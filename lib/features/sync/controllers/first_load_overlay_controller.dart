@@ -31,7 +31,10 @@ class FirstLoadOverlayController extends StateNotifier<FirstLoadOverlayState> {
   FirstLoadOverlayController({
     this.minDisplay = const Duration(milliseconds: 400),
     this.maxDisplay = const Duration(seconds: 2),
-    this.silentRetryDelays = const [Duration(seconds: 2), Duration(seconds: 5)],
+    this.silentRetryDelays = const [
+      Duration(seconds: 2),
+      Duration(seconds: 5),
+    ],
     this.onRetry,
   }) : super(FirstLoadOverlayState.hidden);
 
