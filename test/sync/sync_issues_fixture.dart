@@ -46,11 +46,17 @@ Map<String, Object> deferredTablesPrefs(ScreenTestEnvironment env) => {
       'order_items,payments',
 };
 
-Future<SyncSample> seedSyncSample(ScreenTestEnvironment env) async {
+/// [fixedIds] puts the constant [kSampleBusinessId] in the payloads, so a
+/// golden is the same on every run. Tests that retry a row keep the default:
+/// a retry recovers the business from the payload, so it must be the real one.
+Future<SyncSample> seedSyncSample(
+  ScreenTestEnvironment env, {
+  bool fixedIds = false,
+}) async {
   final db = env.db;
   // The payload text is only shown, so it carries a fixed id: a golden must not
   // depend on the random business id the harness mints.
-  const biz = kSampleBusinessId;
+  final biz = fixedIds ? kSampleBusinessId : env.businessId;
   final bizColumn = env.businessId;
 
   Future<String> queue({

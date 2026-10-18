@@ -48,7 +48,7 @@ void main() {
       productCount: 0,
       businessName: 'Stallion Global',
     );
-    await seedSyncSample(env);
+    await seedSyncSample(env, fixedIds: true);
     for (final r in const [
       ('ceo', 'CEO'),
       ('manager', 'Manager'),

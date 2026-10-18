@@ -70,6 +70,19 @@ void main() {
     await settle(tester);
   }
 
+  /// Waits (real time, bounded) for a write the tap started to land: the
+  /// Drift work runs off the fake clock, so a fixed pump count can be too short
+  /// on a loaded machine.
+  Future<void> until(WidgetTester tester, Future<bool> Function() done) async {
+    for (var i = 0; i < 100; i++) {
+      if ((await tester.runAsync(done))!) break;
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+    }
+    await settle(tester);
+  }
+
   Future<void> close(WidgetTester tester) async {
     await tester.pump(const Duration(seconds: 5));
     await disposeScreen(tester);
@@ -178,7 +191,15 @@ void main() {
     });
     await pumpSync(tester, size: const Size(390, 4000));
     await tester.tap(find.byKey(SyncKeys.retryItem(sample.pendingRlsId)));
-    await settle(tester);
+    await until(
+      tester,
+      () async =>
+          (await (env.db.select(
+                env.db.syncQueue,
+              )..where((t) => t.id.equals(sample.pendingRlsId))).getSingle())
+              .nextAttemptAt ==
+          null,
+    );
     final row = await tester.runAsync(
       () => (env.db.select(
         env.db.syncQueue,
@@ -193,7 +214,12 @@ void main() {
   testWidgets('Discard drops the queue row', (tester) async {
     await pumpSync(tester, size: const Size(390, 4000));
     await tester.tap(find.byKey(SyncKeys.discardItem(sample.pendingPlainId)));
-    await settle(tester);
+    await until(
+      tester,
+      () async => (await (env.db.select(
+        env.db.syncQueue,
+      )..where((t) => t.id.equals(sample.pendingPlainId))).get()).isEmpty,
+    );
     final rows = await tester.runAsync(
       () => (env.db.select(
         env.db.syncQueue,
@@ -212,7 +238,12 @@ void main() {
   ) async {
     await pumpSync(tester, size: const Size(390, 4000));
     await tester.tap(find.byKey(SyncKeys.retryItem(sample.orphanPlainId)));
-    await settle(tester);
+    await until(
+      tester,
+      () async => (await env.db.select(env.db.syncQueueOrphans).get()).every(
+        (o) => o.id != sample.orphanPlainId,
+      ),
+    );
     final orphans = await tester.runAsync(
       () => env.db.select(env.db.syncQueueOrphans).get(),
     );
@@ -220,7 +251,10 @@ void main() {
     expect(find.text('Re-enqueued.'), findsOneWidget);
 
     await tester.tap(find.byKey(SyncKeys.discardItem(sample.orphanSaleId)));
-    await settle(tester);
+    await until(
+      tester,
+      () async => (await env.db.select(env.db.syncQueueOrphans).get()).isEmpty,
+    );
     final left = await tester.runAsync(
       () => env.db.select(env.db.syncQueueOrphans).get(),
     );
