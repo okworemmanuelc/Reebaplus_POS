@@ -116,12 +116,17 @@ void main() {
   test('an overflow without a creator chain still reports its summary', () {
     final report = OverflowRouteReporter.describe(
       FlutterErrorDetails(
-        exception: FlutterError('A RenderFlex overflowed by 5.0 pixels on the right.'),
+        exception: FlutterError(
+          'A RenderFlex overflowed by 5.0 pixels on the right.',
+        ),
       ),
     );
     expect(report, isNotNull);
     expect(report!.route, '(unknown screen)');
-    expect(report.summary, 'A RenderFlex overflowed by 5.0 pixels on the right.');
+    expect(
+      report.summary,
+      'A RenderFlex overflowed by 5.0 pixels on the right.',
+    );
   });
 
   test('is inert when disabled (release builds)', () {
