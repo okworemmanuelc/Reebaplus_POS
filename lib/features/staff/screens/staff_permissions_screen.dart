@@ -217,9 +217,7 @@ class _StaffPermissionsScreenState
   }
 
   Widget _buildBody(ThemeData t, List<PermissionData> permsRaw) {
-    final perms = permsRaw
-        .where((p) => !isPermissionKeyHidden(p.key))
-        .toList();
+    final perms = permsRaw.where((p) => !isPermissionKeyHidden(p.key)).toList();
 
     // Role default grants for this person's role.
     final roleDefaults =
@@ -271,10 +269,7 @@ class _StaffPermissionsScreenState
         ),
         SizedBox(height: context.getRSize(20)),
         for (final entry in groups.entries) ...[
-          SectionHeader(
-            title: entry.key,
-            variant: SectionHeaderVariant.group,
-          ),
+          SectionHeader(title: entry.key, variant: SectionHeaderVariant.group),
           SizedBox(height: context.getRSize(8)),
           _permissionGroupCard(
             t,

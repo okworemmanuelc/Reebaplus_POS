@@ -39,7 +39,10 @@ class RolesPermissionsScreen extends ConsumerWidget {
                   const PermissionIntro('Tap a role to set what it can do.'),
                   SizedBox(height: context.getRSize(16)),
                   for (final role in rolesOnOffer(list)) ...[
-                    _RoleCard(key: PermissionKeys.roleRow(role.slug), role: role),
+                    _RoleCard(
+                      key: PermissionKeys.roleRow(role.slug),
+                      role: role,
+                    ),
                     SizedBox(height: context.getRSize(12)),
                   ],
                 ],

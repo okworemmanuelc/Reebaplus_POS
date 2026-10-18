@@ -698,6 +698,13 @@ Local parts in `widgets/staff_parts.dart`. **Restyle only: every gate, write pat
 - **Staff Detail**: `StaffHeaderCard` (60 gradient initials tile, ExtraBold name, role / Active-Suspended / store pills), `StaffStatGrid` (measured 2 / 3 / 5 columns, fixed-colour `IconTile`s, FittedBox figures), `StaffInfoCard` (Account Details rows, the store row and Permission access still tap), `AppButton` actions behind their own gates. Pop-ups are the theme dialog; the driver-balance pop-up's name box is an `AppInput` in a `scrollable: true` dialog. The Assigned stores sheet is a theme sheet with `StaffSheetFrame`.
 - **Invite Staff**: `AppInput` / `AppDropdown` form, `StaffRoleOptionCard`s (selected = primary border on `primaryTint`), the generated code in a `primaryTint` card in `monoStyle`.
 
+### Roles & permissions (`lib/core/settings/roles_permissions_screen.dart`, `role_permissions_detail_screen.dart`, `lib/features/staff/screens/staff_permissions_screen.dart`, #440 part 2)
+
+Local parts in `lib/features/staff/widgets/permission_parts.dart`. **Restyle only.**
+- **Page**: `PermissionPage` = soft fade + `StaffTopBar` (`ScreenHeader`, 48dp back) + side-inset safe body; all three screens cap at the raw 720 (`StaffColumn`). No-access and load-error text are `PermissionMessage` with the same words.
+- **Roles & Permissions**: intro line, then one `SettingsRow` per role in tier order (CEO, Manager, Cashier, Stock keeper), `IconTile` toned by role, subtitle "N of M permissions" / "All M permissions".
+- **Role detail / Staff permissions**: group `SectionHeader` over a flat `PermissionToggleCard` of `SwitchListTile`s (>= 48dp, hairline between). A child whose parent is off is locked off and says `Requires "…"`; an override says "Overridden — … default is on/off" in Bold primary. Role detail adds the Business / Store pill toggle (`PermissionScopeToggle`, primary gradient on the selected segment), the Manager-only "Allow viewing other stores" card, the discount slider card under Sales and the expense-approval `AppInput` card under Expenses; Store scope has the store picker card (`AppDropdown`) and Restore store defaults. Dialogs are the theme dialog with a fixed-danger action.
+
 ### App bar
 
 | Property | Value |

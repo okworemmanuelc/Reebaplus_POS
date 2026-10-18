@@ -11,7 +11,9 @@ import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 /// Keys for the permission screens (#440 part 2).
 abstract final class PermissionKeys {
   static const Key list = ValueKey<String>('permissions-list');
-  static const Key scopeBusiness = ValueKey<String>('permissions-scope-business');
+  static const Key scopeBusiness = ValueKey<String>(
+    'permissions-scope-business',
+  );
   static const Key scopeStore = ValueKey<String>('permissions-scope-store');
   static const Key discountCard = ValueKey<String>('permissions-discount-card');
   static const Key expenseCard = ValueKey<String>('permissions-expense-card');
@@ -294,9 +296,7 @@ class PermissionScopeToggle extends StatelessWidget {
             label,
             style: context
                 .boldStyle(14)
-                .copyWith(
-                  color: selected ? t.colorScheme.onPrimary : muted,
-                ),
+                .copyWith(color: selected ? t.colorScheme.onPrimary : muted),
           ),
         ),
       ),
@@ -320,12 +320,17 @@ class PermissionNoteCard extends StatelessWidget {
         padding: EdgeInsets.all(context.getRSize(24)),
         child: Column(
           children: [
-            const IconTile(icon: AppIcons.storefront, tone: IconTileTone.neutral),
+            const IconTile(
+              icon: AppIcons.storefront,
+              tone: IconTileTone.neutral,
+            ),
             SizedBox(height: context.getRSize(12)),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: context.regularStyle(13).copyWith(color: muted, height: 1.4),
+              style: context
+                  .regularStyle(13)
+                  .copyWith(color: muted, height: 1.4),
             ),
           ],
         ),

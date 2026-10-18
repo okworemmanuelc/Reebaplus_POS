@@ -7,6 +7,12 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #440 part 2/2: Staff Permissions, Roles & Permissions, Role Permissions Detail restyle (Wave 2 C, 2026-10-18)
+Branch `feat/redesign-w2-roles` (based on `feat/redesign-w2-staff`). **Restyle only: no Drift/cloud/sync/permission/status/money change (no `pos-parity` issue), no new packages, nothing in `lib/shared/widgets/redesign/`, `settings_widgets.dart` untouched.** Gates, the cascade / disable map (`parentOf` / `descendantsOf`), `sales.discount.give` staying defined but unenforced (and hidden), the tier order, the CEO lock and every write path are unchanged.
+- New `lib/features/staff/widgets/permission_parts.dart` (shared-part candidates): `PermissionPage`, `PermissionToggleCard`/`PermissionToggle`, `PermissionScopeToggle`, `PermissionLimitCard`, `PermissionNoteCard`, `PermissionMessage`, `PermissionIntro`.
+- Roles & Permissions: a `SettingsRow` per role (tier-toned tile, "N of M permissions"), raw 720 column. Role Permissions Detail and Staff Permissions: group `SectionHeader`s, flat toggle cards, Business / Store pill toggle, store picker card, the expense limit is an `AppInput`, theme dialogs. `GlassyScaffold` / `GlassyCard` / `SettingsSectionTitle` / `SettingsNoAccess` / `SettingsFadeIn` are no longer used here.
+- Tests: `test/settings/roles_restyle_test.dart`; goldens `test/redesign/roles_golden_test.dart` (24).
+
 ### Issue #440 part 1/2: Staff Management, Staff Detail, Invite Staff restyle (Wave 2 C, 2026-10-17)
 Branch `feat/redesign-w2-staff`, worktree `../drinkPosApp-wt-440`. **Restyle only: no Drift/cloud/sync/permission/status/money change (no `pos-parity` issue), no new packages, nothing in `lib/shared/widgets/redesign/`.** Every `Gate`, the bare `.contains('staff.…')` write-site re-checks, the role-by-tier order and every write path / confirmation are unchanged.
 - New `lib/features/staff/widgets/staff_parts.dart` (shared-part candidates): `StaffTopBar` (+ optional TabBar bottom), `StaffBackButton`, `staffGutter` / `StaffColumn` (raw 720 or 960 centred column), `StaffListRow`, `StaffInviteCard`, `StaffHeaderCard`, `StaffStatGrid`, `StaffInfoCard` / `StaffInfoRow`, `StaffRoleOptionCard`, `StaffSheetFrame`, role-to-tone mapping.

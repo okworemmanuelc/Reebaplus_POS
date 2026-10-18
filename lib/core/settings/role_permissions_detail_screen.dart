@@ -299,9 +299,7 @@ class _RolePermissionsDetailScreenState
   Widget _buildBody(ThemeData t, List<PermissionData> permsRaw) {
     // Drop hidden keys (e.g. give-discount, governed by the slider) so they
     // never render as toggles.
-    final perms = permsRaw
-        .where((p) => !isPermissionKeyHidden(p.key))
-        .toList();
+    final perms = permsRaw.where((p) => !isPermissionKeyHidden(p.key)).toList();
     final granted =
         (ref.watch(rolePermissionsProvider(role.id)).valueOrNull ??
                 const <RolePermissionData>[])
