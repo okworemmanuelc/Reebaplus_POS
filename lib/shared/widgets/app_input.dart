@@ -69,6 +69,10 @@ class AppInput extends StatelessWidget {
   final BoxConstraints? prefixIconConstraints;
   final BoxConstraints? suffixIconConstraints;
 
+  /// Platform autocorrect. On by default; a typed confirmation word (e.g. the
+  /// Resolve unsynced data dialog's DISCARD, #443) turns it off.
+  final bool autocorrect;
+
   const AppInput({
     super.key,
     this.controller,
@@ -101,6 +105,7 @@ class AppInput extends StatelessWidget {
     this.style,
     this.prefixIconConstraints,
     this.suffixIconConstraints,
+    this.autocorrect = true,
   });
 
   /// Unwraps common single-child wrapper widgets to reveal the core icon/control.
@@ -165,16 +170,16 @@ class AppInput extends StatelessWidget {
 
     final BoxConstraints? compactConstraints =
         (context.isShortViewport && !preserveTapTarget)
-            ? const BoxConstraints(minWidth: 40, minHeight: 40)
-            : null;
+        ? const BoxConstraints(minWidth: 40, minHeight: 40)
+        : null;
 
     // An icon carries the 48dp floor on its own (Flutter's default icon
     // constraints), so this only has to answer for the case no icon can:
     // a whole-surface tap target with no icon at all.
     final BoxConstraints? tapTargetFloor =
         (context.isShortViewport && wholeSurfaceTap)
-            ? const BoxConstraints(minHeight: kMinInteractiveDimension)
-            : null;
+        ? const BoxConstraints(minHeight: kMinInteractiveDimension)
+        : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -197,6 +202,7 @@ class AppInput extends StatelessWidget {
           focusNode: focusNode,
           autofocus: autofocus,
           obscureText: obscureText,
+          autocorrect: autocorrect,
           keyboardType: keyboardType,
           textInputAction: textInputAction,
           textCapitalization: textCapitalization,
@@ -220,15 +226,14 @@ class AppInput extends StatelessWidget {
           decoration: InputDecoration(
             hintText: hintText,
             prefixIcon: prefixIcon,
-            prefixIconConstraints:
-                prefixIconConstraints ?? compactConstraints,
+            prefixIconConstraints: prefixIconConstraints ?? compactConstraints,
             suffixIcon: suffixIcon,
-            suffixIconConstraints:
-                suffixIconConstraints ?? compactConstraints,
+            suffixIconConstraints: suffixIconConstraints ?? compactConstraints,
             fillColor: fillColor ?? t.inputDecorationTheme.fillColor,
             constraints: tapTargetFloor,
             isDense: context.isShortViewport ? true : null,
-            contentPadding: contentPadding ??
+            contentPadding:
+                contentPadding ??
                 (context.isShortViewport
                     ? const EdgeInsets.symmetric(horizontal: 16, vertical: 9.5)
                     : null),

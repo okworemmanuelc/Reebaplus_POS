@@ -5,7 +5,12 @@ import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/utils/csv_export.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/sync/widgets/sync_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 
 /// §3.1 "Resolve unsynced data" flow (Invariant #12). Surfaced when a
 /// logout is blocked because the outbox holds **un-pushable** rows the cloud is
@@ -102,6 +107,7 @@ class _ResolveUnsyncedDataDialogState
     return '$records $_photoPhrase could not be uploaded either; '
         '${widget.photoCount == 1 ? "it" : "they"} will be deleted too.';
   }
+
   bool get _canDiscard =>
       _hasExported &&
       !_discarding &&
@@ -121,13 +127,20 @@ class _ResolveUnsyncedDataDialogState
       final user = auth.currentUser;
       if (user == null) return;
       final rows = await db.syncDao.unsyncedExportRows(user.businessId);
-      final stamp = DateTime.now().toIso8601String().split('.').first
+      final stamp = DateTime.now()
+          .toIso8601String()
+          .split('.')
+          .first
           .replaceAll(':', '-');
-      final csv = buildCsv(
-        const ['source', 'table', 'action', 'row_id', 'reason', 'created_at',
-            'payload'],
-        rows,
-      );
+      final csv = buildCsv(const [
+        'source',
+        'table',
+        'action',
+        'row_id',
+        'reason',
+        'created_at',
+        'payload',
+      ], rows);
       await shareCsv(
         csv: csv,
         fileName: 'unsynced-records-$stamp',
@@ -169,64 +182,81 @@ class _ResolveUnsyncedDataDialogState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final f = theme.extension<AppFixedColors>() ?? AppFixedColors.light;
+    final muted =
+        theme.textTheme.bodySmall?.color ?? theme.colorScheme.onSurface;
     return AlertDialog(
+      // The typed-confirmation box sits in this pop-up, so it scrolls with
+      // the keyboard up (owner phone check, #402).
+      scrollable: true,
       title: Text(
-        _recordCount == 0 ? 'Photos that can\'t upload' : 'Records that can\'t sync',
+        _recordCount == 0
+            ? 'Photos that can\'t upload'
+            : 'Records that can\'t sync',
+        style: context
+            .extraBoldStyle(18)
+            .copyWith(color: theme.colorScheme.onSurface),
       ),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(_message, style: theme.textTheme.bodyMedium),
-            if (_recordCount > 0) ...[
-              SizedBox(height: context.getRSize(16)),
-              FilledButton.tonalIcon(
-                onPressed: _exporting ? null : _export,
-                icon: _exporting
-                    ? SizedBox(
-                        width: context.getRSize(16),
-                        height: context.getRSize(16),
-                        child: const CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Icon(
-                        _hasExported ? AppIcons.check : AppIcons.download,
-                      ),
-                label: Text(_hasExported ? 'Exported — export again' : 'Export records'),
-              ),
-            ],
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _message,
+            style: context
+                .regularStyle(14)
+                .copyWith(color: theme.colorScheme.onSurface, height: 1.4),
+          ),
+          if (_recordCount > 0) ...[
             SizedBox(height: context.getRSize(16)),
-            Text(
-              _hasExported
-                  ? 'Type $_confirmWord to permanently discard $_discardWhat '
-                      '${widget.isResign ? "and leave your account." : "and log out."}'
-                  : 'Export the records to unlock discard.',
-              style: theme.textTheme.bodySmall,
-            ),
-            SizedBox(height: context.getRSize(8)),
-            TextField(
-              controller: _confirmController,
-              enabled: _hasExported && !_discarding,
-              autocorrect: false,
-              textCapitalization: TextCapitalization.characters,
-              decoration: const InputDecoration(
-                hintText: _confirmWord,
-                border: OutlineInputBorder(),
-              ),
-              onChanged: (_) => setState(() {}),
+            AppButton(
+              key: SyncKeys.resolveExport,
+              text: _hasExported ? 'Exported — export again' : 'Export records',
+              icon: _hasExported ? AppIcons.check : AppIcons.download,
+              variant: AppButtonVariant.secondary,
+              size: AppButtonSize.small,
+              height: kMinInteractiveDimension,
+              isLoading: _exporting,
+              onPressed: _exporting ? null : _export,
             ),
           ],
-        ),
+          SizedBox(height: context.getRSize(16)),
+          Text(
+            _hasExported
+                ? 'Type $_confirmWord to permanently discard $_discardWhat '
+                      '${widget.isResign ? "and leave your account." : "and log out."}'
+                : 'Export the records to unlock discard.',
+            style: context.regularStyle(13).copyWith(color: muted),
+          ),
+          SizedBox(height: context.getRSize(8)),
+          AppInput(
+            key: SyncKeys.resolveInput,
+            controller: _confirmController,
+            enabled: _hasExported && !_discarding,
+            autocorrect: false,
+            textCapitalization: TextCapitalization.characters,
+            hintText: _confirmWord,
+            onChanged: (_) => setState(() {}),
+          ),
+        ],
       ),
       actions: [
         TextButton(
-          onPressed: _discarding ? null : () => Navigator.of(context).pop(false),
+          onPressed: _discarding
+              ? null
+              : () => Navigator.of(context).pop(false),
           child: const Text('Cancel'),
         ),
         FilledButton(
+          key: SyncKeys.resolveDiscard,
           onPressed: _canDiscard ? _discardAndLogout : null,
           style: FilledButton.styleFrom(
-            backgroundColor: theme.colorScheme.error,
+            backgroundColor: f.danger,
+            foregroundColor: f.onSolid,
+            minimumSize: const Size(
+              kMinInteractiveDimension,
+              kMinInteractiveDimension,
+            ),
           ),
           child: _discarding
               ? SizedBox(

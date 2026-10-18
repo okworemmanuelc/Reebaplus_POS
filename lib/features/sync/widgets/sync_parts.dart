@@ -35,6 +35,8 @@ abstract final class SyncKeys {
   static const Key accessList = ValueKey<String>('sync-access-list');
   static const Key accessIntro = ValueKey<String>('sync-access-intro');
   static const Key resolveInput = ValueKey<String>('sync-resolve-input');
+  static const Key resolveExport = ValueKey<String>('sync-resolve-export');
+  static const Key resolveDiscard = ValueKey<String>('sync-resolve-discard');
 
   static Key pendingItem(String id) => ValueKey<String>('sync-pending-$id');
   static Key failedItem(String id) => ValueKey<String>('sync-failed-$id');
