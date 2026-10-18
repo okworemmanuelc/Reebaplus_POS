@@ -27,8 +27,7 @@ abstract final class StoresKeys {
   static const restricted = ValueKey<String>('store-details-restricted');
   static const settingsList = ValueKey<String>('stores-settings-list');
 
-  static Key card(String storeId) =>
-      ValueKey<String>('stores-card-$storeId');
+  static Key card(String storeId) => ValueKey<String>('stores-card-$storeId');
   static Key edit(String storeId) =>
       ValueKey<String>('stores-card-edit-$storeId');
   static Key delete(String storeId) =>
@@ -57,11 +56,8 @@ double storesTopBarHeight(BuildContext context) => math.max(
 
 /// Side gutter that centres a column of [cap] dp in [width] (the measured
 /// width), never under `getRSize(16)`.
-double storesGutter(BuildContext context, double width, {double? cap}) =>
-    math.max(
-      context.getRSize(16),
-      (width - (cap ?? kSettingsMaxContentWidth)) / 2,
-    );
+double storesGutter(BuildContext context, double width, {double? cap}) => math
+    .max(context.getRSize(16), (width - (cap ?? kSettingsMaxContentWidth)) / 2);
 
 /// Wraps [sliver] in the centred column, measured not predicated.
 Widget storesSliver(
@@ -168,12 +164,7 @@ class StoresBackButton extends StatelessWidget {
 
 /// A centred, muted message (no access / nothing here yet).
 class StoresMessage extends StatelessWidget {
-  const StoresMessage({
-    super.key,
-    required this.text,
-    this.title,
-    this.icon,
-  });
+  const StoresMessage({super.key, required this.text, this.title, this.icon});
 
   final String text;
   final String? title;
@@ -197,19 +188,18 @@ class StoresMessage extends StatelessWidget {
               Text(
                 title!,
                 textAlign: TextAlign.center,
-                style: context.boldStyle(18).copyWith(
-                  color: t.colorScheme.onSurface,
-                ),
+                style: context
+                    .boldStyle(18)
+                    .copyWith(color: t.colorScheme.onSurface),
               ),
               SizedBox(height: context.getRSize(6)),
             ],
             Text(
               text,
               textAlign: TextAlign.center,
-              style: context.regularStyle(14).copyWith(
-                color: muted,
-                height: 1.5,
-              ),
+              style: context
+                  .regularStyle(14)
+                  .copyWith(color: muted, height: 1.5),
             ),
           ],
         ),
@@ -233,8 +223,8 @@ class StoresNotice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final f = Theme.of(context).extension<AppFixedColors>() ??
-        AppFixedColors.light;
+    final f =
+        Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light;
     final (fill, ink) = tone.resolve(f);
     return Container(
       padding: EdgeInsets.all(context.getRSize(12)),
@@ -250,7 +240,9 @@ class StoresNotice extends StatelessWidget {
           Expanded(
             child: Text(
               text,
-              style: context.semiBoldStyle(12).copyWith(color: ink, height: 1.4),
+              style: context
+                  .semiBoldStyle(12)
+                  .copyWith(color: ink, height: 1.4),
             ),
           ),
         ],
@@ -296,9 +288,9 @@ class StoreFigure extends StatelessWidget {
                   value,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: context.boldStyle(15).copyWith(
-                    color: t.colorScheme.onSurface,
-                  ),
+                  style: context
+                      .boldStyle(15)
+                      .copyWith(color: t.colorScheme.onSurface),
                 ),
                 Text(
                   label,
@@ -423,8 +415,9 @@ class StoreSheetFrame extends StatelessWidget {
                       height: context.getRSize(4),
                       decoration: BoxDecoration(
                         color: t.dividerColor,
-                        borderRadius:
-                            BorderRadius.circular(AppSpacing.borderRadiusS),
+                        borderRadius: BorderRadius.circular(
+                          AppSpacing.borderRadiusS,
+                        ),
                       ),
                     ),
                   ),
@@ -556,9 +549,9 @@ class StoresAutocompleteField extends StatelessWidget {
                               ),
                               child: Text(
                                 o,
-                                style: context.regularStyle(14).copyWith(
-                                  color: t.colorScheme.onSurface,
-                                ),
+                                style: context
+                                    .regularStyle(14)
+                                    .copyWith(color: t.colorScheme.onSurface),
                               ),
                             ),
                           ),

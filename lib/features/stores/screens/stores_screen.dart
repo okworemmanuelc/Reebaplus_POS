@@ -292,7 +292,9 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
           scrollable: true,
           title: Text(
             'Delete Store',
-            style: ctx.screenTitleStyle.copyWith(color: t.colorScheme.onSurface),
+            style: ctx.screenTitleStyle.copyWith(
+              color: t.colorScheme.onSurface,
+            ),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -469,7 +471,8 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                           top: context.getRSize(16),
                           // Clears the Add Store FAB.
                           bottom:
-                              context.getRSize(88) + context.deviceBottomPadding,
+                              context.getRSize(88) +
+                              context.deviceBottomPadding,
                         ),
                       ],
                     ),
@@ -597,9 +600,9 @@ class _StoreCardState extends ConsumerState<_StoreCard> {
                             widget.store.name,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: context.boldStyle(15).copyWith(
-                              color: t.colorScheme.onSurface,
-                            ),
+                            style: context
+                                .boldStyle(15)
+                                .copyWith(color: t.colorScheme.onSurface),
                           ),
                           if (hasLocation) ...[
                             SizedBox(height: context.getRSize(3)),
