@@ -239,6 +239,7 @@ class SyncFactRow extends StatelessWidget {
         ),
         SizedBox(width: context.getRSize(10)),
         Flexible(
+          flex: 5,
           child: Text(
             label,
             style: context.mediumStyle(13).copyWith(color: muted),
@@ -246,7 +247,7 @@ class SyncFactRow extends StatelessWidget {
         ),
         SizedBox(width: context.getRSize(8)),
         Flexible(
-          flex: 2,
+          flex: 6,
           child: Text(
             value,
             textAlign: TextAlign.right,

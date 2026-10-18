@@ -265,9 +265,11 @@ class _SchemaErrorBody extends StatelessWidget {
           Expanded(
             child: SelectableText(
               v,
-              style: context
-                  .semiBoldStyle(13)
-                  .copyWith(color: t.colorScheme.onSurface),
+              // Versions, timestamps and ids are codes: the mono family.
+              style: context.monoStyle.copyWith(
+                fontSize: context.getRFontSize(12),
+                color: t.colorScheme.onSurface,
+              ),
             ),
           ),
         ],

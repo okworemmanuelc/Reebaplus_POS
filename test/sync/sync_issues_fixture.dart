@@ -15,6 +15,10 @@ import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 
 import '../helpers/screen_harness.dart';
 
+/// The business id shown in the sample payloads and, via the auth user, on the
+/// Health card (see the golden test), so images are the same on every run.
+const String kSampleBusinessId = '0192a9d0-1111-7000-8000-stallion00001';
+
 /// Ids of the seeded rows, so a test can find its buttons by key.
 class SyncSample {
   const SyncSample({
@@ -44,7 +48,10 @@ Map<String, Object> deferredTablesPrefs(ScreenTestEnvironment env) => {
 
 Future<SyncSample> seedSyncSample(ScreenTestEnvironment env) async {
   final db = env.db;
-  final biz = env.businessId;
+  // The payload text is only shown, so it carries a fixed id: a golden must not
+  // depend on the random business id the harness mints.
+  const biz = kSampleBusinessId;
+  final bizColumn = env.businessId;
 
   Future<String> queue({
     required String action,
@@ -59,7 +66,7 @@ Future<SyncSample> seedSyncSample(ScreenTestEnvironment env) async {
         .insert(
           SyncQueueCompanion.insert(
             id: Value(id),
-            businessId: biz,
+            businessId: bizColumn,
             actionType: action,
             payload: jsonEncode(payload),
             status: Value(status),
