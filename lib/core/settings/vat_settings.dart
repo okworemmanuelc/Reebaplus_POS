@@ -94,7 +94,6 @@ int parseVatRateBps(String? raw) {
 
 /// Parse the stored `vat_basis` string, defaulting to **inclusive** for any
 /// absent/blank/unrecognized value (#176 product decision).
-VatBasis parseVatBasis(String? raw) =>
-    raw?.trim().toLowerCase() == 'exclusive'
-        ? VatBasis.exclusive
-        : VatBasis.inclusive;
+VatBasis parseVatBasis(String? raw) => raw?.trim().toLowerCase() == 'exclusive'
+    ? VatBasis.exclusive
+    : VatBasis.inclusive;

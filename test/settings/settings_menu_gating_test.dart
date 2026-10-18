@@ -44,7 +44,9 @@ void main() {
     db.businessIdResolver = () => businessId;
     await db.customSelect('SELECT 1').get(); // force onCreate
 
-    await db.into(db.businesses).insert(
+    await db
+        .into(db.businesses)
+        .insert(
           BusinessesCompanion.insert(
             id: const Value(businessId),
             name: 'Test Biz',
@@ -54,7 +56,9 @@ void main() {
       (ceoRoleId, 'CEO', 'ceo'),
       (cashierRoleId, 'Cashier', 'cashier'),
     ]) {
-      await db.into(db.roles).insert(
+      await db
+          .into(db.roles)
+          .insert(
             RolesCompanion.insert(
               id: Value(r.$1),
               businessId: businessId,
@@ -68,7 +72,9 @@ void main() {
       (ceoUserId, 'Carla CEO', ceoRoleId),
       (cashierUserId, 'Cathy Cashier', cashierRoleId),
     ]) {
-      await db.into(db.users).insert(
+      await db
+          .into(db.users)
+          .insert(
             UsersCompanion.insert(
               id: Value(u.$1),
               businessId: businessId,
@@ -76,7 +82,9 @@ void main() {
               pin: '0000',
             ),
           );
-      await db.into(db.userBusinesses).insert(
+      await db
+          .into(db.userBusinesses)
+          .insert(
             UserBusinessesCompanion.insert(
               id: Value(UuidV7.generate()),
               businessId: businessId,
@@ -86,7 +94,9 @@ void main() {
           );
     }
     // settings.manage granted to CEO only.
-    await db.into(db.rolePermissions).insert(
+    await db
+        .into(db.rolePermissions)
+        .insert(
           RolePermissionsCompanion.insert(
             id: Value(UuidV7.generate()),
             businessId: businessId,
@@ -100,25 +110,29 @@ void main() {
 
   // The exact gate the drawer uses for the "CEO Settings" row.
   Widget harness(ProviderContainer container) => UncontrolledProviderScope(
-        container: container,
-        child: MaterialApp(
-          home: Scaffold(
-            body: Consumer(
-              builder: (_, ref, __) =>
-                  ref.watch(currentUserPermissionsProvider).contains('settings.manage')
-                      ? const Text('CEO Settings')
-                      : const SizedBox.shrink(),
-            ),
-          ),
+    container: container,
+    child: MaterialApp(
+      home: Scaffold(
+        body: Consumer(
+          builder: (_, ref, __) =>
+              ref
+                  .watch(currentUserPermissionsProvider)
+                  .contains('settings.manage')
+              ? const Text('CEO Settings')
+              : const SizedBox.shrink(),
         ),
-      );
+      ),
+    ),
+  );
 
   testWidgets('shown for a CEO (has settings.manage)', (tester) async {
     final container = ProviderContainer(
       overrides: [databaseProvider.overrideWithValue(db)],
     );
     addTearDown(container.dispose);
-    container.read(authProvider).value = await db.storesDao.getUserById(ceoUserId);
+    container.read(authProvider).value = await db.storesDao.getUserById(
+      ceoUserId,
+    );
 
     await tester.pumpWidget(harness(container));
     await tester.pumpAndSettle();
@@ -131,8 +145,9 @@ void main() {
       overrides: [databaseProvider.overrideWithValue(db)],
     );
     addTearDown(container.dispose);
-    container.read(authProvider).value =
-        await db.storesDao.getUserById(cashierUserId);
+    container.read(authProvider).value = await db.storesDao.getUserById(
+      cashierUserId,
+    );
 
     await tester.pumpWidget(harness(container));
     await tester.pumpAndSettle();

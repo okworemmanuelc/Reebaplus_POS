@@ -39,6 +39,7 @@ class SettingsPageBar extends StatelessWidget implements PreferredSizeWidget {
     required this.icon,
     required this.title,
     this.subtitle,
+    this.leading,
     this.actions = const [],
   });
 
@@ -46,6 +47,9 @@ class SettingsPageBar extends StatelessWidget implements PreferredSizeWidget {
   final IconData icon;
   final String title;
   final String? subtitle;
+
+  /// Replaces the automatic back arrow (a drawer root passes its menu button).
+  final Widget? leading;
   final List<Widget> actions;
 
   @override
@@ -83,22 +87,26 @@ class SettingsPageBar extends StatelessWidget implements PreferredSizeWidget {
         icon: icon,
         title: title,
         subtitle: subtitle,
-        leading: canGoBack
-            ? IconButton(
-                key: const Key('settings-page-back'),
-                tooltip: MaterialLocalizations.of(context).backButtonTooltip,
-                constraints: const BoxConstraints(
-                  minWidth: kMinInteractiveDimension,
-                  minHeight: kMinInteractiveDimension,
-                ),
-                onPressed: () => Navigator.of(context).maybePop(),
-                icon: AppIcon(
-                  AppIcons.arrowBack,
-                  size: context.getRSize(24),
-                  color: t.colorScheme.onSurface,
-                ),
-              )
-            : null,
+        leading:
+            leading ??
+            (canGoBack
+                ? IconButton(
+                    key: const Key('settings-page-back'),
+                    tooltip: MaterialLocalizations.of(
+                      context,
+                    ).backButtonTooltip,
+                    constraints: const BoxConstraints(
+                      minWidth: kMinInteractiveDimension,
+                      minHeight: kMinInteractiveDimension,
+                    ),
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    icon: AppIcon(
+                      AppIcons.arrowBack,
+                      size: context.getRSize(24),
+                      color: t.colorScheme.onSurface,
+                    ),
+                  )
+                : null),
         actions: actions,
       ),
     );

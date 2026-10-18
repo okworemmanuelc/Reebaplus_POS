@@ -38,7 +38,9 @@ void main() {
     db.businessIdResolver = () => businessId;
     await db.customSelect('SELECT 1').get();
 
-    await db.into(db.businesses).insert(
+    await db
+        .into(db.businesses)
+        .insert(
           BusinessesCompanion.insert(
             id: const Value(businessId),
             name: 'Test Biz',
@@ -50,7 +52,9 @@ void main() {
       (cashierRoleId, 'Cashier', 'cashier'),
       ('role-sk', 'Stock keeper', 'stock_keeper'),
     ]) {
-      await db.into(db.roles).insert(
+      await db
+          .into(db.roles)
+          .insert(
             RolesCompanion.insert(
               id: Value(r.$1),
               businessId: businessId,
@@ -60,7 +64,9 @@ void main() {
             ),
           );
     }
-    await db.into(db.users).insert(
+    await db
+        .into(db.users)
+        .insert(
           UsersCompanion.insert(
             id: const Value(ceoUserId),
             businessId: businessId,
@@ -68,7 +74,9 @@ void main() {
             pin: '0000',
           ),
         );
-    await db.into(db.userBusinesses).insert(
+    await db
+        .into(db.userBusinesses)
+        .insert(
           UserBusinessesCompanion.insert(
             id: Value(UuidV7.generate()),
             businessId: businessId,
@@ -76,7 +84,9 @@ void main() {
             roleId: ceoRoleId,
           ),
         );
-    await db.into(db.rolePermissions).insert(
+    await db
+        .into(db.rolePermissions)
+        .insert(
           RolePermissionsCompanion.insert(
             id: Value(UuidV7.generate()),
             businessId: businessId,
@@ -86,7 +96,9 @@ void main() {
         );
     // Cashier: two grants → its card subtitle should read "2 of 37 permissions".
     for (final key in ['sales.make', 'stock.view']) {
-      await db.into(db.rolePermissions).insert(
+      await db
+          .into(db.rolePermissions)
+          .insert(
             RolePermissionsCompanion.insert(
               id: Value(UuidV7.generate()),
               businessId: businessId,
@@ -104,7 +116,9 @@ void main() {
       overrides: [databaseProvider.overrideWithValue(db)],
     );
     addTearDown(container.dispose);
-    container.read(authProvider).value = await db.storesDao.getUserById(ceoUserId);
+    container.read(authProvider).value = await db.storesDao.getUserById(
+      ceoUserId,
+    );
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
@@ -131,7 +145,9 @@ void main() {
 
   group('the Driver role follows the Van Sales switch', () {
     setUp(() async {
-      await db.into(db.roles).insert(
+      await db
+          .into(db.roles)
+          .insert(
             RolesCompanion.insert(
               id: const Value('role-driver'),
               businessId: businessId,

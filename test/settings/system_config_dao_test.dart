@@ -35,7 +35,7 @@ void main() {
       await db.systemConfigDao.set('sync_enabled', 'false');
 
       expect(await db.systemConfigDao.get('sync_enabled'), equals('false'));
-      
+
       final rows = await db.select(db.systemConfig).get();
       expect(rows.length, equals(1));
     });

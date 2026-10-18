@@ -52,7 +52,8 @@ class _SecuritySettingsScreenState
       // 0 is an explicit "off" value (auto-lock disabled). Snap any other
       // legacy/non-preset value (or unset) to the default so the UI and the
       // chips stay consistent; a tap then persists a real preset.
-      _autoLockSeconds = (stored != null && (stored == 0 || _presets.contains(stored)))
+      _autoLockSeconds =
+          (stored != null && (stored == 0 || _presets.contains(stored)))
           ? stored
           : _defaultSeconds;
       _biometricsEnabled = prefs.getBool('biometrics_enabled') ?? false;
@@ -76,8 +77,9 @@ class _SecuritySettingsScreenState
       );
       await db.activityLogDao.log(
         action: 'settings.security.auto_lock',
-        description:
-            off ? 'Turned auto-lock off' : 'Set auto-lock to ${seconds ~/ 60} min',
+        description: off
+            ? 'Turned auto-lock off'
+            : 'Set auto-lock to ${seconds ~/ 60} min',
         staffId: db.currentUserId,
       );
       if (mounted) {

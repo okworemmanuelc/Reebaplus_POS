@@ -127,7 +127,9 @@ class _DeleteBusinessScreenState extends ConsumerState<DeleteBusinessScreen> {
                       Expanded(
                         child: Text(
                           'This is permanent and cannot be undone',
-                          style: context.boldStyle(16).copyWith(color: f.danger),
+                          style: context
+                              .boldStyle(16)
+                              .copyWith(color: f.danger),
                         ),
                       ),
                     ],

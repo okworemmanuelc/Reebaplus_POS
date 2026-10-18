@@ -41,7 +41,9 @@ void main() {
     db.userIdResolver = () => ceoUserId;
     await db.customSelect('SELECT 1').get(); // force onCreate
 
-    await db.into(db.businesses).insert(
+    await db
+        .into(db.businesses)
+        .insert(
           BusinessesCompanion.insert(
             id: const Value(businessId),
             name: 'Test Biz',
@@ -51,7 +53,9 @@ void main() {
       (ceoRoleId, 'CEO', 'ceo'),
       (cashierRoleId, 'Cashier', 'cashier'),
     ]) {
-      await db.into(db.roles).insert(
+      await db
+          .into(db.roles)
+          .insert(
             RolesCompanion.insert(
               id: Value(r.$1),
               businessId: businessId,
@@ -61,7 +65,9 @@ void main() {
             ),
           );
     }
-    await db.into(db.users).insert(
+    await db
+        .into(db.users)
+        .insert(
           UsersCompanion.insert(
             id: const Value(ceoUserId),
             businessId: businessId,
@@ -69,7 +75,9 @@ void main() {
             pin: '0000',
           ),
         );
-    await db.into(db.userBusinesses).insert(
+    await db
+        .into(db.userBusinesses)
+        .insert(
           UserBusinessesCompanion.insert(
             id: Value(UuidV7.generate()),
             businessId: businessId,
@@ -78,7 +86,9 @@ void main() {
           ),
         );
     // CEO can manage settings (so the toggle's permission guard passes).
-    await db.into(db.rolePermissions).insert(
+    await db
+        .into(db.rolePermissions)
+        .insert(
           RolePermissionsCompanion.insert(
             id: Value(UuidV7.generate()),
             businessId: businessId,
@@ -95,7 +105,9 @@ void main() {
       overrides: [databaseProvider.overrideWithValue(db)],
     );
     addTearDown(container.dispose);
-    container.read(authProvider).value = await db.storesDao.getUserById(ceoUserId);
+    container.read(authProvider).value = await db.storesDao.getUserById(
+      ceoUserId,
+    );
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
@@ -107,11 +119,13 @@ void main() {
   }
 
   Future<int> grantCount(String roleId) async {
-    final rows = await (db.select(db.rolePermissions)
-          ..where((t) =>
-              t.roleId.equals(roleId) &
-              t.permissionKey.equals('activity_logs.view')))
-        .get();
+    final rows =
+        await (db.select(db.rolePermissions)..where(
+              (t) =>
+                  t.roleId.equals(roleId) &
+                  t.permissionKey.equals('activity_logs.view'),
+            ))
+            .get();
     return rows.length;
   }
 
@@ -127,7 +141,11 @@ void main() {
 
     final editable = switches.where((s) => s.onChanged != null).toList();
     expect(editable, hasLength(1));
-    expect(editable.first.value, isFalse, reason: 'Cashier starts without view');
+    expect(
+      editable.first.value,
+      isFalse,
+      reason: 'Cashier starts without view',
+    );
   });
 
   testWidgets('toggling Cashier on grants activity_logs.view', (tester) async {
@@ -153,7 +171,9 @@ void main() {
 
   testWidgets('toggling a pre-existing grant off revokes it', (tester) async {
     // Seed the Cashier grant directly (no queue entry) so the row starts ON.
-    await db.into(db.rolePermissions).insert(
+    await db
+        .into(db.rolePermissions)
+        .insert(
           RolePermissionsCompanion.insert(
             id: Value(UuidV7.generate()),
             businessId: businessId,
