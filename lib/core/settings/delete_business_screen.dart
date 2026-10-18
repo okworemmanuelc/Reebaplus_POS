@@ -4,11 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/settings/settings_page_parts.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
-import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/pin_dialog.dart';
 
 /// CEO-only "Delete Business & Account" confirmation (master plan §10.3 — the
@@ -76,7 +79,8 @@ class _DeleteBusinessScreenState extends ConsumerState<DeleteBusinessScreen> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    final error = t.colorScheme.error;
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
 
     // Defense in depth (hard rule #6): the Danger Zone entry that opens this
     // screen is already gated on the same entry, but re-check at the screen
@@ -85,51 +89,50 @@ class _DeleteBusinessScreenState extends ConsumerState<DeleteBusinessScreen> {
     final business = ref.watch(currentBusinessProvider);
 
     if (!canDelete || business == null) {
-      return const GlassyScaffold(
+      return const SettingsPageScaffold(
+        icon: AppIcons.deleteForever,
         title: 'Delete Business',
         body: SettingsNoAccess(),
       );
     }
 
-    return GlassyScaffold(
+    return SettingsPageScaffold(
+      icon: AppIcons.deleteForever,
       title: 'Delete Business',
       body: SettingsFadeIn(
-        child: ListView(
-          padding: EdgeInsets.fromLTRB(
-            24,
-            24,
-            24,
-            24 + context.deviceBottomPadding,
-          ),
+        child: SettingsPageList(
+          listKey: const Key('delete-business-list'),
           children: [
             // ── Warning banner ──────────────────────────────────────────
             Container(
-              padding: const EdgeInsets.all(16),
+              key: const Key('delete-business-warning'),
+              padding: EdgeInsets.all(context.getRSize(16)),
               decoration: BoxDecoration(
-                color: error.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: error.withValues(alpha: 0.4)),
+                color: f.dangerTint,
+                borderRadius: BorderRadius.circular(AppSpacing.borderRadiusXL),
+                border: Border.all(color: f.dangerOutline),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Icon(AppIcons.warning, color: error),
-                      const SizedBox(width: 10),
+                      AppIcon(
+                        AppIcons.warning,
+                        filled: true,
+                        color: f.danger,
+                        size: context.getRSize(24),
+                      ),
+                      SizedBox(width: context.getRSize(10)),
                       Expanded(
                         child: Text(
                           'This is permanent and cannot be undone',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                            color: error,
-                          ),
+                          style: context.boldStyle(16).copyWith(color: f.danger),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: context.getRSize(12)),
                   Text(
                     'You are about to permanently delete "${business.name}".\n\n'
                     'All sales, stock, customers, staff access, and money '
@@ -138,16 +141,14 @@ class _DeleteBusinessScreenState extends ConsumerState<DeleteBusinessScreen> {
                     'Your owner account will be deleted and this device will be '
                     'signed out. Any staff who belong to this business will lose '
                     'access to it.',
-                    style: TextStyle(
-                      fontSize: 14,
-                      height: 1.45,
-                      color: t.colorScheme.onSurface.withValues(alpha: 0.85),
-                    ),
+                    style: context
+                        .regularStyle(14)
+                        .copyWith(height: 1.45, color: t.colorScheme.onSurface),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 28),
+            SizedBox(height: context.getRSize(28)),
 
             // ── Delete (opens the PIN confirmation gate) ────────────────
             AppButton(
@@ -157,14 +158,11 @@ class _DeleteBusinessScreenState extends ConsumerState<DeleteBusinessScreen> {
               isLoading: _deleting,
               onPressed: _deleting ? null : () => _confirmDelete(business.id),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: context.getRSize(12)),
             Center(
               child: Text(
                 'You will be asked for your PIN to confirm.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: t.colorScheme.onSurface.withValues(alpha: 0.55),
-                ),
+                style: context.regularStyle(12).copyWith(color: muted),
                 textAlign: TextAlign.center,
               ),
             ),

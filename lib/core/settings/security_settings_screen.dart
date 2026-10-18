@@ -6,11 +6,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/settings/settings_page_parts.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
-import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
-import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
 /// CEO Settings > Security (§10.1). Auto-lock interval (synced, business-wide)
 /// + biometric login (device-local).
@@ -141,31 +142,30 @@ class _SecuritySettingsScreenState
     // Screen-level gate (hard rule #6) + keeps the permission chain warm for
     // the save-site guard.
     final canManage = Gates.manageSettings.allows(ref);
-    return GlassyScaffold(
+    return SettingsPageScaffold(
+      icon: AppIcons.lock,
       title: 'Security',
       body: !canManage
           ? const SettingsNoAccess()
           : _loading
           ? const SizedBox.shrink()
           : SettingsFadeIn(
-              child: ListView(
-                padding: EdgeInsets.fromLTRB(
-                  24,
-                  24,
-                  24,
-                  24 + context.deviceBottomPadding,
-                ),
+              child: SettingsPageList(
+                listKey: const Key('security-list'),
                 children: [
                   _autoLockCard(context),
-                  const SizedBox(height: 16),
-                  SettingsTile(
-                    icon: AppIcons.biometrics,
-                    title: 'Biometric login',
-                    subtitle: 'Use fingerprint or Face ID on this device',
-                    trailing: Switch(
-                      value: _biometricsEnabled,
-                      onChanged: _toggleBiometrics,
-                      activeThumbColor: t.colorScheme.primary,
+                  SizedBox(height: context.getRSize(12)),
+                  SettingsCard(
+                    child: SettingsControlRow(
+                      icon: AppIcons.biometrics,
+                      tone: IconTileTone.info,
+                      title: 'Biometric login',
+                      subtitle: 'Use fingerprint or Face ID on this device',
+                      trailing: Switch(
+                        value: _biometricsEnabled,
+                        onChanged: _toggleBiometrics,
+                        activeThumbColor: t.colorScheme.primary,
+                      ),
                     ),
                   ),
                 ],
@@ -176,58 +176,22 @@ class _SecuritySettingsScreenState
 
   Widget _autoLockCard(BuildContext context) {
     final t = Theme.of(context);
-    return GlassyCard(
-      padding: const EdgeInsets.all(16),
-      radius: 16,
+    return SettingsCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: t.colorScheme.primary.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  AppIcons.lockClock,
-                  color: t.colorScheme.primary,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Auto-lock',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: t.colorScheme.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _autoLockSeconds == 0
-                          ? 'Off — tap a timer to turn it on'
-                          : 'Return to the sign-in picker after inactivity',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: t.colorScheme.onSurface.withValues(alpha: 0.6),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          SettingsControlRow(
+            icon: AppIcons.lockClock,
+            tone: IconTileTone.danger,
+            title: 'Auto-lock',
+            subtitle: _autoLockSeconds == 0
+                ? 'Off — tap a timer to turn it on'
+                : 'Return to the sign-in picker after inactivity',
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: context.getRSize(16)),
           Wrap(
-            spacing: 8,
-            runSpacing: 8,
+            spacing: context.getRSize(8),
+            runSpacing: context.getRSize(8),
             children: [
               for (final seconds in _presets)
                 () {
@@ -241,19 +205,16 @@ class _SecuritySettingsScreenState
                     backgroundColor: t.colorScheme.surface,
                     selectedColor: t.colorScheme.primary,
                     checkmarkColor: t.colorScheme.onPrimary,
-                    side: BorderSide(
-                      color: t.colorScheme.onSurface.withValues(alpha: 0.12),
-                    ),
-                    labelStyle: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: selected
-                          ? t.colorScheme.onPrimary
-                          : t.colorScheme.onSurface,
-                    ),
+                    side: BorderSide(color: t.dividerColor),
+                    labelStyle: context
+                        .semiBoldStyle(13)
+                        .copyWith(
+                          color: selected
+                              ? t.colorScheme.onPrimary
+                              : t.colorScheme.onSurface,
+                        ),
                     // Re-tapping the active chip turns auto-lock off (saves 0).
-                    onSelected: (_) =>
-                        _saveAutoLock(selected ? 0 : seconds),
+                    onSelected: (_) => _saveAutoLock(selected ? 0 : seconds),
                   );
                 }(),
             ],

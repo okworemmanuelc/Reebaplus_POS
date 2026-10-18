@@ -6,13 +6,14 @@ import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/core/settings/settings_page_parts.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
 
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
-import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
-import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
 /// CEO Settings → Subscription (master plan §32). A READ-ONLY view of the
 /// business's plan, status, and trial-countdown / renewal date. Status is
@@ -22,47 +23,39 @@ import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
 class SubscriptionScreen extends ConsumerWidget {
   const SubscriptionScreen({super.key});
 
-  static const _amber = Color(0xFFF59E0B);
-  static const _green = Color(0xFF16A34A);
-  static const _red = Color(0xFFDC2626);
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     final canManage = Gates.manageSettings.allows(ref);
 
-    return GlassyScaffold(
+    return SettingsPageScaffold(
+      icon: AppIcons.premium,
       title: 'Subscription',
       body: !canManage
           ? const SettingsNoAccess()
           : SettingsFadeIn(
-              child: ListView(
-                padding: EdgeInsets.fromLTRB(
-                  24,
-                  24,
-                  24,
-                  24 + context.deviceBottomPadding,
-                ),
+              child: SettingsPageList(
+                listKey: const Key('subscription-list'),
                 children: [
-                  const SettingsSectionTitle('PLAN & STATUS'),
-                  const SizedBox(height: 16),
+                  const SectionHeader(
+                    title: 'PLAN & STATUS',
+                    variant: SectionHeaderVariant.group,
+                  ),
+                  SizedBox(height: context.getRSize(10)),
                   _statusCard(context, ref),
-                  const SizedBox(height: 24),
+                  SizedBox(height: context.getRSize(24)),
                   AppButton(
                     text: 'Subscribe / Renew',
                     icon: AppIcons.premium,
                     onPressed: () => _showRenewInfo(context),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: context.getRSize(12)),
                   Text(
                     'Your subscription is managed by Reebaplus. Changes from the '
                     'admin console appear here automatically.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 12,
-                      height: 1.4,
-                      color: t.colorScheme.onSurface.withValues(alpha: 0.55),
-                    ),
+                    style: context.regularStyle(12).copyWith(color: muted),
                   ),
                 ],
               ),
@@ -72,27 +65,23 @@ class SubscriptionScreen extends ConsumerWidget {
 
   Widget _statusCard(BuildContext context, WidgetRef ref) {
     final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     final business = ref.watch(currentBusinessProvider);
     final access = ref.watch(currentBusinessSubscriptionProvider);
 
     if (business == null) {
-      return GlassyCard(
-        padding: const EdgeInsets.all(16),
-        radius: 16,
+      return SettingsCard(
         child: Text(
           'Subscription details will appear once your business has synced.',
-          style: TextStyle(
-            color: t.colorScheme.onSurface.withValues(alpha: 0.7),
-          ),
+          style: context.regularStyle(14).copyWith(color: muted),
         ),
       );
     }
 
-    final (statusLabel, statusColor) = _statusChip(access);
+    final (statusLabel, statusTone) = _statusChip(access);
 
-    return GlassyCard(
-      padding: const EdgeInsets.all(20),
-      radius: 16,
+    return SettingsCard(
+      padding: EdgeInsets.all(context.getRSize(20)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -101,25 +90,21 @@ class SubscriptionScreen extends ConsumerWidget {
               Expanded(
                 child: Text(
                   _planTitle(business.subscriptionPlan),
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: t.colorScheme.onSurface,
-                  ),
+                  style: context
+                      .extraBoldStyle(18)
+                      .copyWith(color: t.colorScheme.onSurface),
                 ),
               ),
-              _pill(context, statusLabel, statusColor),
+              SizedBox(width: context.getRSize(8)),
+              TagPill(label: statusLabel, tone: statusTone),
             ],
           ),
-          const SizedBox(height: 6),
+          SizedBox(height: context.getRSize(6)),
           Text(
             _priceLine(business.subscriptionPlan),
-            style: TextStyle(
-              fontSize: 14,
-              color: t.colorScheme.onSurface.withValues(alpha: 0.7),
-            ),
+            style: context.regularStyle(14).copyWith(color: muted),
           ),
-          Divider(height: 28, color: t.dividerColor),
+          Divider(height: context.getRSize(28), color: t.dividerColor),
           _detailRow(
             context,
             AppIcons.event,
@@ -133,13 +118,14 @@ class SubscriptionScreen extends ConsumerWidget {
 
   // ── helpers ────────────────────────────────────────────────────────────
 
-  (String, Color) _statusChip(SubscriptionAccess access) => switch (access) {
-    SubscriptionAccess.active => ('ACTIVE', _green),
-    SubscriptionAccess.trialActive => ('FREE TRIAL', _amber),
-    SubscriptionAccess.trialExpired => ('TRIAL ENDED', _red),
-    SubscriptionAccess.inactive => ('INACTIVE', _red),
-    SubscriptionAccess.grace => ('—', _amber),
-  };
+  (String, TagPillTone) _statusChip(SubscriptionAccess access) =>
+      switch (access) {
+        SubscriptionAccess.active => ('ACTIVE', TagPillTone.green),
+        SubscriptionAccess.trialActive => ('FREE TRIAL', TagPillTone.warning),
+        SubscriptionAccess.trialExpired => ('TRIAL ENDED', TagPillTone.danger),
+        SubscriptionAccess.inactive => ('INACTIVE', TagPillTone.danger),
+        SubscriptionAccess.grace => ('—', TagPillTone.warning),
+      };
 
   String _planTitle(String? plan) => 'Monthly subscription';
 
@@ -182,51 +168,27 @@ class SubscriptionScreen extends ConsumerWidget {
     String value,
   ) {
     final t = Theme.of(context);
-    final subtext = t.colorScheme.onSurface.withValues(alpha: 0.6);
-    return Row(
-      children: [
-        Icon(icon, size: 16, color: subtext),
-        const SizedBox(width: 10),
-        Text(
-          label,
-          style: TextStyle(
-            color: subtext,
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const Spacer(),
-        Flexible(
-          child: Text(
-            value,
-            textAlign: TextAlign.end,
-            style: TextStyle(
-              color: t.colorScheme.onSurface,
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: kMinInteractiveDimension),
+      child: Row(
+        children: [
+          AppIcon(icon, size: context.getRSize(18), color: muted),
+          SizedBox(width: context.getRSize(10)),
+          Text(label, style: context.semiBoldStyle(13).copyWith(color: muted)),
+          SizedBox(width: context.getRSize(12)),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: context
+                  .boldStyle(13)
+                  .copyWith(color: t.colorScheme.onSurface),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
-        ),
-      ],
-    );
-  }
-
-  Widget _pill(BuildContext context, String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-        ),
+        ],
       ),
     );
   }
