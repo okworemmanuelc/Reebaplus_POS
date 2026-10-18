@@ -244,6 +244,24 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.byKey(const Key('edit-profile-sheet')), findsOneWidget);
         expect(tester.takeException(), isNull);
+        // Save can be scrolled above the keyboard (the sheet lifts its
+        // content by the keyboard height).
+        final save = find.text('Save changes');
+        await tester.scrollUntilVisible(
+          save,
+          100,
+          scrollable: find
+              .descendant(
+                of: find.byKey(const Key('edit-profile-sheet')),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+        await tester.pumpAndSettle();
+        expect(
+          tester.getRect(save).bottom,
+          lessThanOrEqualTo(size.height - keyboard),
+        );
         tester.view.resetViewInsets();
         await disposeScreen(tester);
       });

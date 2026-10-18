@@ -156,7 +156,13 @@ class _EditProfileSheetState extends State<EditProfileSheet> {
               gutter,
               context.getRSize(12),
               gutter,
-              context.getRSize(16) + context.deviceBottomPadding,
+              // A modal sheet sits on the root navigator, above MainLayout's
+              // Scaffold, so nothing resizes it for the keyboard: lift by the
+              // keyboard here. deviceBottomPadding collapses to 0 while the
+              // keyboard is up, so the two never double-count.
+              context.getRSize(16) +
+                  context.deviceBottomPadding +
+                  MediaQuery.viewInsetsOf(context).bottom,
             ),
             sliver: SliverToBoxAdapter(
               child: Column(
