@@ -1,42 +1,40 @@
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/core/settings/settings_page_parts.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
-import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/theme/theme_notifier.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
 /// Per-device display settings — light / dark / system. Pushed from the drawer
 /// ("Display"). The business *accent colour* is NOT here: it's CEO-controlled
 /// and synced, under CEO Settings → Appearance (§10.1).
+///
+/// Restyled in #442 (PRD #346 Wave 2 C): solid top bar, 720 cap, one card per
+/// mode with the active one outlined in the primary colour.
 class ThemeSettingsScreen extends StatelessWidget {
   const ThemeSettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Display'), centerTitle: false),
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    return SettingsPageScaffold(
+      icon: AppIcons.themeMode,
+      title: 'Display',
       body: ListenableBuilder(
         listenable: themeController,
-        builder: (_, __) {
-          return ListView(
-            padding: EdgeInsets.fromLTRB(
-              context.getRSize(20),
-              context.getRSize(24),
-              context.getRSize(20),
-              context.getRSize(24) + context.deviceBottomPadding,
-            ),
+        builder: (_, _) {
+          return SettingsPageList(
+            listKey: const Key('display-list'),
             children: [
-              Text(
-                'Appearance Mode',
-                style: t.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
+              const SectionHeader(title: 'Appearance Mode'),
               SizedBox(height: context.getRSize(4)),
               Text(
                 'Applies to this device only.',
-                style: t.textTheme.bodySmall?.copyWith(
-                  color: t.colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
+                style: context.regularStyle(13).copyWith(color: muted),
               ),
               SizedBox(height: context.getRSize(12)),
               _ModeTile(
@@ -88,48 +86,57 @@ class _ModeTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     final primary = t.colorScheme.primary;
-    return Material(
-      color: isActive ? primary.withValues(alpha: 0.1) : t.colorScheme.surface,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: context.getRSize(16),
-            vertical: context.getRSize(14),
-          ),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: isActive ? primary : t.dividerColor,
-              width: isActive ? 1.5 : 1,
+    final radius = BorderRadius.circular(AppSpacing.borderRadiusXL);
+    return DecoratedBox(
+      decoration: AppDecorations.card(context).copyWith(
+        border: Border.all(
+          color: isActive ? primary : t.dividerColor,
+          width: isActive ? 2 : 1,
+        ),
+      ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          borderRadius: radius,
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              minHeight: kMinInteractiveDimension,
             ),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                icon,
-                size: context.getRSize(18),
-                color: isActive ? primary : t.iconTheme.color,
-              ),
-              SizedBox(width: context.getRSize(14)),
-              Expanded(
-                child: Text(
-                  label,
-                  style: t.textTheme.bodyLarge?.copyWith(
-                    fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                    color: isActive ? primary : t.colorScheme.onSurface,
+            child: Padding(
+              padding: EdgeInsets.all(context.getRSize(14)),
+              child: Row(
+                children: [
+                  IconTile(
+                    icon: icon,
+                    size: 40,
+                    tone: isActive ? IconTileTone.info : IconTileTone.neutral,
                   ),
-                ),
+                  SizedBox(width: context.getRSize(14)),
+                  Expanded(
+                    child: Text(
+                      label,
+                      style:
+                          (isActive
+                                  ? context.boldStyle(16)
+                                  : context.mediumStyle(16))
+                              .copyWith(
+                                color: isActive
+                                    ? primary
+                                    : t.colorScheme.onSurface,
+                              ),
+                    ),
+                  ),
+                  if (isActive)
+                    AppIcon(
+                      AppIcons.checkCircle,
+                      filled: true,
+                      size: context.getRSize(22),
+                      color: primary,
+                    ),
+                ],
               ),
-              if (isActive)
-                Icon(
-                  AppIcons.checkCircle,
-                  size: context.getRSize(20),
-                  color: primary,
-                ),
-            ],
+            ),
           ),
         ),
       ),

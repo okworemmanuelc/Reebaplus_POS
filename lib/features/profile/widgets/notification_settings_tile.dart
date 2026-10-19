@@ -5,10 +5,11 @@ import 'package:permission_handler/permission_handler.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/services/push_messaging_port.dart';
-import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
+import 'package:reebaplus_pos/core/settings/settings_page_parts.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
-import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
 /// Profile-screen tile that surfaces and manages this device's OS push
 /// permission for console broadcasts (#138 Slice 2). Lives on the Profile screen
@@ -34,8 +35,9 @@ class _NotificationSettingsTileState
   }
 
   Future<void> _refresh() async {
-    final status =
-        await ref.read(pushNotificationServiceProvider).currentPermission();
+    final status = await ref
+        .read(pushNotificationServiceProvider)
+        .currentPermission();
     if (mounted) setState(() => _status = status);
   }
 
@@ -57,54 +59,13 @@ class _NotificationSettingsTileState
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final primary = theme.colorScheme.primary;
-    final subtext =
-        theme.textTheme.bodySmall?.color ?? theme.iconTheme.color!;
-
-    return GlassyCard(
-      padding: EdgeInsets.all(context.getRSize(16)),
-      child: Row(
-        children: [
-          Container(
-            padding: EdgeInsets.all(context.getRSize(10)),
-            decoration: BoxDecoration(
-              color: primary.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              AppIcons.announcement,
-              color: primary,
-              size: context.getRSize(16),
-            ),
-          ),
-          SizedBox(width: context.getRSize(14)),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Announcements',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: context.getRFontSize(14),
-                    color: theme.colorScheme.onSurface,
-                  ),
-                ),
-                SizedBox(height: context.getRSize(2)),
-                Text(
-                  _subtitle,
-                  style: TextStyle(
-                    color: subtext,
-                    fontSize: context.getRFontSize(12),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(width: context.getRSize(12)),
-          _trailing(context),
-        ],
+    return SettingsCard(
+      child: SettingsControlRow(
+        icon: AppIcons.announcement,
+        tone: IconTileTone.info,
+        title: 'Announcements',
+        subtitle: _subtitle,
+        trailing: _trailing(context),
       ),
     );
   }
@@ -135,13 +96,14 @@ class _NotificationSettingsTileState
     }
     switch (_status!) {
       case PushPermissionStatus.granted:
-        final success =
-            Theme.of(context).extension<AppSemanticColors>()?.success ??
-                Theme.of(context).colorScheme.primary;
-        return Icon(
+        final f =
+            Theme.of(context).extension<AppFixedColors>() ??
+            AppFixedColors.light;
+        return AppIcon(
           AppIcons.checkCircle,
-          color: success,
-          size: context.getRSize(18),
+          filled: true,
+          color: f.green,
+          size: context.getRSize(24),
         );
       case PushPermissionStatus.notDetermined:
         return AppButton(
