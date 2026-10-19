@@ -74,7 +74,7 @@ void main() {
       roleRank: roleRank,
       textScaler: textScaler,
       theme: theme ?? AppTheme.light(),
-      overrides: reportOverrides(env, DateTime.now()),
+      overrides: reportOverrides(env, reportTodayAnchor()),
       settle: false,
     );
     for (var i = 0; i < 6; i++) {

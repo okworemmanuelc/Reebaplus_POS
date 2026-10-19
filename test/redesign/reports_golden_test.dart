@@ -109,7 +109,7 @@ void main() {
             theme: theme,
             overrides: [
               currentBusinessNameProvider.overrideWithValue('Stallion Global'),
-              ...reportOverrides(env, DateTime.now()),
+              ...reportOverrides(env, reportTodayAnchor()),
             ],
             settle: false,
           );
