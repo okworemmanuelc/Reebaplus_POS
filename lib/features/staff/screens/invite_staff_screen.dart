@@ -14,12 +14,14 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/van_sales/van_sales_switch.dart';
-import 'package:reebaplus_pos/shared/utils/role_display.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
-import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
-import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
+import 'package:reebaplus_pos/features/staff/widgets/staff_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
 /// Detailed capabilities for each role slug, shown dynamically in the selector cards.
 const Map<String, List<String>> _roleCapabilities = {
@@ -245,19 +247,32 @@ class _InviteStaffScreenState extends ConsumerState<InviteStaffScreen> {
   Widget build(BuildContext context) {
     final title = _generatedCode == null ? 'Invite Staff' : 'Invite Ready';
 
-    return GlassyScaffold(
-      title: title,
-      centerTitle: true,
-      body: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(
-          context.getRSize(20),
-          context.getRSize(20),
-          context.getRSize(20),
-          context.getRSize(20) + context.deviceBottomPadding,
+    return Container(
+      decoration: AppDecorations.pageBackground(context),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: StaffTopBar(
+          key: StaffKeys.topBar,
+          height: staffTopBarHeight(context),
+          header: ScreenHeader(
+            icon: AppIcons.userAdd,
+            title: title,
+            leading: const StaffBackButton(key: StaffKeys.inviteBack),
+          ),
         ),
-        child: _generatedCode == null
-            ? _buildForm(context)
-            : _buildGenerated(context),
+        body: SafeArea(
+          top: false,
+          bottom: false,
+          child: StaffColumn(
+            top: context.getRSize(20),
+            bottom: context.getRSize(20) + context.deviceBottomPadding,
+            children: [
+              _generatedCode == null
+                  ? _buildForm(context)
+                  : _buildGenerated(context),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -317,22 +332,25 @@ class _InviteStaffScreenState extends ConsumerState<InviteStaffScreen> {
           SizedBox(height: context.getRSize(20)),
           Text(
             'Select Role & View Capabilities',
-            style: TextStyle(
-              fontSize: context.getRFontSize(14),
-              fontWeight: FontWeight.bold,
-              color: t.colorScheme.onSurface,
-            ),
+            style: context
+                .boldStyle(14)
+                .copyWith(color: t.colorScheme.onSurface),
           ),
           SizedBox(height: context.getRSize(8)),
           // Custom vertical selector list of role capability cards
           ...roles.map((role) {
             final isSelected = _roleId == role.id;
             final capabilities = _roleCapabilities[role.slug] ?? const [];
-            return _RoleSelectionCard(
-              role: role,
-              isSelected: isSelected,
-              capabilities: capabilities,
-              onTap: () => setState(() => _roleId = role.id),
+            return Padding(
+              padding: EdgeInsets.only(bottom: context.getRSize(12)),
+              child: StaffRoleOptionCard(
+                key: StaffKeys.roleCard(role.id),
+                roleName: role.name,
+                roleSlug: role.slug,
+                capabilities: capabilities,
+                selected: isSelected,
+                onTap: () => setState(() => _roleId = role.id),
+              ),
             );
           }),
           SizedBox(height: context.getRSize(24)),
@@ -358,28 +376,30 @@ class _InviteStaffScreenState extends ConsumerState<InviteStaffScreen> {
         Text(
           'We\'ve emailed this code to $_generatedEmail. You can also copy or '
           'share it below. It expires in 7 days and can be used once.',
-          style: TextStyle(color: subtext, fontSize: context.getRFontSize(13)),
+          style: context.regularStyle(13).copyWith(color: subtext),
         ),
         SizedBox(height: context.getRSize(16)),
         Container(
           width: double.infinity,
           padding: EdgeInsets.symmetric(vertical: context.getRSize(20)),
-          decoration: BoxDecoration(
-            color: t.colorScheme.primary.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: t.colorScheme.primary.withValues(alpha: 0.3),
-            ),
+          decoration: AppDecorations.card(context).copyWith(
+            color:
+                t.extension<AppSchemeColors>()?.primaryTint ??
+                t.colorScheme.primary.withValues(alpha: 0.12),
+            border: Border.all(color: t.colorScheme.primary),
           ),
           child: Center(
-            child: Text(
-              _generatedCode ?? '',
-              style: TextStyle(
-                color: text,
-                fontSize: context.getRFontSize(30),
-                fontWeight: FontWeight.bold,
-                letterSpacing: 6,
-                fontFamily: 'monospace',
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                _generatedCode ?? '',
+                key: StaffKeys.inviteCode,
+                style: context.monoStyle.copyWith(
+                  color: text,
+                  fontSize: context.getRFontSize(30),
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 6,
+                ),
               ),
             ),
           ),
@@ -422,163 +442,6 @@ class _InviteStaffScreenState extends ConsumerState<InviteStaffScreen> {
           onPressed: () => Navigator.pop(context),
         ),
       ],
-    );
-  }
-}
-
-/// Custom selection card for role options that lists specific capabilities.
-class _RoleSelectionCard extends StatelessWidget {
-  final RoleData role;
-  final bool isSelected;
-  final List<String> capabilities;
-  final VoidCallback onTap;
-
-  const _RoleSelectionCard({
-    required this.role,
-    required this.isSelected,
-    required this.capabilities,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final primaryColor = theme.colorScheme.primary;
-
-    return GlassyCard(
-      margin: EdgeInsets.only(bottom: context.getRSize(12)),
-      padding: EdgeInsets.zero,
-      backgroundColor: isSelected
-          ? primaryColor.withValues(alpha: isDark ? 0.15 : 0.08)
-          : (isDark
-                ? theme.colorScheme.surface.withValues(alpha: 0.25)
-                : theme.colorScheme.surface.withValues(alpha: 0.6)),
-      border: Border.all(
-        color: isSelected
-            ? primaryColor
-            : (isDark
-                  ? Colors.white.withValues(alpha: 0.05)
-                  : theme.colorScheme.primary.withValues(alpha: 0.05)),
-        width: isSelected ? 2 : 1,
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: EdgeInsets.all(context.getRSize(16)),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: context.getRSize(18),
-                    height: context.getRSize(18),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: isSelected
-                            ? primaryColor
-                            : theme.colorScheme.onSurfaceVariant.withValues(
-                                alpha: 0.4,
-                              ),
-                        width: 2,
-                      ),
-                    ),
-                    child: isSelected
-                        ? Center(
-                            child: Container(
-                              width: context.getRSize(10),
-                              height: context.getRSize(10),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: primaryColor,
-                              ),
-                            ),
-                          )
-                        : null,
-                  ),
-                  SizedBox(width: context.getRSize(12)),
-                  Text(
-                    role.name,
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(15),
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.onSurface,
-                    ),
-                  ),
-                  const Spacer(),
-                  _RoleTag(role: role),
-                ],
-              ),
-              if (capabilities.isNotEmpty) ...[
-                SizedBox(height: context.getRSize(12)),
-                ...capabilities.map(
-                  (cap) => Padding(
-                    padding: EdgeInsets.only(bottom: context.getRSize(6)),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: EdgeInsets.only(
-                            top: context.getRSize(3),
-                            right: context.getRSize(8),
-                          ),
-                          child: Icon(
-                            AppIcons.checkCircle,
-                            size: context.getRSize(12),
-                            color: isSelected
-                                ? primaryColor
-                                : theme.colorScheme.onSurfaceVariant.withValues(
-                                    alpha: 0.6,
-                                  ),
-                          ),
-                        ),
-                        Expanded(
-                          child: Text(
-                            cap,
-                            style: TextStyle(
-                              fontSize: context.getRFontSize(13),
-                              color: theme.colorScheme.onSurfaceVariant,
-                              height: 1.3,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _RoleTag extends StatelessWidget {
-  final RoleData? role;
-  const _RoleTag({required this.role});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = roleTagColor(role?.slug);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        role?.name ?? 'Unknown',
-        style: TextStyle(
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
     );
   }
 }

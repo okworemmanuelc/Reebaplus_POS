@@ -5,13 +5,15 @@ import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
-import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/stores/van_store.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
-import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
-import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
+import 'package:reebaplus_pos/features/stores/widgets/stores_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/shared/widgets/app_input.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
 /// CEO Settings > Stores (§10.1). Registers and edits the business's stores —
 /// name + single `location` address. Name/address persist to the `stores` row
@@ -122,7 +124,10 @@ class _StoresSettingsScreenState extends ConsumerState<StoresSettingsScreen> {
         staffId: db.currentUserId,
       );
       if (!mounted) return;
-      AppNotification.showSuccess(context, isVan ? 'Van saved.' : 'Store saved.');
+      AppNotification.showSuccess(
+        context,
+        isVan ? 'Van saved.' : 'Store saved.',
+      );
     } catch (_) {
       if (!mounted) return;
       AppNotification.showError(
@@ -147,14 +152,9 @@ class _StoresSettingsScreenState extends ConsumerState<StoresSettingsScreen> {
     }
     // The sheet owns its controllers and hands the values back through `pop`,
     // so there is nothing here to dispose — see [_AddLocationSheet].
-    final created = await showModalBottomSheet<_NewLocation>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => _AddLocationSheet(isVan: isVan),
+    final created = await showStoresSheet<_NewLocation>(
+      context,
+      (_) => _AddLocationSheet(isVan: isVan),
     );
     // A non-null result means the sheet's validator passed, so the name is
     // already known non-empty.
@@ -192,6 +192,7 @@ class _StoresSettingsScreenState extends ConsumerState<StoresSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     // Screen-level gate (hard rule #6) + keeps the permission chain warm for
     // the save-site guard. stores.manage (via Gates.manageStores), not
     // settings.manage — verbatim.
@@ -200,89 +201,134 @@ class _StoresSettingsScreenState extends ConsumerState<StoresSettingsScreen> {
     // up vans without holding `stores.manage`.
     final canManageVans = Gates.vanManage.allows(ref);
 
-    // Scaffold wrapper handles body resizing under MainLayout correctly.
-    return GlassyScaffold(
-      title: 'Stores',
-      body: !canManage && !canManageVans
-          ? const SettingsNoAccess()
-          : _loading
-          ? const SizedBox.shrink()
-          : SettingsFadeIn(
-              child: ListView(
-                padding: EdgeInsets.fromLTRB(
-                  24,
-                  24,
-                  24,
-                  24 + context.deviceBottomPadding,
-                ),
-                children: [
-                  if (canManage) ...[
-                    for (final store in _stores) ...[
-                      _LocationCard(
-                        nameLabel: 'Store name',
-                        nameIcon: AppIcons.store,
-                        nameController: _nameControllers[store.id]!,
-                        addressController: _addressControllers[store.id]!,
-                        saving: _saving.contains(store.id),
-                        onSave: () => _save(store),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                    OutlinedButton.icon(
-                      onPressed: () => _addLocation(isVan: false),
-                      icon: const Icon(AppIcons.add),
-                      label: const Text('Add a store'),
-                    ),
-                  ],
-                  if (canManageVans) ...[
-                    SizedBox(height: context.getRSize(28)),
-                    Text(
-                      'Vans',
-                      style: t.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    SizedBox(height: context.getRSize(6)),
-                    Text(
-                      'A van holds stock on the road. It is kept out of the '
-                      'store picker and per-store reports, so only the drivers '
-                      'you assign to it sell from it.',
-                      style: t.textTheme.bodySmall?.copyWith(
-                        color: t.colorScheme.onSurface.withValues(alpha: 0.6),
-                      ),
-                    ),
-                    SizedBox(height: context.getRSize(16)),
-                    for (final van in _vans) ...[
-                      _LocationCard(
-                        nameLabel: 'Van name',
-                        nameIcon: AppIcons.supplier,
-                        nameController: _nameControllers[van.id]!,
-                        addressController: _addressControllers[van.id]!,
-                        saving: _saving.contains(van.id),
-                        onSave: () => _save(van),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                    if (_vans.isEmpty)
-                      Padding(
-                        padding: EdgeInsets.only(bottom: context.getRSize(16)),
-                        child: Text(
-                          'No vans yet.',
-                          style: t.textTheme.bodySmall?.copyWith(
-                            color:
-                                t.colorScheme.onSurface.withValues(alpha: 0.5),
-                          ),
+    return Container(
+      decoration: AppDecorations.pageBackground(context),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: StoresTopBar(
+          key: StoresKeys.topBar,
+          height: storesTopBarHeight(context),
+          header: ScreenHeader(
+            leading: StoresBackButton(
+              onPressed: () => Navigator.maybePop(context),
+            ),
+            icon: AppIcons.store,
+            title: 'Stores',
+          ),
+        ),
+        body: !canManage && !canManageVans
+            ? const StoresMessage(
+                key: StoresKeys.noAccess,
+                text: 'You don\'t have access to settings.',
+              )
+            : _loading
+            ? const SizedBox.shrink()
+            : _FadeIn(
+                child: CustomScrollView(
+                  key: StoresKeys.settingsList,
+                  slivers: [
+                    storesSliver(
+                      SliverToBoxAdapter(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (canManage) ...[
+                              for (final store in _stores) ...[
+                                _LocationCard(
+                                  nameLabel: 'Store name',
+                                  nameIcon: AppIcons.store,
+                                  nameController: _nameControllers[store.id]!,
+                                  addressController:
+                                      _addressControllers[store.id]!,
+                                  saving: _saving.contains(store.id),
+                                  onSave: () => _save(store),
+                                ),
+                                SizedBox(height: context.getRSize(12)),
+                              ],
+                              AppButton(
+                                text: 'Add a store',
+                                icon: AppIcons.add,
+                                variant: AppButtonVariant.outline,
+                                height: kMinInteractiveDimension,
+                                onPressed: () => _addLocation(isVan: false),
+                              ),
+                            ],
+                            if (canManageVans) ...[
+                              SizedBox(height: context.getRSize(20)),
+                              const SectionHeader(title: 'Vans'),
+                              SizedBox(height: context.getRSize(6)),
+                              Text(
+                                'A van holds stock on the road. It is kept out of the '
+                                'store picker and per-store reports, so only the drivers '
+                                'you assign to it sell from it.',
+                                style: context
+                                    .regularStyle(13)
+                                    .copyWith(color: muted),
+                              ),
+                              SizedBox(height: context.getRSize(12)),
+                              for (final van in _vans) ...[
+                                _LocationCard(
+                                  nameLabel: 'Van name',
+                                  nameIcon: AppIcons.supplier,
+                                  nameController: _nameControllers[van.id]!,
+                                  addressController:
+                                      _addressControllers[van.id]!,
+                                  saving: _saving.contains(van.id),
+                                  onSave: () => _save(van),
+                                ),
+                                SizedBox(height: context.getRSize(12)),
+                              ],
+                              if (_vans.isEmpty)
+                                Padding(
+                                  padding: EdgeInsets.only(
+                                    bottom: context.getRSize(16),
+                                  ),
+                                  child: Text(
+                                    'No vans yet.',
+                                    style: context
+                                        .regularStyle(13)
+                                        .copyWith(color: muted),
+                                  ),
+                                ),
+                              AppButton(
+                                text: 'Add a van',
+                                icon: AppIcons.add,
+                                variant: AppButtonVariant.outline,
+                                height: kMinInteractiveDimension,
+                                onPressed: () => _addLocation(isVan: true),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
-                    OutlinedButton.icon(
-                      onPressed: () => _addLocation(isVan: true),
-                      icon: const Icon(AppIcons.add),
-                      label: const Text('Add a van'),
+                      top: context.getRSize(10),
+                      bottom:
+                          context.getRSize(24) + context.deviceBottomPadding,
                     ),
                   ],
-                ],
+                ),
               ),
-            ),
+      ),
+    );
+  }
+}
+
+/// Subtle fade-in wrapper for loaded content (§30.7 — no spinners). A local
+/// copy of the frozen `SettingsFadeIn`.
+class _FadeIn extends StatelessWidget {
+  const _FadeIn({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeIn,
+      builder: (context, opacity, child) =>
+          Opacity(opacity: opacity, child: child),
+      child: child,
     );
   }
 }
@@ -309,32 +355,28 @@ class _LocationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GlassyCard(
-      padding: const EdgeInsets.all(16),
-      radius: 16,
-      child: Column(
-        children: [
-          TextField(
-            controller: nameController,
-            textCapitalization: TextCapitalization.words,
-            decoration: AppDecorations.authInputDecoration(
-              context,
-              label: nameLabel,
-              prefixIcon: nameIcon,
+    return DecoratedBox(
+      decoration: AppDecorations.card(context),
+      child: Padding(
+        padding: EdgeInsets.all(context.getRSize(12)),
+        child: Column(
+          children: [
+            AppInput(
+              controller: nameController,
+              textCapitalization: TextCapitalization.words,
+              labelText: nameLabel,
+              prefixIcon: Icon(nameIcon, size: 20),
             ),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: addressController,
-            decoration: AppDecorations.authInputDecoration(
-              context,
-              label: 'Address',
-              prefixIcon: AppIcons.location,
+            SizedBox(height: context.getRSize(12)),
+            AppInput(
+              controller: addressController,
+              labelText: 'Address',
+              prefixIcon: const Icon(AppIcons.location, size: 20),
             ),
-          ),
-          const SizedBox(height: 16),
-          _SaveButton(saving: saving, onPressed: onSave),
-        ],
+            SizedBox(height: context.getRSize(12)),
+            AppButton(text: 'Save changes', onPressed: saving ? null : onSave),
+          ],
+        ),
       ),
     );
   }
@@ -361,13 +403,9 @@ class _NewLocation {
 /// icon, because a van *is* a `stores` row.
 ///
 /// **Owns its controllers.** They are created and disposed inside this State so
-/// they can never be disposed out from under the fields reading them. The
-/// earlier version took them from the caller, which disposed them the moment
-/// `showModalBottomSheet` returned — but that future completes when `pop` is
-/// called, while the sheet is still animating out and its `TextFormField`s are
-/// still mounted, so they touched a disposed `TextEditingController` and threw
-/// "A TextEditingController was used after being disposed." Keeping ownership
-/// and lifetime in one place is the fix; hence [_NewLocation] as the result.
+/// they can never be disposed out from under the fields reading them (the
+/// earlier version took them from the caller, which disposed them while the
+/// sheet was still animating out). Hence [_NewLocation] as the result.
 class _AddLocationSheet extends StatefulWidget {
   const _AddLocationSheet({required this.isVan});
 
@@ -402,110 +440,46 @@ class _AddLocationSheetState extends State<_AddLocationSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context);
     final isVan = widget.isVan;
-    return Padding(
-      // deviceBottomPadding (nav only), never deviceBottomInset: the sheet sits
-      // under MainLayout's Scaffold, which already resizes for the keyboard.
-      padding: EdgeInsets.fromLTRB(
-        context.getRSize(24),
-        context.getRSize(20),
-        context.getRSize(24),
-        context.getRSize(24) + context.deviceBottomPadding,
-      ),
-      child: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              isVan ? 'Add a van' : 'Add a store',
-              style: t.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+    // The frame adds deviceBottomPadding (nav only), never deviceBottomInset:
+    // the sheet sits under MainLayout's Scaffold, which already resizes for
+    // the keyboard.
+    return Form(
+      key: _formKey,
+      child: StoreSheetFrame(
+        icon: isVan ? AppIcons.supplier : AppIcons.store,
+        title: isVan ? 'Add a van' : 'Add a store',
+        subtitle: isVan
+            ? 'Give it a name your drivers will recognise.'
+            : 'Give it a name your staff will recognise.',
+        children: [
+          AppInput(
+            controller: _nameController,
+            autofocus: true,
+            textCapitalization: TextCapitalization.words,
+            labelText: isVan ? 'Van name' : 'Store name',
+            prefixIcon: Icon(
+              isVan ? AppIcons.supplier : AppIcons.store,
+              size: 20,
             ),
-            SizedBox(height: context.getRSize(6)),
-            Text(
-              isVan
-                  ? 'Give it a name your drivers will recognise.'
-                  : 'Give it a name your staff will recognise.',
-              style: t.textTheme.bodySmall?.copyWith(
-                color: t.colorScheme.onSurface.withValues(alpha: 0.6),
-              ),
-            ),
-            SizedBox(height: context.getRSize(20)),
-            TextFormField(
-              controller: _nameController,
-              autofocus: true,
-              textCapitalization: TextCapitalization.words,
-              decoration: AppDecorations.authInputDecoration(
-                context,
-                label: isVan ? 'Van name' : 'Store name',
-                prefixIcon: isVan
-                    ? AppIcons.supplier
-                    : AppIcons.store,
-              ),
-              validator: (v) => (v == null || v.trim().isEmpty)
-                  ? (isVan ? 'Give the van a name' : 'Give the store a name')
-                  : null,
-            ),
-            SizedBox(height: context.getRSize(16)),
-            TextFormField(
-              controller: _noteController,
-              textCapitalization: TextCapitalization.words,
-              textInputAction: TextInputAction.done,
-              onFieldSubmitted: (_) => _submit(),
-              decoration: AppDecorations.authInputDecoration(
-                context,
-                label: isVan
-                    ? 'Plate number or route (optional)'
-                    : 'Address (optional)',
-                prefixIcon: AppIcons.location,
-              ),
-            ),
-            SizedBox(height: context.getRSize(24)),
-            _SaveButton(
-              saving: false,
-              label: isVan ? 'Add van' : 'Add store',
-              onPressed: _submit,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SaveButton extends StatelessWidget {
-  final bool saving;
-  final String label;
-  final VoidCallback onPressed;
-  const _SaveButton({
-    required this.saving,
-    required this.onPressed,
-    this.label = 'Save changes',
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: saving ? null : onPressed,
-      child: Opacity(
-        opacity: saving ? 0.6 : 1,
-        child: Container(
-          height: 54,
-          alignment: Alignment.center,
-          decoration: AppDecorations.primaryGradient(context, radius: 14),
-          child: Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
+            validator: (v) => (v == null || v.trim().isEmpty)
+                ? (isVan ? 'Give the van a name' : 'Give the store a name')
+                : null,
           ),
-        ),
+          SizedBox(height: context.getRSize(12)),
+          AppInput(
+            controller: _noteController,
+            textCapitalization: TextCapitalization.words,
+            textInputAction: TextInputAction.done,
+            onFieldSubmitted: (_) => _submit(),
+            labelText: isVan
+                ? 'Plate number or route (optional)'
+                : 'Address (optional)',
+            prefixIcon: const Icon(AppIcons.location, size: 20),
+          ),
+          SizedBox(height: context.getRSize(24)),
+          AppButton(text: isVan ? 'Add van' : 'Add store', onPressed: _submit),
+        ],
       ),
     );
   }
