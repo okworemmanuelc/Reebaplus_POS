@@ -7,6 +7,12 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #443: Sync Issues + Diagnostics restyle (Wave 2 C, 2026-10-19)
+Branch `feat/redesign-w2-sync`, worktree `../drinkPosApp-wt-443`. One PR. **Restyle only: no Drift/cloud/sync/permission change (no `pos-parity` issue), no new package; `SyncPullBanner`, `AppRefreshWrapper`, the outbox, the auto-recovery allowlist and the backoff are untouched.**
+- New `lib/features/sync/widgets/sync_parts.dart` (shared-part candidates): `SyncTopBar`, `syncGutter` (720 cap), `SyncCard`, `SyncHint`, `SyncMessageCard`, `SyncFactRow`, `SyncItemCard`, `SyncAction`, `SyncRoleToggleRow`.
+- Sync Issues, Sync Issues access, the Resolve unsynced data dialog and the Schema error screen rebuilt from the shared parts (see `ui-context.md`). Schema error stays dark-only and provider-free (`AppTheme.dark()` is a pure static `ThemeData`); the error texts, codes, copy-path and close behaviour are unchanged.
+- One shared change: `AppInput` gained an optional `autocorrect` (default true) so the typed DISCARD box keeps `autocorrect: false`.
+- Tests: `test/sync/sync_issues_restyle_test.dart`, `sync_issues_access_screen_test.dart`, `resolve_unsynced_dialog_restyle_test.dart` (keyboard up at 360x640 / 390x844 @1.15), `test/diagnostics/schema_error_screen_test.dart` (no `ProviderScope`); goldens `test/redesign/sync_golden_test.dart` (40).
 ### Issue #441: Stores restyle, part 2 of 2 (Wave 2 C, 2026-10-19)
 Branch `feat/redesign-w2-stores-2` (base: PR 1's branch `feat/redesign-w2-stores`). Store Details + Transfer hub + Dispatch dialog. **Restyle only: no Drift/cloud/sync/permission/status/money change (no `pos-parity` issue).** Stock transfer, request, approve and receive keep their DAO calls, quantities and confirmations.
 - Store Details: `StoresTopBar` + `ScreenHeader` (store name, location or "Main Storage") with a 48dp back arrow (`pop`), `pageBackground`, one 960 column (`kStoreDetailsMaxContentWidth`). Store Value is the shared `StatCard` (figure + "Total Units" pill); Products / Low Stock / Customers are `StoreStatTile`s (Customers still focuses the store, pops and opens the Customers tab). Header cards sit side by side when the measured column is at least 900. Inventory card (chevron from `AppIcons` via `StoresExpansionTile`, `TagPill` units), Request Stock `AppButton`, Quick Actions `SectionHeader` + `SettingsRow`. The restricted view keeps its text, now a `StoresNotice`.

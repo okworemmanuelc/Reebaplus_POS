@@ -14,7 +14,14 @@ import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/sync/widgets/sync_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/shared/widgets/app_input.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
 /// Result of asking the cloud for the `profiles` row backing the current
 /// session. This is what `get_user_business_id()` will resolve to and thus
@@ -232,28 +239,27 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     // Defense-in-depth (hard rules #6/#7): body-guard on Gates.viewSyncIssues
     // (sync.view OR CEO — the implicit owner; other roles get it via CEO
     // Settings → Sync Issues access), the same entry the sidebar item and the
     // drawer sync badge/banner already hide on. This guards a deep-link /
-    // direct push. Keep the AppBar so the back button still works.
+    // direct push. Keep the top bar so the back button still works.
     if (!Gates.viewSyncIssues.allows(ref)) {
-      return Scaffold(
-        backgroundColor: t.scaffoldBackgroundColor,
-        appBar: AppBar(
-          title: const Text(
-            'Sync Issues',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
+      return Container(
+        decoration: AppDecorations.pageBackground(context),
+        child: Scaffold(
           backgroundColor: Colors.transparent,
-          elevation: 0,
-          centerTitle: true,
-        ),
-        body: Center(
-          child: Text(
-            'You don\'t have access to Sync Issues.',
-            style: TextStyle(
-              color: t.colorScheme.onSurface.withValues(alpha: 0.6),
+          appBar: SyncTopBar.of(context, title: 'Sync Issues'),
+          body: Center(
+            key: SyncKeys.noAccess,
+            child: Padding(
+              padding: EdgeInsets.all(context.getRSize(16)),
+              child: Text(
+                'You don\'t have access to Sync Issues.',
+                textAlign: TextAlign.center,
+                style: context.regularStyle(14).copyWith(color: muted),
+              ),
             ),
           ),
         ),
@@ -268,172 +274,169 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
     final claims = SupabaseSyncService.inspectJwtClaims();
     final businessId = ref.read(authProvider).currentUser?.businessId;
 
-    return Scaffold(
-      // Body padding is nav-only (deviceBottomPadding): this screen is under
-      // MainLayout, whose Scaffold already resizes the body for the keyboard, so
-      // the inset must not re-add it. resizeToAvoidBottomInset:false is a harmless
-      // no-op here (the screen sees viewInsets 0 under MainLayout).
-      resizeToAvoidBottomInset: false,
-      backgroundColor: t.scaffoldBackgroundColor,
-      appBar: AppBar(
-        title: const Text(
-          'Sync Issues',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
+    Widget loading() => Padding(
+      padding: EdgeInsets.all(context.getRSize(24)),
+      child: const Center(child: CircularProgressIndicator()),
+    );
+    Widget section(String title) => SectionHeader(title: title);
+    final sectionGap = SizedBox(height: context.getRSize(24));
+    final headerGap = SizedBox(height: context.getRSize(10));
+
+    return Container(
+      decoration: AppDecorations.pageBackground(context),
+      child: Scaffold(
+        // Body padding is nav-only (deviceBottomPadding): this screen is under
+        // MainLayout, whose Scaffold already resizes the body for the keyboard,
+        // so the inset must not re-add it. resizeToAvoidBottomInset:false is a
+        // harmless no-op here (the screen sees viewInsets 0 under MainLayout).
+        resizeToAvoidBottomInset: false,
         backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-      ),
-      body: ListView(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          20,
-          20,
-          20 + context.deviceBottomPadding,
-        ),
-        children: [
-          _sectionHeader(t, 'Health'),
-          const SizedBox(height: 12),
-          _healthCard(
-            t,
-            businessId: businessId,
-            claims: claims,
-            profile: _profile,
-            pending: pendingCount,
-            failed: failedCount,
-            orphaned: orphanCount,
-          ),
-          const SizedBox(height: 28),
-          if (_deferredTables.isNotEmpty) ...[
-            _sectionHeader(t, 'Catching up'),
-            const SizedBox(height: 12),
-            _deferredCard(t, _deferredTables),
-            const SizedBox(height: 28),
-          ],
-          _sectionHeader(t, 'Pending items'),
-          const SizedBox(height: 4),
-          Text(
-            'Queued for push. If a row sits here for more than a few minutes, '
-            'tap Retry now to force a fresh attempt or Discard to drop it.',
-            style: TextStyle(
-              fontSize: 12,
-              color: t.colorScheme.onSurface.withValues(alpha: 0.6),
-            ),
-          ),
-          const SizedBox(height: 12),
-          pendingAsync.when(
-            loading: () => const Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-            error: (e, _) => _emptyCard(t, 'Failed to load: $e'),
-            data: (items) {
-              if (items.isEmpty) {
-                return _emptyCard(t, 'No pending items.');
-              }
-              return Column(
-                children: [for (final item in items) _pendingItemTile(t, item)],
-              );
-            },
-          ),
-          const SizedBox(height: 28),
-          _sectionHeader(t, 'Failed items'),
-          const SizedBox(height: 12),
-          failedAsync.when(
-            loading: () => const Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-            error: (e, _) => _emptyCard(t, 'Failed to load: $e'),
-            data: (items) {
-              if (items.isEmpty) {
-                return _emptyCard(t, 'No failed items.');
-              }
-              return Column(
-                children: [for (final item in items) _failedItemTile(t, item)],
-              );
-            },
-          ),
-          const SizedBox(height: 28),
-          Row(
-            children: [
-              Expanded(child: _sectionHeader(t, 'Orphaned items')),
-              if (orphanCount > 0)
-                TextButton(
-                  onPressed: () => _retryAllOrphans(),
-                  child: const Text('Retry all'),
+        appBar: SyncTopBar.of(context, title: 'Sync Issues'),
+        body: SafeArea(
+          top: false,
+          bottom: false,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final gutter = syncGutter(context, constraints.maxWidth);
+              return ListView(
+                key: SyncKeys.list,
+                padding: EdgeInsets.fromLTRB(
+                  gutter,
+                  context.getRSize(16),
+                  gutter,
+                  context.getRSize(16) + context.deviceBottomPadding,
                 ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Permanent failures auto-archived out of the queue. Surface here so '
-            'a "Push/RLS gap" in the audit below has a visible cause.',
-            style: TextStyle(
-              fontSize: 12,
-              color: t.colorScheme.onSurface.withValues(alpha: 0.6),
-            ),
-          ),
-          const SizedBox(height: 12),
-          orphanAsync.when(
-            loading: () => const Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-            error: (e, _) => _emptyCard(t, 'Failed to load: $e'),
-            data: (items) {
-              if (items.isEmpty) {
-                return _emptyCard(t, 'No orphaned items.');
-              }
-              return Column(
-                children: [for (final item in items) _orphanItemTile(t, item)],
+                children: [
+                  section('Health'),
+                  headerGap,
+                  _healthCard(
+                    t,
+                    businessId: businessId,
+                    claims: claims,
+                    profile: _profile,
+                    pending: pendingCount,
+                    failed: failedCount,
+                    orphaned: orphanCount,
+                  ),
+                  sectionGap,
+                  if (_deferredTables.isNotEmpty) ...[
+                    section('Catching up'),
+                    headerGap,
+                    _deferredCard(t, _deferredTables),
+                    sectionGap,
+                  ],
+                  section('Pending items'),
+                  SizedBox(height: context.getRSize(4)),
+                  const SyncHint(
+                    'Queued for push. If a row sits here for more than a few '
+                    'minutes, tap Retry now to force a fresh attempt or '
+                    'Discard to drop it.',
+                  ),
+                  headerGap,
+                  pendingAsync.when(
+                    loading: loading,
+                    error: (e, _) => SyncMessageCard('Failed to load: $e'),
+                    data: (items) {
+                      if (items.isEmpty) {
+                        return const SyncMessageCard('No pending items.');
+                      }
+                      return Column(
+                        children: [
+                          for (final item in items) _pendingItemTile(t, item),
+                        ],
+                      );
+                    },
+                  ),
+                  sectionGap,
+                  section('Failed items'),
+                  headerGap,
+                  failedAsync.when(
+                    loading: loading,
+                    error: (e, _) => SyncMessageCard('Failed to load: $e'),
+                    data: (items) {
+                      if (items.isEmpty) {
+                        return const SyncMessageCard('No failed items.');
+                      }
+                      return Column(
+                        children: [
+                          for (final item in items) _failedItemTile(t, item),
+                        ],
+                      );
+                    },
+                  ),
+                  sectionGap,
+                  Row(
+                    children: [
+                      Expanded(child: section('Orphaned items')),
+                      if (orphanCount > 0)
+                        SyncAction(
+                          key: SyncKeys.retryAllOrphans,
+                          text: 'Retry all',
+                          onPressed: () => _retryAllOrphans(),
+                        ),
+                    ],
+                  ),
+                  SizedBox(height: context.getRSize(4)),
+                  const SyncHint(
+                    'Permanent failures auto-archived out of the queue. '
+                    'Surface here so a "Push/RLS gap" in the audit below has '
+                    'a visible cause.',
+                  ),
+                  headerGap,
+                  orphanAsync.when(
+                    loading: loading,
+                    error: (e, _) => SyncMessageCard('Failed to load: $e'),
+                    data: (items) {
+                      if (items.isEmpty) {
+                        return const SyncMessageCard('No orphaned items.');
+                      }
+                      return Column(
+                        children: [
+                          for (final item in items) _orphanItemTile(t, item),
+                        ],
+                      );
+                    },
+                  ),
+                  sectionGap,
+                  section('Row-count audit'),
+                  headerGap,
+                  _auditCard(t),
+                  SizedBox(height: context.getRSize(8)),
+                ],
               );
             },
           ),
-          const SizedBox(height: 28),
-          _sectionHeader(t, 'Row-count audit'),
-          const SizedBox(height: 12),
-          _auditCard(t),
-          const SizedBox(height: 24),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _sectionHeader(ThemeData t, String text) => Text(
-    text.toUpperCase(),
-    style: TextStyle(
-      fontSize: 13,
-      fontWeight: FontWeight.w700,
-      color: t.colorScheme.primary,
-      letterSpacing: 1.2,
-    ),
-  );
-
   Widget _deferredCard(ThemeData t, List<String> tables) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: AppDecorations.glassCard(context, radius: 16),
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    return SyncCard(
+      key: SyncKeys.deferredCard,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(
+              AppIcon(
                 AppIcons.download,
-                size: 16,
+                size: context.getRSize(18),
                 color: t.colorScheme.primary,
               ),
-              const SizedBox(width: 8),
-              Text(
-                'Some history is still catching up',
-                style: t.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
+              SizedBox(width: context.getRSize(8)),
+              Expanded(
+                child: Text(
+                  'Some history is still catching up',
+                  style: context
+                      .boldStyle(15)
+                      .copyWith(color: t.colorScheme.onSurface),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: context.getRSize(8)),
           Text(
             'The last pull held back ${tables.length} '
             'table${tables.length == 1 ? '' : 's'} — either the connection was '
@@ -442,49 +445,23 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
             'still syncs normally. Tap retry on a stronger connection; if it '
             'keeps coming back, the app is healing it in the background and it '
             'should clear within a sync or two.',
-            style: t.textTheme.bodySmall?.copyWith(
-              color: t.colorScheme.onSurface.withValues(alpha: 0.7),
-              height: 1.4,
-            ),
+            style: context.regularStyle(13).copyWith(color: muted, height: 1.4),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: context.getRSize(12)),
           Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              for (final tbl in tables)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: t.colorScheme.primary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    tbl,
-                    style: t.textTheme.bodySmall?.copyWith(
-                      color: t.colorScheme.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-            ],
+            spacing: context.getRSize(6),
+            runSpacing: context.getRSize(6),
+            children: [for (final tbl in tables) TagPill(label: tbl)],
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: context.getRSize(12)),
           Align(
             alignment: Alignment.centerRight,
-            child: ElevatedButton.icon(
+            child: SyncAction(
+              key: SyncKeys.retryPull,
+              text: _retryingDeferred ? 'Retrying…' : 'Retry pull',
+              icon: AppIcons.refresh,
+              isLoading: _retryingDeferred,
               onPressed: _retryingDeferred ? null : _retryDeferredPull,
-              icon: _retryingDeferred
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(AppIcons.refresh, size: 16),
-              label: Text(_retryingDeferred ? 'Retrying…' : 'Retry pull'),
             ),
           ),
         ],
@@ -504,9 +481,9 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
     // RLS in this project uses auth.uid() → profiles, not the JWT claim.
     // The claim status is shown for completeness only — its absence is
     // expected and harmless. Session presence is the real signal here.
-    final claimColor = !claims.hasSession
-        ? t.colorScheme.error
-        : t.colorScheme.onSurface.withValues(alpha: 0.7);
+    final claimTone = !claims.hasSession
+        ? SyncFactTone.bad
+        : SyncFactTone.normal;
     final claimText = !claims.hasSession
         ? 'No active Supabase session'
         : claims.error != null
@@ -519,137 +496,193 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
     // and therefore what RLS will enforce. Mismatch with local businessId is
     // the most likely root cause of silent insert failures.
     String profileText;
-    Color? profileColor;
+    var profileTone = SyncFactTone.normal;
     if (!profile.fetched) {
       profileText = 'Checking…';
     } else if (profile.error != null) {
       profileText = 'Probe failed: ${profile.error}';
-      profileColor = t.colorScheme.error;
+      profileTone = SyncFactTone.bad;
     } else if (!profile.found) {
       profileText = 'No profiles row for current auth.uid()';
-      profileColor = t.colorScheme.error;
+      profileTone = SyncFactTone.bad;
     } else if (profile.businessId == null) {
       profileText = 'profiles.business_id is NULL — RLS will reject inserts';
-      profileColor = t.colorScheme.error;
+      profileTone = SyncFactTone.bad;
     } else if (businessId != null && profile.businessId != businessId) {
       profileText =
           'profiles.business_id = ${profile.businessId} (mismatch — local is $businessId)';
-      profileColor = t.colorScheme.error;
+      profileTone = SyncFactTone.bad;
     } else {
       profileText = 'profiles.business_id = ${profile.businessId}';
-      profileColor = Colors.green;
+      profileTone = SyncFactTone.ok;
     }
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: AppDecorations.glassCard(context, radius: 16),
+    final gap = SizedBox(height: context.getRSize(10));
+    return SyncCard(
+      key: SyncKeys.healthCard,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _healthRow(
-            t,
-            AppIcons.idBadge,
-            'Local businessId',
-            businessId?.toString() ?? '—',
+          SyncFactRow(
+            icon: AppIcons.idBadge,
+            label: 'Local businessId',
+            value: businessId?.toString() ?? '—',
           ),
-          const SizedBox(height: 10),
-          _healthRow(
-            t,
-            AppIcons.userVerified,
-            'Cloud profile',
-            profileText,
-            valueColor: profileColor,
+          gap,
+          SyncFactRow(
+            icon: AppIcons.userVerified,
+            label: 'Cloud profile',
+            value: profileText,
+            tone: profileTone,
           ),
-          const SizedBox(height: 10),
-          _healthRow(
-            t,
-            AppIcons.key,
-            'JWT claim',
-            claimText,
-            valueColor: claimColor,
+          gap,
+          SyncFactRow(
+            icon: AppIcons.key,
+            label: 'JWT claim',
+            value: claimText,
+            tone: claimTone,
           ),
-          const SizedBox(height: 10),
-          _healthRow(
-            t,
-            AppIcons.history,
-            'Pending in queue',
-            pending.toString(),
+          gap,
+          SyncFactRow(
+            icon: AppIcons.history,
+            label: 'Pending in queue',
+            value: pending.toString(),
           ),
-          const SizedBox(height: 10),
-          _healthRow(
-            t,
-            AppIcons.warning,
-            'Failed in queue',
-            failed.toString(),
-            valueColor: failed == 0 ? null : t.colorScheme.error,
+          gap,
+          SyncFactRow(
+            icon: AppIcons.warning,
+            label: 'Failed in queue',
+            value: failed.toString(),
+            tone: failed == 0 ? SyncFactTone.normal : SyncFactTone.bad,
           ),
-          const SizedBox(height: 10),
-          _healthRow(
-            t,
-            AppIcons.ghost,
-            'Orphaned (auto-archived)',
-            orphaned.toString(),
-            valueColor: orphaned == 0 ? null : t.colorScheme.error,
+          gap,
+          SyncFactRow(
+            icon: AppIcons.ghost,
+            label: 'Orphaned (auto-archived)',
+            value: orphaned.toString(),
+            tone: orphaned == 0 ? SyncFactTone.normal : SyncFactTone.bad,
           ),
         ],
       ),
     );
   }
 
-  Widget _healthRow(
-    ThemeData t,
-    IconData icon,
-    String label,
-    String value, {
-    Color? valueColor,
-  }) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(
-          icon,
-          size: 14,
-          color: t.colorScheme.onSurface.withValues(alpha: 0.6),
-        ),
-        const SizedBox(width: 10),
-        Flexible(
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              color: t.colorScheme.onSurface.withValues(alpha: 0.7),
-            ),
+  /// The pill tone for a classified error: reds for access problems, amber for
+  /// data conflicts, neutral for transport and the unknown.
+  TagPillTone _toneFor(_SyncErrorKind kind) => switch (kind) {
+    _SyncErrorKind.rls => TagPillTone.danger,
+    _SyncErrorKind.authUserMismatch => TagPillTone.danger,
+    _SyncErrorKind.missingBusinessId => TagPillTone.warning,
+    _SyncErrorKind.duplicateKey => TagPillTone.warning,
+    _SyncErrorKind.fk => TagPillTone.warning,
+    _SyncErrorKind.network => TagPillTone.neutral,
+    _SyncErrorKind.other => TagPillTone.neutral,
+  };
+
+  String _preview(String payload) =>
+      payload.length > 200 ? '${payload.substring(0, 200)}…' : payload;
+
+  Future<void> _retryItem(SyncQueueData item) async {
+    try {
+      await _db.syncDao.clearFailureBackoffById(item.id);
+      unawaited(_sync.pushPending());
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not retry item: $e')));
+    }
+  }
+
+  Future<void> _discardItem(SyncQueueData item) async {
+    try {
+      await ref.read(databaseProvider).syncDao.discardQueueItem(item.id);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not discard item: $e')));
+    }
+  }
+
+  List<Widget> _queueActions(SyncQueueData item) => [
+    SyncAction(
+      key: SyncKeys.retryItem(item.id),
+      text: 'Retry now',
+      onPressed: () => _retryItem(item),
+    ),
+    SyncAction(
+      key: SyncKeys.discardItem(item.id),
+      text: 'Discard',
+      variant: AppButtonVariant.danger,
+      onPressed: () => _discardItem(item),
+    ),
+  ];
+
+  Widget _orphanItemTile(ThemeData t, SyncQueueOrphanData item) {
+    // A rejected `pos_record_sale_v2` sale (an oversell the cloud rolled back)
+    // gets a one-tap recovery: run the same full local reversal as the
+    // `sale_rejected` notification, then clear this orphan (#150).
+    final rejectedOrderId = _rejectedSaleOrderId(item);
+
+    return SyncItemCard(
+      key: SyncKeys.orphanItem(item.id),
+      pillLabel: 'Orphan',
+      pillTone: TagPillTone.danger,
+      actionType: item.actionType,
+      meta: 'archived: ${item.movedAt.toLocal()}',
+      errorText: item.reason,
+      payloadPreview: _preview(item.payload),
+      actions: [
+        if (rejectedOrderId != null)
+          SyncAction(
+            text: 'Cancel this sale',
+            variant: AppButtonVariant.outline,
+            onPressed: () => _confirmCancelRejectedSale(item, rejectedOrderId),
           ),
+        SyncAction(
+          key: SyncKeys.retryItem(item.id),
+          text: 'Retry',
+          onPressed: () async {
+            try {
+              await _db.syncDao.retryOrphan(item.id);
+              unawaited(_sync.pushPending());
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Re-enqueued.'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            } catch (e) {
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Retry failed: $e'),
+                  backgroundColor: t.colorScheme.error,
+                ),
+              );
+            }
+          },
         ),
-        const SizedBox(width: 8),
-        Flexible(
-          child: Text(
-            value,
-            textAlign: TextAlign.right,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: valueColor ?? t.colorScheme.onSurface,
-            ),
-          ),
+        SyncAction(
+          key: SyncKeys.discardItem(item.id),
+          text: 'Discard',
+          variant: AppButtonVariant.danger,
+          onPressed: () async {
+            try {
+              await ref.read(databaseProvider).syncDao.discardOrphan(item.id);
+            } catch (e) {
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Could not discard orphan: $e')),
+              );
+            }
+          },
         ),
       ],
     );
   }
-
-  Widget _emptyCard(ThemeData t, String text) => Container(
-    padding: const EdgeInsets.all(20),
-    decoration: AppDecorations.glassCard(context, radius: 16),
-    child: Center(
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 13,
-          color: t.colorScheme.onSurface.withValues(alpha: 0.7),
-        ),
-      ),
-    ),
-  );
 
   Future<void> _retryAllOrphans() async {
     final dao = _db.syncDao;
@@ -673,138 +706,6 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
           '${failed > 0 ? ', $failed could not be retried' : ''}.',
         ),
         duration: const Duration(seconds: 3),
-      ),
-    );
-  }
-
-  Widget _orphanItemTile(ThemeData t, SyncQueueOrphanData item) {
-    final reasonText = item.reason;
-    // A rejected `pos_record_sale_v2` sale (an oversell the cloud rolled back)
-    // gets a one-tap recovery: run the same full local reversal as the
-    // `sale_rejected` notification, then clear this orphan (#150).
-    final rejectedOrderId = _rejectedSaleOrderId(item);
-    final payloadPreview = item.payload.length > 200
-        ? '${item.payload.substring(0, 200)}…'
-        : item.payload;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: AppDecorations.glassCard(context, radius: 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: t.colorScheme.error.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  'Orphan',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: t.colorScheme.error,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  item.actionType,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: t.colorScheme.onSurface,
-                  ),
-                ),
-              ),
-              Text(
-                'archived: ${item.movedAt.toLocal()}',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: t.colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            reasonText,
-            style: TextStyle(
-              fontSize: 12,
-              color: t.colorScheme.error.withValues(alpha: 0.9),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            payloadPreview,
-            style: TextStyle(
-              fontSize: 11,
-              fontFamily: 'monospace',
-              color: t.colorScheme.onSurface.withValues(alpha: 0.55),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            alignment: WrapAlignment.end,
-            spacing: 4,
-            children: [
-              if (rejectedOrderId != null)
-                TextButton(
-                  onPressed: () =>
-                      _confirmCancelRejectedSale(item, rejectedOrderId),
-                  child: const Text('Cancel this sale'),
-                ),
-              TextButton(
-                onPressed: () async {
-                  try {
-                    await _db.syncDao.retryOrphan(item.id);
-                    unawaited(_sync.pushPending());
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Re-enqueued.'),
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
-                  } catch (e) {
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Retry failed: $e'),
-                        backgroundColor: t.colorScheme.error,
-                      ),
-                    );
-                  }
-                },
-                child: const Text('Retry'),
-              ),
-              TextButton(
-                onPressed: () async {
-                  try {
-                    await ref
-                        .read(databaseProvider)
-                        .syncDao
-                        .discardOrphan(item.id);
-                  } catch (e) {
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Could not discard orphan: $e')),
-                    );
-                  }
-                },
-                style: TextButton.styleFrom(
-                  foregroundColor: t.colorScheme.error,
-                ),
-                child: const Text('Discard'),
-              ),
-            ],
-          ),
-        ],
       ),
     );
   }
@@ -836,6 +737,7 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
     String orderId,
   ) async {
     final t = Theme.of(context);
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
     // Resolve everything off `ref` before any await — the element can unmount
     // while the dialog is open, and touching `ref` afterwards races the
     // riverpod invalidation (see the initState capture note above).
@@ -853,13 +755,21 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Cancel this rejected sale?'),
-        content: const Text(
+        scrollable: true,
+        title: Text(
+          'Cancel this rejected sale?',
+          style: ctx
+              .extraBoldStyle(18)
+              .copyWith(color: t.colorScheme.onSurface),
+        ),
+        content: Text(
           'The server turned this sale down — the item was likely sold on '
           'another till. Cancelling removes the sale from this device: the '
           'stock and any customer empties balance go back to what they were '
           'before it, and this entry is cleared.',
-          style: TextStyle(fontSize: 14),
+          style: ctx
+              .regularStyle(14)
+              .copyWith(color: t.colorScheme.onSurface, height: 1.4),
         ),
         actions: [
           TextButton(
@@ -868,7 +778,7 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: t.colorScheme.error),
+            style: TextButton.styleFrom(foregroundColor: f.danger),
             child: const Text('Cancel the sale'),
           ),
         ],
@@ -905,354 +815,127 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
   Widget _pendingItemTile(ThemeData t, SyncQueueData item) {
     final hasError = item.errorMessage != null;
     final kind = _classify(item.errorMessage);
-    final badgeLabel = hasError ? _labelFor(kind) : 'Pending';
-    final badgeColor = hasError
-        ? switch (kind) {
-            _SyncErrorKind.rls => t.colorScheme.error,
-            _SyncErrorKind.missingBusinessId => Colors.orange,
-            _SyncErrorKind.authUserMismatch => t.colorScheme.error,
-            _SyncErrorKind.duplicateKey => Colors.amber,
-            _SyncErrorKind.fk => Colors.deepOrange,
-            _SyncErrorKind.network => Colors.blueGrey,
-            _SyncErrorKind.other => t.colorScheme.onSurface.withValues(
-              alpha: 0.6,
-            ),
-          }
-        : t.colorScheme.primary;
-    final payloadPreview = item.payload.length > 200
-        ? '${item.payload.substring(0, 200)}…'
-        : item.payload;
     final nextAttemptLabel = item.nextAttemptAt == null
         ? 'Next try: ASAP'
         : 'Next try: ${item.nextAttemptAt!.toLocal()}';
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: AppDecorations.glassCard(context, radius: 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: badgeColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  badgeLabel,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: badgeColor,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  item.actionType,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: t.colorScheme.onSurface,
-                  ),
-                ),
-              ),
-              Text(
-                'attempts: ${item.attempts}',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: t.colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
-              ),
-            ],
-          ),
-          if (hasError) ...[
-            const SizedBox(height: 8),
-            Text(
-              item.errorMessage!,
-              style: TextStyle(
-                fontSize: 12,
-                color: t.colorScheme.error.withValues(alpha: 0.9),
-              ),
-            ),
-          ],
-          const SizedBox(height: 6),
-          Text(
-            nextAttemptLabel,
-            style: TextStyle(
-              fontSize: 11,
-              color: t.colorScheme.onSurface.withValues(alpha: 0.6),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            payloadPreview,
-            style: TextStyle(
-              fontSize: 11,
-              fontFamily: 'monospace',
-              color: t.colorScheme.onSurface.withValues(alpha: 0.55),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              const Spacer(),
-              TextButton(
-                onPressed: () async {
-                  try {
-                    await _db.syncDao.clearFailureBackoffById(item.id);
-                    unawaited(_sync.pushPending());
-                  } catch (e) {
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Could not retry item: $e')),
-                    );
-                  }
-                },
-                child: const Text('Retry now'),
-              ),
-              TextButton(
-                onPressed: () async {
-                  try {
-                    await ref
-                        .read(databaseProvider)
-                        .syncDao
-                        .discardQueueItem(item.id);
-                  } catch (e) {
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Could not discard item: $e')),
-                    );
-                  }
-                },
-                style: TextButton.styleFrom(
-                  foregroundColor: t.colorScheme.error,
-                ),
-                child: const Text('Discard'),
-              ),
-            ],
-          ),
-        ],
-      ),
+    return SyncItemCard(
+      key: SyncKeys.pendingItem(item.id),
+      pillLabel: hasError ? _labelFor(kind) : 'Pending',
+      pillTone: hasError ? _toneFor(kind) : TagPillTone.info,
+      actionType: item.actionType,
+      meta: 'attempts: ${item.attempts}',
+      errorText: item.errorMessage,
+      detailLines: [nextAttemptLabel],
+      payloadPreview: _preview(item.payload),
+      actions: _queueActions(item),
     );
   }
 
   Widget _failedItemTile(ThemeData t, SyncQueueData item) {
     final kind = _classify(item.errorMessage);
-    final kindColor = switch (kind) {
-      _SyncErrorKind.rls => t.colorScheme.error,
-      _SyncErrorKind.missingBusinessId => Colors.orange,
-      _SyncErrorKind.authUserMismatch => t.colorScheme.error,
-      _SyncErrorKind.duplicateKey => Colors.amber,
-      _SyncErrorKind.fk => Colors.deepOrange,
-      _SyncErrorKind.network => Colors.blueGrey,
-      _SyncErrorKind.other => t.colorScheme.onSurface.withValues(alpha: 0.6),
-    };
-    final payloadPreview = item.payload.length > 200
-        ? '${item.payload.substring(0, 200)}…'
-        : item.payload;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: AppDecorations.glassCard(context, radius: 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: kindColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  _labelFor(kind),
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: kindColor,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  item.actionType,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: t.colorScheme.onSurface,
-                  ),
-                ),
-              ),
-              Text(
-                'attempts: ${item.attempts}',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: t.colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
-              ),
-            ],
-          ),
-          if (item.errorMessage != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              item.errorMessage!,
-              style: TextStyle(
-                fontSize: 12,
-                color: t.colorScheme.error.withValues(alpha: 0.9),
-              ),
-            ),
-          ],
-          const SizedBox(height: 8),
-          Text(
-            payloadPreview,
-            style: TextStyle(
-              fontSize: 11,
-              fontFamily: 'monospace',
-              color: t.colorScheme.onSurface.withValues(alpha: 0.55),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              if (item.nextAttemptAt != null)
-                Expanded(
-                  child: Text(
-                    'Next try: ${item.nextAttemptAt!.toLocal()}',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: t.colorScheme.onSurface.withValues(alpha: 0.5),
-                    ),
-                  ),
-                )
-              else
-                const Spacer(),
-              TextButton(
-                onPressed: () async {
-                  try {
-                    await _db.syncDao.clearFailureBackoffById(item.id);
-                    unawaited(_sync.pushPending());
-                  } catch (e) {
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Could not retry item: $e')),
-                    );
-                  }
-                },
-                child: const Text('Retry now'),
-              ),
-              TextButton(
-                onPressed: () async {
-                  try {
-                    await ref
-                        .read(databaseProvider)
-                        .syncDao
-                        .discardQueueItem(item.id);
-                  } catch (e) {
-                    if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Could not discard item: $e')),
-                    );
-                  }
-                },
-                style: TextButton.styleFrom(
-                  foregroundColor: t.colorScheme.error,
-                ),
-                child: const Text('Discard'),
-              ),
-            ],
-          ),
-        ],
-      ),
+    return SyncItemCard(
+      key: SyncKeys.failedItem(item.id),
+      pillLabel: _labelFor(kind),
+      pillTone: _toneFor(kind),
+      actionType: item.actionType,
+      meta: 'attempts: ${item.attempts}',
+      errorText: item.errorMessage,
+      detailLines: [
+        if (item.nextAttemptAt != null)
+          'Next try: ${item.nextAttemptAt!.toLocal()}',
+      ],
+      payloadPreview: _preview(item.payload),
+      actions: _queueActions(item),
     );
   }
 
   Widget _auditCard(ThemeData t) {
-    return Container(
-      decoration: AppDecorations.glassCard(context, radius: 16),
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    return SyncCard(
+      padding: EdgeInsets.zero,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           InkWell(
-            borderRadius: BorderRadius.circular(16),
+            key: SyncKeys.auditToggle,
+            borderRadius: BorderRadius.circular(AppSpacing.borderRadiusXL),
             onTap: () => setState(() => _auditExpanded = !_auditExpanded),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Icon(
-                    AppIcons.table,
-                    size: 14,
-                    color: t.colorScheme.primary,
-                  ),
-                  const SizedBox(width: 12),
-                  Flexible(
-                    child: Text(
-                      'Compare local vs Supabase row counts',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: t.colorScheme.onSurface,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                minHeight: kMinInteractiveDimension,
+              ),
+              child: Padding(
+                padding: EdgeInsets.all(context.getRSize(14)),
+                child: Row(
+                  children: [
+                    AppIcon(
+                      AppIcons.table,
+                      size: context.getRSize(18),
+                      color: t.colorScheme.primary,
+                    ),
+                    SizedBox(width: context.getRSize(12)),
+                    Expanded(
+                      child: Text(
+                        'Compare local vs Supabase row counts',
+                        style: context
+                            .boldStyle(14)
+                            .copyWith(color: t.colorScheme.onSurface),
                       ),
                     ),
-                  ),
-                  Icon(
-                    _auditExpanded ? AppIcons.chevronUp : AppIcons.chevronDown,
-                    color: t.colorScheme.onSurface.withValues(alpha: 0.6),
-                  ),
-                ],
+                    AppIcon(
+                      _auditExpanded
+                          ? AppIcons.chevronUp
+                          : AppIcons.chevronDown,
+                      size: context.getRSize(22),
+                      color: muted,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
           if (_auditExpanded)
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              padding: EdgeInsets.fromLTRB(
+                context.getRSize(14),
+                0,
+                context.getRSize(14),
+                context.getRSize(14),
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  const SyncHint(
                     'Authed count uses the current session (RLS applies). '
                     'Service-role count bypasses RLS — paste a key only on a '
                     'trusted dev device.',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: t.colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
                   ),
                   if (kDebugMode) ...[
-                    const SizedBox(height: 12),
-                    TextField(
+                    SizedBox(height: context.getRSize(12)),
+                    AppInput(
+                      key: SyncKeys.projectUrl,
                       controller: _projectUrlCtl,
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        labelText: 'Project URL (optional)',
-                        hintText: 'https://<ref>.supabase.co',
-                      ),
+                      labelText: 'Project URL (optional)',
+                      hintText: 'https://<ref>.supabase.co',
                     ),
-                    const SizedBox(height: 8),
-                    TextField(
+                    SizedBox(height: context.getRSize(10)),
+                    AppInput(
+                      key: SyncKeys.serviceKey,
                       controller: _serviceKeyCtl,
                       obscureText: true,
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        labelText: 'Service role key (optional, dev only)',
-                      ),
+                      labelText: 'Service role key (optional, dev only)',
                     ),
                   ],
-                  const SizedBox(height: 12),
-                  ElevatedButton.icon(
+                  SizedBox(height: context.getRSize(12)),
+                  SyncAction(
+                    key: SyncKeys.runAudit,
+                    text: _auditRunning ? 'Running…' : 'Run audit',
+                    icon: AppIcons.play,
+                    variant: AppButtonVariant.primary,
                     onPressed: _auditRunning ? null : _runAudit,
-                    icon: const Icon(AppIcons.play, size: 16),
-                    label: Text(_auditRunning ? 'Running…' : 'Run audit'),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: context.getRSize(12)),
                   if (_auditResults != null) _auditTable(t, _auditResults!),
                 ],
               ),
@@ -1263,43 +946,38 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
   }
 
   Widget _auditTable(ThemeData t, List<TableDiagnosticRow> rows) {
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
     Widget cell(
       String text, {
       bool header = false,
       Color? color,
       TextAlign? align,
     }) => Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+      padding: EdgeInsets.symmetric(
+        vertical: context.getRSize(6),
+        horizontal: context.getRSize(4),
+      ),
       child: Text(
         text,
         textAlign: align,
+        maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: header ? FontWeight.w700 : FontWeight.w500,
-          color:
-              color ??
-              (header
-                  ? t.colorScheme.primary
-                  : t.colorScheme.onSurface.withValues(alpha: 0.85)),
-          fontFamily: header ? null : 'monospace',
-        ),
+        style: header
+            ? context.boldStyle(12).copyWith(color: t.colorScheme.primary)
+            : context.monoStyle.copyWith(
+                fontSize: context.getRFontSize(12),
+                color: color ?? t.colorScheme.onSurface,
+              ),
       ),
     );
 
-    const colTable = 180.0;
-    const colInt = 72.0;
-    const colDiag = 140.0;
-    const total = colTable + colInt * 3 + colDiag;
+    final colTable = context.getRSize(180);
+    final colInt = context.getRSize(72);
+    final colDiag = context.getRSize(140);
+    final total = colTable + colInt * 3 + colDiag;
 
-    Widget row(List<Widget> children, {Color? bg}) => Container(
-      color: bg,
-      height: 30,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: children,
-      ),
-    );
+    Widget row(List<Widget> children) =>
+        Row(crossAxisAlignment: CrossAxisAlignment.center, children: children);
 
     Widget sized(double w, Widget child) => SizedBox(width: w, child: child);
 
@@ -1344,9 +1022,7 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
                   colDiag,
                   cell(
                     _diagnose(r),
-                    color: _diagnose(r) == 'OK'
-                        ? Colors.green
-                        : t.colorScheme.error,
+                    color: _diagnose(r) == 'OK' ? f.green : f.danger,
                   ),
                 ),
               ]),

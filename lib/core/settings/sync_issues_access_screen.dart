@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:reebaplus_pos/core/theme/app_icons.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/van_sales/van_sales_switch.dart';
-import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
+import 'package:reebaplus_pos/features/sync/widgets/sync_parts.dart';
 
 const _kSyncView = 'sync.view';
 
@@ -24,52 +24,73 @@ class SyncIssuesAccessScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     // Screen-level gate (hard rule #6) — also keeps the permission chain warm
     // so the per-row toggle's guard reads a resolved value.
     final canManage = Gates.manageSettings.allows(ref);
     final roles = ref.watch(allRolesProvider);
 
-    return GlassyScaffold(
-      title: 'Sync Issues access',
-      body: !canManage
-          ? const SettingsNoAccess()
-          : roles.when(
-              loading: () => const SizedBox.shrink(),
-              error: (_, __) => Center(
-                child: Text(
-                  'Couldn\'t load roles.',
-                  style: TextStyle(
-                    color: t.colorScheme.onSurface.withValues(alpha: 0.6),
-                  ),
-                ),
-              ),
-              data: (list) => SettingsFadeIn(
-                child: ListView(
-                  padding: EdgeInsets.fromLTRB(
-                    24,
-                    24,
-                    24,
-                    24 + context.deviceBottomPadding,
-                  ),
-                  children: [
-                    Text(
-                      'Choose which roles can open Sync Issues (the sync '
-                      'troubleshooting screen). The CEO always has access.',
-                      style: TextStyle(
-                        fontSize: 13,
-                        height: 1.4,
-                        color: t.colorScheme.onSurface.withValues(alpha: 0.6),
-                      ),
+    return Container(
+      decoration: AppDecorations.pageBackground(context),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: SyncTopBar.of(context, title: 'Sync Issues access'),
+        body: SafeArea(
+          top: false,
+          bottom: false,
+          child: !canManage
+              ? Center(
+                  key: SyncKeys.noAccess,
+                  child: Padding(
+                    padding: EdgeInsets.all(context.getRSize(16)),
+                    child: Text(
+                      'You don\'t have access to settings.',
+                      textAlign: TextAlign.center,
+                      style: context.regularStyle(14).copyWith(color: muted),
                     ),
-                    const SizedBox(height: 20),
-                    for (final role in rolesOnOffer(list)) ...[
-                      _RoleToggle(role: role),
-                      const SizedBox(height: 16),
-                    ],
-                  ],
+                  ),
+                )
+              : roles.when(
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, __) => Center(
+                    child: Text(
+                      'Couldn\'t load roles.',
+                      style: context.regularStyle(14).copyWith(color: muted),
+                    ),
+                  ),
+                  data: (list) => LayoutBuilder(
+                    builder: (context, constraints) {
+                      final gutter = syncGutter(context, constraints.maxWidth);
+                      return ListView(
+                        key: SyncKeys.accessList,
+                        padding: EdgeInsets.fromLTRB(
+                          gutter,
+                          context.getRSize(16),
+                          gutter,
+                          context.getRSize(16) + context.deviceBottomPadding,
+                        ),
+                        children: [
+                          Text(
+                            key: SyncKeys.accessIntro,
+                            'Choose which roles can open Sync Issues (the '
+                            'sync troubleshooting screen). The CEO always has '
+                            'access.',
+                            style: context
+                                .regularStyle(13)
+                                .copyWith(color: muted, height: 1.4),
+                          ),
+                          SizedBox(height: context.getRSize(16)),
+                          for (final role in rolesOnOffer(list)) ...[
+                            _RoleToggle(role: role),
+                            SizedBox(height: context.getRSize(12)),
+                          ],
+                        ],
+                      );
+                    },
+                  ),
                 ),
-              ),
-            ),
+        ),
+      ),
     );
   }
 }
@@ -80,22 +101,19 @@ class _RoleToggle extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final t = Theme.of(context);
     final isCeo = role.slug == 'ceo';
     final grants =
         ref.watch(rolePermissionsProvider(role.id)).valueOrNull ?? [];
     final hasView = grants.any((g) => g.permissionKey == _kSyncView);
 
-    return SettingsTile(
-      icon: AppIcons.cloudSync,
+    return SyncRoleToggleRow(
+      key: SyncKeys.roleRow(role.slug),
+      switchKey: SyncKeys.roleSwitch(role.slug),
       title: role.name,
       subtitle: isCeo ? 'Always on' : 'Can open Sync Issues',
-      trailing: Switch(
-        value: isCeo ? true : hasView,
-        // CEO is locked on — implicit owner of this infra screen.
-        onChanged: isCeo ? null : (v) => _toggle(context, ref, v),
-        activeThumbColor: t.colorScheme.primary,
-      ),
+      value: isCeo ? true : hasView,
+      // CEO is locked on — implicit owner of this infra screen.
+      onChanged: isCeo ? null : (v) => _toggle(context, ref, v),
     );
   }
 
