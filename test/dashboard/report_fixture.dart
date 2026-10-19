@@ -157,6 +157,15 @@ List<SupplierLedgerEntryData> sampleLedger(ScreenTestEnvironment env) {
   ];
 }
 
+/// Noon today: the anchor for [reportOverrides] in tests whose screens
+/// default to the "Today" period. The sample orders sit 2h and 5h before
+/// the anchor, so anchoring on `DateTime.now()` pushed them into yesterday
+/// whenever the suite ran between midnight and 5am.
+DateTime reportTodayAnchor() {
+  final now = DateTime.now();
+  return DateTime(now.year, now.month, now.day, 12);
+}
+
 /// Provider overrides that feed the report screens the sample data above.
 List<Override> reportOverrides(ScreenTestEnvironment env, DateTime orderAt) => [
   allOrdersProvider.overrideWith(
