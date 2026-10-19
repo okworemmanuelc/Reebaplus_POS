@@ -127,9 +127,14 @@ void main() {
     await tester.tap(find.text(openLabel));
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byType(TextFormField).first, name);
+    // Scoped to the sheet: the cards behind it hold AppInput fields too.
+    final sheetFields = find.descendant(
+      of: find.byType(BottomSheet),
+      matching: find.byType(TextFormField),
+    );
+    await tester.enterText(sheetFields.first, name);
     if (note != null) {
-      await tester.enterText(find.byType(TextFormField).last, note);
+      await tester.enterText(sheetFields.last, note);
     }
     await tester.tap(find.text(submitLabel));
     await tester.pumpAndSettle();
@@ -257,7 +262,15 @@ void main() {
 
     await tester.tap(find.text('Add a store'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextFormField).first, 'Abandoned');
+    await tester.enterText(
+      find
+          .descendant(
+            of: find.byType(BottomSheet),
+            matching: find.byType(TextFormField),
+          )
+          .first,
+      'Abandoned',
+    );
     // Barrier tap = the caller gets null back, so nothing is created.
     await tester.tapAt(const Offset(20, 20));
     await tester.pumpAndSettle();
