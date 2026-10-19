@@ -689,6 +689,14 @@ Local parts in `widgets/payments_parts.dart`. **Restyle only: every figure, gate
 - **Transaction History**: period `AppDropdown` (long ranges behind `Gates.seeExtendedDateRanges`), Total In / Out `PaymentsFigureCard`s (FittedBox figures), `SupplierLedgerEntryTile` rows (flat card, 40 `IconTile` green / danger / neutral for a void, Bold 15 name, SemiBold 12 subtitle, ExtraBold 15 signed figure; a void is faded and struck through).
 - **Sheets**: supplier form and Record Invoice / Payment keep the draggable sheet (tap-out kept) on their own Surface with the theme shape; `PaymentsFormSheetLayout` pins header and button when the sheet is at least `getRSize(340)` tall, else scrolls everything; the button lifts by `paymentsSheetKeyboardLift` plus `deviceBottomPadding`. The chooser is a theme sheet (`PaymentsChooserFrame`) with two `SettingsRow`s. The confirm dialog is the theme dialog.
 
+### Settings pages, Profile and Staff Settings (`lib/core/settings/settings_page_parts.dart`, `lib/features/profile/`, #442, PRD #346 Wave 2 C)
+
+Pages behind CEO Settings follow the CEO Settings menu (no mockups). **Restyle only.**
+- **Top bar** (`SettingsPageBar`, height rule of Home): solid Surface + hairline + `topBarShadow`, `ScreenHeader`, a 48dp back arrow when the route can pop. Never changes on scroll.
+- **Width**: list and form pages cap at the raw `kSettingsMaxContentWidth` (720, `settingsGutter`, measured, minimum `getRSize(16)`); the top bar spans the full width. Sheets cap at 640.
+- **Rows and cards**: `SettingsRow` for navigation rows, `SettingsCard` (= `AppDecorations.card`) + `SettingsControlRow` (48 `IconTile`, Bold 16 title, Regular 13 muted subtitle, optional trailing control) for toggles and info.
+- **Profile**: header card (avatar initials in the avatar colour, ExtraBold 20 name, role tag, pills), stat cards (40 `IconTile` in fixed green / purple / primary), `Account Details` card (48dp rows). `profile_ui.dart` is shared with Staff Detail.
+- **Edit Profile** (`EditProfileSheet.show`): theme sheet, `ScreenHeader`, `AppInput`, 8 hex swatches (48dp targets), `AppButton`; scrolls above the keyboard.
 ### Staff (`lib/features/staff/`, #440, PRD #346 Wave 2 C)
 
 Local parts in `widgets/staff_parts.dart`. **Restyle only: every gate, write path, confirmation and wording is unchanged.**
