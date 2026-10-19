@@ -7,6 +7,14 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #441: Stores restyle, part 2 of 2 (Wave 2 C, 2026-10-19)
+Branch `feat/redesign-w2-stores-2` (base: PR 1's branch `feat/redesign-w2-stores`). Store Details + Transfer hub + Dispatch dialog. **Restyle only: no Drift/cloud/sync/permission/status/money change (no `pos-parity` issue).** Stock transfer, request, approve and receive keep their DAO calls, quantities and confirmations.
+- Store Details: `StoresTopBar` + `ScreenHeader` (store name, location or "Main Storage") with a 48dp back arrow (`pop`), `pageBackground`, one 960 column (`kStoreDetailsMaxContentWidth`). Store Value is the shared `StatCard` (figure + "Total Units" pill); Products / Low Stock / Customers are `StoreStatTile`s (Customers still focuses the store, pops and opens the Customers tab). Header cards sit side by side when the measured column is at least 900. Inventory card (chevron from `AppIcons` via `StoresExpansionTile`, `TagPill` units), Request Stock `AppButton`, Quick Actions `SectionHeader` + `SettingsRow`. The restricted view keeps its text, now a `StoresNotice`.
+- Transfer hub: `SectionHeader`s, flat cards with a transfer `IconTile`, 48dp `AppButton`s (side by side while each has 340dp of room, else stacked), history rows with `TagPill` IN/OUT. Gates unchanged.
+- Dispatch dialog: `scrollable`, `AppInput` + `AppButton`; now `_DispatchDialog` owns its controllers (real bug, BUILD_LOG 2026-10-19).
+- The inventory `ExpansionTile` sat in a coloured `DecoratedBox` (ListTile "ink may be invisible" assertion); a transparent `Material` now sits between.
+- Tests: `test/stores/store_details_screen_test.dart` (+ `store_details_fixture.dart`); goldens `store_details_*`, `store_details_hub_*`, `store_details_restricted_*`, `dispatch_dialog_*`.
+
 ### Issue #441: Stores restyle, part 1 of 2 (Wave 2 C, 2026-10-19)
 Branch `feat/redesign-w2-stores`, worktree `../drinkPosApp-wt-441`. PR 1 = Stores list + Add / Edit / Delete + CEO Settings > Stores; PR 2 (Store Details + Transfer hub + Dispatch dialog) branches from it. **Restyle only: no Drift/cloud/sync/permission/status/money change (no `pos-parity` issue).**
 - New `lib/features/stores/widgets/stores_parts.dart` (shared-part candidates): `StoresTopBar`/`storesTopBarHeight`, `StoresLiveBell`, `StoresBackButton`, `storesGutter`/`storesSliver` (raw 720 cap), `StoresMessage`, `StoresNotice`, `StoreFigure`, `StoreCardAction`, `StoresCardShell`, `StoreSheetFrame` + `showStoresSheet` (640 cap), `StoresAutocompleteField`.

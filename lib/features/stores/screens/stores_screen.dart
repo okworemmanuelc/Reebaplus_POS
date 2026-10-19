@@ -320,14 +320,18 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
               text: 'Cancel',
               variant: AppButtonVariant.ghost,
               size: AppButtonSize.small,
+              height: kMinInteractiveDimension,
               isFullWidth: false,
+              width: ctx.getRSize(120),
               onPressed: () => Navigator.pop(ctx),
             ),
             AppButton(
               text: 'Delete',
               variant: AppButtonVariant.danger,
               size: AppButtonSize.small,
+              height: kMinInteractiveDimension,
               isFullWidth: false,
+              width: ctx.getRSize(120),
               onPressed: () async {
                 Navigator.pop(ctx);
                 // Re-check at the write boundary (hard rule #6) — deleting a
