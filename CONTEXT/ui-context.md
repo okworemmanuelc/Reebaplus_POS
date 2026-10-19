@@ -697,6 +697,7 @@ Pages behind CEO Settings follow the CEO Settings menu (no mockups). **Restyle o
 - **Rows and cards**: `SettingsRow` for navigation rows, `SettingsCard` (= `AppDecorations.card`) + `SettingsControlRow` (48 `IconTile`, Bold 16 title, Regular 13 muted subtitle, optional trailing control) for toggles and info.
 - **Profile**: header card (avatar initials in the avatar colour, ExtraBold 20 name, role tag, pills), stat cards (40 `IconTile` in fixed green / purple / primary), `Account Details` card (48dp rows). `profile_ui.dart` is shared with Staff Detail.
 - **Business Info / Appearance / Display / Receipt printer** (PR 2): `SectionHeader` (group) over a `SettingsCard`; fields are `AppInput` / `AppDropdown`, switches are Bold 15 title + Regular 13 muted subtitle rows, Save is a full-width `AppButton`. Appearance cards keep their keys; Display and Appearance mark the active choice with a 2dp outline.
+- **Security / Subscription / Activity Logs access / Activity Logs / Delete Business** (PR 3): toggles and info are `SettingsCard` + `SettingsControlRow`; the Subscription status is a fixed-tone `TagPill`; Activity Logs is a drawer root (`MenuButton` + `NotificationBell`, 720 list cap, `IconTile` + `TagPill` log cards); Delete Business is a danger-tint banner over a danger `AppButton`.
 - **Edit Profile** (`EditProfileSheet.show`): theme sheet, `ScreenHeader`, `AppInput`, 8 hex swatches (48dp targets), `AppButton`; scrolls above the keyboard.
 ### Staff (`lib/features/staff/`, #440, PRD #346 Wave 2 C)
 
