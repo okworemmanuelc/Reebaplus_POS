@@ -689,6 +689,32 @@ Local parts in `widgets/payments_parts.dart`. **Restyle only: every figure, gate
 - **Transaction History**: period `AppDropdown` (long ranges behind `Gates.seeExtendedDateRanges`), Total In / Out `PaymentsFigureCard`s (FittedBox figures), `SupplierLedgerEntryTile` rows (flat card, 40 `IconTile` green / danger / neutral for a void, Bold 15 name, SemiBold 12 subtitle, ExtraBold 15 signed figure; a void is faded and struck through).
 - **Sheets**: supplier form and Record Invoice / Payment keep the draggable sheet (tap-out kept) on their own Surface with the theme shape; `PaymentsFormSheetLayout` pins header and button when the sheet is at least `getRSize(340)` tall, else scrolls everything; the button lifts by `paymentsSheetKeyboardLift` plus `deviceBottomPadding`. The chooser is a theme sheet (`PaymentsChooserFrame`) with two `SettingsRow`s. The confirm dialog is the theme dialog.
 
+### Settings pages, Profile and Staff Settings (`lib/core/settings/settings_page_parts.dart`, `lib/features/profile/`, #442, PRD #346 Wave 2 C)
+
+Pages behind CEO Settings follow the CEO Settings menu (no mockups). **Restyle only.**
+- **Top bar** (`SettingsPageBar`, height rule of Home): solid Surface + hairline + `topBarShadow`, `ScreenHeader`, a 48dp back arrow when the route can pop. Never changes on scroll.
+- **Width**: list and form pages cap at the raw `kSettingsMaxContentWidth` (720, `settingsGutter`, measured, minimum `getRSize(16)`); the top bar spans the full width. Sheets cap at 640.
+- **Rows and cards**: `SettingsRow` for navigation rows, `SettingsCard` (= `AppDecorations.card`) + `SettingsControlRow` (48 `IconTile`, Bold 16 title, Regular 13 muted subtitle, optional trailing control) for toggles and info.
+- **Profile**: header card (avatar initials in the avatar colour, ExtraBold 20 name, role tag, pills), stat cards (40 `IconTile` in fixed green / purple / primary), `Account Details` card (48dp rows). `profile_ui.dart` is shared with Staff Detail.
+- **Business Info / Appearance / Display / Receipt printer** (PR 2): `SectionHeader` (group) over a `SettingsCard`; fields are `AppInput` / `AppDropdown`, switches are Bold 15 title + Regular 13 muted subtitle rows, Save is a full-width `AppButton`. Appearance cards keep their keys; Display and Appearance mark the active choice with a 2dp outline.
+- **Security / Subscription / Activity Logs access / Activity Logs / Delete Business** (PR 3): toggles and info are `SettingsCard` + `SettingsControlRow`; the Subscription status is a fixed-tone `TagPill`; Activity Logs is a drawer root (`MenuButton` + `NotificationBell`, 720 list cap, `IconTile` + `TagPill` log cards); Delete Business is a danger-tint banner over a danger `AppButton`.
+- **Edit Profile** (`EditProfileSheet.show`): theme sheet, `ScreenHeader`, `AppInput`, 8 hex swatches (48dp targets), `AppButton`; scrolls above the keyboard.
+### Staff (`lib/features/staff/`, #440, PRD #346 Wave 2 C)
+
+Local parts in `widgets/staff_parts.dart`. **Restyle only: every gate, write path, confirmation and wording is unchanged.**
+- **Top bar** (`StaffTopBar`, CEO Settings' height rule): solid Surface + hairline + `topBarShadow`, `ScreenHeader` (staff tile; Staff Management keeps its 48dp `MenuButton` only off the rail and a `TabBar` under the header; pushed screens get a 48dp back arrow). No bell (the screens never had one). Never changes on scroll.
+- **Width**: Staff Management and Invite Staff cap at the raw `kSettingsMaxContentWidth` (720, `staffGutter`, minimum gutter `getRSize(16)`); Staff Detail caps at a raw 960 (`kStaffDetailMaxContentWidth`) and puts the header card and Account Details side by side once the measured column is 900 or more. Sheets use Material's 640.
+- **Staff Management**: `AppInput` search (+ `AppDropdown` store filter, side by side when the column is 420 or more, else stacked), `StaffListRow` flat cards (44 initial tile, Bold 15 name, muted email / phone / address, role `TagPill` via `staffRoleTone` CEO warning / Manager info / Cashier green / rest neutral, "You" and "Suspended" pills, last login, chevron only when tappable; faded rows for suspended or a Manager viewing a CEO / Manager), "SUSPENDED" as a group `SectionHeader`. Invites: `StaffInviteCard` (mono code, role tag, three meta lines, danger Revoke).
+- **Staff Detail**: `StaffHeaderCard` (60 gradient initials tile, ExtraBold name, role / Active-Suspended / store pills), `StaffStatGrid` (measured 2 / 3 / 5 columns, fixed-colour `IconTile`s, FittedBox figures), `StaffInfoCard` (Account Details rows, the store row and Permission access still tap), `AppButton` actions behind their own gates. Pop-ups are the theme dialog; the driver-balance pop-up's name box is an `AppInput` in a `scrollable: true` dialog. The Assigned stores sheet is a theme sheet with `StaffSheetFrame`.
+- **Invite Staff**: `AppInput` / `AppDropdown` form, `StaffRoleOptionCard`s (selected = primary border on `primaryTint`), the generated code in a `primaryTint` card in `monoStyle`.
+
+### Roles & permissions (`lib/core/settings/roles_permissions_screen.dart`, `role_permissions_detail_screen.dart`, `lib/features/staff/screens/staff_permissions_screen.dart`, #440 part 2)
+
+Local parts in `lib/features/staff/widgets/permission_parts.dart`. **Restyle only.**
+- **Page**: `PermissionPage` = soft fade + `StaffTopBar` (`ScreenHeader`, 48dp back) + side-inset safe body; all three screens cap at the raw 720 (`StaffColumn`). No-access and load-error text are `PermissionMessage` with the same words.
+- **Roles & Permissions**: intro line, then one `SettingsRow` per role in tier order (CEO, Manager, Cashier, Stock keeper), `IconTile` toned by role, subtitle "N of M permissions" / "All M permissions".
+- **Role detail / Staff permissions**: group `SectionHeader` over a flat `PermissionToggleCard` of `SwitchListTile`s (>= 48dp, hairline between). A child whose parent is off is locked off and says `Requires "…"`; an override says "Overridden — … default is on/off" in Bold primary. Role detail adds the Business / Store pill toggle (`PermissionScopeToggle`, primary gradient on the selected segment), the Manager-only "Allow viewing other stores" card, the discount slider card under Sales and the expense-approval `AppInput` card under Expenses; Store scope has the store picker card (`AppDropdown`) and Restore store defaults. Dialogs are the theme dialog with a fixed-danger action.
+
 ### App bar
 
 | Property | Value |

@@ -5,7 +5,13 @@ import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/shared/widgets/app_input.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
+import 'package:reebaplus_pos/core/settings/settings_page_parts.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/utils/avatar_helpers.dart';
@@ -15,11 +21,8 @@ import 'package:reebaplus_pos/shared/utils/avatar_helpers.dart';
 /// Settings page (§10.5). Local state (name field + swatch selection) lives
 /// here so taps update live without rebuilding the parent screen.
 ///
-/// Open it with:
-///   showModalBottomSheet(
-///     context: context, isScrollControlled: true,
-///     backgroundColor: Colors.transparent,
-///     builder: (_) => EditProfileSheet(user: user, parentRef: ref));
+/// Open it with [EditProfileSheet.show] (the theme draws the surface; capped
+/// at Material 3's 640 on wide screens).
 class EditProfileSheet extends StatefulWidget {
   final UserData user;
   final WidgetRef parentRef;
@@ -28,6 +31,18 @@ class EditProfileSheet extends StatefulWidget {
     required this.user,
     required this.parentRef,
   });
+
+  /// Opens the sheet: scroll-controlled, capped at 640dp.
+  static Future<void> show(
+    BuildContext context, {
+    required UserData user,
+    required WidgetRef parentRef,
+  }) => showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    constraints: const BoxConstraints(maxWidth: kSettingsSheetMaxWidth),
+    builder: (_) => EditProfileSheet(user: user, parentRef: parentRef),
+  );
 
   @override
   State<EditProfileSheet> createState() => _EditProfileSheetState();
@@ -123,112 +138,139 @@ class _EditProfileSheetState extends State<EditProfileSheet> {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: t.colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      padding: EdgeInsets.fromLTRB(
-        24,
-        16,
-        24,
-        24 + context.deviceBottomPadding,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: t.colorScheme.onSurface.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(2),
-              ),
+    final fixed = t.extension<AppFixedColors>() ?? AppFixedColors.light;
+    final gutter = context.getRSize(20);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    // One shrink-wrapped scroll view capped at 90% of the screen height (the
+    // customer sheets' frame): the name box and Save stay reachable at 360dp
+    // @1.15 and at 844x390 with the keyboard up. The theme draws the Surface
+    // and shape.
+    return ConstrainedBox(
+      key: const Key('edit-profile-sheet'),
+      constraints: BoxConstraints(maxHeight: context.screenHeight * 0.9),
+      child: CustomScrollView(
+        shrinkWrap: true,
+        slivers: [
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(
+              gutter,
+              context.getRSize(12),
+              gutter,
+              // A modal sheet sits on the root navigator, above MainLayout's
+              // Scaffold, so nothing resizes it for the keyboard: lift by the
+              // keyboard here. deviceBottomPadding collapses to 0 while the
+              // keyboard is up, so the two never double-count.
+              context.getRSize(16) +
+                  context.deviceBottomPadding +
+                  MediaQuery.viewInsetsOf(context).bottom,
             ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            'Edit Profile',
-            style: TextStyle(
-              fontSize: context.getRFontSize(18),
-              fontWeight: FontWeight.bold,
-              color: t.colorScheme.onSurface,
-            ),
-          ),
-          const SizedBox(height: 20),
-          TextField(
-            controller: _nameController,
-            textCapitalization: TextCapitalization.words,
-            decoration: AppDecorations.authInputDecoration(
-              context,
-              label: 'Name',
-              prefixIcon: AppIcons.user,
-            ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            'Avatar colour',
-            style: TextStyle(
-              fontSize: context.getRFontSize(13),
-              fontWeight: FontWeight.w600,
-              color: t.colorScheme.onSurface.withValues(alpha: 0.7),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              for (final hex in _swatches)
-                GestureDetector(
-                  onTap: () => setState(() => _selectedHex = hex),
-                  child: Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: parseHexColor(hex),
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: _selectedHex == hex
-                            ? t.colorScheme.onSurface
-                            : Colors.transparent,
-                        width: 3,
+            sliver: SliverToBoxAdapter(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: context.getRSize(40),
+                      height: context.getRSize(4),
+                      decoration: BoxDecoration(
+                        color: t.dividerColor,
+                        borderRadius: BorderRadius.circular(
+                          AppSpacing.borderRadiusS,
+                        ),
                       ),
                     ),
-                    child: _selectedHex == hex
-                        ? const Icon(
-                            AppIcons.check,
-                            color: Colors.white,
-                            size: 20,
-                          )
-                        : null,
                   ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          GestureDetector(
-            onTap: _saving ? null : _save,
-            child: Opacity(
-              opacity: _saving ? 0.6 : 1,
-              child: Container(
-                height: 54,
-                alignment: Alignment.center,
-                decoration: AppDecorations.primaryGradient(context, radius: 14),
-                child: const Text(
-                  'Save changes',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+                  SizedBox(height: context.getRSize(16)),
+                  const ScreenHeader(
+                    icon: AppIcons.user,
+                    title: 'Edit Profile',
                   ),
-                ),
+                  SizedBox(height: context.getRSize(20)),
+                  AppInput(
+                    controller: _nameController,
+                    labelText: 'Name',
+                    textCapitalization: TextCapitalization.words,
+                    prefixIcon: Icon(AppIcons.user, color: muted),
+                  ),
+                  SizedBox(height: context.getRSize(20)),
+                  Text(
+                    'Avatar colour',
+                    style: context.semiBoldStyle(13).copyWith(color: muted),
+                  ),
+                  SizedBox(height: context.getRSize(8)),
+                  Wrap(
+                    spacing: context.getRSize(8),
+                    runSpacing: context.getRSize(8),
+                    children: [
+                      for (final hex in _swatches)
+                        _Swatch(
+                          hex: hex,
+                          selected: _selectedHex == hex,
+                          checkColor: fixed.onSolid,
+                          onTap: () => setState(() => _selectedHex = hex),
+                        ),
+                    ],
+                  ),
+                  SizedBox(height: context.getRSize(24)),
+                  AppButton(
+                    text: 'Save changes',
+                    onPressed: _saving ? null : _save,
+                  ),
+                ],
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// One avatar-colour choice: a 48dp tap target around a 44dp circle.
+class _Swatch extends StatelessWidget {
+  const _Swatch({
+    required this.hex,
+    required this.selected,
+    required this.checkColor,
+    required this.onTap,
+  });
+
+  final String hex;
+  final bool selected;
+  final Color checkColor;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    return InkResponse(
+      onTap: onTap,
+      radius: kMinInteractiveDimension / 2,
+      child: SizedBox(
+        width: kMinInteractiveDimension,
+        height: kMinInteractiveDimension,
+        child: Center(
+          child: Container(
+            width: context.getRSize(44),
+            height: context.getRSize(44),
+            decoration: BoxDecoration(
+              color: parseHexColor(hex),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: selected ? t.colorScheme.onSurface : Colors.transparent,
+                width: 3,
+              ),
+            ),
+            child: selected
+                ? AppIcon(
+                    AppIcons.check,
+                    color: checkColor,
+                    size: context.getRSize(20),
+                  )
+                : null,
+          ),
+        ),
       ),
     );
   }
