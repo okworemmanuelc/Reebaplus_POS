@@ -6,13 +6,12 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/role_permissions_detail_screen.dart';
-import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
+import 'package:reebaplus_pos/features/staff/widgets/permission_parts.dart';
+import 'package:reebaplus_pos/features/staff/widgets/staff_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/van_sales/van_sales_switch.dart';
-import 'package:reebaplus_pos/shared/utils/role_display.dart';
-import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
-import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
 
 /// CEO Settings > Roles & Permissions (§10.1/§10.2). Lists the four system
 /// roles; tap one to edit its permissions and limits.
@@ -21,48 +20,32 @@ class RolesPermissionsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final t = Theme.of(context);
     final canManage = Gates.manageSettings.allows(ref);
     final roles = ref.watch(allRolesProvider);
 
-    return GlassyScaffold(
+    return PermissionPage(
       title: 'Roles & Permissions',
+      icon: AppIcons.staff,
       body: !canManage
-          ? const SettingsNoAccess()
+          ? const PermissionMessage('You don\'t have access to settings.')
           : roles.when(
               loading: () => const SizedBox.shrink(),
-              error: (_, __) => Center(
-                child: Text(
-                  'Couldn\'t load roles.',
-                  style: TextStyle(
-                    color: t.colorScheme.onSurface.withValues(alpha: 0.6),
-                  ),
-                ),
-              ),
-              data: (list) => SettingsFadeIn(
-                child: ListView(
-                  padding: EdgeInsets.fromLTRB(
-                    24,
-                    24,
-                    24,
-                    24 + context.deviceBottomPadding,
-                  ),
-                  children: [
-                    Text(
-                      'Tap a role to set what it can do.',
-                      style: TextStyle(
-                        fontSize: 13,
-                        height: 1.4,
-                        color: t.colorScheme.onSurface.withValues(alpha: 0.6),
-                      ),
+              error: (_, __) =>
+                  const PermissionMessage('Couldn\'t load roles.'),
+              data: (list) => StaffColumn(
+                scrollKey: PermissionKeys.rolesList,
+                top: context.getRSize(20),
+                children: [
+                  const PermissionIntro('Tap a role to set what it can do.'),
+                  SizedBox(height: context.getRSize(16)),
+                  for (final role in rolesOnOffer(list)) ...[
+                    _RoleCard(
+                      key: PermissionKeys.roleRow(role.slug),
+                      role: role,
                     ),
-                    const SizedBox(height: 20),
-                    for (final role in rolesOnOffer(list)) ...[
-                      _RoleCard(role: role),
-                      const SizedBox(height: 16),
-                    ],
+                    SizedBox(height: context.getRSize(12)),
                   ],
-                ),
+                ],
               ),
             ),
     );
@@ -71,12 +54,10 @@ class RolesPermissionsScreen extends ConsumerWidget {
 
 class _RoleCard extends ConsumerWidget {
   final RoleData role;
-  const _RoleCard({required this.role});
+  const _RoleCard({super.key, required this.role});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final t = Theme.of(context);
-    final color = roleTagColor(role.slug);
     final isCeo = role.slug == 'ceo';
     // Exclude hidden keys (e.g. give-discount) from both tallies so the count
     // matches the toggles actually shown on the detail screen.
@@ -100,58 +81,14 @@ class _RoleCard extends ConsumerWidget {
         ? 'All $total permissions'
         : '$count of $total permissions';
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => RolePermissionsDetailScreen(role: role),
-          ),
-        ),
-        child: GlassyCard(
-          padding: const EdgeInsets.all(16),
-          radius: 16,
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(AppIcons.staff, color: color, size: 20),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      role.name,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: t.colorScheme.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: t.colorScheme.onSurface.withValues(alpha: 0.6),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(
-                AppIcons.chevronRight,
-                color: t.colorScheme.onSurface.withValues(alpha: 0.4),
-              ),
-            ],
-          ),
+    return SettingsRow(
+      icon: AppIcons.staff,
+      tone: staffRoleIconTone(role.slug),
+      title: role.name,
+      subtitle: subtitle,
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => RolePermissionsDetailScreen(role: role),
         ),
       ),
     );
