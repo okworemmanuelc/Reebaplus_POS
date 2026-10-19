@@ -7,6 +7,15 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #442: Business Info, Appearance, Display, Receipt printer (Wave 2 C, PR 2 of 3, 2026-10-17)
+Branch `feat/redesign-w2-settings-2` (based on PR 1's branch). **Restyle only: the business info save path (incl. the explicit `lastUpdatedAt` bump inside `businessesDao.updateInfo`), VAT opt-in OFF by default + storage keys, `settings.manage` gates, the appearance write and the paired-printer list (58/80, last used first) are unchanged.**
+- Business Info: `SettingsPageScaffold` + `SectionHeader` groups (Logo / Business / Tax) + `SettingsCard`; `AppInput` / `AppDropdown` / `AppButton`; VAT and crate switches are `_SwitchRow`s (Bold 15 / Regular 13); logo pick is an outline `AppButton`, "Remove logo" a 48dp text button. 720 form cap.
+- Appearance: accent cards on `AppDecorations.card` (active = 2dp border in the scheme's own colour, keys kept), sizes via `getRSize`, check mark colour from the theme (`scrim` / `onSolid`) instead of black / white.
+- Display: three mode cards (`IconTile` + label + check), active outlined in primary.
+- Receipt printer: refresh action in the bar, each printer a `SettingsCard` + `SettingsControlRow` + the 58/80 `SegmentedButton`.
+- `SettingsCard` now wraps its content in a transparent `Material` (a `SwitchListTile` inside a decorated card painted its ink under the fill).
+- Tests: `test/settings/settings_leftovers_pr2_test.dart` (30), goldens `test/redesign/settings_leftovers_pr2_golden_test.dart` (`business_info_*`, `appearance_*`, `display_*`, `receipt_printer_*` x 4 sizes x light/dark).
+
 ### Issue #442: Profile + Settings leftovers restyle (Wave 2 C, PR 1 of 3, 2026-10-17)
 Branch `feat/redesign-w2-settings`, worktree `../drinkPosApp-wt-442`. **Restyle only: no money/permission/write-path/sync change, no Drift/cloud change (no `pos-parity` issue), no new packages, nothing in `lib/shared/widgets/redesign/`, `settings_widgets.dart` and `settings_screen.dart` untouched.**
 - New `lib/core/settings/settings_page_parts.dart` (shared-part candidates, local to #442): `SettingsPageBar` / `settingsBarHeight` (solid Surface + hairline + `topBarShadow` with `ScreenHeader`, back arrow when the route can pop), `SettingsPageScaffold`, `SettingsPageList` (raw 720 cap via `settingsGutter`, clears side insets and `deviceBottomPadding`), `SettingsCard`, `SettingsControlRow`, `kSettingsSheetMaxWidth` (640).
