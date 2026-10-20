@@ -13,6 +13,7 @@ import 'package:reebaplus_pos/features/inventory/widgets/inventory_parts.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/product_detail_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 import 'package:reebaplus_pos/core/result.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 
 import 'package:reebaplus_pos/shared/widgets/auto_lock_wrapper.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
@@ -99,30 +100,23 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   // (CEO + Manager). Stock keeper can only adjust quantities via the "Update
   // Stock" modal (`stock.adjust`) and sees a restricted view. Cashier: view-only.
   // Read (not watch) so these getters are safe to call from non-build handlers.
-  bool get _canEdit =>
-      ref.read(currentUserPermissionsProvider).contains('products.edit_price');
+  bool get _canEdit => Gates.editProductPrice.allowsNow(ref);
   // Delete is its own permission, not edit. Granted to CEO + Manager by default;
   // the CEO can revoke it per role in Roles & Permissions and the change applies
-  // live (build() watches currentUserPermissionsProvider, so the screen rebuilds
+  // live (build() watches gateContextProvider, so the screen rebuilds
   // and this getter re-reads).
-  bool get _canDelete =>
-      ref.read(currentUserPermissionsProvider).contains('products.delete');
-  bool get _canEditBuying => ref
-      .read(currentUserPermissionsProvider)
-      .contains('products.edit_buying_price');
-  bool get _canAdjustStock =>
-      ref.read(currentUserPermissionsProvider).contains('stock.adjust');
+  bool get _canDelete => Gates.deleteProduct.allowsNow(ref);
+  bool get _canEditBuying => Gates.editBuyingPrice.allowsNow(ref);
+  bool get _canAdjustStock => Gates.adjustStock.allowsNow(ref);
   // Add-stock is its own permission (§16.7), separate from adjust/remove. The
   // Update-Stock modal opens if the viewer holds either; the Add and Remove
   // modes inside are gated individually (stock.add vs stock.adjust).
-  bool get _canAddStock =>
-      ref.read(currentUserPermissionsProvider).contains('stock.add');
+  bool get _canAddStock => Gates.addStock.allowsNow(ref);
   // Sales Target is CEO-only (a Manager may edit everything else but not the
   // target — explicit user requirement).
   bool get _isCeo => ref.read(currentUserRoleProvider)?.slug == 'ceo';
   // Suppliers are gated (§16.7): Stock keeper / Cashier don't see the field.
-  bool get _canSeeSuppliers =>
-      ref.read(currentUserPermissionsProvider).contains('suppliers.manage');
+  bool get _canSeeSuppliers => Gates.manageSuppliers.allowsNow(ref);
 
   @override
   void initState() {
@@ -488,7 +482,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     // Subscribe to permission changes so the role-gated UI (buying row,
     // action button) rebuilds when the role + its grants resolve locally.
     // The `_canEdit` family of getters read the same provider.
-    ref.watch(currentUserPermissionsProvider);
+    ref.watch(gateContextProvider);
 
     // Realtime sync (§5): watch this product's row + stock so an edit or stock
     // change on another device reflects here live, without leaving the screen.
@@ -623,7 +617,13 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               minWidth: kMinInteractiveDimension,
               minHeight: kMinInteractiveDimension,
             ),
-            onPressed: () => _confirmDelete(context),
+            onPressed: () {
+              if (!Gates.deleteProduct.allowsNow(ref)) {
+                showGateDenied(context, Gates.deleteProduct);
+                return;
+              }
+              _confirmDelete(context);
+            },
             icon: AppIcon(
               AppIcons.delete,
               size: context.getRSize(24),
@@ -1817,6 +1817,11 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             variant: AppButtonVariant.danger,
             isFullWidth: false,
             onPressed: () async {
+              if (!Gates.deleteProduct.allowsNow(ref)) {
+                Navigator.pop(ctx);
+                showGateDenied(context, Gates.deleteProduct);
+                return;
+              }
               final productName = widget.item.productName;
               final productId = widget.item.id;
               final db = ref.read(databaseProvider);

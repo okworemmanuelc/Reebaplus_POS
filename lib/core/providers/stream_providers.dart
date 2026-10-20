@@ -803,6 +803,14 @@ final allStoresProvider = businessScopedStream<List<StoreData>>(
   whenAbsent: const [],
 );
 
+/// Store name lookup by store id for all stores in the business, including
+/// soft-deleted ones. Used by Activity Logs and historical views to display
+/// store names instead of 'N/A' or raw IDs.
+final storeNamesProvider = businessScopedStream<Map<String, String>>(
+  (ref, db, businessId) => db.storesDao.watchAllStoreNames(),
+  whenAbsent: const {},
+);
+
 /// Per-store SKU + quantity counts, keyed by store id. The silent-empty variant
 /// of the build-time-poison bug: it read `db.currentBusinessId` synchronously
 /// and stuck empty. The factory hands the closure the resolved non-null

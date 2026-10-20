@@ -7,7 +7,7 @@ import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/industry/lexicon.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/result.dart';
-import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
@@ -101,19 +101,15 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
 
   /// Whether the current role may see / edit the buying price (§16.5 / §16.7).
   /// Reads (not watches) so it is safe to call from `_save`.
-  bool get _canEditBuying => ref
-      .read(currentUserPermissionsProvider)
-      .contains('products.edit_buying_price');
+  bool get _canEditBuying => Gates.editBuyingPrice.allowsNow(ref);
 
   /// Whether the current role may edit product details/prices (§16.7). This
   /// editor's primary purpose; re-checked at save time (hard rule #6).
-  bool get _canEditPrice =>
-      ref.read(currentUserPermissionsProvider).contains('products.edit_price');
+  bool get _canEditPrice => Gates.editProductPrice.allowsNow(ref);
 
   /// Whether the current role may add stock to an existing product (§16.7).
   /// Gates the in-sheet "quantity to add" field and its save branch.
-  bool get _canAddStock =>
-      ref.read(currentUserPermissionsProvider).contains('stock.add');
+  bool get _canAddStock => Gates.addStock.allowsNow(ref);
 
   /// §13.4 / rule #13 — empty-crate tracking is Bar / Beer Distributor only.
   /// Gate the toggle (below) + force the saved value off for non-crate types.

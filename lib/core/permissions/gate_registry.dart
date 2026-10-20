@@ -98,6 +98,27 @@ abstract final class Gates {
     rule: Gate.key('products.edit_buying_price'),
   );
 
+  /// Delete a product (`products.delete`).
+  static const NamedGate deleteProduct = NamedGate(
+    name: 'deleteProduct',
+    action: 'Delete Product',
+    rule: Gate.key('products.delete'),
+  );
+
+  /// Add stock to a product (`stock.add`).
+  static const NamedGate addStock = NamedGate(
+    name: 'addStock',
+    action: 'Add Stock',
+    rule: Gate.key('stock.add'),
+  );
+
+  /// Adjust stock for damages or manual correction (`stock.adjust`).
+  static const NamedGate adjustStock = NamedGate(
+    name: 'adjustStock',
+    action: 'Adjust Stock',
+    rule: Gate.key('stock.adjust'),
+  );
+
   /// Manage suppliers, incl. recording a supplier payment during a receipt.
   /// Sub-gate of the Receive Stock checkout's payment section; also the Add
   /// Product screen's "Add new supplier" button (issue #20).
@@ -127,7 +148,10 @@ abstract final class Gates {
     action: 'See Total Sales',
     rule: OrGate(
       Gate.ceo(),
-      AndGate(Gate.tierAtLeast(GateTier.cashier), Gate.key('reports.see_sales')),
+      AndGate(
+        Gate.tierAtLeast(GateTier.cashier),
+        Gate.key('reports.see_sales'),
+      ),
     ),
   );
 
@@ -453,6 +477,14 @@ abstract final class Gates {
     rule: Gate.key('staff.invite'),
   );
 
+  /// Invite new staff (§9, `staff.invite`, CEO + Manager by default) —
+  /// the Invite Staff screen and write boundary.
+  static const NamedGate inviteStaff = NamedGate(
+    name: 'inviteStaff',
+    action: 'Invite Staff',
+    rule: Gate.key('staff.invite'),
+  );
+
   /// Activity Logs — the drawer entry (§27.3: CEO always; Manager only if
   /// granted `activity_logs.view`; hidden for Cashier/Stock keeper).
   static const NamedGate viewActivityLogs = NamedGate(
@@ -700,6 +732,9 @@ abstract final class Gates {
     addManufacturer,
     countCrates,
     editBuyingPrice,
+    deleteProduct,
+    addStock,
+    adjustStock,
     manageSuppliers,
     seeSalesMetric,
     seeProfitMetric,
@@ -734,6 +769,7 @@ abstract final class Gates {
     deleteBusiness,
     viewCustomers,
     manageStaff,
+    inviteStaff,
     viewActivityLogs,
     viewStores,
     assignStaffStores,

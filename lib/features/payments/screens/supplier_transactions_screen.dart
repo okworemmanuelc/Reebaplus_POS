@@ -48,8 +48,8 @@ class _SupplierTransactionsScreenState
   Widget build(BuildContext context) {
     ref.watch(currencySymbolProvider);
     // §21 access — gated by suppliers.manage. Fail closed while grants load.
-    final perms = ref.watch(currentUserPermissionsProvider);
-    final canManage = perms.contains('suppliers.manage');
+    final canManage = Gates.manageSuppliers.allows(ref);
+    final isReady = ref.watch(gateContextProvider).isReady;
 
     final lockedStoreId = ref.watch(lockedStoreProvider).value;
     final providerKey = (storeId: lockedStoreId, period: _effectivePeriod);
@@ -201,7 +201,7 @@ class _SupplierTransactionsScreenState
           bottom: false,
           child: !canManage
               ? Center(
-                  child: perms.isEmpty
+                  child: !isReady
                       ? const CircularProgressIndicator()
                       : Padding(
                           padding: EdgeInsets.all(context.getRSize(16)),
