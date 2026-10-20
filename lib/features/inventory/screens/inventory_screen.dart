@@ -147,10 +147,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
 
     // Use the EFFECTIVE permission set (role grants ± this user's overrides), not
     // the raw role grants — otherwise a CEO's per-staff override of
-    // `suppliers.manage` wouldn't change the visible tabs. The grants watch above
-    // stays only as the load-gate so the tab bar still reveals in one shot.
-    final perms = ref.watch(currentUserPermissionsProvider);
-    final showSuppliers = perms.contains('suppliers.manage');
+    // `suppliers.manage` wouldn't change the visible tabs.
+    final showSuppliers = Gates.manageSuppliers.allows(ref);
     final showCrates = businessTracksCrates(ref.watch(currentBusinessProvider));
     final showHistory =
         role.slug == 'ceo' ||

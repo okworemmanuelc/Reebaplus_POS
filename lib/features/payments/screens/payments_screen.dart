@@ -4,6 +4,7 @@ import 'package:reebaplus_pos/core/widgets/app_fab.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
@@ -35,15 +36,17 @@ class PaymentsScreen extends ConsumerWidget {
 
     // §21 access: Supplier Accounts is gated by `suppliers.manage`. Fail CLOSED:
     // `perms` is empty while grants load → spinner, not a flash of no-access.
-    final perms = ref.watch(currentUserPermissionsProvider);
-    final canManage = perms.contains('suppliers.manage');
+    final canManage = Gates.manageSuppliers.allows(ref);
+    final isReady = ref.watch(gateContextProvider).isReady;
 
     return Container(
       decoration: AppDecorations.pageBackground(context),
       child: Scaffold(
         backgroundColor: Colors.transparent,
         // One line: test/tour/drawer_presence_ban_test.dart reads it line by line.
-        drawer: context.isRailLayout ? null : const AppDrawer(activeRoute: 'supplier_accounts'),
+        drawer: context.isRailLayout
+            ? null
+            : const AppDrawer(activeRoute: 'supplier_accounts'),
         appBar: PaymentsTopBar(
           key: PaymentsKeys.topBar,
           height: paymentsTopBarHeight(context),
@@ -68,7 +71,7 @@ class PaymentsScreen extends ConsumerWidget {
             bottom: false,
             child: !canManage
                 ? Center(
-                    child: perms.isEmpty
+                    child: !isReady
                         ? const CircularProgressIndicator()
                         : Padding(
                             padding: EdgeInsets.all(context.getRSize(16)),

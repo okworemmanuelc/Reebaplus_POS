@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
-import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
@@ -121,10 +121,9 @@ class _SupplierFormSheetState extends ConsumerState<SupplierFormSheet> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate() || _saving) return;
     // Write-boundary re-check (hard rule #6 / 3-layer enforcement).
-    if (!ref
-        .read(currentUserPermissionsProvider)
-        .contains('suppliers.manage')) {
+    if (!Gates.manageSuppliers.allowsNow(ref)) {
       Navigator.pop(context);
+      showGateDenied(context, Gates.manageSuppliers);
       return;
     }
     final supplierName = _nameCtrl.text.trim();

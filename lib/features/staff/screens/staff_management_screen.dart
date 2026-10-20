@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
@@ -80,13 +81,13 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen>
     // default; revocable per staff via override). The drawer entry is already
     // permission-gated (hard rule #7), but guard the screen too (coding rule #1)
     // so an alternate/stale entry can't bypass it and a per-user override takes
-    // effect. The FAB below builds only past this gate. Fail CLOSED: `perms` is
-    // empty while grants load → spinner, not a flash of no-access.
-    final perms = ref.watch(currentUserPermissionsProvider);
+    // effect. The FAB below builds only past this gate. Fail CLOSED: while
+    // permissions are resolving locally, show a spinner, not a flash of no-access.
     final activeStoreLabel = ref.watch(activeStoreLabelProvider);
     final t = Theme.of(context);
     final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
-    if (!perms.contains('staff.invite')) {
+    if (!Gates.manageStaff.allows(ref)) {
+      final isReady = ref.watch(gateContextProvider).isReady;
       return Container(
         decoration: AppDecorations.pageBackground(context),
         child: SharedScaffold(
@@ -98,7 +99,7 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen>
             header: _header(context, 'Staff', activeStoreLabel),
           ),
           body: Center(
-            child: perms.isEmpty
+            child: !isReady
                 ? const CircularProgressIndicator()
                 : Padding(
                     padding: EdgeInsets.all(context.getRSize(16)),
