@@ -69,12 +69,6 @@ class StoresDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
-  /// One-shot business-scoped variant of [watchAllStoreNames].
-  Future<Map<String, String>> getAllStoreNames() async {
-    final rows = await (select(stores)..where((t) => whereBusiness(t))).get();
-    return {for (final r in rows) r.id: r.name};
-  }
-
   /// One-shot business-scoped variant of [watchActiveStores]. Use this for
   /// store pickers that read once (initState / load) so a device holding more
   /// than one business's data can't surface — and FK-reference — another

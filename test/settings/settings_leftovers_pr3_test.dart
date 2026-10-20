@@ -1,15 +1,14 @@
-import 'package:reebaplus_pos/core/providers/app_providers.dart';
-import 'package:reebaplus_pos/shared/widgets/redesign/tag_pill.dart';
-import 'package:drift/drift.dart' show Value;
-import 'package:reebaplus_pos/core/database/app_database.dart';
 // Security, Subscription, Activity Logs (access + log) and Delete Business
 // after the #442 restyle (PR 3 of 3, PRD #346 Wave 2 C): every control still
 // renders, the permission-hidden ones stay hidden, the main actions still work
 // and nothing overflows at the reference sizes.
 
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/activity_logs_access_screen.dart';
 import 'package:reebaplus_pos/core/settings/delete_business_screen.dart';
@@ -18,6 +17,7 @@ import 'package:reebaplus_pos/core/settings/subscription_screen.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
 import 'package:reebaplus_pos/shared/widgets/activity_log_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/tag_pill.dart';
 
 import '../helpers/screen_harness.dart';
 import 'settings_leftovers_fixture.dart';
