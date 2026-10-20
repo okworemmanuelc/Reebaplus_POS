@@ -204,7 +204,7 @@ class _AppDropdownState<T> extends FormFieldState<T> {
                                     ? theme.colorScheme.primary.withValues(alpha: 0.1)
                                     : Colors.transparent,
                               ),
-                              child: DefaultTextStyle(
+                              child: DefaultTextStyle.merge(
                                 style: TextStyle(
                                   color: isSelected 
                                       ? theme.colorScheme.primary 
@@ -309,7 +309,7 @@ class _AppDropdownState<T> extends FormFieldState<T> {
                       ],
                       Expanded(
                         child: selectedChild != null
-                            ? DefaultTextStyle(
+                            ? DefaultTextStyle.merge(
                                 style: TextStyle(
                                   color: t.colorScheme.onSurface,
                                   fontSize: 13,
