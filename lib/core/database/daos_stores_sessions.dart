@@ -14,6 +14,23 @@ class StoresDao extends DatabaseAccessor<AppDatabase>
         .watch();
   }
 
+  /// All stores for the current business including soft-deleted ones, mapped
+  /// from store id to store name.
+  ///
+  /// Used to resolve store names on historical records (e.g. Activity Logs)
+  /// even after a store has been soft-deleted.
+  Stream<Map<String, String>> watchAllStoreNames() {
+    return (select(stores)..where((t) => whereBusiness(t))).watch().map(
+      (rows) => {for (final r in rows) r.id: r.name},
+    );
+  }
+
+  /// One-shot business-scoped variant of [watchAllStoreNames].
+  Future<Map<String, String>> getAllStoreNames() async {
+    final rows = await (select(stores)..where((t) => whereBusiness(t))).get();
+    return {for (final r in rows) r.id: r.name};
+  }
+
   /// One-shot business-scoped variant of [watchActiveStores]. Use this for
   /// store pickers that read once (initState / load) so a device holding more
   /// than one business's data can't surface — and FK-reference — another

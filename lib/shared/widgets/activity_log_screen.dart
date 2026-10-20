@@ -12,8 +12,6 @@ import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-import 'package:reebaplus_pos/features/inventory/data/inventory_data.dart';
-import 'package:reebaplus_pos/features/stores/data/models/store.dart';
 import 'package:reebaplus_pos/shared/models/activity_log.dart';
 import 'package:reebaplus_pos/shared/widgets/app_drawer.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
@@ -57,6 +55,8 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
 
     final t = Theme.of(context);
     final subtextCol = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
+    final storeNames =
+        ref.watch(storeNamesProvider).valueOrNull ?? const <String, String>{};
 
     return Container(
       decoration: AppDecorations.pageBackground(context),
@@ -176,7 +176,11 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
                                   padding: EdgeInsets.only(
                                     bottom: context.getRSize(12),
                                   ),
-                                  child: _buildLogCard(context, log),
+                                  child: _buildLogCard(
+                                    context,
+                                    log,
+                                    storeNames,
+                                  ),
                                 );
                               },
                             );
@@ -225,7 +229,11 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
     );
   }
 
-  Widget _buildLogCard(BuildContext context, ActivityLog log) {
+  Widget _buildLogCard(
+    BuildContext context,
+    ActivityLog log,
+    Map<String, String> storeNames,
+  ) {
     final t = Theme.of(context);
     final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     // Determine the icon and tone based on the action or type.
@@ -311,13 +319,7 @@ class _ActivityLogScreenState extends ConsumerState<ActivityLogScreen> {
                       ),
                       if (log.storeId != null)
                         TagPill(
-                          label: kStores
-                              .firstWhere(
-                                (w) => w.id == log.storeId,
-                                orElse: () =>
-                                    Store(id: '', name: 'N/A', location: ''),
-                              )
-                              .name,
+                          label: storeNames[log.storeId] ?? 'N/A',
                           tone: TagPillTone.info,
                           dense: true,
                         ),
