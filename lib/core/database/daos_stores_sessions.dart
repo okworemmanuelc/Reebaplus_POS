@@ -1,5 +1,49 @@
 part of 'daos.dart';
 
+const _kManagerViewAllStoresSetting = 'manager_view_all_stores';
+
+/// Reasons why a store deletion is blocked by safety guards (#456).
+enum StoreDeleteBlockedReason {
+  isOnlyStore,
+  hasStock,
+  hasStorelessStaff,
+  hasOpenTransfers,
+  hasPendingAdjustments,
+  hasOpenVanTrip,
+  hasCrates,
+}
+
+extension StoreDeleteBlockedReasonMessage on StoreDeleteBlockedReason {
+  String get message {
+    switch (this) {
+      case StoreDeleteBlockedReason.isOnlyStore:
+        return 'Cannot delete the only store in your business. A business must have at least one store.';
+      case StoreDeleteBlockedReason.hasStock:
+        return 'This store still has stock on hand. Transfer or write off all inventory before deleting.';
+      case StoreDeleteBlockedReason.hasStorelessStaff:
+        return 'Staff members are assigned only to this store. Reassign them to another store before deleting.';
+      case StoreDeleteBlockedReason.hasOpenTransfers:
+        return 'This store has open stock transfers (pending or in transit). Complete or cancel them before deleting.';
+      case StoreDeleteBlockedReason.hasPendingAdjustments:
+        return 'This store has pending stock adjustment requests. Approve or reject them before deleting.';
+      case StoreDeleteBlockedReason.hasOpenVanTrip:
+        return 'This store has an active van trip currently open. Close the van trip before deleting.';
+      case StoreDeleteBlockedReason.hasCrates:
+        return 'This store still holds empty crates. Transfer or return all crates before deleting.';
+    }
+  }
+}
+
+class StoreDeleteBlockedException implements Exception {
+  final StoreDeleteBlockedReason reason;
+  const StoreDeleteBlockedException(this.reason);
+
+  String get message => reason.message;
+
+  @override
+  String toString() => message;
+}
+
 @DriftAccessor(tables: [Users, Stores])
 class StoresDao extends DatabaseAccessor<AppDatabase>
     with _$StoresDaoMixin, BusinessScopedDao<AppDatabase> {
@@ -153,6 +197,221 @@ class StoresDao extends DatabaseAccessor<AppDatabase>
       stores,
     )..where((t) => t.id.equals(id))).getSingle();
     await db.syncDao.enqueueUpsert('stores', row);
+  }
+
+  /// Check whether deleting [storeId] is blocked by any safety invariant (#456):
+  /// 1. isOnlyStore: Business has <= 1 active stores.
+  /// 2. hasStock: Store has remaining inventory quantity > 0.
+  /// 3. hasStorelessStaff: Staff member would be left with no other active store.
+  /// 4. hasOpenTransfers: Store is part of an open transfer (pending or in_transit).
+  /// 5. hasPendingAdjustments: Store has pending stock adjustment requests.
+  /// 6. hasOpenVanTrip: Store is linked to an active open van trip.
+  /// 7. hasCrates: Store holds empty crates with balance > 0.
+  ///
+  /// Returns the first [StoreDeleteBlockedReason] found, or null if clear.
+  Future<StoreDeleteBlockedReason?> checkStoreDeleteBlocked(
+    String storeId,
+  ) async {
+    final businessId = requireBusinessId();
+
+    // Guard 1: Cannot delete if it is the only active store.
+    final activeStores = await getActiveStores();
+    if (activeStores.length <= 1) {
+      return StoreDeleteBlockedReason.isOnlyStore;
+    }
+
+    // Guard 2: Cannot delete if store has inventory with quantity > 0.
+    final stockRows =
+        await (select(db.inventory)
+              ..where(
+                (t) =>
+                    whereBusiness(t) &
+                    t.storeId.equals(storeId) &
+                    t.quantity.isBiggerThanValue(0),
+              )
+              ..limit(1))
+            .get();
+    if (stockRows.isNotEmpty) {
+      return StoreDeleteBlockedReason.hasStock;
+    }
+
+    // Guard 3: Block only when a staff member would be left with NO other active store.
+    // Staff assigned to several stores, and CEO/"All stores" users, don't block.
+    final otherActiveStoreIds = activeStores
+        .map((s) => s.id)
+        .where((id) => id != storeId)
+        .toSet();
+
+    final bizUsers = await (select(
+      users,
+    )..where((u) => whereBusiness(u))).get();
+    for (final u in bizUsers) {
+      // Only ACTIVE staff count: a suspended or removed member's leftover
+      // store assignments must not block the delete (they can't be reassigned).
+      final ub =
+          await (select(db.userBusinesses)..where(
+                (t) =>
+                    t.businessId.equals(businessId) &
+                    t.userId.equals(u.id) &
+                    t.status.equals('active'),
+              ))
+              .getSingleOrNull();
+      if (ub == null) continue;
+
+      final role = await (select(
+        db.roles,
+      )..where((r) => r.id.equals(ub.roleId))).getSingleOrNull();
+      if (role != null) {
+        if (role.slug == 'ceo') continue;
+        if (role.slug == 'manager') {
+          final setting = await db.roleSettingsDao.getValue(
+            role.id,
+            _kManagerViewAllStoresSetting,
+          );
+          if (setting == 'true') continue;
+        }
+      }
+
+      // Check assigned stores for this user
+      final userStoreRows = await (select(
+        db.userStores,
+      )..where((t) => whereBusiness(t) & t.userId.equals(u.id))).get();
+      final assignedStoreIds = userStoreRows.map((r) => r.storeId).toSet();
+      if (assignedStoreIds.isEmpty && u.storeId != null) {
+        assignedStoreIds.add(u.storeId!);
+      }
+
+      if (assignedStoreIds.contains(storeId)) {
+        final hasOtherActiveStore = assignedStoreIds.any(
+          (id) => otherActiveStoreIds.contains(id),
+        );
+        if (!hasOtherActiveStore) {
+          return StoreDeleteBlockedReason.hasStorelessStaff;
+        }
+      }
+    }
+
+    // Guard 4: Cannot delete if store is part of a pending or in-transit transfer.
+    final transferRows =
+        await (select(db.stockTransfers)
+              ..where(
+                (t) =>
+                    whereBusiness(t) &
+                    (t.fromLocationId.equals(storeId) |
+                        t.toLocationId.equals(storeId)) &
+                    (t.status.equals('pending') |
+                        t.status.equals('in_transit')),
+              )
+              ..limit(1))
+            .get();
+    if (transferRows.isNotEmpty) {
+      return StoreDeleteBlockedReason.hasOpenTransfers;
+    }
+
+    // Guard 5: Cannot delete if store has pending stock adjustment requests.
+    final adjustmentRows =
+        await (select(db.stockAdjustmentRequests)
+              ..where(
+                (t) =>
+                    whereBusiness(t) &
+                    t.storeId.equals(storeId) &
+                    t.status.equals('pending'),
+              )
+              ..limit(1))
+            .get();
+    if (adjustmentRows.isNotEmpty) {
+      return StoreDeleteBlockedReason.hasPendingAdjustments;
+    }
+
+    // Guard 6: Cannot delete if store is linked to an open van trip.
+    final vanTripRows =
+        await (select(db.vanTrips)
+              ..where(
+                (t) =>
+                    whereBusiness(t) &
+                    (t.vanStoreId.equals(storeId) |
+                        t.sourceStoreId.equals(storeId)) &
+                    t.status.equals(kVanTripStatusOpen),
+              )
+              ..limit(1))
+            .get();
+    if (vanTripRows.isNotEmpty) {
+      return StoreDeleteBlockedReason.hasOpenVanTrip;
+    }
+
+    // Guard 7: Cannot delete if store still holds empty crates.
+    final crateRows =
+        await (select(db.storeCrateBalances)
+              ..where(
+                (t) =>
+                    whereBusiness(t) &
+                    t.storeId.equals(storeId) &
+                    t.balance.isBiggerThanValue(0),
+              )
+              ..limit(1))
+            .get();
+    if (crateRows.isNotEmpty) {
+      return StoreDeleteBlockedReason.hasCrates;
+    }
+
+    return null;
+  }
+
+  /// Soft-delete a store for the current business (#456).
+  ///
+  /// Business-scoped and transactional:
+  /// 1. Re-verifies all 7 safety guards inside the transaction at write time.
+  ///    Throws [StoreDeleteBlockedException] if any guard fails.
+  /// 2. Updates `stores.is_deleted = true` with bumped `last_updated_at`.
+  /// 3. Appends an `activity_logs` entry with action 'store.delete'.
+  /// 4. Enqueues upserts to `sync_queue` for both `stores` and `activity_logs`.
+  Future<void> softDeleteStore(String storeId) async {
+    final businessId = requireBusinessId();
+    final now = DateTime.now();
+    final targetUserId = currentUserId;
+
+    await transaction(() async {
+      final blocker = await checkStoreDeleteBlocked(storeId);
+      if (blocker != null) {
+        throw StoreDeleteBlockedException(blocker);
+      }
+
+      final store =
+          await (select(stores)
+                ..where((t) => t.id.equals(storeId) & whereBusiness(t)))
+              .getSingleOrNull();
+      if (store == null) {
+        throw StateError('Store $storeId not found.');
+      }
+
+      final storeUpdate = StoresCompanion(
+        id: Value(storeId),
+        isDeleted: const Value(true),
+        lastUpdatedAt: Value(now),
+      );
+      await (update(stores)
+            ..where((t) => t.id.equals(storeId) & whereBusiness(t)))
+          .write(storeUpdate);
+
+      final updatedStore = await (select(
+        stores,
+      )..where((t) => t.id.equals(storeId))).getSingle();
+      await db.syncDao.enqueueUpsert('stores', updatedStore);
+
+      final activityRow = ActivityLogsCompanion.insert(
+        id: Value(UuidV7.generate()),
+        businessId: businessId,
+        userId: Value(targetUserId),
+        action: 'store.delete',
+        description: 'Deleted store "${store.name}"',
+        entityType: const Value('store'),
+        entityId: Value(storeId),
+        storeId: Value(storeId),
+        lastUpdatedAt: Value(now),
+      );
+      await into(db.activityLogs).insert(activityRow);
+      await db.syncDao.enqueueUpsert('activity_logs', activityRow);
+    });
   }
 
   /// Edit a user's own display name / avatar colour (profile, §10.1-adjacent).

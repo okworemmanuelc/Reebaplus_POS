@@ -14,6 +14,21 @@ Branch `feat/455-gate-permissions`, worktree `../drinkPosApp-wt-455`. PR #455.
 - Action site write-boundary enforcement via `showGateDenied(context, gate)` across staff (invite, detail, permissions), inventory (product delete, price edit, stock adjustments, add product), customers (refund, credit, crate return), payments/suppliers, and store transfers.
 - Added static ban test (`test/permissions/raw_permission_check_ban_test.dart`) preventing future direct references to `currentUserPermissionsProvider` outside `lib/core/permissions/` and ensuring no catalogue permission keys are checked via `.contains()` outside the permissions module.
 - Tests: `test/permissions/` suite (74/74 passed), `test/staff/invite_staff_screen_test.dart`, `test/stores/request_stock_screen_test.dart`.
+### Issue #456: Stores safe deletion with safety guards and transactional write path (2026-10-20)
+Branch `feat/456-stores-safe-delete`, worktree `../drinkPosApp-wt-456`.
+- **7 safety guards**: Implemented `StoreDeleteBlockedReason` enum and `StoresDao.checkStoreDeleteBlocked`:
+  1. `isOnlyStore`: Store is the only active store in the business.
+  2. `hasStock`: Store holds products with inventory `quantity > 0`.
+  3. `hasStorelessStaff`: An ACTIVE staff member assigned to this store would be left with no other active store (multi-store staff, CEOs, all-stores Managers, and suspended/removed staff do not block).
+  4. `hasOpenTransfers`: Open stock transfers (`pending` or `in_transit`) where the store is origin or destination.
+  5. `hasPendingAdjustments`: Pending stock adjustment requests for this store.
+  6. `hasOpenVanTrip`: Active unclosed van trip (`status = 'open'`) where the store is van or source warehouse.
+  7. `hasCrates`: Store holds empty crates (`store_crate_balances.balance > 0`).
+- **Transactional write path**: `StoresDao.softDeleteStore(storeId)` checks all 7 guards inside the transaction, soft-deletes the store (`is_deleted = true`), logs `activity_logs` entry with action `'store.delete'`, and enqueues sync upserts for both `stores` and `activity_logs`.
+- **Devices locked to a deleted store**: no new provider. The deleted store drops out of `allStoresProvider` → `selectableStoresProvider`, and MainLayout's existing §12.1 active-store default moves every device's lock to the first remaining store once the delete syncs; while the store list is still loading (empty) the lock is left alone. (A read-side `activeStoreIdProvider` was tried and removed in review: ~24 screens read `lockedStoreProvider` directly, and it turned every lock into "All Stores" during loading.)
+- **UI**: `StoresScreen` pre-checks guards and displays "Cannot Delete Store" dialog with the specific blocker reason; if clear, displays plain confirmation: `"Delete '<name>'? It will no longer appear in your stores. Its past sales and records are kept."`. Executes `softDeleteStore` and, if this device was locked to it, clears the lock silently (`explicit: false`) so MainLayout re-defaults to a remaining store instead of latching "All Stores".
+- **POS Parity**: Opened `pos-parity` issue in `okworemmanuelc/reebaplus-web#133`.
+- **Tests**: `test/stores/stores_dao_test.dart` (22 tests covering all 7 guards incl. suspended/removed staff, edge cases, and transactional soft-delete), `test/stores/stores_screen_test.dart` (30 tests updated for plain confirmation text, blocked notice, and locked store reset), `test/stores/store_lock_after_delete_test.dart` (deleted store leaves the selectable list; locked device moves to a remaining store; silent clear doesn't latch All Stores; lock kept while loading).
 
 ### Issue #443: Sync Issues + Diagnostics restyle (Wave 2 C, 2026-10-19)
 Branch `feat/redesign-w2-sync`, worktree `../drinkPosApp-wt-443`. One PR. **Restyle only: no Drift/cloud/sync/permission change (no `pos-parity` issue), no new package; `SyncPullBanner`, `AppRefreshWrapper`, the outbox, the auto-recovery allowlist and the backoff are untouched.**
