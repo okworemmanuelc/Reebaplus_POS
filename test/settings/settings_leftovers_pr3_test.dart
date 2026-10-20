@@ -3,9 +3,12 @@
 // renders, the permission-hidden ones stay hidden, the main actions still work
 // and nothing overflows at the reference sizes.
 
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/activity_logs_access_screen.dart';
 import 'package:reebaplus_pos/core/settings/delete_business_screen.dart';
@@ -14,6 +17,7 @@ import 'package:reebaplus_pos/core/settings/subscription_screen.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
 import 'package:reebaplus_pos/shared/widgets/activity_log_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/tag_pill.dart';
 
 import '../helpers/screen_harness.dart';
 import 'settings_leftovers_fixture.dart';
@@ -185,6 +189,88 @@ void main() {
       await disposeScreen(tester);
     });
 
+    testWidgets(
+      'store pill resolves name for active and soft-deleted stores, falling back to N/A for unknown stores',
+      (tester) async {
+        await env.db
+            .into(env.db.stores)
+            .insert(
+              StoresCompanion.insert(
+                id: const Value('store-soft-deleted'),
+                businessId: env.businessId,
+                name: 'Old Lagos Branch',
+                location: const Value('Lagos'),
+                isDeleted: const Value(true),
+              ),
+            );
+
+        final now = DateTime(2026, 3, 14, 12, 0);
+        await env.db
+            .into(env.db.activityLogs)
+            .insert(
+              ActivityLogsCompanion.insert(
+                id: const Value('log-active'),
+                businessId: env.businessId,
+                action: 'Active store action',
+                description: 'Active store event',
+                createdAt: Value(now),
+                storeId: Value(env.storeId),
+                lastUpdatedAt: Value(now),
+              ),
+            );
+        await env.db
+            .into(env.db.activityLogs)
+            .insert(
+              ActivityLogsCompanion.insert(
+                id: const Value('log-soft-deleted'),
+                businessId: env.businessId,
+                action: 'Archived store action',
+                description: 'Archived store event',
+                createdAt: Value(now.subtract(const Duration(minutes: 5))),
+                storeId: const Value('store-soft-deleted'),
+                lastUpdatedAt: Value(now),
+              ),
+            );
+        await env.db.customStatement('PRAGMA foreign_keys = OFF;');
+        await env.db
+            .into(env.db.activityLogs)
+            .insert(
+              ActivityLogsCompanion.insert(
+                id: const Value('log-unknown'),
+                businessId: env.businessId,
+                action: 'Unknown store action',
+                description: 'Unknown store event',
+                createdAt: Value(now.subtract(const Duration(minutes: 10))),
+                storeId: const Value('store-nonexistent'),
+                lastUpdatedAt: Value(now),
+              ),
+            );
+        await env.db.customStatement('PRAGMA foreign_keys = ON;');
+
+        await pumpSettingsPage(
+          tester,
+          env: env,
+          screen: const ActivityLogScreen(),
+          size: const Size(390, 844),
+          pushed: false,
+          grantedKeys: const {'activity_logs.view'},
+          overrides: [
+            lockedStoreProvider.overrideWith(
+              (ref) => ValueNotifier<String?>(null),
+            ),
+          ],
+        );
+
+        expect(find.widgetWithText(TagPill, 'Abuja HQ'), findsOneWidget);
+        expect(
+          find.widgetWithText(TagPill, 'Old Lagos Branch'),
+          findsOneWidget,
+        );
+        expect(find.widgetWithText(TagPill, 'N/A'), findsOneWidget);
+
+        await disposeScreen(tester);
+      },
+    );
     testWidgets('empty state says so', (tester) async {
       await pumpSettingsPage(
         tester,
