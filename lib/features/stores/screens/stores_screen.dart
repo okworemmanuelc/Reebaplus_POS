@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
@@ -276,12 +275,56 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
 
   // ── Delete Store ───────────────────────────────────────────────────────
   Future<void> _confirmDelete(BuildContext context, StoreData store) async {
+    // Re-check permission gate at the user action boundary.
+    if (!Gates.manageStores.allowsNow(ref)) {
+      showGateDenied(context, Gates.manageStores);
+      return;
+    }
+
     final db = ref.read(databaseProvider);
-    final rows = await (db.select(
-      db.inventory,
-    )..where((t) => t.storeId.equals(store.id))).get();
-    final stock = rows.fold<int>(0, (sum, r) => sum + r.quantity);
+    final blocker = await db.storesDao.checkStoreDeleteBlocked(store.id);
     if (!context.mounted) return;
+
+    if (blocker != null) {
+      showDialog(
+        context: context,
+        builder: (ctx) {
+          final t = Theme.of(ctx);
+          return AlertDialog(
+            scrollable: true,
+            title: Text(
+              'Cannot Delete Store',
+              style: ctx.screenTitleStyle.copyWith(
+                color: t.colorScheme.onSurface,
+              ),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                StoresNotice(
+                  tone: IconTileTone.warning,
+                  icon: AppIcons.warning,
+                  text: blocker.message,
+                ),
+              ],
+            ),
+            actions: [
+              AppButton(
+                text: 'OK',
+                variant: AppButtonVariant.primary,
+                size: AppButtonSize.small,
+                height: kMinInteractiveDimension,
+                isFullWidth: false,
+                width: ctx.getRSize(120),
+                onPressed: () => Navigator.pop(ctx),
+              ),
+            ],
+          );
+        },
+      );
+      return;
+    }
 
     showDialog(
       context: context,
@@ -301,18 +344,9 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Are you sure you want to delete "${store.name}"?',
+                'Delete "${store.name}"? It will no longer appear in your stores. Its past sales and records are kept.',
                 style: ctx.regularStyle(14).copyWith(color: muted),
               ),
-              if (stock > 0) ...[
-                SizedBox(height: ctx.getRSize(12)),
-                StoresNotice(
-                  tone: IconTileTone.warning,
-                  icon: AppIcons.warning,
-                  text:
-                      'This store has $stock units in stock. Deleting it will also remove its inventory records.',
-                ),
-              ],
             ],
           ),
           actions: [
@@ -340,31 +374,19 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                   showGateDenied(context, Gates.manageStores);
                   return;
                 }
-                // Soft-delete the store: hard-delete would orphan
-                // inventory and ledger FKs. The cloud-side cascade in 0001
-                // is ON DELETE CASCADE for inventory, but realtime DELETE
-                // events confuse local listeners. Soft-delete + enqueue is
-                // the consistent path with the rest of the codebase.
-                final db = ref.read(databaseProvider);
-                final whComp = StoresCompanion(
-                  id: Value(store.id),
-                  isDeleted: const Value(true),
-                  lastUpdatedAt: Value(DateTime.now()),
-                );
                 try {
-                  await (db.update(
-                    db.stores,
-                  )..where((t) => t.id.equals(store.id))).write(whComp);
-                  // Full-row enqueue: a partial stores upsert omits the NOT NULL name.
-                  await db.syncDao.enqueueUpsert(
-                    'stores',
-                    store
-                        .toCompanion(true)
-                        .copyWith(
-                          isDeleted: const Value(true),
-                          lastUpdatedAt: whComp.lastUpdatedAt,
-                        ),
-                  );
+                  await db.storesDao.softDeleteStore(store.id);
+                  // Silent (explicit: false) so it doesn't latch "All Stores";
+                  // MainLayout then re-defaults to the first remaining store,
+                  // as it does on every other device once the delete syncs.
+                  final nav = ref.read(navigationProvider);
+                  if (nav.lockedStoreId.value == store.id) {
+                    nav.setLockedStore(null, explicit: false);
+                  }
+                } on StoreDeleteBlockedException catch (e) {
+                  if (context.mounted) {
+                    AppNotification.showError(context, e.message);
+                  }
                 } catch (e) {
                   if (context.mounted) {
                     AppNotification.showError(

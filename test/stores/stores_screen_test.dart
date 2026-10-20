@@ -14,6 +14,7 @@ import 'package:reebaplus_pos/core/settings/stores_settings_screen.dart';
 import 'package:reebaplus_pos/features/stores/screens/stores_screen.dart';
 import 'package:reebaplus_pos/features/stores/widgets/stores_parts.dart';
 
+import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import '../helpers/screen_harness.dart';
 
 const _manage = {'stores.manage'};
@@ -199,6 +200,12 @@ void main() {
       await tester.tap(find.byKey(StoresKeys.delete(lagosId)));
       await tester.pumpAndSettle();
       expect(find.text('Delete Store'), findsOneWidget);
+      expect(
+        find.text(
+          'Delete "Lagos Island Annex With A Very Long Store Name"? It will no longer appear in your stores. Its past sales and records are kept.',
+        ),
+        findsOneWidget,
+      );
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
       final all = await env.db.storesDao.getActiveStores();
@@ -206,17 +213,83 @@ void main() {
       await disposeScreen(tester);
     });
 
-    testWidgets('Delete confirms and soft-deletes the store', (tester) async {
-      await pumpStores(tester);
-      await tester.tap(find.byKey(StoresKeys.delete(lagosId)));
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(InkWell, 'Delete').last);
-      await tester.pumpAndSettle();
-      await deliver(tester);
-      final all = await env.db.storesDao.getActiveStores();
-      expect(all.any((s) => s.id == lagosId), isFalse);
-      await disposeScreen(tester);
-    });
+    testWidgets(
+      'Delete confirms and soft-deletes the store, clearing locked store',
+      (tester) async {
+        await pumpStores(tester);
+        final nav = NavigationService();
+        nav.setLockedStore(lagosId);
+        expect(nav.lockedStoreId.value, lagosId);
+        await tester.tap(find.byKey(StoresKeys.delete(lagosId)));
+        await tester.pumpAndSettle();
+        expect(
+          find.text(
+            'Delete "Lagos Island Annex With A Very Long Store Name"? It will no longer appear in your stores. Its past sales and records are kept.',
+          ),
+          findsOneWidget,
+        );
+        await tester.tap(find.widgetWithText(InkWell, 'Delete').last);
+        await tester.pumpAndSettle();
+        await deliver(tester);
+        final all = await env.db.storesDao.getActiveStores();
+        expect(all.any((s) => s.id == lagosId), isFalse);
+        expect(nav.lockedStoreId.value, isNull);
+        await disposeScreen(tester);
+      },
+    );
+
+    testWidgets(
+      'Delete blocked by guard shows Cannot Delete Store dialog with reason',
+      (tester) async {
+        // Give lagosId inventory
+        final products = await env.db.select(env.db.products).get();
+        await env.db
+            .into(env.db.inventory)
+            .insert(
+              InventoryCompanion.insert(
+                id: Value(UuidV7.generate()),
+                businessId: env.businessId,
+                productId: products.first.id,
+                storeId: lagosId,
+                quantity: const Value(5),
+                lastUpdatedAt: Value(DateTime.now()),
+              ),
+            );
+
+        await pumpStores(tester);
+        await tester.tap(find.byKey(StoresKeys.delete(lagosId)));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Cannot Delete Store'), findsOneWidget);
+        expect(
+          find.text(
+            'This store still has stock on hand. Transfer or write off all inventory before deleting.',
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: find.byType(AlertDialog),
+            matching: find.text('Delete'),
+          ),
+          findsNothing,
+        );
+        expect(
+          find.descendant(
+            of: find.byType(AlertDialog),
+            matching: find.text('OK'),
+          ),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.text('OK'));
+        await tester.pumpAndSettle();
+
+        final all = await env.db.storesDao.getActiveStores();
+        expect(all.any((s) => s.id == lagosId), isTrue);
+        await disposeScreen(tester);
+      },
+    );
 
     for (final (name, size, padding, scale)
         in <(String, Size, EdgeInsets, double)>[
