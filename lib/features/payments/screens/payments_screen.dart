@@ -44,9 +44,9 @@ class PaymentsScreen extends ConsumerWidget {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         // One line: test/tour/drawer_presence_ban_test.dart reads it line by line.
-        drawer: context.isRailLayout
-            ? null
-            : const AppDrawer(activeRoute: 'supplier_accounts'),
+        // dart format off
+        drawer: context.isRailLayout ? null : const AppDrawer(activeRoute: 'supplier_accounts'),
+        // dart format on
         appBar: PaymentsTopBar(
           key: PaymentsKeys.topBar,
           height: paymentsTopBarHeight(context),

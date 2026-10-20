@@ -16,7 +16,7 @@ final _userPermissionsProviderRef = RegExp(
 );
 
 final _rawContainsRegex = RegExp(
-  r'''\.contains\(\s*['"]([a-z_]+\.[a-z_]+)['"]\s*\)''',
+  r'''\.contains\(\s*['"]([a-z_]+(?:\.[a-z_]+)+)['"]\s*\)''',
 );
 
 void main() {
