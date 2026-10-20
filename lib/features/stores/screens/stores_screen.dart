@@ -376,9 +376,12 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                 }
                 try {
                   await db.storesDao.softDeleteStore(store.id);
+                  // Silent (explicit: false) so it doesn't latch "All Stores";
+                  // MainLayout then re-defaults to the first remaining store,
+                  // as it does on every other device once the delete syncs.
                   final nav = ref.read(navigationProvider);
                   if (nav.lockedStoreId.value == store.id) {
-                    nav.setLockedStore(null);
+                    nav.setLockedStore(null, explicit: false);
                   }
                 } on StoreDeleteBlockedException catch (e) {
                   if (context.mounted) {

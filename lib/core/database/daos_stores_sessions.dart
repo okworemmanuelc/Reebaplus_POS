@@ -107,13 +107,10 @@ class StoresDao extends DatabaseAccessor<AppDatabase>
       await db.syncDao.enqueueUpsert('stores', storeRow);
 
       if (targetUserId != null) {
-        final user =
-            await (select(users)..where(
-                  (u) =>
-                      u.id.equals(targetUserId) &
-                      u.businessId.equals(businessId),
-                ))
-                .getSingleOrNull();
+        final user = await (select(users)
+              ..where((u) =>
+                  u.id.equals(targetUserId) & u.businessId.equals(businessId)))
+            .getSingleOrNull();
         if (user != null) {
           final userStoreRow = UserStoresCompanion.insert(
             id: Value(UuidV7.generate()),
@@ -130,19 +127,16 @@ class StoresDao extends DatabaseAccessor<AppDatabase>
               storeId: Value(storeId),
               lastUpdatedAt: Value(now),
             );
-            await (update(users)..where(
-                  (u) =>
+            await (update(users)
+                  ..where((u) =>
                       u.id.equals(targetUserId) &
-                      u.businessId.equals(businessId),
-                ))
+                      u.businessId.equals(businessId)))
                 .write(userUpdate);
-            final updatedUser =
-                await (select(users)..where(
-                      (u) =>
-                          u.id.equals(targetUserId) &
-                          u.businessId.equals(businessId),
-                    ))
-                    .getSingle();
+            final updatedUser = await (select(users)
+                  ..where((u) =>
+                      u.id.equals(targetUserId) &
+                      u.businessId.equals(businessId)))
+                .getSingle();
             await db.syncDao.enqueueUpsert('users', updatedUser);
           }
         }
@@ -252,7 +246,8 @@ class StoresDao extends DatabaseAccessor<AppDatabase>
       users,
     )..where((u) => whereBusiness(u))).get();
     for (final u in bizUsers) {
-      // Check user's role in this business
+      // Only ACTIVE staff count: a suspended or removed member's leftover
+      // store assignments must not block the delete (they can't be reassigned).
       final ub =
           await (select(db.userBusinesses)..where(
                 (t) =>
@@ -261,20 +256,19 @@ class StoresDao extends DatabaseAccessor<AppDatabase>
                     t.status.equals('active'),
               ))
               .getSingleOrNull();
+      if (ub == null) continue;
 
-      if (ub != null) {
-        final role = await (select(
-          db.roles,
-        )..where((r) => r.id.equals(ub.roleId))).getSingleOrNull();
-        if (role != null) {
-          if (role.slug == 'ceo') continue;
-          if (role.slug == 'manager') {
-            final setting = await db.roleSettingsDao.getValue(
-              role.id,
-              _kManagerViewAllStoresSetting,
-            );
-            if (setting == 'true') continue;
-          }
+      final role = await (select(
+        db.roles,
+      )..where((r) => r.id.equals(ub.roleId))).getSingleOrNull();
+      if (role != null) {
+        if (role.slug == 'ceo') continue;
+        if (role.slug == 'manager') {
+          final setting = await db.roleSettingsDao.getValue(
+            role.id,
+            _kManagerViewAllStoresSetting,
+          );
+          if (setting == 'true') continue;
         }
       }
 
@@ -541,9 +535,10 @@ class SessionsDao extends DatabaseAccessor<AppDatabase>
         // cloud. enqueueUpsert coalesces by (action_type, payload.id), so this
         // collapses into any still-pending push for this row rather than adding
         // another. Mirrors revokeSession's update-then-full-row-enqueue.
-        final refreshed = await (select(
-          sessions,
-        )..where((t) => t.id.equals(existing.id))).getSingleOrNull();
+        final refreshed =
+            await (select(sessions)
+                  ..where((t) => t.id.equals(existing.id)))
+                .getSingleOrNull();
         if (refreshed != null) {
           await db.syncDao.enqueueUpsert(
             'sessions',

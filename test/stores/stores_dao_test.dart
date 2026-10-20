@@ -400,6 +400,31 @@ void main() {
         expect(reason, isNull);
       },
     );
+
+    for (final status in ['suspended', 'removed']) {
+      test(
+        'permits when the only staff assigned solely here is $status',
+        () async {
+          await insertStore('Store A');
+          final storeB = await insertStore('Store B');
+
+          final staffId = await insertUser(name: 'Former Cashier');
+          final cashierRoleId = await insertRole(
+            name: 'Cashier',
+            slug: 'cashier',
+          );
+          await assignUserRole(
+            userId: staffId,
+            roleId: cashierRoleId,
+            status: status,
+          );
+          await db.userStoresDao.assign(staffId, storeB);
+
+          final reason = await db.storesDao.checkStoreDeleteBlocked(storeB);
+          expect(reason, isNull);
+        },
+      );
+    }
   });
 
   group('Guard 4: hasOpenTransfers', () {
