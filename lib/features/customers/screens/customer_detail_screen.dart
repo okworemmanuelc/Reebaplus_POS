@@ -505,17 +505,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                           // `customers.wallet.withdraw`, but re-check the effective
                           // permission before moving money so a revoked override is
                           // honored at the action too.
-                          if (!ref
-                              .read(currentUserPermissionsProvider)
-                              .contains('customers.wallet.withdraw')) {
+                          if (!Gates.refundCustomerWallet.allowsNow(ref)) {
                             Navigator.pop(ctx);
-                            messenger.showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'You don\'t have permission to do that.',
-                                ),
-                              ),
-                            );
+                            showGateDenied(context, Gates.refundCustomerWallet);
                             return;
                           }
                           // The Sales card's Refunds figure is store-filtered, so
@@ -1746,17 +1738,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                           .name;
                       final messenger = ScaffoldMessenger.of(context);
                       // Write-boundary re-check (§10.2.1): honor a revoked override.
-                      if (!ref
-                          .read(currentUserPermissionsProvider)
-                          .contains('sales.make')) {
+                      if (!Gates.recordCrateReturn.allowsNow(ref)) {
                         Navigator.pop(ctx);
-                        messenger.showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'You don\'t have permission to do that.',
-                            ),
-                          ),
-                        );
+                        showGateDenied(context, Gates.recordCrateReturn);
                         return;
                       }
                       Navigator.pop(ctx);

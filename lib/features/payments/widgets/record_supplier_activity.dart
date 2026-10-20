@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
@@ -140,10 +141,9 @@ class _RecordInvoiceSheetState extends ConsumerState<RecordInvoiceSheet> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate() || _saving) return;
-    if (!ref
-        .read(currentUserPermissionsProvider)
-        .contains('suppliers.manage')) {
+    if (!Gates.manageSuppliers.allowsNow(ref)) {
       Navigator.pop(context);
+      showGateDenied(context, Gates.manageSuppliers);
       return;
     }
     final amountKobo = (parseCurrency(_amountCtrl.text) * 100).round();
@@ -385,10 +385,9 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet> {
       );
       return;
     }
-    if (!ref
-        .read(currentUserPermissionsProvider)
-        .contains('suppliers.manage')) {
+    if (!Gates.manageSuppliers.allowsNow(ref)) {
       Navigator.pop(context);
+      showGateDenied(context, Gates.manageSuppliers);
       return;
     }
     final amountKobo = (parseCurrency(_amountCtrl.text) * 100).round();

@@ -477,6 +477,44 @@ void main() {
     await disposeScreen(tester);
   });
 
+  testWidgets(
+    'requestStoreTransfer gate denial blocks sending and shows feedback',
+    (tester) async {
+      await pumpScreen(
+        tester,
+        env: env,
+        size: const Size(390, 844),
+        screen: _Launcher(
+          screen: RequestStockScreen(fixedDestStoreId: env.storeId),
+        ),
+        bottomNavHeight: 0,
+        grantedKeys: const {'stock.view'}, // lacks stores.request_transfer
+        roleRank: 0,
+        selectableStores: [env.store, ikeja],
+        settle: false,
+      );
+      await deliver(tester);
+      await tester.tap(find.text('open'));
+      await deliver(tester);
+
+      await pick(tester, 'Request from store', 'Ikeja');
+      await tapTile(tester, p1);
+      await openReview(tester);
+
+      await tester.tap(find.byKey(StockRequestReviewKeys.send));
+      await tester.pump();
+
+      expect(
+        find.text('You no longer have access to Request Stock Transfer.'),
+        findsOneWidget,
+      );
+      expect(find.text('Send this request?'), findsNothing);
+      expect(await requests(tester), isEmpty);
+      await tester.pump(const Duration(seconds: 5));
+      await disposeScreen(tester);
+    },
+  );
+
   group('fits every size: no overflow, long names ellipsize, 48dp targets', () {
     for (final (name, size, scale) in const [
       ('360x740 @1.3', Size(360, 740), 1.3),

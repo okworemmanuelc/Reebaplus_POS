@@ -115,9 +115,8 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
     // Defense-in-depth (hard rule #6): re-check the specific permission at the
     // start, not only at button render. Change-role has its own permission
     // (§9), separate from invite/suspend.
-    if (!ref
-        .read(currentUserPermissionsProvider)
-        .contains('staff.change_role')) {
+    if (!Gates.changeStaffRole.allowsNow(ref)) {
+      showGateDenied(context, Gates.changeStaffRole);
       return;
     }
     // Owner protection: the original business creator's role is immutable.
@@ -240,7 +239,8 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
   Future<void> _toggleSuspend(UserBusinessData membership) async {
     // Defense-in-depth (hard rule #6): re-check the specific permission before
     // running. Suspend/reactivate has its own permission (§9).
-    if (!ref.read(currentUserPermissionsProvider).contains('staff.suspend')) {
+    if (!Gates.suspendStaff.allowsNow(ref)) {
+      showGateDenied(context, Gates.suspendStaff);
       return;
     }
     // Owner protection: the original business creator cannot be suspended by
@@ -354,7 +354,8 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
   Future<void> _removeStaff(UserBusinessData membership, UserData user) async {
     // Defense-in-depth (hard rule #6): re-check the specific permission before
     // running, not only at button render.
-    if (!ref.read(currentUserPermissionsProvider).contains('staff.remove')) {
+    if (!Gates.staffRemove.allowsNow(ref)) {
+      showGateDenied(context, Gates.staffRemove);
       return;
     }
     // Owner protection: the original business creator can never be removed by
@@ -554,9 +555,8 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
   /// is disabled when nothing is selected.
   Future<void> _editStoreAssignments(UserData user) async {
     // Defense-in-depth (hard rule #6): re-check the permission before running.
-    if (!ref
-        .read(currentUserPermissionsProvider)
-        .contains('staff.assign_stores')) {
+    if (!Gates.assignStaffStores.allowsNow(ref)) {
+      showGateDenied(context, Gates.assignStaffStores);
       return;
     }
     final allStores =

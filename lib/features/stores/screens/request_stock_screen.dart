@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/stores/van_store.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
@@ -223,9 +224,8 @@ class _RequestStockScreenState extends ConsumerState<RequestStockScreen> {
 
   Future<void> _confirmAndSend() async {
     // Write-boundary re-check (layer 3, hard rule #6).
-    if (!ref
-        .read(currentUserPermissionsProvider)
-        .contains('stores.request_transfer')) {
+    if (!Gates.requestStoreTransfer.allowsNow(ref)) {
+      showGateDenied(context, Gates.requestStoreTransfer);
       return;
     }
 

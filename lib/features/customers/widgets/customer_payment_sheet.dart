@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
@@ -205,13 +206,9 @@ class _CustomerPaymentSheetState extends ConsumerState<CustomerPaymentSheet> {
     // entry points are already render-gated on `customers.wallet.update`
     // (Gates.addCustomerCredit), but re-check the effective permission
     // before moving money so a revoked override is honored at the action too.
-    if (!ref
-        .read(currentUserPermissionsProvider)
-        .contains('customers.wallet.update')) {
+    if (!Gates.addCustomerCredit.allowsNow(ref)) {
       navigator.pop();
-      messenger.showSnackBar(
-        const SnackBar(content: Text('You don\'t have permission to do that.')),
-      );
+      showGateDenied(context, Gates.addCustomerCredit);
       return;
     }
     // PRD #155 US 36 — every new payment row carries the store it happened

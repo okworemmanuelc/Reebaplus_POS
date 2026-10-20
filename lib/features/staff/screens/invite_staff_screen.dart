@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -102,11 +103,8 @@ class _InviteStaffScreenState extends ConsumerState<InviteStaffScreen> {
 
   Future<void> _generate() async {
     if (!_formKey.currentState!.validate()) return;
-    if (!ref.read(currentUserPermissionsProvider).contains('staff.invite')) {
-      AppNotification.showError(
-        context,
-        'You don\'t have permission to do that.',
-      );
+    if (!Gates.inviteStaff.allowsNow(ref)) {
+      showGateDenied(context, Gates.inviteStaff);
       return;
     }
     // The store must still be one on offer — a van is not while Van Sales is

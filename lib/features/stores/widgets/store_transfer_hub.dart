@@ -370,11 +370,14 @@ class _TransferActionCardState extends ConsumerState<_TransferActionCard> {
   bool _busy = false;
 
   Future<void> _run(
-    String permission,
+    NamedGate gate,
     Future<void> Function(String userId) action,
     String successMsg,
   ) async {
-    if (!ref.read(currentUserPermissionsProvider).contains(permission)) return;
+    if (!gate.allowsNow(ref)) {
+      showGateDenied(context, gate);
+      return;
+    }
     final userId = ref.read(authProvider).currentUser?.id;
     if (userId == null) return;
     setState(() => _busy = true);
@@ -395,7 +398,7 @@ class _TransferActionCardState extends ConsumerState<_TransferActionCard> {
     final qty = result.quantity;
     final empties = result.empties;
     await _run(
-      'stores.dispatch_transfer',
+      Gates.dispatchStoreTransfer,
       (uid) => ref
           .read(databaseProvider)
           .stockTransferDao
@@ -412,7 +415,7 @@ class _TransferActionCardState extends ConsumerState<_TransferActionCard> {
   }
 
   Future<void> _reject() => _run(
-    'stores.dispatch_transfer',
+    Gates.dispatchStoreTransfer,
     (uid) => ref
         .read(databaseProvider)
         .stockTransferDao
@@ -421,7 +424,7 @@ class _TransferActionCardState extends ConsumerState<_TransferActionCard> {
   );
 
   Future<void> _receive() => _run(
-    'stores.receive_transfer',
+    Gates.receiveStoreTransfer,
     (uid) => ref
         .read(databaseProvider)
         .stockTransferDao
@@ -430,7 +433,7 @@ class _TransferActionCardState extends ConsumerState<_TransferActionCard> {
   );
 
   Future<void> _cancel() => _run(
-    'stores.dispatch_transfer',
+    Gates.dispatchStoreTransfer,
     (uid) => ref
         .read(databaseProvider)
         .stockTransferDao

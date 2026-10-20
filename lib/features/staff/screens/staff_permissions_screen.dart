@@ -64,11 +64,8 @@ class _StaffPermissionsScreenState
 
   /// Re-check the manage permission at write time (mirrors the per-role screen).
   bool _guard() {
-    if (!ref.read(currentUserPermissionsProvider).contains('settings.manage')) {
-      AppNotification.showError(
-        context,
-        'You don\'t have permission to do that.',
-      );
+    if (!Gates.manageSettings.allowsNow(ref)) {
+      showGateDenied(context, Gates.manageSettings);
       return false;
     }
     return true;

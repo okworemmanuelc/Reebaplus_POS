@@ -116,9 +116,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
     ref.watch(currencySymbolProvider);
     final theme = Theme.of(context);
     final f = theme.extension<AppFixedColors>() ?? AppFixedColors.light;
-    final canManage = ref
-        .watch(currentUserPermissionsProvider)
-        .contains('suppliers.manage');
+    final canManage = Gates.manageSuppliers.allows(ref);
     final isCeo = ref.watch(currentUserRoleProvider)?.slug == 'ceo';
     final supplierAsync = ref.watch(supplierByIdProvider(widget.supplierId));
     final supplier = supplierAsync.valueOrNull;
@@ -633,9 +631,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
   List<Widget> _cratesTabSlivers(BuildContext context, ThemeData theme) {
     final supplierAsync = ref.watch(supplierByIdProvider(widget.supplierId));
     final supplier = supplierAsync.valueOrNull;
-    final canManage = ref
-        .watch(currentUserPermissionsProvider)
-        .contains('suppliers.manage');
+    final canManage = Gates.manageSuppliers.allows(ref);
     final balances =
         ref
             .watch(supplierCrateBalancesProvider(widget.supplierId))
@@ -1080,14 +1076,9 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
 
     // Write-boundary re-check (§10.2.1): honour a revoked override, and re-read
     // the money gate rather than trusting the flag the sheet opened with.
-    if (!ref
-        .read(currentUserPermissionsProvider)
-        .contains('suppliers.manage')) {
+    if (!Gates.manageSuppliers.allowsNow(ref)) {
       Navigator.pop(sheetCtx);
-      AppNotification.showError(
-        context,
-        'You don’t have permission to do that.',
-      );
+      showGateDenied(context, Gates.manageSuppliers);
       return;
     }
     final postDirectly =
@@ -1577,14 +1568,9 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
     final messenger = ScaffoldMessenger.of(context);
 
     // Write-boundary re-check (§10.2.1): honour a revoked override.
-    if (!ref
-        .read(currentUserPermissionsProvider)
-        .contains('suppliers.manage')) {
+    if (!Gates.manageSuppliers.allowsNow(ref)) {
       Navigator.pop(sheetCtx);
-      AppNotification.showError(
-        context,
-        'You don’t have permission to do that.',
-      );
+      showGateDenied(context, Gates.manageSuppliers);
       return;
     }
     Navigator.pop(sheetCtx);
@@ -1798,9 +1784,9 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
       ),
     );
     if (confirm != true) return;
-    if (!ref
-        .read(currentUserPermissionsProvider)
-        .contains('suppliers.manage')) {
+    if (!mounted) return;
+    if (!Gates.manageSuppliers.allowsNow(ref)) {
+      showGateDenied(context, Gates.manageSuppliers);
       return;
     }
     final db = ref.read(databaseProvider);

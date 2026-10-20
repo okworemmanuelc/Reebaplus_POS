@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
@@ -1138,27 +1139,18 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
     // mutating UI (Save / Record Damages / table) until an allowed role is
     // confirmed — show a spinner while the role is still resolving (null), and
     // the no-access state once it resolves to a disallowed role.
-    // §17.4 access is by role, but the count/damage actions decrement stock, so
-    // gate on the `stock.adjust` permission too (hard rule #6) — it is
-    // independently revocable from a Manager/Stock keeper. `perms` is empty
-    // while the role's grants are still loading; treat that as "resolving" so we
-    // show a spinner rather than flashing the no-access state for a legit role.
-    final role = ref.watch(currentUserRoleProvider);
-    final perms = ref.watch(currentUserPermissionsProvider);
-    const allowed = {'ceo', 'manager', 'stock_keeper'};
-    final blocked =
-        role == null ||
-        perms.isEmpty ||
-        !allowed.contains(role.slug) ||
-        !perms.contains('stock.adjust');
-    if (blocked) {
+    // §17.4 access is gated on Gates.dailyStockCount (tier in CEO/Manager/Stock keeper AND stock.adjust).
+    // Fail closed while grants load → spinner, not a flash of no-access.
+    final canCount = Gates.dailyStockCount.allows(ref);
+    final isReady = ref.watch(gateContextProvider).isReady;
+    if (!canCount) {
       return Container(
         decoration: AppDecorations.pageBackground(context),
         child: Scaffold(
           backgroundColor: Colors.transparent,
           appBar: _topBar(context, withActions: false),
           body: Center(
-            child: (role == null || perms.isEmpty)
+            child: !isReady
                 ? const CircularProgressIndicator()
                 : Padding(
                     padding: EdgeInsets.all(context.getRSize(16)),

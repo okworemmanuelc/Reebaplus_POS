@@ -435,7 +435,9 @@ void main() {
         () => env.db.walletTransactionsDao.getBalanceKobo(owes),
       );
       expect(balance, -1250000);
-      expect(find.text('You don\'t have permission to do that.'), findsOne);
+      expect(find.text('You no longer have access to Add Credit.'), findsOne);
+      // Let the denial notification's auto-dismiss timer run out.
+      await tester.pump(const Duration(seconds: 6));
       await disposeScreen(tester);
     });
 
