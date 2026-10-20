@@ -482,6 +482,9 @@ void main() {
       await _deliver(tester);
       final rows = await env.db.select(env.db.customers).get();
       expect(rows, isEmpty);
+      expect(find.textContaining('You no longer have access to'), findsOne);
+      // Let the denial notification's auto-dismiss timer run out.
+      await tester.pump(const Duration(seconds: 6));
       await disposeScreen(tester);
     });
   });
