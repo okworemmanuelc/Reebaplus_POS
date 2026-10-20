@@ -38,10 +38,11 @@ final allOrdersProvider = businessScopedStream<List<OrderWithItems>>(
 
 final pendingOrdersProvider =
     businessScopedStreamFamily<List<OrderWithItems>, String?>(
-  (ref, db, businessId, storeId) =>
-      ref.watch(orderServiceProvider).watchPendingOrdersWithItems(storeId: storeId),
-  whenAbsent: const [],
-);
+      (ref, db, businessId, storeId) => ref
+          .watch(orderServiceProvider)
+          .watchPendingOrdersWithItems(storeId: storeId),
+      whenAbsent: const [],
+    );
 
 class OrdersPageState {
   final List<OrderWithItems> orders;
@@ -73,7 +74,8 @@ class OrdersPageState {
 
 class PaginatedOrdersNotifier extends StateNotifier<OrdersPageState> {
   final Ref _ref;
-  final ({String status, String? storeId, String dateLabel, String search}) _arg;
+  final ({String status, String? storeId, String dateLabel, String search})
+  _arg;
 
   StreamSubscription<List<OrderWithItems>>? _headSubscription;
   List<OrderWithItems> _headOrders = const [];
@@ -83,19 +85,23 @@ class PaginatedOrdersNotifier extends StateNotifier<OrdersPageState> {
   bool _hasMore = true;
 
   PaginatedOrdersNotifier(this._ref, this._arg)
-      : super(const OrdersPageState(
+    : super(
+        const OrdersPageState(
           orders: [],
           isLoading: true,
           isLoadingMore: false,
           hasMore: true,
-        )) {
+        ),
+      ) {
     _init();
   }
 
   void _init() {
     final (from, to) = dateRangeForLabel(_arg.dateLabel);
 
-    final headStream = _ref.read(orderServiceProvider).watchOrdersPage(
+    final headStream = _ref
+        .read(orderServiceProvider)
+        .watchOrdersPage(
           status: _arg.status,
           storeId: _arg.storeId,
           from: from,
@@ -135,10 +141,12 @@ class PaginatedOrdersNotifier extends StateNotifier<OrdersPageState> {
 
   void _emitState() {
     final headIds = _headOrders.map((o) => o.order.id).toSet();
-    // Note: In this live-head/static-tail design, if an order is created between 
-    // the head's last row and the tail cursor after the tail is loaded, it will 
+    // Note: In this live-head/static-tail design, if an order is created between
+    // the head's last row and the tail cursor after the tail is loaded, it will
     // only appear after a manual pull-to-refresh (deduping by id prevents duplication).
-    final filteredTail = _tailOrders.where((o) => !headIds.contains(o.order.id)).toList();
+    final filteredTail = _tailOrders
+        .where((o) => !headIds.contains(o.order.id))
+        .toList();
 
     state = OrdersPageState(
       orders: [..._headOrders, ...filteredTail],
@@ -165,10 +173,15 @@ class PaginatedOrdersNotifier extends StateNotifier<OrdersPageState> {
         return;
       }
 
-      final cursor = (createdAt: lastOrder.order.createdAt, id: lastOrder.order.id);
+      final cursor = (
+        createdAt: lastOrder.order.createdAt,
+        id: lastOrder.order.id,
+      );
       final (from, to) = dateRangeForLabel(_arg.dateLabel);
 
-      final nextPage = await _ref.read(orderServiceProvider).getOrdersPage(
+      final nextPage = await _ref
+          .read(orderServiceProvider)
+          .getOrdersPage(
             status: _arg.status,
             storeId: _arg.storeId,
             from: from,
@@ -187,9 +200,11 @@ class PaginatedOrdersNotifier extends StateNotifier<OrdersPageState> {
 
       final existingIds = {
         ..._headOrders.map((o) => o.order.id),
-        ..._tailOrders.map((o) => o.order.id)
+        ..._tailOrders.map((o) => o.order.id),
       };
-      final newUniqueItems = nextPage.where((o) => !existingIds.contains(o.order.id)).toList();
+      final newUniqueItems = nextPage
+          .where((o) => !existingIds.contains(o.order.id))
+          .toList();
 
       _tailOrders = [..._tailOrders, ...newUniqueItems];
     } catch (err) {
@@ -207,33 +222,34 @@ class PaginatedOrdersNotifier extends StateNotifier<OrdersPageState> {
   }
 }
 
-final paginatedOrdersProvider = StateNotifierProvider.autoDispose.family<
-    PaginatedOrdersNotifier,
-    OrdersPageState,
-    ({String status, String? storeId, String dateLabel, String search})
->((ref, arg) {
-  return PaginatedOrdersNotifier(ref, arg);
-});
+final paginatedOrdersProvider = StateNotifierProvider.autoDispose
+    .family<
+      PaginatedOrdersNotifier,
+      OrdersPageState,
+      ({String status, String? storeId, String dateLabel, String search})
+    >((ref, arg) {
+      return PaginatedOrdersNotifier(ref, arg);
+    });
 
-final ordersStatsProvider = businessScopedStreamAutoDisposeFamily<
-    OrdersStats,
-    ({String status, String? storeId, String dateLabel, String search})
->(
-  (ref, db, businessId, arg) {
-    final (from, to) = dateRangeForLabel(arg.dateLabel);
-    return ref.watch(orderServiceProvider).watchOrdersStats(
-          status: arg.status,
-          storeId: arg.storeId,
-          from: from,
-          to: to,
-          search: arg.search,
-          // #140 — keep road sales out of the orders tab's totals too, so the
-          // list and its header can never disagree.
-          excludeStoreIds: ref.watch(vanStoresProvider).ids,
-        );
-  },
-  whenAbsent: OrdersStats.empty(),
-);
+final ordersStatsProvider =
+    businessScopedStreamAutoDisposeFamily<
+      OrdersStats,
+      ({String status, String? storeId, String dateLabel, String search})
+    >((ref, db, businessId, arg) {
+      final (from, to) = dateRangeForLabel(arg.dateLabel);
+      return ref
+          .watch(orderServiceProvider)
+          .watchOrdersStats(
+            status: arg.status,
+            storeId: arg.storeId,
+            from: from,
+            to: to,
+            search: arg.search,
+            // #140 — keep road sales out of the orders tab's totals too, so the
+            // list and its header can never disagree.
+            excludeStoreIds: ref.watch(vanStoresProvider).ids,
+          );
+    }, whenAbsent: OrdersStats.empty());
 
 // ── Activity Logs ───────────────────────────────────────────────────────────
 class ActivityLogsPageState {
@@ -264,7 +280,8 @@ class ActivityLogsPageState {
   }
 }
 
-class PaginatedActivityLogsNotifier extends StateNotifier<ActivityLogsPageState> {
+class PaginatedActivityLogsNotifier
+    extends StateNotifier<ActivityLogsPageState> {
   final Ref _ref;
   final String? _storeId;
 
@@ -276,20 +293,22 @@ class PaginatedActivityLogsNotifier extends StateNotifier<ActivityLogsPageState>
   bool _hasMore = true;
 
   PaginatedActivityLogsNotifier(this._ref, this._storeId)
-      : super(const ActivityLogsPageState(
+    : super(
+        const ActivityLogsPageState(
           logs: [],
           isLoading: true,
           isLoadingMore: false,
           hasMore: true,
-        )) {
+        ),
+      ) {
     _init();
   }
 
   void _init() {
-    final headStream = _ref.read(databaseProvider).activityLogDao.watchActivityLogsPage(
-          storeId: _storeId,
-          limit: 30,
-        );
+    final headStream = _ref
+        .read(databaseProvider)
+        .activityLogDao
+        .watchActivityLogsPage(storeId: _storeId, limit: 30);
 
     _headSubscription?.cancel();
     _headSubscription = headStream.listen(
@@ -319,9 +338,13 @@ class PaginatedActivityLogsNotifier extends StateNotifier<ActivityLogsPageState>
 
   void _emitState() {
     final headIds = _headLogsData.map((l) => l.id).toSet();
-    final filteredTail = _tailLogsData.where((l) => !headIds.contains(l.id)).toList();
+    final filteredTail = _tailLogsData
+        .where((l) => !headIds.contains(l.id))
+        .toList();
     final combinedData = [..._headLogsData, ...filteredTail];
-    final mappedLogs = combinedData.map((data) => ActivityLog.fromDb(data)).toList();
+    final mappedLogs = combinedData
+        .map((data) => ActivityLog.fromDb(data))
+        .toList();
 
     state = ActivityLogsPageState(
       logs: mappedLogs,
@@ -350,11 +373,10 @@ class PaginatedActivityLogsNotifier extends StateNotifier<ActivityLogsPageState>
 
       final cursor = (createdAt: lastLog.createdAt, id: lastLog.id);
 
-      final nextPage = await _ref.read(databaseProvider).activityLogDao.getActivityLogsPage(
-            storeId: _storeId,
-            cursor: cursor,
-            limit: 30,
-          );
+      final nextPage = await _ref
+          .read(databaseProvider)
+          .activityLogDao
+          .getActivityLogsPage(storeId: _storeId, cursor: cursor, limit: 30);
 
       if (nextPage.length < 30) {
         _hasMore = false;
@@ -364,9 +386,11 @@ class PaginatedActivityLogsNotifier extends StateNotifier<ActivityLogsPageState>
 
       final existingIds = {
         ..._headLogsData.map((l) => l.id),
-        ..._tailLogsData.map((l) => l.id)
+        ..._tailLogsData.map((l) => l.id),
       };
-      final newUniqueItems = nextPage.where((l) => !existingIds.contains(l.id)).toList();
+      final newUniqueItems = nextPage
+          .where((l) => !existingIds.contains(l.id))
+          .toList();
 
       _tailLogsData = [..._tailLogsData, ...newUniqueItems];
     } catch (err) {
@@ -385,9 +409,12 @@ class PaginatedActivityLogsNotifier extends StateNotifier<ActivityLogsPageState>
 }
 
 final paginatedActivityLogsProvider = StateNotifierProvider.autoDispose
-    .family<PaginatedActivityLogsNotifier, ActivityLogsPageState, String?>((ref, storeId) {
-  return PaginatedActivityLogsNotifier(ref, storeId);
-});
+    .family<PaginatedActivityLogsNotifier, ActivityLogsPageState, String?>((
+      ref,
+      storeId,
+    ) {
+      return PaginatedActivityLogsNotifier(ref, storeId);
+    });
 
 // ── Stock History / Inventory History ───────────────────────────────────────
 class StockHistoryPageState {
@@ -418,7 +445,8 @@ class StockHistoryPageState {
   }
 }
 
-class PaginatedStockHistoryNotifier extends StateNotifier<StockHistoryPageState> {
+class PaginatedStockHistoryNotifier
+    extends StateNotifier<StockHistoryPageState> {
   final Ref _ref;
   final ({String? storeId, String period}) _arg;
 
@@ -431,12 +459,14 @@ class PaginatedStockHistoryNotifier extends StateNotifier<StockHistoryPageState>
   String _businessTz = 'UTC';
 
   PaginatedStockHistoryNotifier(this._ref, this._arg)
-      : super(const StockHistoryPageState(
+    : super(
+        const StockHistoryPageState(
           transactions: [],
           isLoading: true,
           isLoadingMore: false,
           hasMore: true,
-        )) {
+        ),
+      ) {
     _init();
   }
 
@@ -466,7 +496,10 @@ class PaginatedStockHistoryNotifier extends StateNotifier<StockHistoryPageState>
 
   void _startWatch() {
     final dates = _getDateRange();
-    final headStream = _ref.read(databaseProvider).stockLedgerDao.watchTransactionsPage(
+    final headStream = _ref
+        .read(databaseProvider)
+        .stockLedgerDao
+        .watchTransactionsPage(
           storeId: _arg.storeId,
           startDate: dates.$1,
           endDate: dates.$2,
@@ -501,7 +534,9 @@ class PaginatedStockHistoryNotifier extends StateNotifier<StockHistoryPageState>
 
   void _emitState() {
     final headIds = _headTransactions.map((t) => t.transactionId).toSet();
-    final filteredTail = _tailTransactions.where((t) => !headIds.contains(t.transactionId)).toList();
+    final filteredTail = _tailTransactions
+        .where((t) => !headIds.contains(t.transactionId))
+        .toList();
 
     state = StockHistoryPageState(
       transactions: [..._headTransactions, ...filteredTail],
@@ -531,7 +566,10 @@ class PaginatedStockHistoryNotifier extends StateNotifier<StockHistoryPageState>
       final cursor = (createdAt: lastTx.createdAt, id: lastTx.transactionId);
       final dates = _getDateRange();
 
-      final nextPage = await _ref.read(databaseProvider).stockLedgerDao.getTransactionsPage(
+      final nextPage = await _ref
+          .read(databaseProvider)
+          .stockLedgerDao
+          .getTransactionsPage(
             storeId: _arg.storeId,
             startDate: dates.$1,
             endDate: dates.$2,
@@ -547,9 +585,11 @@ class PaginatedStockHistoryNotifier extends StateNotifier<StockHistoryPageState>
 
       final existingIds = {
         ..._headTransactions.map((t) => t.transactionId),
-        ..._tailTransactions.map((t) => t.transactionId)
+        ..._tailTransactions.map((t) => t.transactionId),
       };
-      final newUniqueItems = nextPage.where((t) => !existingIds.contains(t.transactionId)).toList();
+      final newUniqueItems = nextPage
+          .where((t) => !existingIds.contains(t.transactionId))
+          .toList();
 
       _tailTransactions = [..._tailTransactions, ...newUniqueItems];
     } catch (err) {
@@ -567,47 +607,46 @@ class PaginatedStockHistoryNotifier extends StateNotifier<StockHistoryPageState>
   }
 }
 
-final paginatedStockHistoryProvider = StateNotifierProvider.autoDispose.family<
-    PaginatedStockHistoryNotifier,
-    StockHistoryPageState,
-    ({String? storeId, String period})
->((ref, arg) {
-  return PaginatedStockHistoryNotifier(ref, arg);
-});
+final paginatedStockHistoryProvider = StateNotifierProvider.autoDispose
+    .family<
+      PaginatedStockHistoryNotifier,
+      StockHistoryPageState,
+      ({String? storeId, String period})
+    >((ref, arg) {
+      return PaginatedStockHistoryNotifier(ref, arg);
+    });
 
-final stockHistoryStatsProvider = businessScopedStreamAutoDisposeFamily<
-    StockHistoryStats,
-    ({String? storeId, String period})
->(
-  (ref, db, businessId, arg) async* {
-    final tz = await getBusinessTimezone(db, businessId);
+final stockHistoryStatsProvider =
+    businessScopedStreamAutoDisposeFamily<
+      StockHistoryStats,
+      ({String? storeId, String period})
+    >((ref, db, businessId, arg) async* {
+      final tz = await getBusinessTimezone(db, businessId);
 
-    final now = DateTime.now();
-    DateTime? startDate;
-    DateTime? endDate;
-    switch (arg.period) {
-      case 'Today':
-        startDate = localDayStartUtc(now, tz);
-        break;
-      case '7 Days':
-        startDate = now.subtract(const Duration(days: 7));
-        break;
-      case '30 Days':
-        startDate = now.subtract(const Duration(days: 30));
-        break;
-      case 'All':
-      default:
-        break;
-    }
+      final now = DateTime.now();
+      DateTime? startDate;
+      DateTime? endDate;
+      switch (arg.period) {
+        case 'Today':
+          startDate = localDayStartUtc(now, tz);
+          break;
+        case '7 Days':
+          startDate = now.subtract(const Duration(days: 7));
+          break;
+        case '30 Days':
+          startDate = now.subtract(const Duration(days: 30));
+          break;
+        case 'All':
+        default:
+          break;
+      }
 
-    yield* db.stockLedgerDao.watchTransactionsStats(
-      storeId: arg.storeId,
-      startDate: startDate,
-      endDate: endDate,
-    );
-  },
-  whenAbsent: StockHistoryStats.empty(),
-);
+      yield* db.stockLedgerDao.watchTransactionsStats(
+        storeId: arg.storeId,
+        startDate: startDate,
+        endDate: endDate,
+      );
+    }, whenAbsent: StockHistoryStats.empty());
 
 // ── Supplier Transaction History Pagination ──────────────────────────────────
 
@@ -652,12 +691,14 @@ class PaginatedSupplierHistoryNotifier
   bool _hasMore = true;
 
   PaginatedSupplierHistoryNotifier(this._ref, this._arg)
-      : super(const SupplierHistoryPageState(
+    : super(
+        const SupplierHistoryPageState(
           entries: [],
           isLoading: true,
           isLoadingMore: false,
           hasMore: true,
-        )) {
+        ),
+      ) {
     _startWatch();
   }
 
@@ -668,12 +709,14 @@ class PaginatedSupplierHistoryNotifier
 
   void _startWatch() {
     final startDate = _getStartDate();
-    final headStream =
-        _ref.read(databaseProvider).supplierLedgerDao.watchSupplierHistoryPage(
-              storeId: _arg.storeId,
-              startDate: startDate,
-              limit: 30,
-            );
+    final headStream = _ref
+        .read(databaseProvider)
+        .supplierLedgerDao
+        .watchSupplierHistoryPage(
+          storeId: _arg.storeId,
+          startDate: startDate,
+          limit: 30,
+        );
 
     _headSubscription?.cancel();
     _headSubscription = headStream.listen(
@@ -703,8 +746,9 @@ class PaginatedSupplierHistoryNotifier
 
   void _emitState() {
     final headIds = _headEntries.map((e) => e.id).toSet();
-    final filteredTail =
-        _tailEntries.where((e) => !headIds.contains(e.id)).toList();
+    final filteredTail = _tailEntries
+        .where((e) => !headIds.contains(e.id))
+        .toList();
 
     state = SupplierHistoryPageState(
       entries: [..._headEntries, ...filteredTail],
@@ -754,8 +798,9 @@ class PaginatedSupplierHistoryNotifier
         ..._headEntries.map((e) => e.id),
         ..._tailEntries.map((e) => e.id),
       };
-      final newUnique =
-          nextPage.where((e) => !existingIds.contains(e.id)).toList();
+      final newUnique = nextPage
+          .where((e) => !existingIds.contains(e.id))
+          .toList();
       _tailEntries = [..._tailEntries, ...newUnique];
     } catch (err) {
       debugPrint('Error loading more supplier history: $err');
@@ -773,23 +818,25 @@ class PaginatedSupplierHistoryNotifier
 }
 
 final paginatedSupplierHistoryProvider = StateNotifierProvider.autoDispose
-    .family<PaginatedSupplierHistoryNotifier, SupplierHistoryPageState,
-        ({String? storeId, String period})>((ref, arg) {
-  return PaginatedSupplierHistoryNotifier(ref, arg);
-});
+    .family<
+      PaginatedSupplierHistoryNotifier,
+      SupplierHistoryPageState,
+      ({String? storeId, String period})
+    >((ref, arg) {
+      return PaginatedSupplierHistoryNotifier(ref, arg);
+    });
 
-final supplierHistoryStatsProvider = businessScopedStreamAutoDisposeFamily<
-    SupplierLedgerStats,
-    ({String? storeId, String period})>(
-  (ref, db, businessId, arg) {
-    final (startDate, _) = dateRangeForLabel(arg.period);
-    return db.supplierLedgerDao.watchSupplierHistoryStats(
-      storeId: arg.storeId,
-      startDate: startDate,
-    );
-  },
-  whenAbsent: SupplierLedgerStats.empty(),
-);
+final supplierHistoryStatsProvider =
+    businessScopedStreamAutoDisposeFamily<
+      SupplierLedgerStats,
+      ({String? storeId, String period})
+    >((ref, db, businessId, arg) {
+      final (startDate, _) = dateRangeForLabel(arg.period);
+      return db.supplierLedgerDao.watchSupplierHistoryStats(
+        storeId: arg.storeId,
+        startDate: startDate,
+      );
+    }, whenAbsent: SupplierLedgerStats.empty());
 
 // ── Stores ──────────────────────────────────────────────────────────────────
 /// Active stores for the bound business — the store picker feed (Receive
@@ -808,28 +855,32 @@ final allStoresProvider = businessScopedStream<List<StoreData>>(
 /// and stuck empty. The factory hands the closure the resolved non-null
 /// businessId to bind into the custom SQL directly.
 final storeInventoryCountsProvider =
-    businessScopedStream<Map<String, ({int skuCount, int totalQuantity})>>(
-  (ref, db, businessId) {
-    return db.customSelect(
-      'SELECT store_id, SUM(quantity) as qty, COUNT(DISTINCT product_id) as sku_count FROM inventory WHERE business_id = ? GROUP BY store_id',
-      variables: [Variable(businessId)],
-      readsFrom: {db.inventory},
-    ).watch().map((rows) {
-      final map = <String, ({int skuCount, int totalQuantity})>{};
-      for (final row in rows) {
-        final storeId = row.readNullable<String>('store_id');
-        if (storeId != null) {
-          map[storeId] = (
-            skuCount: row.readNullable<num>('sku_count')?.toInt() ?? 0,
-            totalQuantity: row.readNullable<num>('qty')?.toInt() ?? 0,
-          );
-        }
-      }
-      return map;
-    });
-  },
-  whenAbsent: const {},
-);
+    businessScopedStream<Map<String, ({int skuCount, int totalQuantity})>>((
+      ref,
+      db,
+      businessId,
+    ) {
+      return db
+          .customSelect(
+            'SELECT store_id, SUM(quantity) as qty, COUNT(DISTINCT product_id) as sku_count FROM inventory WHERE business_id = ? GROUP BY store_id',
+            variables: [Variable(businessId)],
+            readsFrom: {db.inventory},
+          )
+          .watch()
+          .map((rows) {
+            final map = <String, ({int skuCount, int totalQuantity})>{};
+            for (final row in rows) {
+              final storeId = row.readNullable<String>('store_id');
+              if (storeId != null) {
+                map[storeId] = (
+                  skuCount: row.readNullable<num>('sku_count')?.toInt() ?? 0,
+                  totalQuantity: row.readNullable<num>('qty')?.toInt() ?? 0,
+                );
+              }
+            }
+            return map;
+          });
+    }, whenAbsent: const {});
 
 // ── Expenses ───────────────────────────────────────────────────────────────
 final allExpensesProvider = businessScopedStream<List<ExpenseWithCategory>>(
@@ -840,9 +891,9 @@ final allExpensesProvider = businessScopedStream<List<ExpenseWithCategory>>(
 /// Map of expense category id → name. Resolves the category text for display
 /// after the cached `expenses.category` column was removed.
 final expenseCategoryNamesProvider = businessScopedStream<Map<String, String>>(
-  (ref, db, businessId) => db.expensesDao
-      .watchAllCategories()
-      .map((cats) => {for (final c in cats) c.id: c.name}),
+  (ref, db, businessId) => db.expensesDao.watchAllCategories().map(
+    (cats) => {for (final c in cats) c.id: c.name},
+  ),
   whenAbsent: const {},
 );
 
@@ -860,7 +911,7 @@ final pendingExpensesCountProvider = businessScopedStream<int>(
 /// viewer is always pinned to their active store (locked, else their first
 /// selectable store) so they never see another store's costs.
 final expenseScopeStoreIdProvider = Provider.autoDispose<String?>((ref) {
-  final locked = ref.watch(lockedStoreProvider).value;
+  final locked = ref.watch(activeStoreIdProvider);
   if (ref.watch(canViewAllStoresProvider)) return locked; // null = All Stores
   return locked ?? ref.watch(activeWriteStoreProvider).id;
 });
@@ -907,9 +958,9 @@ int? resolveMonthlyBudgetKobo(
 /// [viewerScopedPendingStockRequestsProvider].
 final pendingStockRequestsProvider =
     businessScopedStream<List<StockAdjustmentRequestData>>(
-  (ref, db, businessId) => db.stockAdjustmentRequestsDao.watchPending(),
-  whenAbsent: const [],
-);
+      (ref, db, businessId) => db.stockAdjustmentRequestsDao.watchPending(),
+      whenAbsent: const [],
+    );
 
 /// Pending stock requests the current viewer may approve (§16.6.1): a CEO sees
 /// every store; a Manager sees only requests for the store(s) they're assigned
@@ -937,9 +988,9 @@ final viewerScopedPendingStockRequestsProvider =
 /// [viewerScopedPendingQuickSaleRequestsProvider].
 final pendingQuickSaleRequestsProvider =
     businessScopedStream<List<QuickSaleRequestData>>(
-  (ref, db, businessId) => db.quickSaleRequestsDao.watchPending(),
-  whenAbsent: const [],
-);
+      (ref, db, businessId) => db.quickSaleRequestsDao.watchPending(),
+      whenAbsent: const [],
+    );
 
 /// Pending Quick Sale requests the current viewer may approve (§12.3.1): a CEO
 /// sees every store; a Manager sees only requests for the store(s) they're
@@ -972,9 +1023,10 @@ final viewerScopedPendingQuickSaleRequestsProvider =
 /// exactly as it did before PRD #203.
 final pendingCrateDepositRequestsProvider =
     businessScopedStream<List<SupplierCrateDepositRequestData>>(
-  (ref, db, businessId) => db.cratePoolDao.watchPendingCrateDepositRequests(),
-  whenAbsent: const [],
-);
+      (ref, db, businessId) =>
+          db.cratePoolDao.watchPendingCrateDepositRequests(),
+      whenAbsent: const [],
+    );
 
 /// Pending crate deposits the current viewer may decide: a CEO sees every
 /// store; a Manager sees only their assigned store(s). Mirrors
@@ -1001,58 +1053,56 @@ final viewerScopedPendingCrateDepositsProvider =
 /// viewer-scoped providers derive their lists in memory.
 final allInTransitTransfersProvider =
     businessScopedStream<List<StockTransferData>>(
-  (ref, db, businessId) => db.stockTransferDao.watchAllInTransit(),
-  whenAbsent: const [],
-);
+      (ref, db, businessId) => db.stockTransferDao.watchAllInTransit(),
+      whenAbsent: const [],
+    );
 
 /// All `pending` transfer requests for the business — the raw feed the
 /// viewer-scoped request providers derive their lists from in memory.
 final allPendingTransfersProvider =
     businessScopedStream<List<StockTransferData>>(
-  (ref, db, businessId) => db.stockTransferDao.watchAllPending(),
-  whenAbsent: const [],
-);
+      (ref, db, businessId) => db.stockTransferDao.watchAllPending(),
+      whenAbsent: const [],
+    );
 
 /// Pending requests the current viewer's stores must ACCEPT & DISPATCH — i.e.
 /// requests where one of the viewer's stores HOLDS the goods (`fromLocationId`).
 /// CEO sees every pending request; a store-assigned user sees only requests
 /// against their assigned stores. Gated for action by `stores.dispatch_transfer`.
-final viewerScopedIncomingRequestsProvider = Provider<List<StockTransferData>>(
-  (ref) {
-    final all = ref.watch(allPendingTransfersProvider).valueOrNull ?? const [];
-    final role = ref.watch(currentUserRoleProvider);
-    if (role?.slug == 'ceo') return all;
-    final userId = ref.watch(authProvider).currentUser?.id;
-    if (userId == null) return const [];
-    final assignedStoreIds =
-        (ref.watch(myUserStoresProvider(userId)).valueOrNull ??
-                const <UserStoreData>[])
-            .map((s) => s.storeId)
-            .toSet();
-    return all
-        .where((r) => assignedStoreIds.contains(r.fromLocationId))
-        .toList();
-  },
-);
+final viewerScopedIncomingRequestsProvider = Provider<List<StockTransferData>>((
+  ref,
+) {
+  final all = ref.watch(allPendingTransfersProvider).valueOrNull ?? const [];
+  final role = ref.watch(currentUserRoleProvider);
+  if (role?.slug == 'ceo') return all;
+  final userId = ref.watch(authProvider).currentUser?.id;
+  if (userId == null) return const [];
+  final assignedStoreIds =
+      (ref.watch(myUserStoresProvider(userId)).valueOrNull ??
+              const <UserStoreData>[])
+          .map((s) => s.storeId)
+          .toSet();
+  return all.where((r) => assignedStoreIds.contains(r.fromLocationId)).toList();
+});
 
 /// Pending requests the current viewer's stores RAISED — i.e. requests where one
 /// of the viewer's stores NEEDS the goods (`toLocationId`). CEO sees all; a
 /// store-assigned user sees only their stores' outstanding requests.
-final viewerScopedOutgoingRequestsProvider = Provider<List<StockTransferData>>(
-  (ref) {
-    final all = ref.watch(allPendingTransfersProvider).valueOrNull ?? const [];
-    final role = ref.watch(currentUserRoleProvider);
-    if (role?.slug == 'ceo') return all;
-    final userId = ref.watch(authProvider).currentUser?.id;
-    if (userId == null) return const [];
-    final assignedStoreIds =
-        (ref.watch(myUserStoresProvider(userId)).valueOrNull ??
-                const <UserStoreData>[])
-            .map((s) => s.storeId)
-            .toSet();
-    return all.where((r) => assignedStoreIds.contains(r.toLocationId)).toList();
-  },
-);
+final viewerScopedOutgoingRequestsProvider = Provider<List<StockTransferData>>((
+  ref,
+) {
+  final all = ref.watch(allPendingTransfersProvider).valueOrNull ?? const [];
+  final role = ref.watch(currentUserRoleProvider);
+  if (role?.slug == 'ceo') return all;
+  final userId = ref.watch(authProvider).currentUser?.id;
+  if (userId == null) return const [];
+  final assignedStoreIds =
+      (ref.watch(myUserStoresProvider(userId)).valueOrNull ??
+              const <UserStoreData>[])
+          .map((s) => s.storeId)
+          .toSet();
+  return all.where((r) => assignedStoreIds.contains(r.toLocationId)).toList();
+});
 
 // ── Per-store transfer feeds (store-details hub, §16.8.2) ────────────────────
 // These are scoped to ONE concrete store, not to the viewer's assignment set —
@@ -1061,32 +1111,34 @@ final viewerScopedOutgoingRequestsProvider = Provider<List<StockTransferData>>(
 /// `pending` requests THIS store must fulfil (others asking it to send).
 final storeIncomingRequestsProvider =
     businessScopedStreamFamily<List<StockTransferData>, String>(
-  (ref, db, businessId, storeId) =>
-      db.stockTransferDao.watchPendingForHolderStore(storeId),
-  whenAbsent: const [],
-);
+      (ref, db, businessId, storeId) =>
+          db.stockTransferDao.watchPendingForHolderStore(storeId),
+      whenAbsent: const [],
+    );
 
 /// `pending` requests THIS store raised that have not been dispatched yet.
 final storeOutgoingRequestsProvider =
     businessScopedStreamFamily<List<StockTransferData>, String>(
-  (ref, db, businessId, storeId) =>
-      db.stockTransferDao.watchPendingFromStore(storeId),
-  whenAbsent: const [],
-);
+      (ref, db, businessId, storeId) =>
+          db.stockTransferDao.watchPendingFromStore(storeId),
+      whenAbsent: const [],
+    );
 
 /// `in_transit` transfers arriving AT this store (the confirm-receipt queue).
 final storeIncomingTransfersProvider =
     businessScopedStreamFamily<List<StockTransferData>, String>(
-  (ref, db, businessId, storeId) => db.stockTransferDao.watchIncoming(storeId),
-  whenAbsent: const [],
-);
+      (ref, db, businessId, storeId) =>
+          db.stockTransferDao.watchIncoming(storeId),
+      whenAbsent: const [],
+    );
 
 /// `in_transit` transfers dispatched FROM this store (awaiting receipt).
 final storeOutgoingTransfersProvider =
     businessScopedStreamFamily<List<StockTransferData>, String>(
-  (ref, db, businessId, storeId) => db.stockTransferDao.watchOutgoing(storeId),
-  whenAbsent: const [],
-);
+      (ref, db, businessId, storeId) =>
+          db.stockTransferDao.watchOutgoing(storeId),
+      whenAbsent: const [],
+    );
 
 /// In-transit transfers where the current viewer's stores are the DESTINATION
 /// (the confirm queue). CEO sees all stores; store users see only their
@@ -1134,26 +1186,26 @@ final viewerScopedOutgoingTransfersProvider = Provider<List<StockTransferData>>(
 /// first. Used by the history tab on the Incoming Transfers screen.
 final stockTransferHistoryProvider =
     businessScopedStream<List<StockTransferData>>(
-  (ref, db, businessId) => db.stockTransferDao.watchHistory(),
-  whenAbsent: const [],
-);
+      (ref, db, businessId) => db.stockTransferDao.watchHistory(),
+      whenAbsent: const [],
+    );
 
 /// Completed stock transfers (received + cancelled) involving a specific store in either direction, newest
 /// first. Used by the Transfer History section in the store details hub.
 final storeTransferHistoryProvider =
     businessScopedStreamFamily<List<StockTransferData>, String>(
-  (ref, db, businessId, storeId) =>
-      db.stockTransferDao.watchHistoryForStore(storeId),
-  whenAbsent: const [],
-);
+      (ref, db, businessId, storeId) =>
+          db.stockTransferDao.watchHistoryForStore(storeId),
+      whenAbsent: const [],
+    );
 
 // ── Products by store ───────────────────────────────────────────────────────
 final productsByStoreProvider =
     businessScopedStreamFamily<List<ProductDataWithStock>, String>(
-  (ref, db, businessId, storeId) =>
-      db.inventoryDao.watchProductDatasWithStockByStore(storeId),
-  whenAbsent: const [],
-);
+      (ref, db, businessId, storeId) =>
+          db.inventoryDao.watchProductDatasWithStockByStore(storeId),
+      whenAbsent: const [],
+    );
 
 /// Products with stock totals for a store scope, where the key may be null to
 /// mean "All Stores". Drives the Product Details screen's realtime refresh so a
@@ -1161,10 +1213,10 @@ final productsByStoreProvider =
 /// detail view live (§5).
 final productsWithStockProvider =
     businessScopedStreamFamily<List<ProductDataWithStock>, String?>(
-  (ref, db, businessId, storeId) =>
-      db.inventoryDao.watchProductsWithStock(storeId: storeId),
-  whenAbsent: const [],
-);
+      (ref, db, businessId, storeId) =>
+          db.inventoryDao.watchProductsWithStock(storeId: storeId),
+      whenAbsent: const [],
+    );
 
 // ── Categories ──────────────────────────────────────────────────────────────
 final allCategoriesProvider = businessScopedStream<List<CategoryData>>(
@@ -1208,9 +1260,10 @@ final storeByIdProvider = businessScopedStreamFamily<StoreData?, String>(
 /// the tier order is consistent everywhere.
 final allRolesProvider = businessScopedStream<List<RoleData>>(
   (ref, db, businessId) => db.rolesDao.watchAll().map(
-        (roles) => roles.toList()
+    (roles) =>
+        roles.toList()
           ..sort((a, b) => roleRank(a.slug).compareTo(roleRank(b.slug))),
-      ),
+  ),
   whenAbsent: const [],
 );
 
@@ -1293,19 +1346,20 @@ final allPermissionsProvider = StreamProvider<List<PermissionData>>((ref) {
 /// Granted permissions for a specific role.
 final rolePermissionsProvider =
     businessScopedStreamFamily<List<RolePermissionData>, String>(
-  (ref, db, businessId, roleId) => db.rolePermissionsDao.watchForRole(roleId),
-  whenAbsent: const [],
-);
+      (ref, db, businessId, roleId) =>
+          db.rolePermissionsDao.watchForRole(roleId),
+      whenAbsent: const [],
+    );
 
 /// Per-staff permission overrides for a specific user (§10.2.1). A row forces
 /// `permissionKey` on (`isGranted` true) or off (false) for that user,
 /// overriding their role default; no row = inherit.
 final userPermissionOverridesProvider =
     businessScopedStreamFamily<List<UserPermissionOverrideData>, String>(
-  (ref, db, businessId, userId) =>
-      db.userPermissionOverridesDao.watchForUser(userId),
-  whenAbsent: const [],
-);
+      (ref, db, businessId, userId) =>
+          db.userPermissionOverridesDao.watchForUser(userId),
+      whenAbsent: const [],
+    );
 
 /// Per-store role permission overrides for a specific (store, role) (§10.2.1
 /// Store scope). A row forces `permissionKey` on (`isGranted` true) or off
@@ -1318,17 +1372,17 @@ final storeRolePermissionsProvider =
       List<StoreRolePermissionData>,
       ({String storeId, String roleId})
     >(
-  (ref, db, businessId, key) =>
-      db.storeRolePermissionsDao.watchFor(key.storeId, key.roleId),
-  whenAbsent: const [],
-);
+      (ref, db, businessId, key) =>
+          db.storeRolePermissionsDao.watchFor(key.storeId, key.roleId),
+      whenAbsent: const [],
+    );
 
 /// Per-role tunable settings (max discount %, max expense approval kobo).
 final roleSettingsProvider =
     businessScopedStreamFamily<List<RoleSettingData>, String>(
-  (ref, db, businessId, roleId) => db.roleSettingsDao.watchForRole(roleId),
-  whenAbsent: const [],
-);
+      (ref, db, businessId, roleId) => db.roleSettingsDao.watchForRole(roleId),
+      whenAbsent: const [],
+    );
 
 /// All memberships for the current business — drives Staff Management.
 final userBusinessesProvider = businessScopedStream<List<UserBusinessData>>(
@@ -1778,8 +1832,7 @@ final selectableStoresProvider = Provider<List<StoreData>>((ref) {
     assigned.map((s) => s.storeId).toSet(),
     // The one viewer a van is selectable for: a driver (`van.sell`) standing on
     // the van they were assigned to. Everyone else never sees it.
-    canSellFromVan:
-        Gates.vanSell.rule.evaluate(ref.watch(gateContextProvider)),
+    canSellFromVan: Gates.vanSell.rule.evaluate(ref.watch(gateContextProvider)),
   );
 });
 
@@ -1828,18 +1881,18 @@ final allVanTripsProvider = businessScopedStream<List<VanTripData>>(
 /// Every trip (open and closed) for one van, newest first.
 final vanTripsForVanProvider =
     businessScopedStreamFamily<List<VanTripData>, String>(
-  (ref, db, businessId, vanStoreId) =>
-      db.vanTripsDao.watchTripsForVan(vanStoreId),
-  whenAbsent: const [],
-);
+      (ref, db, businessId, vanStoreId) =>
+          db.vanTripsDao.watchTripsForVan(vanStoreId),
+      whenAbsent: const [],
+    );
 
 /// One trip's priced load lots, oldest dispatch first — the FIFO order returns
 /// credit against (#143) and close consumes for COGS (#145).
 final vanTripLotsProvider =
     businessScopedStreamFamily<List<VanTripLotData>, String>(
-  (ref, db, businessId, tripId) => db.vanTripsDao.watchLotsForTrip(tripId),
-  whenAbsent: const [],
-);
+      (ref, db, businessId, tripId) => db.vanTripsDao.watchLotsForTrip(tripId),
+      whenAbsent: const [],
+    );
 
 /// driverUserId → balance (kobo); **negative = the driver owes**. Drivers with
 /// no ledger rows are absent — render them at 0.
@@ -1978,9 +2031,11 @@ final vanTripReturnsProvider =
 /// fails first and this decision is reopened.
 final vanDriversProvider = Provider<List<UserData>>((ref) {
   final memberships =
-      ref.watch(userBusinessesProvider).valueOrNull ?? const <UserBusinessData>[];
+      ref.watch(userBusinessesProvider).valueOrNull ??
+      const <UserBusinessData>[];
   final roles = ref.watch(allRolesProvider).valueOrNull ?? const <RoleData>[];
-  final users = ref.watch(usersByBusinessProvider).valueOrNull ??
+  final users =
+      ref.watch(usersByBusinessProvider).valueOrNull ??
       const <String, UserData>{};
 
   final driverRoleIds = {
@@ -2037,9 +2092,9 @@ final currentDriverTripProvider = businessScopedStream<VanTripData?>((
   if (userId == null) return Stream<VanTripData?>.value(null);
   // `openTripForDriver` is a one-shot read; re-run it whenever the trips table
   // changes so an opened/closed trip lands on the driver's device live.
-  return db.vanTripsDao
-      .watchOpenTrips()
-      .asyncMap((_) => db.vanTripsDao.openTripForDriver(userId));
+  return db.vanTripsDao.watchOpenTrips().asyncMap(
+    (_) => db.vanTripsDao.openTripForDriver(userId),
+  );
 }, whenAbsent: null);
 
 /// A trip's road price list: productId → load price (kobo). The driver sells at
@@ -2052,10 +2107,11 @@ final vanTripLoadPricesProvider =
     );
 
 /// A trip's road sales, newest first — the driver's read-only run list.
-final vanTripSalesProvider = businessScopedStreamFamily<List<OrderData>, String>(
-  (ref, db, businessId, tripId) => db.vanTripsDao.watchSalesForTrip(tripId),
-  whenAbsent: const [],
-);
+final vanTripSalesProvider =
+    businessScopedStreamFamily<List<OrderData>, String>(
+      (ref, db, businessId, tripId) => db.vanTripsDao.watchSalesForTrip(tripId),
+      whenAbsent: const [],
+    );
 
 /// A trip's whole reconciliation position, live (#145, spec §6).
 ///
@@ -2093,29 +2149,42 @@ final vanTripSoldValueProvider = businessScopedStreamFamily<int, String>(
   whenAbsent: 0,
 );
 
+/// The effective active store id. Falls back to null ("All Stores") if
+/// [lockedStoreProvider] points to a store that is not among the business's
+/// active stores (#456).
+final activeStoreIdProvider = Provider<String?>((ref) {
+  final id = ref.watch(lockedStoreProvider).value;
+  if (id == null) return null;
+  final stores =
+      ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[];
+  if (stores.any((s) => s.id == id)) return id;
+  return null;
+});
+
 /// Display label for the active-store scope (§21.11 supplier accounts and any
 /// other screen that wants to caption the current scope): the locked store's
-/// name, or "All Stores" when nothing is locked.
+/// name, or "All Stores" when nothing is locked or if the locked store is no
+/// longer active (#456).
 final activeStoreLabelProvider = Provider.autoDispose<String>((ref) {
-  final id = ref.watch(lockedStoreProvider).value;
+  final id = ref.watch(activeStoreIdProvider);
   if (id == null) return 'All Stores';
   final stores =
       ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[];
   for (final s in stores) {
     if (s.id == id) return s.name;
   }
-  return 'Store';
+  return 'All Stores';
 });
 
 /// The store a NEW write (an expense §20.8, a supplier activity §21.11, …) is
-/// stamped against: the locked active store, else the user's first selectable
-/// store, else their home store. `label` is its display name for a
-/// "Recording for: <store>" banner. Unlike [activeStoreLabelProvider] this never
-/// returns "All Stores" — a write always lands on one concrete store, the same
-/// fallback a POS sale uses (checkout_page.dart).
+/// stamped against: the locked active store (if still active), else the user's
+/// first selectable store, else their home store. `label` is its display name
+/// for a "Recording for: <store>" banner. Unlike [activeStoreLabelProvider]
+/// this never returns "All Stores" — a write always lands on one concrete store,
+/// the same fallback a POS sale uses (checkout_page.dart).
 final activeWriteStoreProvider =
     Provider.autoDispose<({String? id, String label})>((ref) {
-      final locked = ref.watch(lockedStoreProvider).value;
+      final locked = ref.watch(activeStoreIdProvider);
       final selectable = ref.watch(selectableStoresProvider);
       final id =
           locked ??
@@ -2171,10 +2240,11 @@ final businessTimezoneProvider = FutureProvider<String>((ref) async {
 /// Current empty-crate holdings per manufacturer (`manufacturerId → count`).
 /// Crate businesses only (§13/§18.3); used by the Daily Reconciliation Report's
 /// empty-crates section. Point-in-time pool balance, not a day-scoped movement.
-final emptyCratesByManufacturerProvider = businessScopedStream<Map<String, int>>(
-  (ref, db, businessId) => db.inventoryDao.watchEmptyCratesByManufacturer(),
-  whenAbsent: const {},
-);
+final emptyCratesByManufacturerProvider =
+    businessScopedStream<Map<String, int>>(
+      (ref, db, businessId) => db.inventoryDao.watchEmptyCratesByManufacturer(),
+      whenAbsent: const {},
+    );
 
 /// Every `damaged` empty-crate movement (§17.2 crate-aware damages — the
 /// stored-empty fate). Drives the Daily Reconciliation Statement's forfeited
@@ -2190,24 +2260,25 @@ final allCrateDamagesProvider = businessScopedStream<List<CrateLedgerData>>(
 /// locked. #159: DERIVED from the append-only `crate_ledger` via the Crate Pool
 /// seam (not the demoted `store_crate_balances` cache), so a locked store's view
 /// and the business-wide view agree. Crate businesses only.
-final storeCrateBalancesProvider = businessScopedStream<Map<String, int>>(
-  (ref, db, businessId) {
-    final storeId = ref.watch(lockedStoreProvider).value;
-    if (storeId == null) return Stream.value(const {});
-    return db.cratePoolDao.watchEmptiesPoolByManufacturer(storeId: storeId);
-  },
-  whenAbsent: const {},
-);
+final storeCrateBalancesProvider = businessScopedStream<Map<String, int>>((
+  ref,
+  db,
+  businessId,
+) {
+  final storeId = ref.watch(activeStoreIdProvider);
+  if (storeId == null) return Stream.value(const {});
+  return db.cratePoolDao.watchEmptiesPoolByManufacturer(storeId: storeId);
+}, whenAbsent: const {});
 
 /// Current empty-crate balance per manufacturer for a given store, mapped as
 /// manufacturerId -> balance. Scoped to [storeId] (§16.8.1). #159: DERIVED from
 /// the ledger via the Crate Pool seam.
 final storeEmptiesByManufacturerProvider =
     businessScopedStreamFamily<Map<String, int>, String>(
-  (ref, db, businessId, storeId) =>
-      db.cratePoolDao.watchEmptiesPoolByManufacturer(storeId: storeId),
-  whenAbsent: const {},
-);
+      (ref, db, businessId, storeId) =>
+          db.cratePoolDao.watchEmptiesPoolByManufacturer(storeId: storeId),
+      whenAbsent: const {},
+    );
 
 /// Full bottles in stock per manufacturer, scoped to the active store (§16.8.1
 /// Phase 2). When a store is locked it counts only that store's inventory; in
@@ -2215,7 +2286,7 @@ final storeEmptiesByManufacturerProvider =
 /// "Full" figures on the inventory Empty Crates tab.
 final fullCratesByManufacturerProvider = businessScopedStream<Map<String, int>>(
   (ref, db, businessId) {
-    final storeId = ref.watch(lockedStoreProvider).value;
+    final storeId = ref.watch(activeStoreIdProvider);
     return db.inventoryDao.watchFullCratesByManufacturer(storeId: storeId);
   },
   whenAbsent: const {},
@@ -2233,74 +2304,79 @@ final crateTrackedManufacturerIdsProvider = businessScopedStream<Set<String>>(
 /// Open crate shortage per manufacturer (`manufacturerId → shortageCount`).
 /// When a store is locked, scopes to that store; otherwise sums shortages across
 /// all stores per manufacturer (#293, PRD #284 §7).
-final crateShortagesByManufacturerProvider = businessScopedStream<Map<String, int>>(
-  (ref, db, businessId) {
-    final storeId = ref.watch(lockedStoreProvider).value;
-    return db.cratePoolDao.watchAllCrateShortages(storeId: storeId);
-  },
-  whenAbsent: const {},
-);
+final crateShortagesByManufacturerProvider =
+    businessScopedStream<Map<String, int>>((ref, db, businessId) {
+      final storeId = ref.watch(activeStoreIdProvider);
+      return db.cratePoolDao.watchAllCrateShortages(storeId: storeId);
+    }, whenAbsent: const {});
 
 /// Every brand's Crate Shortage for a store scope (#296, PRD #284 §7): the
 /// per-brand read Daily Reconciliation and the write-off sheets share with the
 /// manufacturer screen. `null` = every store.
 final crateShortageRollupProvider =
     businessScopedStreamAutoDisposeFamily<CrateShortageRollup, String?>(
-  (ref, db, businessId, storeId) =>
-      db.cratePoolDao.watchCrateShortageRollup(storeId: storeId),
-  whenAbsent: CrateShortageRollup.empty,
-);
+      (ref, db, businessId, storeId) =>
+          db.cratePoolDao.watchCrateShortageRollup(storeId: storeId),
+      whenAbsent: CrateShortageRollup.empty,
+    );
 
 /// The complete crate position for ONE manufacturer across its six statuses
 /// (#291, PRD #284 §5). Respects the locked store when active, or aggregates
 /// business-wide in "All Stores".
 final manufacturerCratePositionProvider =
-    businessScopedStreamFamily<ManufacturerCratePosition, String>(
-  (ref, db, businessId, manufacturerId) {
-    final storeId = ref.watch(lockedStoreProvider).value;
-    return db.cratePoolDao.watchManufacturerCratePosition(
+    businessScopedStreamFamily<ManufacturerCratePosition, String>((
+      ref,
+      db,
+      businessId,
       manufacturerId,
-      storeId: storeId,
-    );
-  },
-  whenAbsent: const ManufacturerCratePosition.zero(''),
-);
+    ) {
+      final storeId = ref.watch(activeStoreIdProvider);
+      return db.cratePoolDao.watchManufacturerCratePosition(
+        manufacturerId,
+        storeId: storeId,
+      );
+    }, whenAbsent: const ManufacturerCratePosition.zero(''));
 
 /// Attribution of customer held deposits across all manufacturers (#291).
 /// Guarantees attributed deposits + unattributed == business-wide held deposit.
 final customerDepositAttributionProvider =
     businessScopedStream<CustomerDepositAttribution>(
-  (ref, db, businessId) => db.cratePoolDao.watchCustomerDepositAttribution(),
-  whenAbsent: const CustomerDepositAttribution.zero(),
-);
+      (ref, db, businessId) =>
+          db.cratePoolDao.watchCustomerDepositAttribution(),
+      whenAbsent: const CustomerDepositAttribution.zero(),
+    );
 
 /// Chronological crate movements for ONE manufacturer (#291).
 /// Newest first; displays who, when, store, quantity delta, and movement label.
 final manufacturerCrateMovementsProvider =
-    businessScopedStreamFamily<List<CrateMovementHistoryEntry>, String>(
-  (ref, db, businessId, manufacturerId) {
-    final storeId = ref.watch(lockedStoreProvider).value;
-    return db.cratePoolDao.watchManufacturerCrateMovements(
+    businessScopedStreamFamily<List<CrateMovementHistoryEntry>, String>((
+      ref,
+      db,
+      businessId,
       manufacturerId,
-      storeId: storeId,
-    );
-  },
-  whenAbsent: const [],
-);
+    ) {
+      final storeId = ref.watch(activeStoreIdProvider);
+      return db.cratePoolDao.watchManufacturerCrateMovements(
+        manufacturerId,
+        storeId: storeId,
+      );
+    }, whenAbsent: const []);
 
 /// Tracked-bottle products belonging to ONE manufacturer (#291).
 /// Read-only product list for the manufacturer screen Products tab.
 final manufacturerProductsProvider =
-    businessScopedStreamFamily<List<ProductDataWithStock>, String>(
-  (ref, db, businessId, manufacturerId) {
-    final storeId = ref.watch(lockedStoreProvider).value;
-    return db.cratePoolDao.watchManufacturerProducts(
+    businessScopedStreamFamily<List<ProductDataWithStock>, String>((
+      ref,
+      db,
+      businessId,
       manufacturerId,
-      storeId: storeId,
-    );
-  },
-  whenAbsent: const [],
-);
+    ) {
+      final storeId = ref.watch(activeStoreIdProvider);
+      return db.cratePoolDao.watchManufacturerProducts(
+        manufacturerId,
+        storeId: storeId,
+      );
+    }, whenAbsent: const []);
 
 // ── Daily Stock Count (master plan §17) ──────────────────────────────────────
 
@@ -2320,17 +2396,16 @@ final allStockCountsProvider = businessScopedStream<List<StockCountData>>(
 /// live. At most one row exists per (business, day) — first-writer-wins.
 final dailyClosingForDayProvider =
     businessScopedStreamFamily<DailyClosingData?, String>(
-  (ref, db, businessId, businessDate) =>
-      db.dailyClosingsDao.watchForDay(businessDate),
-  whenAbsent: null,
-);
+      (ref, db, businessId, businessDate) =>
+          db.dailyClosingsDao.watchForDay(businessDate),
+      whenAbsent: null,
+    );
 
 /// Every persisted day-close snapshot in the business, newest day first (#192).
 /// One small row per REVIEWED day — days nobody opened have none — so the
 /// reconciliation LIST can mark which days were reviewed and which of those have
 /// moved since, instead of that being knowable only from inside the day itself.
-final allDailyClosingsProvider =
-    businessScopedStream<List<DailyClosingData>>(
+final allDailyClosingsProvider = businessScopedStream<List<DailyClosingData>>(
   (ref, db, businessId) => db.dailyClosingsDao.watchAllForBusiness(),
   whenAbsent: const [],
 );
@@ -2341,9 +2416,9 @@ final allDailyClosingsProvider =
 /// for the Manager reconciliation.
 final allStockAdjustmentsProvider =
     businessScopedStream<List<StockAdjustmentData>>(
-  (ref, db, businessId) => db.inventoryDao.watchAllAdjustments(),
-  whenAbsent: const [],
-);
+      (ref, db, businessId) => db.inventoryDao.watchAllAdjustments(),
+      whenAbsent: const [],
+    );
 
 /// Every supplier-ledger entry across all suppliers (business-wide, newest
 /// first). Used by the §25.10 CEO statement of account for goods received
@@ -2351,9 +2426,9 @@ final allStockAdjustmentsProvider =
 /// applied in the report from each entry's `storeId` (§21.11).
 final allSupplierLedgerEntriesProvider =
     businessScopedStream<List<SupplierLedgerEntryData>>(
-  (ref, db, businessId) => db.supplierLedgerDao.watchAllHistory(),
-  whenAbsent: const [],
-);
+      (ref, db, businessId) => db.supplierLedgerDao.watchAllHistory(),
+      whenAbsent: const [],
+    );
 
 /// Every `payment_transactions` row (the unified physical-cash tender ledger)
 /// for this business, newest first. Feeds the Daily Reconciliation cash-flow
@@ -2362,9 +2437,9 @@ final allSupplierLedgerEntriesProvider =
 /// `storeId`, so the cash summary is business-wide (like customer debt).
 final allPaymentTransactionsProvider =
     businessScopedStream<List<PaymentTransactionData>>(
-  (ref, db, businessId) => db.ordersDao.watchAllPaymentTransactions(),
-  whenAbsent: const [],
-);
+      (ref, db, businessId) => db.ordersDao.watchAllPaymentTransactions(),
+      whenAbsent: const [],
+    );
 
 /// Every non-voided `crate_deposit_forfeited` wallet row (business-wide, newest
 /// first). Feeds the Daily Reconciliation forfeit-income line (#176): a kept
@@ -2373,9 +2448,9 @@ final allPaymentTransactionsProvider =
 /// like the held-deposit figure.
 final crateForfeitRowsProvider =
     businessScopedStream<List<WalletTransactionData>>(
-  (ref, db, businessId) => db.walletTransactionsDao.watchForfeitRows(),
-  whenAbsent: const [],
-);
+      (ref, db, businessId) => db.walletTransactionsDao.watchForfeitRows(),
+      whenAbsent: const [],
+    );
 
 /// Every non-voided `stock_transactions` row (the append-only stock ledger) for
 /// this business. Feeds the Daily Reconciliation stock flow-equation card (ADR
@@ -2384,6 +2459,6 @@ final crateForfeitRowsProvider =
 /// scope is applied in the report from each row's `locationId`.
 final allStockTransactionsProvider =
     businessScopedStream<List<StockTransactionData>>(
-  (ref, db, businessId) => db.stockLedgerDao.watchAllTransactions(),
-  whenAbsent: const [],
-);
+      (ref, db, businessId) => db.stockLedgerDao.watchAllTransactions(),
+      whenAbsent: const [],
+    );
