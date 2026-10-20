@@ -7,6 +7,13 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #455: Migrate raw permission checks to NamedGate & add static ban test (2026-10-20)
+Branch `feat/455-gate-permissions`, worktree `../drinkPosApp-wt-455`. PR #455.
+- Migrated all remaining raw permission checks (`currentUserPermissionsProvider.contains(...)`, `perms.contains(...)`) across `lib/` to `Gates.*` and `gateContextProvider.isReady`.
+- Gate registry additions (`lib/core/permissions/gate_registry.dart`): added `inviteStaff` (`staff.invite`), `deleteProduct` (`products.delete`), `addStock` (`stock.add`), and `adjustStock` (`stock.adjust`), registered in `Gates.all`.
+- Action site write-boundary enforcement via `showGateDenied(context, gate)` across staff (invite, detail, permissions), inventory (product delete, price edit, stock adjustments, add product), customers (refund, credit, crate return), payments/suppliers, and store transfers.
+- Added static ban test (`test/permissions/raw_permission_check_ban_test.dart`) preventing future direct references to `currentUserPermissionsProvider` outside `lib/core/permissions/` and ensuring no catalogue permission keys are checked via `.contains()` outside the permissions module.
+- Tests: `test/permissions/` suite (74/74 passed), `test/staff/invite_staff_screen_test.dart`, `test/stores/request_stock_screen_test.dart`.
 ### Issue #456: Stores safe deletion with safety guards and transactional write path (2026-10-20)
 Branch `feat/456-stores-safe-delete`, worktree `../drinkPosApp-wt-456`.
 - **7 safety guards**: Implemented `StoreDeleteBlockedReason` enum and `StoresDao.checkStoreDeleteBlocked`:

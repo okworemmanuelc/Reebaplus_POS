@@ -22,6 +22,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/permissions/gate.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/van_sales/van_sales_switch.dart';
 import 'package:reebaplus_pos/features/staff/screens/invite_staff_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
@@ -51,18 +53,19 @@ void main() {
     // Force onCreate.
     await db.customSelect('SELECT 1').get();
 
-    await db.into(db.businesses).insert(
+    await db
+        .into(db.businesses)
+        .insert(
           BusinessesCompanion.insert(
             id: const Value(businessId),
             name: 'Test Biz',
             type: const Value('bar'),
           ),
         );
-    for (final s in [
-      (store1Id, 'Store 1'),
-      (store2Id, 'Store 2'),
-    ]) {
-      await db.into(db.stores).insert(
+    for (final s in [(store1Id, 'Store 1'), (store2Id, 'Store 2')]) {
+      await db
+          .into(db.stores)
+          .insert(
             StoresCompanion.insert(
               id: Value(s.$1),
               businessId: businessId,
@@ -76,7 +79,9 @@ void main() {
       (cashierRoleId, 'Cashier', 'cashier'),
       (stockRoleId, 'Stock keeper', 'stock_keeper'),
     ]) {
-      await db.into(db.roles).insert(
+      await db
+          .into(db.roles)
+          .insert(
             RolesCompanion.insert(
               id: Value(r.$1),
               businessId: businessId,
@@ -86,7 +91,9 @@ void main() {
             ),
           );
     }
-    await db.into(db.users).insert(
+    await db
+        .into(db.users)
+        .insert(
           UsersCompanion.insert(
             id: const Value(managerUserId),
             businessId: businessId,
@@ -95,7 +102,9 @@ void main() {
             storeId: const Value(store1Id),
           ),
         );
-    await db.into(db.userBusinesses).insert(
+    await db
+        .into(db.userBusinesses)
+        .insert(
           UserBusinessesCompanion.insert(
             id: Value(UuidV7.generate()),
             businessId: businessId,
@@ -107,8 +116,7 @@ void main() {
 
   tearDown(() => db.close());
 
-  testWidgets('Manager role selector excludes CEO and Manager',
-      (tester) async {
+  testWidgets('Manager role selector excludes CEO and Manager', (tester) async {
     final container = ProviderContainer(
       overrides: [databaseProvider.overrideWithValue(db)],
     );
@@ -116,8 +124,9 @@ void main() {
 
     // Bind the current user as the Manager so currentUserRoleProvider
     // resolves to the manager slug.
-    container.read(authProvider).value = await db.storesDao
-        .getUserById(managerUserId);
+    container.read(authProvider).value = await db.storesDao.getUserById(
+      managerUserId,
+    );
 
     await tester.pumpWidget(
       UncontrolledProviderScope(
@@ -134,12 +143,71 @@ void main() {
     expect(find.text('Manager'), findsNothing);
   });
 
+  testWidgets(
+    'inviteStaff gate denial blocks generating code and shows feedback',
+    (tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          gateContextProvider.overrideWith(
+            (ref) => const GateContext(
+              grantedKeys: {}, // missing staff.invite
+              roleRank: GateTier.manager,
+              isReady: true,
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      container.read(authProvider).value = await db.storesDao.getUserById(
+        managerUserId,
+      );
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(home: InviteStaffScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Fill in valid email
+      await tester.enterText(
+        find.byType(TextFormField).first,
+        'newstaff@test.com',
+      );
+      // Select Cashier role card
+      await tester.tap(find.text('Cashier').first);
+      await tester.pumpAndSettle();
+
+      // Tap Generate code
+      await tester.ensureVisible(find.text('Generate code'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Generate code'));
+      await tester.pump();
+
+      expect(
+        find.text('You no longer have access to Invite Staff.'),
+        findsOneWidget,
+      );
+
+      // Verify no invite codes were generated in db
+      final codes = await db.select(db.inviteCodes).get();
+      expect(codes, isEmpty);
+
+      await tester.pump(const Duration(seconds: 5));
+    },
+  );
+
   group('Van Sales switch', () {
     const ceoUserId = 'user-ceo';
     const vanId = 'van-1';
 
     Future<void> pumpAsCeo(WidgetTester tester) async {
-      await db.into(db.stores).insert(
+      await db
+          .into(db.stores)
+          .insert(
             StoresCompanion.insert(
               id: const Value(vanId),
               businessId: businessId,
@@ -147,7 +215,9 @@ void main() {
               kind: const Value(kStoreKindVan),
             ),
           );
-      await db.into(db.roles).insert(
+      await db
+          .into(db.roles)
+          .insert(
             RolesCompanion.insert(
               id: const Value('role-driver'),
               businessId: businessId,
@@ -156,7 +226,9 @@ void main() {
               isSystemDefault: const Value(true),
             ),
           );
-      await db.into(db.users).insert(
+      await db
+          .into(db.users)
+          .insert(
             UsersCompanion.insert(
               id: const Value(ceoUserId),
               businessId: businessId,
@@ -164,7 +236,9 @@ void main() {
               pin: '0000',
             ),
           );
-      await db.into(db.userBusinesses).insert(
+      await db
+          .into(db.userBusinesses)
+          .insert(
             UserBusinessesCompanion.insert(
               id: Value(UuidV7.generate()),
               businessId: businessId,
@@ -176,8 +250,9 @@ void main() {
         overrides: [databaseProvider.overrideWithValue(db)],
       );
       addTearDown(container.dispose);
-      container.read(authProvider).value =
-          await db.storesDao.getUserById(ceoUserId);
+      container.read(authProvider).value = await db.storesDao.getUserById(
+        ceoUserId,
+      );
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
@@ -195,8 +270,9 @@ void main() {
 
     tearDown(() => debugOverrideVanSalesEnabled(null));
 
-    testWidgets('switched off: no van store and no Driver role on offer',
-        (tester) async {
+    testWidgets('switched off: no van store and no Driver role on offer', (
+      tester,
+    ) async {
       debugOverrideVanSalesEnabled(false);
       await pumpAsCeo(tester);
 
@@ -204,8 +280,9 @@ void main() {
       expect(find.text('Driver'), findsNothing);
     });
 
-    testWidgets('switched on: the van and the Driver role are back',
-        (tester) async {
+    testWidgets('switched on: the van and the Driver role are back', (
+      tester,
+    ) async {
       debugOverrideVanSalesEnabled(true);
       await pumpAsCeo(tester);
 

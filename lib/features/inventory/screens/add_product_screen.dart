@@ -10,7 +10,6 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/industry/lexicon.dart';
 import 'package:reebaplus_pos/core/result.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/product_photo_field.dart';
-import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
@@ -165,9 +164,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
 
   /// Whether the current role may see / set the buying price (master plan
   /// §16.5 / §16.7). Reads (not watches) so it is safe to call from `_save`.
-  bool get _canEditBuying => ref
-      .read(currentUserPermissionsProvider)
-      .contains('products.edit_buying_price');
+  bool get _canEditBuying => Gates.editBuyingPrice.allowsNow(ref);
 
   @override
   void initState() {
