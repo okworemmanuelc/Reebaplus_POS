@@ -31,12 +31,17 @@ void main() {
   late ScreenTestEnvironment env;
 
   setUp(() async {
+    // No corner DEBUG banner in the goldens.
+    WidgetsApp.debugAllowBannerOverride = false;
     env = await setupScreenTestEnvironment(
       productCount: 0,
       businessName: 'Stallion Global',
     );
   });
-  tearDown(() => env.dispose());
+  tearDown(() {
+    WidgetsApp.debugAllowBannerOverride = true;
+    return env.dispose();
+  });
 
   Future<void> pumpIt(
     WidgetTester tester, {

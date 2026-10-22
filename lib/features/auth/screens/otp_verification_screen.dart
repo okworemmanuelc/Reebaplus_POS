@@ -342,6 +342,14 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
                 ),
               ),
               AuthCenteredScroll(
+                // Top padding clears the pinned back button (48dp) so a short
+                // viewport never runs the title into it.
+                padding: EdgeInsets.fromLTRB(
+                  28,
+                  kMinInteractiveDimension,
+                  28,
+                  MediaQuery.of(context).viewInsets.bottom + 24,
+                ),
                 children: [
                   Text('Check your email', style: authTitleStyle(context)),
                   SizedBox(height: context.getRSize(8)),
