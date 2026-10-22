@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
 import 'package:reebaplus_pos/features/auth/screens/ceo_sign_up_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/staff_sign_up_screen.dart';
@@ -43,52 +46,39 @@ class NoAccountFoundScreen extends StatelessWidget {
               ),
               AuthCenteredScroll(
                 children: [
-                  Center(
-                    child: Container(
-                      padding: const EdgeInsets.all(22),
-                      decoration: BoxDecoration(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.primary.withValues(alpha: 0.12),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        AppIcons.personSearch,
-                        color: Theme.of(context).colorScheme.primary,
-                        size: 56,
-                      ),
+                  const Center(
+                    child: IconTile(
+                      icon: AppIcons.personSearch,
+                      tone: IconTileTone.info,
+                      size: 80,
                     ),
                   ),
-                  const SizedBox(height: 28),
+                  SizedBox(height: context.getRSize(24)),
                   Text(
                     'No account found',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w800,
-                      color: authTextPrimary(context),
-                    ),
+                    style: context
+                        .extraBoldStyle(26)
+                        .copyWith(color: authTextPrimary(context)),
                   ),
-                  const SizedBox(height: 10),
+                  SizedBox(height: context.getRSize(10)),
                   Text(
                     'We couldn\'t find an account for $email. '
                     'Create a new business or join an existing one with an '
                     'invite code.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 15,
-                      height: 1.45,
-                      color: authTextPrimary(context).withValues(alpha: 0.65),
-                    ),
+                    style: context
+                        .regularStyle(15)
+                        .copyWith(height: 1.45, color: authTextMuted(context)),
                   ),
-                  const SizedBox(height: 36),
+                  SizedBox(height: context.getRSize(32)),
                   AppButton(
                     text: 'Create a new business',
                     onPressed: () => Navigator.of(context).pushReplacement(
                       SmoothRoute(page: CeoSignUpScreen(verifiedEmail: email)),
                     ),
                   ),
-                  const SizedBox(height: 14),
+                  SizedBox(height: context.getRSize(12)),
                   AppButton(
                     text: 'Join with invite code',
                     variant: AppButtonVariant.outline,

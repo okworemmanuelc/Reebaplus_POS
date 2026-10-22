@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 
 /// The one-tap warning shown at sign-in when this phone still holds an older
@@ -19,28 +22,46 @@ StaleBusinessConfirm staleBusinessClearPrompt(BuildContext context) {
     final confirmed = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Clear the old business from this phone?'),
-        // "changes", not "sales": the count is every un-uploaded outbox row
-        // for that business — a price edit, a stock count or an expense counts
-        // the same as a sale, and naming them all sales would misstate what is
-        // about to go.
-        content: Text(
-          '${warning.unsentCount} unsaved '
-          '${warning.unsentCount == 1 ? 'change' : 'changes'} from '
-          '${warning.businessName} will be deleted from this phone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
+      builder: (ctx) {
+        final f =
+            Theme.of(ctx).extension<AppFixedColors>() ?? AppFixedColors.light;
+        return AlertDialog(
+          title: Text(
+            'Clear the old business from this phone?',
+            style: ctx.extraBoldStyle(18).copyWith(color: authTextPrimary(ctx)),
           ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Clear and continue'),
+          // "changes", not "sales": the count is every un-uploaded outbox row
+          // for that business — a price edit, a stock count or an expense counts
+          // the same as a sale, and naming them all sales would misstate what is
+          // about to go.
+          content: Text(
+            '${warning.unsentCount} unsaved '
+            '${warning.unsentCount == 1 ? 'change' : 'changes'} from '
+            '${warning.businessName} will be deleted from this phone.',
+            style: ctx
+                .regularStyle(14)
+                .copyWith(color: authTextPrimary(ctx), height: 1.4),
           ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              style: FilledButton.styleFrom(
+                backgroundColor: f.danger,
+                foregroundColor: f.onSolid,
+                minimumSize: const Size(
+                  kMinInteractiveDimension,
+                  kMinInteractiveDimension,
+                ),
+              ),
+              child: const Text('Clear and continue'),
+            ),
+          ],
+        );
+      },
     );
     return confirmed ?? false;
   };
