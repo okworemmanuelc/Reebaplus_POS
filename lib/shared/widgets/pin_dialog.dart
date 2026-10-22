@@ -106,6 +106,9 @@ class _PinDialogState extends ConsumerState<PinDialog> {
     }
   }
 
+  /// Height (base dp, at text scale 1) the one-column dialog needs.
+  static const double _oneColumnHeight = 520;
+
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
@@ -113,72 +116,104 @@ class _PinDialogState extends ConsumerState<PinDialog> {
     final subtextColor = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
     final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
 
-    // Same pop-up look as the other restyled dialogs: the theme's surface and
-    // radius, DM Sans titles. The body scrolls, so a short or sideways screen
-    // (or a large text size) never overflows.
-    return Dialog(
-      child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(
-          context.getRSize(24),
-          context.getRSize(24),
-          context.getRSize(24),
-          context.getRSize(16),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // ── Title ───────────────────────────────────────────────────
-            Text(
-              widget.title,
-              style: context.extraBoldStyle(18).copyWith(color: textColor),
-              textAlign: TextAlign.center,
-            ),
-            SizedBox(height: context.getRSize(6)),
-            Text(
-              'Enter a 6-digit manager PIN to continue',
-              style: context.regularStyle(13).copyWith(color: subtextColor),
-              textAlign: TextAlign.center,
-            ),
-            SizedBox(height: context.getRSize(20)),
+    final heading = <Widget>[
+      // ── Title ─────────────────────────────────────────────────────────
+      Text(
+        widget.title,
+        style: context.extraBoldStyle(18).copyWith(color: textColor),
+        textAlign: TextAlign.center,
+      ),
+      SizedBox(height: context.getRSize(6)),
+      Text(
+        'Enter a 6-digit manager PIN to continue',
+        style: context.regularStyle(13).copyWith(color: subtextColor),
+        textAlign: TextAlign.center,
+      ),
+      SizedBox(height: context.getRSize(20)),
 
-            // ── Six dots ─────────────────────────────────────────────────
-            PinDots(filled: _pin.length),
-            SizedBox(height: context.getRSize(8)),
+      // ── Six dots ──────────────────────────────────────────────────────
+      PinDots(filled: _pin.length),
+      SizedBox(height: context.getRSize(8)),
 
-            // ── Error message ────────────────────────────────────────────
-            SizedBox(
-              height: context.getRSize(20),
-              child: _errorMessage != null
-                  ? Text(
-                      _errorMessage!,
-                      style: context.mediumStyle(12).copyWith(color: f.danger),
-                      textAlign: TextAlign.center,
-                    )
-                  : null,
-            ),
-            SizedBox(height: context.getRSize(8)),
-
-            // ── Keypad ───────────────────────────────────────────────────
-            PinKeypad(onDigit: _onDigit, onBackspace: _onBackspace),
-
-            SizedBox(height: context.getRSize(12)),
-
-            // ── Cancel ───────────────────────────────────────────────────
-            if (_checking)
-              SizedBox(
-                height: context.getRSize(24),
-                width: context.getRSize(24),
-                child: const CircularProgressIndicator(strokeWidth: 2),
+      // ── Error message ─────────────────────────────────────────────────
+      SizedBox(
+        height: context.getRSize(20),
+        child: _errorMessage != null
+            ? Text(
+                _errorMessage!,
+                style: context.mediumStyle(12).copyWith(color: f.danger),
+                textAlign: TextAlign.center,
               )
-            else
-              AppButton(
-                text: 'Cancel',
-                variant: AppButtonVariant.ghost,
-                isFullWidth: false,
-                onPressed: () => Navigator.pop(context, null),
-              ),
-          ],
-        ),
+            : null,
+      ),
+    ];
+    final keypad = PinKeypad(onDigit: _onDigit, onBackspace: _onBackspace);
+    // ── Cancel ──────────────────────────────────────────────────────────
+    final cancel = _checking
+        ? SizedBox(
+            height: context.getRSize(24),
+            width: context.getRSize(24),
+            child: const CircularProgressIndicator(strokeWidth: 2),
+          )
+        : AppButton(
+            text: 'Cancel',
+            variant: AppButtonVariant.ghost,
+            isFullWidth: false,
+            onPressed: () => Navigator.pop(context, null),
+          );
+
+    // Same pop-up look as the other restyled dialogs: the theme's surface and
+    // radius, DM Sans titles. The space is measured: a short window (a phone
+    // sideways) puts the message left and the keypad right; the body scrolls
+    // either way, so nothing overflows at any size or text scale.
+    return Dialog(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final scale = MediaQuery.textScalerOf(context).scale(1.0);
+          final need = _oneColumnHeight * (scale > 1 ? scale : 1.0);
+          final twoColumn =
+              constraints.maxWidth >= 520 && constraints.maxHeight < need;
+          final pad = EdgeInsets.fromLTRB(
+            context.getRSize(24),
+            context.getRSize(24),
+            context.getRSize(24),
+            context.getRSize(16),
+          );
+          return ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: twoColumn ? 560 : 360),
+            child: SingleChildScrollView(
+              padding: pad,
+              child: twoColumn
+                  ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              ...heading,
+                              SizedBox(height: context.getRSize(8)),
+                              cancel,
+                            ],
+                          ),
+                        ),
+                        SizedBox(width: context.getRSize(16)),
+                        Expanded(child: Center(child: keypad)),
+                      ],
+                    )
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ...heading,
+                        SizedBox(height: context.getRSize(8)),
+                        keypad,
+                        SizedBox(height: context.getRSize(12)),
+                        cancel,
+                      ],
+                    ),
+            ),
+          );
+        },
       ),
     );
   }
