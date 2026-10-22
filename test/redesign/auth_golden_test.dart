@@ -80,38 +80,36 @@ void main() {
     for (final brightness in [Brightness.light, Brightness.dark]) {
       final themeKey = brightness == Brightness.light ? 'light' : 'dark';
 
-      testWidgets(
-        'Welcome screen golden ($sizeKey, $themeKey)',
-        (tester) async {
-          await golden(
-            tester,
-            screen: const WelcomeScreen(),
-            type: WelcomeScreen,
-            size: size,
-            padding: padding,
-            brightness: brightness,
-            name: 'welcome_${sizeKey}_$themeKey',
-          );
-        },
-      );
+      testWidgets('Welcome screen golden ($sizeKey, $themeKey)', (
+        tester,
+      ) async {
+        await golden(
+          tester,
+          screen: const WelcomeScreen(),
+          type: WelcomeScreen,
+          size: size,
+          padding: padding,
+          brightness: brightness,
+          name: 'welcome_${sizeKey}_$themeKey',
+        );
+      });
 
-      testWidgets(
-        'Coming soon screen golden ($sizeKey, $themeKey)',
-        (tester) async {
-          await golden(
-            tester,
-            screen: const ComingSoonScreen(
-              title: 'Terms of Service',
-              message: 'Terms of Service — coming soon.',
-            ),
-            type: ComingSoonScreen,
-            size: size,
-            padding: padding,
-            brightness: brightness,
-            name: 'coming_soon_${sizeKey}_$themeKey',
-          );
-        },
-      );
+      testWidgets('Coming soon screen golden ($sizeKey, $themeKey)', (
+        tester,
+      ) async {
+        await golden(
+          tester,
+          screen: const ComingSoonScreen(
+            title: 'Terms of Service',
+            message: 'Terms of Service — coming soon.',
+          ),
+          type: ComingSoonScreen,
+          size: size,
+          padding: padding,
+          brightness: brightness,
+          name: 'coming_soon_${sizeKey}_$themeKey',
+        );
+      });
     }
   }
 }

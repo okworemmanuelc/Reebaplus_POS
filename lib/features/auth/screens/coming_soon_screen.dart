@@ -30,10 +30,7 @@ class ComingSoonScreen extends StatelessWidget {
         surfaceTintColor: Colors.transparent,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Container(
-            color: theme.dividerColor,
-            height: 1,
-          ),
+          child: Container(color: theme.dividerColor, height: 1),
         ),
         iconTheme: IconThemeData(color: authTextPrimary(context)),
         title: Text(
