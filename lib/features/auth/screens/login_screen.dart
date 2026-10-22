@@ -573,7 +573,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     );
   }
 
-
   // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
@@ -944,10 +943,12 @@ class _PinPad extends StatelessWidget {
             ? 'Not ${identifiedUser!.name.split(' ').first}? Switch account'
             : 'Login with a different account',
         textAlign: TextAlign.center,
-        style: context.mediumStyle(14).copyWith(
-          color: authTextMuted(context),
-          decoration: TextDecoration.underline,
-        ),
+        style: context
+            .mediumStyle(14)
+            .copyWith(
+              color: authTextMuted(context),
+              decoration: TextDecoration.underline,
+            ),
       ),
     );
   }
@@ -963,9 +964,9 @@ class _PinPad extends StatelessWidget {
       ),
       child: Text(
         'Forgot PIN?',
-        style: context.regularStyle(13).copyWith(
-          color: authTextMuted(context, 0.55),
-        ),
+        style: context
+            .regularStyle(13)
+            .copyWith(color: authTextMuted(context, 0.55)),
       ),
     );
   }
@@ -1083,7 +1084,7 @@ class _UserPickerSheet extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.vertical(
+        borderRadius: const BorderRadius.vertical(
           top: Radius.circular(AppSpacing.borderRadiusXL),
         ),
         border: Border(top: BorderSide(color: theme.dividerColor)),
@@ -1152,11 +1153,13 @@ class _UserPickerSheet extends StatelessWidget {
                               final role = ref.watch(userRoleProvider(u.id));
                               return Text(
                                 role?.name ?? 'Member',
-                                style: context.semiBoldStyle(12).copyWith(
-                                  color: role == null
-                                      ? subtextColor
-                                      : roleTagColor(role.slug),
-                                ),
+                                style: context
+                                    .semiBoldStyle(12)
+                                    .copyWith(
+                                      color: role == null
+                                          ? subtextColor
+                                          : roleTagColor(role.slug),
+                                    ),
                               );
                             },
                           ),

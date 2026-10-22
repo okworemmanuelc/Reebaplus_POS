@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/core/settings/settings_screen.dart'
+    show kSettingsMaxContentWidth;
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -221,33 +225,52 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
     }
   }
 
+  /// Height (base dp, at text scale 1) the one-column layout needs.
+  static const double _oneColumnHeight = 760;
+
+  /// Narrowest body that can hold two columns.
+  static const double _twoColumnMinWidth = 560;
+
   @override
   Widget build(BuildContext context) {
-    final pad = context.isShortViewport
-        ? const EdgeInsets.symmetric(horizontal: 16, vertical: 8)
-        : context.rPaddingSymmetric(horizontal: 32, vertical: 24);
-
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: BrandedAuthBackground(
-        child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: pad,
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 500),
-                child: _saving
-                    ? _buildSavingState(Theme.of(context).colorScheme.primary)
-                    : _buildInputState(Theme.of(context).colorScheme.primary),
+      // The body is measured AFTER the safe-area insets: one column when it
+      // fits, two (steps and title left, keypad right) only when the height is
+      // short and the width can hold them, e.g. a phone sideways.
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final pad = MediaQuery.paddingOf(context);
+          final availH = constraints.maxHeight - pad.top - pad.bottom;
+          final availW = constraints.maxWidth - pad.left - pad.right;
+          final scale = MediaQuery.textScalerOf(context).scale(1.0);
+          final need = _oneColumnHeight * (scale > 1 ? scale : 1.0);
+          final twoColumn = availW >= _twoColumnMinWidth && availH < need;
+          return BrandedAuthBackground(
+            maxWidth: twoColumn ? kSettingsMaxContentWidth : 480.0,
+            child: SafeArea(
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: twoColumn
+                      ? context.rPaddingSymmetric(horizontal: 16, vertical: 8)
+                      : context.rPaddingSymmetric(horizontal: 32, vertical: 24),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 500),
+                    child: _saving
+                        ? _buildSavingState()
+                        : _buildInputState(twoColumn),
+                  ),
+                ),
               ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
 
-  Widget _buildSavingState(Color primary) {
+  Widget _buildSavingState() {
+    final primary = Theme.of(context).colorScheme.primary;
     final textColor = authTextPrimary(context);
 
     return Column(
@@ -266,19 +289,14 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
         SizedBox(height: context.getRSize(24)),
         Text(
           'PIN Setup Complete',
-          style: TextStyle(
-            fontSize: context.getRFontSize(22),
-            fontWeight: FontWeight.w700,
-            color: textColor,
-          ),
+          style: context.boldStyle(22).copyWith(color: textColor),
         ),
         SizedBox(height: context.getRSize(8)),
         Text(
           'Securing your account...',
-          style: TextStyle(
-            fontSize: context.getRFontSize(14),
-            color: textColor.withValues(alpha: 0.6),
-          ),
+          style: context
+              .regularStyle(14)
+              .copyWith(color: authTextMuted(context, 0.6)),
         ),
       ],
     );
@@ -286,214 +304,168 @@ class _CreatePinScreenState extends ConsumerState<CreatePinScreen> {
 
   bool get _isOnboarding => widget.isNewBusinessSetup;
 
-  Widget _buildLandscapeInputState(Color primary, Color textColor) {
-    return Row(
-      key: const ValueKey('input_landscape'),
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        // Left column
-        Expanded(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              if (_isOnboarding)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Text(
-                    'Step 6 of 7: PIN',
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(12),
-                      fontWeight: FontWeight.w600,
-                      color: primary,
-                    ),
-                  ),
-                ),
-              Text(
-                _confirming ? 'Confirm your PIN' : 'Create a PIN',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: context.getRFontSize(20),
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                _confirming
-                    ? 'Re-enter the same PIN to confirm'
-                    : 'Choose a 6-digit PIN for quick login',
-                style: TextStyle(
-                  fontSize: context.getRFontSize(12),
-                  color: textColor.withValues(alpha: 0.6),
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
-              ShakeWidget(
-                key: _shakeKey,
-                child: PinDots(filled: _pin.length),
-              ),
-              SizedBox(
-                height: 20,
-                child: _errorMessage != null
-                    ? Center(
-                        child: Text(
-                          _errorMessage!,
-                          style: TextStyle(
-                            color: const Color(0xFFFF6B6B),
-                            fontSize: context.getRFontSize(12),
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      )
-                    : null,
-              ),
-              if (_confirming)
-                TextButton(
-                  onPressed: () => setState(() {
-                    _pin = '';
-                    _firstPin = '';
-                    _confirming = false;
-                    _errorMessage = null;
-                  }),
-                  style: TextButton.styleFrom(
-                    minimumSize: const Size(48, kMinInteractiveDimension),
-                  ),
-                  child: Text(
-                    '← Back to create PIN',
-                    style: TextStyle(
-                      color: textColor.withValues(alpha: 0.65),
-                      fontSize: context.getRFontSize(12),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 12),
-        // Right column: Keypad
-        PinKeypad(onDigit: _onDigit, onBackspace: _onBackspace),
-      ],
+  void _backToCreate() => setState(() {
+    _pin = '';
+    _firstPin = '';
+    _confirming = false;
+    _errorMessage = null;
+  });
+
+  Widget _stepIndicator() => const OnboardingStepIndicator(
+    currentStep: 6,
+    totalSteps: 7,
+    stepLabels: OnboardingStepIndicator.pathALabels,
+  );
+
+  Widget _title() => Text(
+    _confirming ? 'Confirm your PIN' : 'Create a PIN',
+    textAlign: TextAlign.center,
+    style: authTitleStyle(context),
+  );
+
+  Widget _welcome() => Text(
+    'Welcome, ${widget.user?.name ?? ref.read(onboardingDraftProvider)?.ownerName ?? "there"}!',
+    textAlign: TextAlign.center,
+    style: context.mediumStyle(15).copyWith(color: authTextMuted(context, 0.8)),
+  );
+
+  Widget _subtitle() => Text(
+    _confirming
+        ? 'Re-enter the same PIN to confirm'
+        : 'Choose a 6-digit PIN for quick login',
+    style: context
+        .regularStyle(13)
+        .copyWith(color: authTextMuted(context, 0.6)),
+    textAlign: TextAlign.center,
+  );
+
+  /// Reserves its height so the layout doesn't jump between phases.
+  Widget _reassurance() => SizedBox(
+    height: context.getRSize(20),
+    child: Opacity(
+      opacity: _confirming ? 0.0 : 1.0,
+      child: Text(
+        'You\'ll use this PIN every time you log in',
+        style: context
+            .regularStyle(12)
+            .copyWith(
+              color: _errorMessage != null
+                  ? Colors.transparent
+                  : authTextMuted(context, 0.4),
+              fontStyle: FontStyle.italic,
+            ),
+        textAlign: TextAlign.center,
+      ),
+    ),
+  );
+
+  Widget _dots() => ShakeWidget(
+    key: _shakeKey,
+    child: PinDots(filled: _pin.length),
+  );
+
+  Widget _error() {
+    final f =
+        Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light;
+    return SizedBox(
+      height: context.getRSize(20),
+      child: _errorMessage != null
+          ? Text(
+              _errorMessage!,
+              style: context.regularStyle(13).copyWith(color: f.danger),
+              textAlign: TextAlign.center,
+            )
+          : null,
     );
   }
 
-  Widget _buildInputState(Color primary) {
-    final textColor = authTextPrimary(context);
+  Widget _keypad() => Center(
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 280),
+      child: PinKeypad(onDigit: _onDigit, onBackspace: _onBackspace),
+    ),
+  );
 
-    if (context.isShortViewport) {
-      return _buildLandscapeInputState(primary, textColor);
+  Widget _backLink() => Visibility(
+    visible: _confirming,
+    maintainSize: true,
+    maintainAnimation: true,
+    maintainState: true,
+    child: TextButton(
+      onPressed: _backToCreate,
+      style: TextButton.styleFrom(
+        minimumSize: const Size(48, kMinInteractiveDimension),
+      ),
+      child: Text(
+        '← Back to create PIN',
+        style: context
+            .regularStyle(13)
+            .copyWith(color: authTextMuted(context, 0.55)),
+      ),
+    ),
+  );
+
+  Widget _buildInputState(bool twoColumn) {
+    // One key for both layouts so a rotation doesn't cross-fade two copies of
+    // the shake widget (they share a GlobalKey).
+    if (twoColumn) {
+      return Row(
+        key: const ValueKey('input'),
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Left: where you are and what to do.
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_isOnboarding) ...[
+                  _stepIndicator(),
+                  SizedBox(height: context.getRSize(12)),
+                ],
+                _title(),
+                SizedBox(height: context.getRSize(4)),
+                _welcome(),
+                SizedBox(height: context.getRSize(4)),
+                _subtitle(),
+                SizedBox(height: context.getRSize(12)),
+                _dots(),
+                SizedBox(height: context.getRSize(8)),
+                _error(),
+                _backLink(),
+              ],
+            ),
+          ),
+          SizedBox(width: context.getRSize(16)),
+          // Right: the keypad.
+          Expanded(child: _keypad()),
+        ],
+      );
     }
 
     return Column(
       key: const ValueKey('input'),
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        if (_isOnboarding)
-          const OnboardingStepIndicator(
-            currentStep: 6,
-            totalSteps: 7,
-            stepLabels: OnboardingStepIndicator.pathALabels,
-          ),
-        if (_isOnboarding) SizedBox(height: context.getRSize(16)),
-        // Logo
+        if (_isOnboarding) ...[
+          _stepIndicator(),
+          SizedBox(height: context.getRSize(16)),
+        ],
         ReebaplusLogo(height: context.getRSize(60)),
         SizedBox(height: context.getRSize(12)),
-
-        Text(
-          _confirming ? 'Confirm your PIN' : 'Create a PIN',
-          textAlign: TextAlign.center,
-          style: authTitleStyle(context),
-        ),
+        _title(),
         SizedBox(height: context.getRSize(6)),
-        Text(
-          'Welcome, ${widget.user?.name ?? ref.read(onboardingDraftProvider)?.ownerName ?? "there"}!',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: context.getRFontSize(15),
-            color: textColor.withValues(alpha: 0.8),
-            fontWeight: FontWeight.w500,
-          ),
-        ),
+        _welcome(),
         SizedBox(height: context.getRSize(4)),
-        Text(
-          _confirming
-              ? 'Re-enter the same PIN to confirm'
-              : 'Choose a 6-digit PIN for quick login',
-          style: TextStyle(
-            fontSize: context.getRFontSize(13),
-            color: textColor.withValues(alpha: 0.6),
-          ),
-          textAlign: TextAlign.center,
-        ),
-        SizedBox(
-          height: context.getRSize(20), // Exact height for the line + spacing
-          child: Opacity(
-            opacity: _confirming ? 0.0 : 1.0,
-            child: Text(
-              'You\'ll use this PIN every time you log in',
-              style: TextStyle(
-                fontSize: context.getRFontSize(12),
-                color: _errorMessage != null
-                    ? Colors.transparent
-                    : textColor.withValues(alpha: 0.4),
-                fontStyle: FontStyle.italic,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ),
+        _subtitle(),
+        _reassurance(),
         SizedBox(height: context.getRSize(24)),
-
-        // Six dots
-        ShakeWidget(
-          key: _shakeKey,
-          child: PinDots(filled: _pin.length),
-        ),
+        _dots(),
         SizedBox(height: context.getRSize(12)),
-
-        // Error feedback
-        SizedBox(
-          height: context.getRSize(20),
-          child: _errorMessage != null
-              ? Text(
-                  _errorMessage!,
-                  style: TextStyle(
-                    color: const Color(0xFFFF6B6B),
-                    fontSize: context.getRFontSize(13),
-                  ),
-                  textAlign: TextAlign.center,
-                )
-              : null,
-        ),
+        _error(),
         SizedBox(height: context.getRSize(16)),
-
-        // Numpad
-        PinKeypad(onDigit: _onDigit, onBackspace: _onBackspace),
-
-        // Phase indicator / Back button
+        _keypad(),
         SizedBox(height: context.getRSize(20)),
-        Visibility(
-          visible: _confirming,
-          maintainSize: true,
-          maintainAnimation: true,
-          maintainState: true,
-          child: TextButton(
-            onPressed: () => setState(() {
-              _pin = '';
-              _firstPin = '';
-              _confirming = false;
-              _errorMessage = null;
-            }),
-            child: Text(
-              '← Back to create PIN',
-              style: TextStyle(
-                color: textColor.withValues(alpha: 0.55),
-                fontSize: context.getRFontSize(13),
-              ),
-            ),
-          ),
-        ),
+        _backLink(),
       ],
     );
   }
