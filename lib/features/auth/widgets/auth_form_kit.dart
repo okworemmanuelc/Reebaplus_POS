@@ -110,7 +110,7 @@ class AuthFormShell extends StatelessWidget {
   }
 }
 
-/// Glass-card wrapper for a single input field.
+/// Flat-card wrapper for a single input field.
 class AuthInputCard extends StatelessWidget {
   final Widget child;
   const AuthInputCard({super.key, required this.child});
@@ -118,7 +118,7 @@ class AuthInputCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: AppDecorations.glassCard(context),
+      decoration: AppDecorations.card(context),
       padding: const EdgeInsets.all(16),
       child: child,
     );
@@ -169,6 +169,7 @@ class AutocompleteField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Autocomplete<String>(
       initialValue: TextEditingValue(text: initial),
       optionsBuilder: (value) {
@@ -196,9 +197,12 @@ class AutocompleteField extends StatelessWidget {
         return Align(
           alignment: Alignment.topLeft,
           child: Material(
-            color: Theme.of(context).colorScheme.surface,
+            color: theme.colorScheme.surface,
             elevation: 4,
-            borderRadius: BorderRadius.circular(10),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+              side: BorderSide(color: theme.dividerColor),
+            ),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxHeight: 220, maxWidth: 320),
               child: ListView(
@@ -208,14 +212,18 @@ class AutocompleteField extends StatelessWidget {
                     .map(
                       (o) => InkWell(
                         onTap: () => onSelected(o),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
-                          ),
-                          child: Text(
-                            o,
-                            style: TextStyle(color: authTextPrimary(context)),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(minHeight: 48),
+                          child: Container(
+                            alignment: Alignment.centerLeft,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            child: Text(
+                              o,
+                              style: TextStyle(color: authTextPrimary(context)),
+                            ),
                           ),
                         ),
                       ),

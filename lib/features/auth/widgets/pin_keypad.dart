@@ -55,7 +55,7 @@ class PinKey extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: AppDecorations.glassCard(context, radius: 16),
+      decoration: AppDecorations.card(context, radius: 16),
       child: Material(
         color: Colors.transparent,
         child: InkWell(

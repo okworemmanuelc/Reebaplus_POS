@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:reebaplus_pos/core/theme/colors.dart';
 
 /// The branded auth backdrop from the Welcome screen (master plan §4.3):
 /// a base surface, two soft accent glows in opposite corners (top-right +
@@ -20,7 +19,7 @@ class BrandedAuthBackground extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final base = isDark ? adBg : theme.scaffoldBackgroundColor;
+    final base = theme.scaffoldBackgroundColor;
     final accent = theme.colorScheme.primary;
     // Light mode reads almost flat at a low alpha, so the glow is stronger
     // there; dark mode keeps its subtler accent wash. Stops run the full
@@ -49,22 +48,14 @@ class BrandedAuthBackground extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(color: base),
       child: Stack(
+        fit: StackFit.expand,
         children: [
           cornerGlow(const Alignment(1.0, -1.0)), // top-right
           cornerGlow(const Alignment(-1.0, 1.0)), // bottom-left
           Positioned.fill(
             child: CustomPaint(painter: _DotGridPainter(dotColor)),
           ),
-          Center(
-            child: Container(
-              constraints: const BoxConstraints(
-                // Preserves portrait behavior (<480dp) while preventing landscape
-                // phones from stretching full-width once breakpoint definitions change.
-                maxWidth: 480.0,
-              ),
-              child: child,
-            ),
-          ),
+          child,
         ],
       ),
     );

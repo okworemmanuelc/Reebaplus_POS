@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/shared/widgets/main_layout.dart';
-import 'package:reebaplus_pos/features/auth/widgets/auth_background.dart';
+import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
 import 'package:reebaplus_pos/shared/widgets/smooth_route.dart';
 
@@ -51,9 +51,10 @@ class _SuccessDashboardEntryScreenState
     final isDark = theme.brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : Colors.black;
 
-    return AuthBackground(
-      child: SafeArea(
-        child: AuthCenteredScroll(
+    return Scaffold(
+      body: BrandedAuthBackground(
+        child: SafeArea(
+          child: AuthCenteredScroll(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             // Success Icon
@@ -107,6 +108,7 @@ class _SuccessDashboardEntryScreenState
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

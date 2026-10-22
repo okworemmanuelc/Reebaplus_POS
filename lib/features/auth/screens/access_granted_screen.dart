@@ -8,7 +8,7 @@ import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/main_layout.dart';
-import 'package:reebaplus_pos/features/auth/widgets/auth_background.dart';
+import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 
 class AccessGrantedScreen extends ConsumerStatefulWidget {
   final UserData user;
@@ -161,8 +161,9 @@ class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
         theme.extension<AppSemanticColors>()?.success ??
         const Color(0xFF30D158);
 
-    return AuthBackground(
-      child: FutureBuilder<Map<String, String>>(
+    return Scaffold(
+      body: BrandedAuthBackground(
+        child: FutureBuilder<Map<String, String>>(
         future: _futureDetails,
         builder: (context, snapshot) {
           final details =
@@ -313,8 +314,9 @@ class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
           );
         },
       ),
-    );
-  }
+    ),
+  );
+}
 
   /// Animated check-circle icon with pulsing glow ring.
   Widget _buildSuccessIcon(Color successColor, Color textColor) {

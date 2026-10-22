@@ -24,7 +24,7 @@ import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/welcome_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/otp_verification_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
-import 'package:reebaplus_pos/features/auth/widgets/auth_background.dart';
+import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/main_layout.dart';
 import 'package:reebaplus_pos/shared/widgets/auto_lock_wrapper.dart';
@@ -505,9 +505,12 @@ class _BrandedSplash extends StatelessWidget {
     // light/dark setting (matching the native launch screen and icon).
     final brightness = MediaQuery.platformBrightnessOf(context);
     final dark = brightness == Brightness.dark;
-    final fg = dark ? Colors.white : Colors.black;
+    final fallbackTheme = dark ? AppTheme.dark() : AppTheme.light();
+    final bg = fallbackTheme.scaffoldBackgroundColor;
+    final fg = fallbackTheme.colorScheme.onSurface;
+    final primary = fallbackTheme.colorScheme.primary;
     return Scaffold(
-      backgroundColor: dark ? Colors.black : Colors.white,
+      backgroundColor: bg,
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -526,7 +529,7 @@ class _BrandedSplash extends StatelessWidget {
             SizedBox(
               width: 24,
               height: 24,
-              child: CircularProgressIndicator(strokeWidth: 2.5, color: fg),
+              child: CircularProgressIndicator(strokeWidth: 2.5, color: primary),
             ),
           ],
         ),
@@ -621,59 +624,60 @@ class _SessionExpiredScreenState extends ConsumerState<_SessionExpiredScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : Colors.black;
+    final textColor = theme.colorScheme.onSurface;
     final email = widget.user.email ?? '';
 
-    return AuthBackground(
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Spacer(),
-              Icon(
-                AppIcons.lockClock,
-                size: 72,
-                color: theme.colorScheme.primary,
-              ),
-              const SizedBox(height: 20),
-              Text(
-                'Session expired',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.w700,
-                  color: textColor,
+    return Scaffold(
+      body: BrandedAuthBackground(
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Spacer(),
+                Icon(
+                  AppIcons.lockClock,
+                  size: 72,
+                  color: theme.colorScheme.primary,
                 ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                email.isEmpty
-                    ? "Your sign-in has expired. Verify your email to keep your changes syncing."
-                    : "Your sign-in has expired. We'll send a code to $email to restore your session — your PIN and local data stay intact.",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  height: 1.4,
-                  color: textColor.withValues(alpha: 0.75),
+                const SizedBox(height: 20),
+                Text(
+                  'Session expired',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.w700,
+                    color: textColor,
+                  ),
                 ),
-              ),
-              const Spacer(),
-              AppButton(
-                text: _sending ? 'Sending…' : 'Verify email',
-                onPressed: _sending ? null : _resendOtp,
-              ),
-              const SizedBox(height: 12),
-              TextButton(
-                onPressed: _sending ? null : _signOut,
-                child: Text(
-                  'Sign out instead',
-                  style: TextStyle(color: textColor.withValues(alpha: 0.65)),
+                const SizedBox(height: 12),
+                Text(
+                  email.isEmpty
+                      ? "Your sign-in has expired. Verify your email to keep your changes syncing."
+                      : "Your sign-in has expired. We'll send a code to $email to restore your session — your PIN and local data stay intact.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    height: 1.4,
+                    color: textColor.withValues(alpha: 0.75),
+                  ),
                 ),
-              ),
-            ],
+                const Spacer(),
+                AppButton(
+                  text: _sending ? 'Sending…' : 'Verify email',
+                  onPressed: _sending ? null : _resendOtp,
+                ),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: _sending ? null : _signOut,
+                  child: Text(
+                    'Sign out instead',
+                    style: TextStyle(color: textColor.withValues(alpha: 0.65)),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

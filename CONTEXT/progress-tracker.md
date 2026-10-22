@@ -7,6 +7,32 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #462 PR 1: Auth parts + welcome/coming soon + delete AuthBackground (Wave 2 D, 2026-10-22)
+Branch `feat/redesign-w2-auth`. Sub-Issue #462 PR 1 of 3.
+- **Restyle only: no logic/money/permissions/routing/wipe changes.**
+- **Auth parts restyled**:
+  - `lib/features/auth/widgets/branded_auth_background.dart`: Removed `adBg`, uses `theme.scaffoldBackgroundColor`, removed fixed 480dp width constraint.
+  - `lib/core/theme/app_decorations.dart`: Replaced hardcoded `Colors.redAccent` with `theme.colorScheme.error`.
+  - `lib/features/auth/widgets/auth_form_kit.dart`: Replaced `glassCard` with `AppDecorations.card(context)` in `AuthInputCard`, added theme border and 48dp minimum item height for `AutocompleteField`.
+  - `lib/features/auth/widgets/onboarding_step_indicator.dart`: Cleaned up to use `theme.colorScheme.onSurface`, `theme.colorScheme.onPrimary`, and `theme.dividerColor`.
+  - `lib/features/auth/widgets/pin_keypad.dart`: Replaced `glassCard` with `AppDecorations.card(context, radius: 16)`.
+- **Swapped AuthBackground callers**:
+  - `lib/features/auth/screens/biometric_setup_screen.dart`: Swapped to `Scaffold(body: BrandedAuthBackground(...))`, replaced hardcoded `Color(0xFFFF6B6B)` with `theme.colorScheme.error` and text colors with `theme.colorScheme.onSurface`.
+  - `lib/features/auth/screens/success_dashboard_entry_screen.dart`: Swapped background to `Scaffold(body: BrandedAuthBackground(...))` (D2 file: only background touched).
+  - `lib/features/auth/screens/access_granted_screen.dart`: Swapped background to `Scaffold(body: BrandedAuthBackground(...))` (D2 file: only background touched).
+  - `lib/main.dart`: Swapped `_SessionExpiredScreen` to `Scaffold(body: BrandedAuthBackground(...))` and restyled `_BrandedSplash` with `AppTheme` tokens.
+- **Deleted `AuthBackground` & Enforced Ban**:
+  - Deleted `lib/features/auth/widgets/auth_background.dart`.
+  - Updated `test/core/theme/no_backdrop_blur_ban_test.dart` to remove the exception; verified zero `BackdropFilter` or `ImageFilter.blur` in `lib/`.
+- **Restyled PR 1 screens**:
+  - `lib/features/auth/screens/coming_soon_screen.dart`: Restyled with solid surface AppBar + hairline divider and `BrandedAuthBackground`.
+  - `lib/features/auth/screens/welcome_screen.dart`: Added 480dp maxWidth constraint, updated `_SignInLink` with `minHeight: kMinInteractiveDimension`.
+- **Tests**:
+  - `test/redesign/auth_golden_test.dart`: 16 golden PNGs (`welcome_*` and `coming_soon_*` across 4 sizes × 2 themes).
+  - `test/discovery/viewport_sweep_test.dart`: Handled connectivity mock setup in `main()`.
+  - `test/core/theme/no_backdrop_blur_ban_test.dart` and `test/auth/` (139 tests passed).
+  - `flutter analyze` passed with 0 issues.
+
 ### Issue #455: Migrate raw permission checks to NamedGate & add static ban test (2026-10-20)
 Branch `feat/455-gate-permissions`, worktree `../drinkPosApp-wt-455`. PR #455.
 - Migrated all remaining raw permission checks (`currentUserPermissionsProvider.contains(...)`, `perms.contains(...)`) across `lib/` to `Gates.*` and `gateContextProvider.isReady`.
