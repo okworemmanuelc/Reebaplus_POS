@@ -195,11 +195,11 @@ class AppDecorations {
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: theme.colorScheme.error, width: 1),
+        borderSide: const BorderSide(color: Colors.redAccent, width: 1),
       ),
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: theme.colorScheme.error, width: 2),
+        borderSide: const BorderSide(color: Colors.redAccent, width: 2),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
     );

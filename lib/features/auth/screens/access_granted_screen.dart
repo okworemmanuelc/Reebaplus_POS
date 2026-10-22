@@ -164,159 +164,159 @@ class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
     return Scaffold(
       body: BrandedAuthBackground(
         child: FutureBuilder<Map<String, String>>(
-        future: _futureDetails,
-        builder: (context, snapshot) {
-          final details =
-              snapshot.data ??
-              {
-                'businessName': '...',
-                'locationName': '...',
-                'inviterName': '...',
-              };
+          future: _futureDetails,
+          builder: (context, snapshot) {
+            final details =
+                snapshot.data ??
+                {
+                  'businessName': '...',
+                  'locationName': '...',
+                  'inviterName': '...',
+                };
 
-          return SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                return SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 32,
-                  ),
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      minHeight: constraints.maxHeight - 64,
+            return SafeArea(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  return SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 32,
                     ),
-                    child: IntrinsicHeight(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          const Spacer(),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: constraints.maxHeight - 64,
+                      ),
+                      child: IntrinsicHeight(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const Spacer(),
 
-                          // ── Animated Success Icon ──
-                          _buildSuccessIcon(successColor, textColor),
-                          const SizedBox(height: 28),
+                            // ── Animated Success Icon ──
+                            _buildSuccessIcon(successColor, textColor),
+                            const SizedBox(height: 28),
 
-                          // ── Welcome Header ──
-                          SlideTransition(
-                            position: _headerSlide,
-                            child: FadeTransition(
-                              opacity: _headerOpacity,
-                              child: Column(
-                                children: [
-                                  Text(
-                                    'Access Granted!',
-                                    style: TextStyle(
-                                      fontSize: 30,
-                                      fontWeight: FontWeight.w800,
-                                      color: textColor,
-                                      letterSpacing: -0.5,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Welcome aboard, ${widget.user.name}',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      color: textColor.withValues(alpha: 0.7),
-                                      height: 1.4,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 32),
-
-                          // ── Accent Divider ──
-                          SlideTransition(
-                            position: _cardsSlide,
-                            child: FadeTransition(
-                              opacity: _cardsOpacity,
-                              child: Container(
-                                height: 2,
-                                margin: const EdgeInsets.symmetric(
-                                  horizontal: 40,
-                                ),
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      Colors.transparent,
-                                      theme.colorScheme.primary.withValues(
-                                        alpha: 0.6,
+                            // ── Welcome Header ──
+                            SlideTransition(
+                              position: _headerSlide,
+                              child: FadeTransition(
+                                opacity: _headerOpacity,
+                                child: Column(
+                                  children: [
+                                    Text(
+                                      'Access Granted!',
+                                      style: TextStyle(
+                                        fontSize: 30,
+                                        fontWeight: FontWeight.w800,
+                                        color: textColor,
+                                        letterSpacing: -0.5,
                                       ),
-                                      Colors.transparent,
-                                    ],
-                                  ),
-                                  borderRadius: BorderRadius.circular(1),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Welcome aboard, ${widget.user.name}',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        color: textColor.withValues(alpha: 0.7),
+                                        height: 1.4,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 28),
+                            const SizedBox(height: 32),
 
-                          // ── Detail Cards ──
-                          SlideTransition(
-                            position: _cardsSlide,
-                            child: FadeTransition(
-                              opacity: _cardsOpacity,
-                              child: Column(
-                                children: [
-                                  _buildDetailCard(
-                                    context,
-                                    icon: AppIcons.business,
-                                    label: 'Business',
-                                    value: details['businessName']!,
-                                    textColor: textColor,
+                            // ── Accent Divider ──
+                            SlideTransition(
+                              position: _cardsSlide,
+                              child: FadeTransition(
+                                opacity: _cardsOpacity,
+                                child: Container(
+                                  height: 2,
+                                  margin: const EdgeInsets.symmetric(
+                                    horizontal: 40,
                                   ),
-                                  const SizedBox(height: 12),
-                                  _buildDetailCard(
-                                    context,
-                                    icon: AppIcons.location,
-                                    label: 'Location',
-                                    value: details['locationName']!,
-                                    textColor: textColor,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-
-                          const Spacer(),
-                          const SizedBox(height: 28),
-
-                          // ── Enter App Button ──
-                          SlideTransition(
-                            position: _buttonSlide,
-                            child: FadeTransition(
-                              opacity: _buttonOpacity,
-                              child: AppButton(
-                                text: 'Enter App',
-                                onPressed: () {
-                                  Navigator.of(context).pushAndRemoveUntil(
-                                    MaterialPageRoute(
-                                      builder: (_) => const MainLayout(),
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        Colors.transparent,
+                                        theme.colorScheme.primary.withValues(
+                                          alpha: 0.6,
+                                        ),
+                                        Colors.transparent,
+                                      ],
                                     ),
-                                    (route) => false,
-                                  );
-                                },
+                                    borderRadius: BorderRadius.circular(1),
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 28),
+
+                            // ── Detail Cards ──
+                            SlideTransition(
+                              position: _cardsSlide,
+                              child: FadeTransition(
+                                opacity: _cardsOpacity,
+                                child: Column(
+                                  children: [
+                                    _buildDetailCard(
+                                      context,
+                                      icon: AppIcons.business,
+                                      label: 'Business',
+                                      value: details['businessName']!,
+                                      textColor: textColor,
+                                    ),
+                                    const SizedBox(height: 12),
+                                    _buildDetailCard(
+                                      context,
+                                      icon: AppIcons.location,
+                                      label: 'Location',
+                                      value: details['locationName']!,
+                                      textColor: textColor,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+
+                            const Spacer(),
+                            const SizedBox(height: 28),
+
+                            // ── Enter App Button ──
+                            SlideTransition(
+                              position: _buttonSlide,
+                              child: FadeTransition(
+                                opacity: _buttonOpacity,
+                                child: AppButton(
+                                  text: 'Enter App',
+                                  onPressed: () {
+                                    Navigator.of(context).pushAndRemoveUntil(
+                                      MaterialPageRoute(
+                                        builder: (_) => const MainLayout(),
+                                      ),
+                                      (route) => false,
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                );
-              },
-            ),
-          );
-        },
+                  );
+                },
+              ),
+            );
+          },
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   /// Animated check-circle icon with pulsing glow ring.
   Widget _buildSuccessIcon(Color successColor, Color textColor) {
@@ -390,56 +390,56 @@ class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
             color: isDark
-                ? Colors.white.withValues(alpha: 0.08)
-                : Colors.black.withValues(alpha: 0.04),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.15)
-                  : Colors.black.withValues(alpha: 0.08),
-            ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, color: theme.colorScheme.primary, size: 22),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: textColor.withValues(alpha: 0.5),
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      value,
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                        color: textColor,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+                ? Colors.white.withValues(alpha: 0.15)
+                : Colors.black.withValues(alpha: 0.08),
           ),
         ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: theme.colorScheme.primary, size: 22),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: textColor.withValues(alpha: 0.5),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    value,
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                      color: textColor,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

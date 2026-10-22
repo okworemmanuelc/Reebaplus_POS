@@ -55,60 +55,60 @@ class _SuccessDashboardEntryScreenState
       body: BrandedAuthBackground(
         child: SafeArea(
           child: AuthCenteredScroll(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            // Success Icon
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.greenAccent.withValues(alpha: 0.15),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                AppIcons.checkCircle,
-                color: Colors.greenAccent,
-                size: 80,
-              ),
-            ),
-            const SizedBox(height: 32),
-
-            // Success Text
-            Text(
-              'Your business is ready!',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.w700,
-                color: textColor,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 40),
-              child: Text(
-                'Preparing your dashboard...',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: textColor.withValues(alpha: 0.7),
-                  height: 1.4,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Success Icon
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.greenAccent.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  AppIcons.checkCircle,
+                  color: Colors.greenAccent,
+                  size: 80,
                 ),
               ),
-            ),
-            const SizedBox(height: 48),
+              const SizedBox(height: 32),
 
-            SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.5,
-                color: theme.colorScheme.primary,
+              // Success Text
+              Text(
+                'Your business is ready!',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w700,
+                  color: textColor,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 40),
+                child: Text(
+                  'Preparing your dashboard...',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: textColor.withValues(alpha: 0.7),
+                    height: 1.4,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 48),
+
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 }

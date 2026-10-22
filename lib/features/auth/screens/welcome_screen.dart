@@ -58,55 +58,54 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 end: Offset.zero,
               ).animate(_fade),
               child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 480),
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(28, 32, 28, 28),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const _WelcomeLogo(),
-                        const SizedBox(height: 20),
-                        Text(
-                          'Reebaplus',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 30,
-                            fontWeight: FontWeight.w800,
-                            color: authTextPrimary(context),
-                            letterSpacing: 0.5,
-                          ),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(28, 32, 28, 28),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const _WelcomeLogo(),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Reebaplus',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 30,
+                          fontWeight: FontWeight.w800,
+                          color: authTextPrimary(context),
+                          letterSpacing: 0.5,
                         ),
-                        const SizedBox(height: 10),
-                        Text(
-                          'Sales, stock, and staff — all in your pocket.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 15,
-                            height: 1.4,
-                            color: authTextPrimary(
-                              context,
-                            ).withValues(alpha: 0.65),
-                          ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'Sales, stock, and staff — all in your pocket.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 15,
+                          height: 1.4,
+                          color: authTextPrimary(
+                            context,
+                          ).withValues(alpha: 0.65),
                         ),
-                        const SizedBox(height: 44),
-                        AppButton(
-                          text: 'Create a new business',
-                          onPressed: () => _push(const EmailEntryScreen(createBusinessIntent: true)),
+                      ),
+                      const SizedBox(height: 44),
+                      AppButton(
+                        text: 'Create a new business',
+                        onPressed: () => _push(
+                          const EmailEntryScreen(createBusinessIntent: true),
                         ),
-                        const SizedBox(height: 14),
-                        AppButton(
-                          text: 'Join with invite code',
-                          variant: AppButtonVariant.outline,
-                          onPressed: () => _push(const StaffSignUpScreen()),
-                        ),
-                        const SizedBox(height: 22),
-                        _SignInLink(onTap: () => _push(const EmailEntryScreen())),
-                        const SizedBox(height: 36),
-                        const _SmallPrint(),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(height: 14),
+                      AppButton(
+                        text: 'Join with invite code',
+                        variant: AppButtonVariant.outline,
+                        onPressed: () => _push(const StaffSignUpScreen()),
+                      ),
+                      const SizedBox(height: 22),
+                      _SignInLink(onTap: () => _push(const EmailEntryScreen())),
+                      const SizedBox(height: 36),
+                      const _SmallPrint(),
+                    ],
                   ),
                 ),
               ),

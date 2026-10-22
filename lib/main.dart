@@ -258,7 +258,7 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
             final lostUser = _auth.currentUser;
             CrashReporter.record(
               'auth session lost (event=${state.event.name}, '
-                  'hadLocalUser=${lostUser != null})',
+              'hadLocalUser=${lostUser != null})',
               StackTrace.current,
               context: 'auth.session_lost',
               businessId: lostUser?.businessId,
@@ -505,12 +505,9 @@ class _BrandedSplash extends StatelessWidget {
     // light/dark setting (matching the native launch screen and icon).
     final brightness = MediaQuery.platformBrightnessOf(context);
     final dark = brightness == Brightness.dark;
-    final fallbackTheme = dark ? AppTheme.dark() : AppTheme.light();
-    final bg = fallbackTheme.scaffoldBackgroundColor;
-    final fg = fallbackTheme.colorScheme.onSurface;
-    final primary = fallbackTheme.colorScheme.primary;
+    final fg = dark ? Colors.white : Colors.black;
     return Scaffold(
-      backgroundColor: bg,
+      backgroundColor: dark ? Colors.black : Colors.white,
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -529,7 +526,7 @@ class _BrandedSplash extends StatelessWidget {
             SizedBox(
               width: 24,
               height: 24,
-              child: CircularProgressIndicator(strokeWidth: 2.5, color: primary),
+              child: CircularProgressIndicator(strokeWidth: 2.5, color: fg),
             ),
           ],
         ),
@@ -624,7 +621,8 @@ class _SessionExpiredScreenState extends ConsumerState<_SessionExpiredScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final textColor = theme.colorScheme.onSurface;
+    final isDark = theme.brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : Colors.black;
     final email = widget.user.email ?? '';
 
     return Scaffold(

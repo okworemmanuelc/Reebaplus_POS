@@ -107,7 +107,8 @@ class _BiometricSetupScreenState extends ConsumerState<BiometricSetupScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final textColor = theme.colorScheme.onSurface;
+    final isDark = theme.brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : Colors.black;
     final primary = theme.colorScheme.primary;
 
     return Scaffold(
@@ -151,8 +152,8 @@ class _BiometricSetupScreenState extends ConsumerState<BiometricSetupScreen> {
                   padding: const EdgeInsets.only(bottom: 24),
                   child: Text(
                     _errorMessage!,
-                    style: TextStyle(
-                      color: theme.colorScheme.error,
+                    style: const TextStyle(
+                      color: Color(0xFFFF6B6B),
                       fontSize: 13,
                     ),
                     textAlign: TextAlign.center,
