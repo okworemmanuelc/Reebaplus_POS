@@ -158,6 +158,7 @@ void main() {
           (t) => !t.comingSoon,
         );
         await tester.tap(find.text(first.label));
+        await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
         expect(tester.takeException(), isNull);
         await expectLater(

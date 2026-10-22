@@ -1403,7 +1403,12 @@ class _TypeCard extends StatelessWidget {
           ),
           padding: EdgeInsets.all(context.getRSize(16)),
           decoration: base.copyWith(
-            color: selected ? primary.withValues(alpha: 0.12) : base.color,
+            color: selected
+                ? Color.alphaBlend(
+                    primary.withValues(alpha: 0.12),
+                    Theme.of(context).colorScheme.surface,
+                  )
+                : base.color,
             border: Border.all(
               color: selected ? primary : Theme.of(context).dividerColor,
               width: selected ? 2 : 1,
