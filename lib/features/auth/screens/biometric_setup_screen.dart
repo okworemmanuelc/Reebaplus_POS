@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:reebaplus_pos/core/theme/app_decorations.dart'
     show authTextPrimary, authTextMuted;
+import 'package:reebaplus_pos/core/settings/settings_screen.dart'
+    show kSettingsMaxContentWidth;
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
@@ -109,6 +111,12 @@ class _BiometricSetupScreenState extends ConsumerState<BiometricSetupScreen> {
     // Navigator key regeneration in main.dart handles routing automatically.
   }
 
+  /// Height (base dp, at text scale 1) the one-column layout needs.
+  static const double _oneColumnHeight = 640;
+
+  /// Narrowest body that can hold two columns.
+  static const double _twoColumnMinWidth = 560;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -116,66 +124,110 @@ class _BiometricSetupScreenState extends ConsumerState<BiometricSetupScreen> {
     final primary = theme.colorScheme.primary;
     final f = theme.extension<AppFixedColors>() ?? AppFixedColors.light;
 
-    return Scaffold(
-      body: BrandedAuthBackground(
-        child: SafeArea(
-          child: AuthCenteredScroll(
-            padding: context.rPaddingSymmetric(horizontal: 28, vertical: 24),
-            children: [
-              if (widget.isNewBusinessSetup) ...[
-                const OnboardingStepIndicator(
-                  currentStep: 7,
-                  totalSteps: 7,
-                  stepLabels: OnboardingStepIndicator.pathALabels,
-                ),
-                SizedBox(height: context.getRSize(16)),
-              ],
-              Icon(
-                AppIcons.biometrics,
-                size: context.getRSize(80),
-                color: primary,
-              ),
-              SizedBox(height: context.getRSize(24)),
-              Text(
-                'Speed up your login',
-                style: context.boldStyle(24).copyWith(color: textColor),
-                textAlign: TextAlign.center,
-              ),
-              SizedBox(height: context.getRSize(12)),
-              Text(
-                'Use Face ID or Fingerprint to log into Reebaplus POS instantly and securely instead of typing your PIN every time.',
-                style: context
-                    .regularStyle(14)
-                    .copyWith(color: authTextMuted(context, 0.7), height: 1.5),
-                textAlign: TextAlign.center,
-              ),
-              SizedBox(height: context.getRSize(40)),
-
-              if (_errorMessage != null)
-                Padding(
-                  padding: EdgeInsets.only(bottom: context.getRSize(24)),
-                  child: Text(
-                    _errorMessage!,
-                    style: context.regularStyle(13).copyWith(color: f.danger),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-
-              AppButton(
-                text: 'Enable Biometrics',
-                isLoading: _loading,
-                onPressed: _enableBiometrics,
-              ),
-              SizedBox(height: context.getRSize(16)),
-
-              AppButton(
-                text: 'Skip for now',
-                variant: AppButtonVariant.ghost,
-                onPressed: _loading ? null : _skip,
-              ),
-            ],
+    final steps = <Widget>[
+      if (widget.isNewBusinessSetup) ...[
+        const OnboardingStepIndicator(
+          currentStep: 7,
+          totalSteps: 7,
+          stepLabels: OnboardingStepIndicator.pathALabels,
+        ),
+        SizedBox(height: context.getRSize(16)),
+      ],
+    ];
+    final intro = <Widget>[
+      Icon(AppIcons.biometrics, size: context.getRSize(80), color: primary),
+      SizedBox(height: context.getRSize(24)),
+      Text(
+        'Speed up your login',
+        style: context.boldStyle(24).copyWith(color: textColor),
+        textAlign: TextAlign.center,
+      ),
+      SizedBox(height: context.getRSize(12)),
+      Text(
+        'Use Face ID or Fingerprint to log into Reebaplus POS instantly and securely instead of typing your PIN every time.',
+        style: context
+            .regularStyle(14)
+            .copyWith(color: authTextMuted(context, 0.7), height: 1.5),
+        textAlign: TextAlign.center,
+      ),
+    ];
+    final actions = <Widget>[
+      if (_errorMessage != null)
+        Padding(
+          padding: EdgeInsets.only(bottom: context.getRSize(24)),
+          child: Text(
+            _errorMessage!,
+            style: context.regularStyle(13).copyWith(color: f.danger),
+            textAlign: TextAlign.center,
           ),
         ),
+      AppButton(
+        text: 'Enable Biometrics',
+        isLoading: _loading,
+        onPressed: _enableBiometrics,
+      ),
+      SizedBox(height: context.getRSize(16)),
+      AppButton(
+        text: 'Skip for now',
+        variant: AppButtonVariant.ghost,
+        onPressed: _loading ? null : _skip,
+      ),
+    ];
+
+    return Scaffold(
+      // The body is measured AFTER the safe-area insets: one column when it
+      // fits, two (message left, buttons right) only when the height is short
+      // and the width can hold them, e.g. a phone sideways.
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final pad = MediaQuery.paddingOf(context);
+          final availH = constraints.maxHeight - pad.top - pad.bottom;
+          final availW = constraints.maxWidth - pad.left - pad.right;
+          final scale = MediaQuery.textScalerOf(context).scale(1.0);
+          final need = _oneColumnHeight * (scale > 1 ? scale : 1.0);
+          final twoColumn = availW >= _twoColumnMinWidth && availH < need;
+
+          return BrandedAuthBackground(
+            maxWidth: twoColumn ? kSettingsMaxContentWidth : 480.0,
+            child: SafeArea(
+              child: twoColumn
+                  ? Row(
+                      children: [
+                        Expanded(
+                          child: AuthCenteredScroll(
+                            padding: context.rPaddingSymmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            children: [...steps, ...intro],
+                          ),
+                        ),
+                        Expanded(
+                          child: AuthCenteredScroll(
+                            padding: context.rPaddingSymmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            children: actions,
+                          ),
+                        ),
+                      ],
+                    )
+                  : AuthCenteredScroll(
+                      padding: context.rPaddingSymmetric(
+                        horizontal: 28,
+                        vertical: 24,
+                      ),
+                      children: [
+                        ...steps,
+                        ...intro,
+                        SizedBox(height: context.getRSize(40)),
+                        ...actions,
+                      ],
+                    ),
+            ),
+          );
+        },
       ),
     );
   }

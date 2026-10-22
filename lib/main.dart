@@ -683,6 +683,11 @@ class _SessionExpiredScreenState extends ConsumerState<_SessionExpiredScreen> {
   }
 }
 
+/// Test seam: lets widget tests mount the private [_SessionExpiredScreen].
+@visibleForTesting
+Widget buildSessionExpiredScreenForTest(UserData user) =>
+    _SessionExpiredScreen(user: user);
+
 // ---------------------------------------------------------------------------
 // Home routing widget — extracted from _ReebaplusPosAppState so all
 // ref.watch calls live at the top of a dedicated build() (code-standards.md)

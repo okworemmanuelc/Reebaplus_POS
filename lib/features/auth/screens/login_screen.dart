@@ -1008,12 +1008,12 @@ class _PinPad extends StatelessWidget {
         Expanded(
           child: Center(
             child: SingleChildScrollView(
-              padding: context.rPaddingSymmetric(horizontal: 12, vertical: 8),
+              padding: context.rPaddingSymmetric(horizontal: 12, vertical: 4),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _hint(context),
-                  SizedBox(height: context.getRSize(8)),
+                  SizedBox(height: context.getRSize(6)),
                   _dots(),
                   _warning(context),
                   _keypad(),
