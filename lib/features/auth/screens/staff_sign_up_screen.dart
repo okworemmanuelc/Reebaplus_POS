@@ -13,12 +13,18 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
 import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 import 'package:reebaplus_pos/features/auth/widgets/otp_input.dart';
 import 'package:reebaplus_pos/features/auth/widgets/pin_keypad.dart';
 import 'package:reebaplus_pos/features/auth/widgets/shake_widget.dart';
+import 'package:reebaplus_pos/features/auth/widgets/sign_up_step_dots.dart';
+import 'package:reebaplus_pos/core/settings/settings_screen.dart'
+    show kSettingsMaxContentWidth;
+import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 
@@ -822,62 +828,119 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      resizeToAvoidBottomInset: false,
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: BrandedAuthBackground(
-        child: SafeArea(
-          child: Column(
-            children: [
-              _buildTopBar(),
-              Expanded(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
-                  child: KeyedSubtree(
-                    key: ValueKey(_step),
-                    child: _buildStepBody(),
+    // The PIN steps go two-column when one column won't fit the measured
+    // height (a phone sideways); everything else scrolls inside the 480 column.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final mq = MediaQuery.of(context);
+        final bodyHeight = constraints.maxHeight - mq.padding.vertical;
+        final isPinStep = _step == 6 || _step == 7;
+        final twoColumn =
+            isPinStep &&
+            !_committing &&
+            bodyHeight < _pinOneColumnHeight &&
+            constraints.maxWidth - mq.padding.horizontal >= _pinTwoColumnWidth;
+        return Scaffold(
+          resizeToAvoidBottomInset: false,
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+          body: BrandedAuthBackground(
+            maxWidth: twoColumn ? kSettingsMaxContentWidth : 480.0,
+            child: SafeArea(
+              child: Column(
+                children: [
+                  _buildTopBar(compact: bodyHeight < _compactBarHeight),
+                  Expanded(
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 300),
+                      child: KeyedSubtree(
+                        key: ValueKey(_step),
+                        child: _buildStepBody(twoColumn: twoColumn),
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildTopBar() {
+  /// Measured body height under which the top bar drops the dots for a
+  /// one-line "Step n of N" label.
+  static const double _compactBarHeight = 520;
+
+  /// Measured body height under which the PIN steps need two columns.
+  static const double _pinOneColumnHeight = 600;
+
+  /// Measured body width a two-column PIN step needs.
+  static const double _pinTwoColumnWidth = 560;
+
+  Widget _buildTopBar({required bool compact}) {
     final showBack = _step != 8 && !_committing;
+    final back = Opacity(
+      opacity: showBack ? 1 : 0,
+      child: IconButton(
+        constraints: const BoxConstraints(
+          minWidth: kMinInteractiveDimension,
+          minHeight: kMinInteractiveDimension,
+        ),
+        icon: Icon(
+          AppIcons.arrowBackIos,
+          color: authTextPrimary(context),
+          size: context.getRSize(20),
+        ),
+        onPressed: showBack ? _back : null,
+      ),
+    );
+    if (compact) {
+      return Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: context.getRSize(12),
+          vertical: context.getRSize(4),
+        ),
+        child: SizedBox(
+          height: kMinInteractiveDimension,
+          child: Row(
+            children: [
+              back,
+              Expanded(
+                child: Text(
+                  'Step ${_step + 1} of $_totalSteps',
+                  textAlign: TextAlign.center,
+                  style: context
+                      .semiBoldStyle(13)
+                      .copyWith(color: authTextMuted(context, 0.7)),
+                ),
+              ),
+              const SizedBox(width: kMinInteractiveDimension),
+            ],
+          ),
+        ),
+      );
+    }
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      padding: EdgeInsets.fromLTRB(
+        context.getRSize(12),
+        context.getRSize(8),
+        context.getRSize(12),
+        context.getRSize(4),
+      ),
       child: Column(
         children: [
           SizedBox(
-            height: 40,
-            child: Row(
-              children: [
-                Opacity(
-                  opacity: showBack ? 1 : 0,
-                  child: IconButton(
-                    icon: Icon(
-                      AppIcons.arrowBackIos,
-                      color: authTextPrimary(context),
-                      size: 20,
-                    ),
-                    onPressed: showBack ? _back : null,
-                  ),
-                ),
-              ],
-            ),
+            height: kMinInteractiveDimension,
+            child: Row(children: [back]),
           ),
-          _StepDots(current: _step, total: _totalSteps),
-          const SizedBox(height: 8),
+          SignUpStepDots(current: _step, total: _totalSteps),
+          SizedBox(height: context.getRSize(8)),
         ],
       ),
     );
   }
 
-  Widget _buildStepBody() {
+  Widget _buildStepBody({required bool twoColumn}) {
     switch (_step) {
       case 0:
         return _buildCodeStep();
@@ -893,7 +956,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
         return _buildAddressStep();
       case 6:
       case 7:
-        return _buildPinStep();
+        return _buildPinStep(twoColumn: twoColumn);
       case 8:
         return _buildSuccessStep();
       default:
@@ -916,11 +979,9 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
             autofocus: true,
             maxLength: 8,
             onSubmitted: (_) => _lookingUp ? null : _submitCode(),
-            style: TextStyle(
-              color: authTextPrimary(context),
-              letterSpacing: 4,
-              fontWeight: FontWeight.w700,
-            ),
+            style: context
+                .boldStyle(16)
+                .copyWith(color: authTextPrimary(context), letterSpacing: 4),
             decoration: AppDecorations.authInputDecoration(
               context,
               label: 'Invite code',
@@ -928,7 +989,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
             ).copyWith(counterText: ''),
           ),
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: context.getRSize(4)),
         AuthErrorText(_codeError),
         const SizedBox(height: 12),
         AppButton(
@@ -954,7 +1015,9 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
             controller: _emailDisplayCtrl,
             readOnly: true,
             enabled: false,
-            style: TextStyle(color: authTextPrimary(context)),
+            style: context
+                .mediumStyle(16)
+                .copyWith(color: authTextPrimary(context)),
             decoration: AppDecorations.authInputDecoration(
               context,
               label: 'Email address',
@@ -962,15 +1025,14 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
             ),
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: context.getRSize(8)),
         Text(
           "We'll send a code to ${_draft.email}",
-          style: TextStyle(
-            fontSize: 13,
-            color: authTextPrimary(context).withValues(alpha: 0.6),
-          ),
+          style: context
+              .regularStyle(13)
+              .copyWith(color: authTextMuted(context, 0.6)),
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: context.getRSize(16)),
         AppButton(
           text: 'Send code',
           isLoading: _sendingOtp,
@@ -983,50 +1045,43 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
   Widget _buildOtpStep() {
     return AuthCenteredScroll(
       children: [
-        Text(
-          'Check your email',
-          style: TextStyle(
-            fontSize: 26,
-            fontWeight: FontWeight.w800,
-            color: authTextPrimary(context),
-          ),
-        ),
-        const SizedBox(height: 8),
+        Text('Check your email', style: authTitleStyle(context)),
+        SizedBox(height: context.getRSize(8)),
         Text(
           'Enter the 6-digit code sent to\n${_draft.email}',
-          style: TextStyle(
-            fontSize: 15,
-            height: 1.4,
-            color: authTextPrimary(context).withValues(alpha: 0.65),
-          ),
+          style: authSubtitleStyle(context),
         ),
-        const SizedBox(height: 28),
-        ShakeWidget(
-          key: _otpShakeKey,
-          child: OtpBoxRow(
-            controller: _otpCtrl,
-            hasError: _otpError != null,
-            ignorePointers: _otpLockedOut,
-            readOnly: _otpVerifying,
-            textColor: authTextPrimary(context),
-            onSubmit: () {
-              if (_otpCtrl.text.trim().length == 6) _verifyOtp();
-            },
-          ),
-        ),
-        const SizedBox(height: 12),
+        SizedBox(height: context.getRSize(28)),
         Center(
-          child: Text(
-            'Code expires in 5 minutes',
-            style: TextStyle(
-              color: authTextPrimary(context).withValues(alpha: 0.5),
-              fontSize: 13,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 360),
+            child: ShakeWidget(
+              key: _otpShakeKey,
+              child: OtpBoxRow(
+                controller: _otpCtrl,
+                hasError: _otpError != null,
+                ignorePointers: _otpLockedOut,
+                readOnly: _otpVerifying,
+                textColor: authTextPrimary(context),
+                onSubmit: () {
+                  if (_otpCtrl.text.trim().length == 6) _verifyOtp();
+                },
+              ),
             ),
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: context.getRSize(12)),
+        Center(
+          child: Text(
+            'Code expires in 5 minutes',
+            style: context
+                .regularStyle(13)
+                .copyWith(color: authTextMuted(context, 0.5)),
+          ),
+        ),
+        SizedBox(height: context.getRSize(8)),
         Center(child: AuthErrorText(_otpError)),
-        const SizedBox(height: 8),
+        SizedBox(height: context.getRSize(8)),
         if (_otpVerified)
           const AppButton(
             text: 'Verified  ✓',
@@ -1041,19 +1096,26 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
                 ? _verifyOtp
                 : null,
           ),
-        const SizedBox(height: 16),
+        SizedBox(height: context.getRSize(16)),
         Center(
           child: _resendCountdown > 0
               ? Text(
                   'Resend code in 0:${_resendCountdown.toString().padLeft(2, '0')}',
-                  style: TextStyle(
-                    color: authTextPrimary(context).withValues(alpha: 0.5),
-                    fontSize: 13,
-                  ),
+                  style: context
+                      .regularStyle(13)
+                      .copyWith(color: authTextMuted(context, 0.5)),
                 )
               : TextButton(
-                  onPressed: (_sendingOtp || _otpLockedOut || _otpVerified) ? null : _resendOtp,
-                  child: const Text('Resend code'),
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(
+                      kMinInteractiveDimension,
+                      kMinInteractiveDimension,
+                    ),
+                  ),
+                  onPressed: (_sendingOtp || _otpLockedOut || _otpVerified)
+                      ? null
+                      : _resendOtp,
+                  child: Text('Resend code', style: context.semiBoldStyle(14)),
                 ),
         ),
       ],
@@ -1075,7 +1137,9 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
               if (_nameError != null) setState(() => _nameError = null);
             },
             onSubmitted: (_) => _submitName(),
-            style: TextStyle(color: authTextPrimary(context)),
+            style: context
+                .mediumStyle(16)
+                .copyWith(color: authTextPrimary(context)),
             decoration: AppDecorations.authInputDecoration(
               context,
               label: 'Full name',
@@ -1083,7 +1147,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
             ),
           ),
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: context.getRSize(4)),
         AuthErrorText(_nameError),
         const SizedBox(height: 12),
         AppButton(text: 'Continue', onPressed: _submitName),
@@ -1119,31 +1183,33 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
             controller: _phoneCtrl,
             enabled: _dialCode.isNotEmpty,
             keyboardType: TextInputType.phone,
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-            ],
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             textInputAction: TextInputAction.done,
             autofocus: false,
             onChanged: (_) {
               if (_phoneError != null) setState(() => _phoneError = null);
             },
             onSubmitted: (_) => _submitPhone(),
-            style: TextStyle(
-              color: _dialCode.isNotEmpty
-                  ? authTextPrimary(context)
-                  : authTextMuted(context, 0.4),
-            ),
+            style: context
+                .mediumStyle(16)
+                .copyWith(
+                  color: _dialCode.isNotEmpty
+                      ? authTextPrimary(context)
+                      : authTextMuted(context, 0.4),
+                ),
             decoration: AppDecorations.authInputDecoration(
               context,
               label: 'Phone number',
               prefixIcon: AppIcons.phone,
               enabled: _dialCode.isNotEmpty,
               prefixText: _dialCode.isNotEmpty ? '$_dialCode ' : null,
-              helperText: _dialCode.isEmpty ? 'Choose your country first' : null,
+              helperText: _dialCode.isEmpty
+                  ? 'Choose your country first'
+                  : null,
             ),
           ),
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: context.getRSize(4)),
         AuthErrorText(_phoneError),
         const SizedBox(height: 12),
         AppButton(text: 'Continue', onPressed: _submitPhone),
@@ -1167,7 +1233,9 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
               if (_addressError != null) setState(() => _addressError = null);
             },
             onSubmitted: (_) => _submitAddress(),
-            style: TextStyle(color: authTextPrimary(context)),
+            style: context
+                .mediumStyle(16)
+                .copyWith(color: authTextPrimary(context)),
             decoration: AppDecorations.authInputDecoration(
               context,
               label: 'Street address',
@@ -1175,7 +1243,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
             ),
           ),
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: context.getRSize(4)),
         AuthErrorText(_addressError),
         const SizedBox(height: 12),
         AppButton(text: 'Continue', onPressed: _submitAddress),
@@ -1183,73 +1251,101 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
     );
   }
 
-  Widget _buildPinStep() {
+  Widget _buildPinStep({required bool twoColumn}) {
+    if (_committing) {
+      return AuthCenteredScroll(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [_buildCommitting()],
+      );
+    }
     final confirming = _step == 7;
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(28, 12, 28, 24),
-      child: Column(
-        children: [
-          if (_committing)
-            _buildCommitting()
-          else ...[
-            Text(
-              confirming ? 'Confirm your PIN' : 'Create a PIN',
-              style: TextStyle(
-                fontSize: 26,
-                fontWeight: FontWeight.w800,
-                color: authTextPrimary(context),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              confirming
-                  ? 'Re-enter the same 6-digit PIN to confirm.'
-                  : 'Choose a 6-digit PIN you\'ll use to log in.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 15,
-                color: authTextPrimary(context).withValues(alpha: 0.65),
-              ),
-            ),
-            const SizedBox(height: 28),
-            ShakeWidget(
-              key: confirming ? _confirmPinShakeKey : _createPinShakeKey,
-              child: PinDots(filled: _pin.length),
-            ),
-            const SizedBox(height: 12),
-            AuthErrorText(_pinError),
-            const SizedBox(height: 12),
-            PinKeypad(onDigit: _onPinDigit, onBackspace: _onPinBackspace),
-          ],
-        ],
+    final heading = <Widget>[
+      Text(
+        confirming ? 'Confirm your PIN' : 'Create a PIN',
+        textAlign: TextAlign.center,
+        style: authTitleStyle(context),
       ),
+      SizedBox(height: context.getRSize(8)),
+      Text(
+        confirming
+            ? 'Re-enter the same 6-digit PIN to confirm.'
+            : 'Choose a 6-digit PIN you\'ll use to log in.',
+        textAlign: TextAlign.center,
+        style: authSubtitleStyle(context),
+      ),
+      SizedBox(height: context.getRSize(28)),
+      ShakeWidget(
+        key: confirming ? _confirmPinShakeKey : _createPinShakeKey,
+        child: PinDots(filled: _pin.length),
+      ),
+      SizedBox(height: context.getRSize(12)),
+      AuthErrorText(_pinError),
+    ];
+    final keypad = PinKeypad(
+      onDigit: _onPinDigit,
+      onBackspace: _onPinBackspace,
+    );
+    if (twoColumn) {
+      // A phone sideways: heading + dots on the left, keypad on the right.
+      return LayoutBuilder(
+        builder: (context, constraints) => SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                context.getRSize(28),
+                context.getRSize(8),
+                context.getRSize(28),
+                context.getRSize(16),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: heading,
+                    ),
+                  ),
+                  SizedBox(width: context.getRSize(24)),
+                  Expanded(child: Center(child: keypad)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    return AuthCenteredScroll(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        ...heading,
+        SizedBox(height: context.getRSize(12)),
+        keypad,
+      ],
     );
   }
 
   Widget _buildCommitting() {
+    final primary = Theme.of(context).colorScheme.primary;
     return Padding(
-      padding: const EdgeInsets.only(top: 60),
+      padding: EdgeInsets.only(top: context.getRSize(60)),
       child: Column(
         children: [
           CircleAvatar(
-            radius: 44,
-            backgroundColor: Theme.of(
-              context,
-            ).colorScheme.primary.withValues(alpha: 0.12),
+            radius: context.getRSize(44),
+            backgroundColor: primary.withValues(alpha: 0.12),
             child: Icon(
               AppIcons.check,
-              size: 48,
-              color: Theme.of(context).colorScheme.primary,
+              size: context.getRSize(48),
+              color: primary,
             ),
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: context.getRSize(24)),
           Text(
             'Joining your team…',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: authTextPrimary(context),
-            ),
+            style: context
+                .boldStyle(18)
+                .copyWith(color: authTextPrimary(context)),
           ),
         ],
       ),
@@ -1262,81 +1358,55 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
     // fall back to the name the invite carried.
     final live = ref.watch(currentBusinessNameProvider);
     final business = live.isNotEmpty ? live : _draft.businessName;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 40),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.greenAccent.withValues(alpha: 0.15),
-                shape: BoxShape.circle,
+    final f =
+        Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light;
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: context.getRSize(40),
+                vertical: context.getRSize(16),
               ),
-              child: const Icon(
-                AppIcons.checkCircle,
-                color: Colors.greenAccent,
-                size: 80,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: EdgeInsets.all(context.getRSize(24)),
+                    decoration: BoxDecoration(
+                      color: f.greenTint,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      AppIcons.checkCircle,
+                      color: f.green,
+                      size: context.getRSize(80),
+                    ),
+                  ),
+                  SizedBox(height: context.getRSize(32)),
+                  Text(
+                    business != null
+                        ? 'Welcome to $business!'
+                        : 'Welcome to the team!',
+                    textAlign: TextAlign.center,
+                    style: context
+                        .extraBoldStyle(28)
+                        .copyWith(color: authTextPrimary(context)),
+                  ),
+                  SizedBox(height: context.getRSize(12)),
+                  Text(
+                    'Taking you to Home…',
+                    textAlign: TextAlign.center,
+                    style: authSubtitleStyle(context),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 32),
-            Text(
-              business != null
-                  ? 'Welcome to $business!'
-                  : 'Welcome to the team!',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.w800,
-                color: authTextPrimary(context),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Taking you to Home…',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 15,
-                color: authTextPrimary(context).withValues(alpha: 0.65),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
-    );
-  }
-}
-
-// ── Small private widgets ────────────────────────────────────────────────
-
-/// Nine small dots indicating progress (master plan §6: "small dots progress
-/// indicator", fading between steps). Mirrors the CEO sign-up indicator.
-class _StepDots extends StatelessWidget {
-  final int current;
-  final int total;
-
-  const _StepDots({required this.current, required this.total});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(total, (i) {
-        final active = i <= current;
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          margin: const EdgeInsets.symmetric(horizontal: 3),
-          width: i == current ? 22 : 8,
-          height: 8,
-          decoration: BoxDecoration(
-            color: active
-                ? Theme.of(context).colorScheme.primary
-                : authTextPrimary(context).withValues(alpha: 0.18),
-            borderRadius: BorderRadius.circular(4),
-          ),
-        );
-      }),
     );
   }
 }

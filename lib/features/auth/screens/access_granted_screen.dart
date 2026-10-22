@@ -3,11 +3,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
-import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/icon_tile.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/main_layout.dart';
+import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
 import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 
 class AccessGrantedScreen extends ConsumerStatefulWidget {
@@ -155,11 +160,9 @@ class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : Colors.black;
-    final successColor =
-        theme.extension<AppSemanticColors>()?.success ??
-        const Color(0xFF30D158);
+    final f = theme.extension<AppFixedColors>() ?? AppFixedColors.light;
+    final textColor = authTextPrimary(context);
+    final successColor = f.green;
 
     return Scaffold(
       body: BrandedAuthBackground(
@@ -178,13 +181,13 @@ class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   return SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 32,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: context.getRSize(24),
+                      vertical: context.getRSize(32),
                     ),
                     child: ConstrainedBox(
                       constraints: BoxConstraints(
-                        minHeight: constraints.maxHeight - 64,
+                        minHeight: constraints.maxHeight - context.getRSize(64),
                       ),
                       child: IntrinsicHeight(
                         child: Column(
@@ -194,7 +197,7 @@ class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
 
                             // ── Animated Success Icon ──
                             _buildSuccessIcon(successColor, textColor),
-                            const SizedBox(height: 28),
+                            SizedBox(height: context.getRSize(28)),
 
                             // ── Welcome Header ──
                             SlideTransition(
@@ -205,29 +208,25 @@ class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
                                   children: [
                                     Text(
                                       'Access Granted!',
-                                      style: TextStyle(
-                                        fontSize: 30,
-                                        fontWeight: FontWeight.w800,
-                                        color: textColor,
-                                        letterSpacing: -0.5,
-                                      ),
+                                      style: context
+                                          .extraBoldStyle(30)
+                                          .copyWith(
+                                            color: textColor,
+                                            letterSpacing: -0.5,
+                                          ),
                                       textAlign: TextAlign.center,
                                     ),
-                                    const SizedBox(height: 8),
+                                    SizedBox(height: context.getRSize(8)),
                                     Text(
                                       'Welcome aboard, ${widget.user.name}',
                                       textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        color: textColor.withValues(alpha: 0.7),
-                                        height: 1.4,
-                                      ),
+                                      style: authSubtitleStyle(context),
                                     ),
                                   ],
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 32),
+                            SizedBox(height: context.getRSize(32)),
 
                             // ── Accent Divider ──
                             SlideTransition(
@@ -235,18 +234,22 @@ class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
                               child: FadeTransition(
                                 opacity: _cardsOpacity,
                                 child: Container(
-                                  height: 2,
-                                  margin: const EdgeInsets.symmetric(
-                                    horizontal: 40,
+                                  height: context.getRSize(2),
+                                  margin: EdgeInsets.symmetric(
+                                    horizontal: context.getRSize(40),
                                   ),
                                   decoration: BoxDecoration(
                                     gradient: LinearGradient(
                                       colors: [
-                                        Colors.transparent,
+                                        theme.colorScheme.primary.withValues(
+                                          alpha: 0,
+                                        ),
                                         theme.colorScheme.primary.withValues(
                                           alpha: 0.6,
                                         ),
-                                        Colors.transparent,
+                                        theme.colorScheme.primary.withValues(
+                                          alpha: 0,
+                                        ),
                                       ],
                                     ),
                                     borderRadius: BorderRadius.circular(1),
@@ -254,7 +257,7 @@ class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 28),
+                            SizedBox(height: context.getRSize(28)),
 
                             // ── Detail Cards ──
                             SlideTransition(
@@ -270,7 +273,7 @@ class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
                                       value: details['businessName']!,
                                       textColor: textColor,
                                     ),
-                                    const SizedBox(height: 12),
+                                    SizedBox(height: context.getRSize(12)),
                                     _buildDetailCard(
                                       context,
                                       icon: AppIcons.location,
@@ -284,7 +287,7 @@ class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
                             ),
 
                             const Spacer(),
-                            const SizedBox(height: 28),
+                            SizedBox(height: context.getRSize(28)),
 
                             // ── Enter App Button ──
                             SlideTransition(
@@ -318,28 +321,30 @@ class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
     );
   }
 
-  /// Animated check-circle icon with pulsing glow ring.
+  /// Animated check-circle icon with pulsing ring.
   Widget _buildSuccessIcon(Color successColor, Color textColor) {
+    final f =
+        Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light;
     return Center(
       child: FadeTransition(
         opacity: _iconOpacity,
         child: ScaleTransition(
           scale: _iconScale,
           child: SizedBox(
-            width: 120,
-            height: 120,
+            width: context.getRSize(120),
+            height: context.getRSize(120),
             child: Stack(
               alignment: Alignment.center,
               children: [
-                // Pulsing glow ring
+                // Pulsing ring
                 AnimatedBuilder(
                   animation: _pulseScale,
                   builder: (context, child) {
                     return Transform.scale(
                       scale: _pulseScale.value,
                       child: Container(
-                        width: 110,
-                        height: 110,
+                        width: context.getRSize(110),
+                        height: context.getRSize(110),
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           border: Border.all(
@@ -353,20 +358,17 @@ class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
                 ),
                 // Main circle
                 Container(
-                  width: 88,
-                  height: 88,
+                  width: context.getRSize(88),
+                  height: context.getRSize(88),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: successColor.withValues(alpha: 0.15),
-                    boxShadow: [
-                      BoxShadow(
-                        color: successColor.withValues(alpha: 0.2),
-                        blurRadius: 30,
-                        spreadRadius: 5,
-                      ),
-                    ],
+                    color: f.greenTint,
                   ),
-                  child: Icon(AppIcons.check, color: successColor, size: 48),
+                  child: Icon(
+                    AppIcons.check,
+                    color: successColor,
+                    size: context.getRSize(48),
+                  ),
                 ),
               ],
             ),
@@ -376,7 +378,7 @@ class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
     );
   }
 
-  /// Individual glassmorphism detail card.
+  /// Individual detail card.
   Widget _buildDetailCard(
     BuildContext context, {
     required IconData icon,
@@ -384,61 +386,32 @@ class _AccessGrantedScreenState extends ConsumerState<AccessGrantedScreen>
     required String value,
     required Color textColor,
   }) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.black.withValues(alpha: 0.04),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.15)
-                : Colors.black.withValues(alpha: 0.08),
+    return Container(
+      padding: EdgeInsets.all(context.getRSize(16)),
+      decoration: AppDecorations.card(context),
+      child: Row(
+        children: [
+          IconTile(icon: icon, size: 44),
+          SizedBox(width: context.getRSize(16)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: context
+                      .mediumStyle(12)
+                      .copyWith(color: authTextMuted(context, 0.6)),
+                ),
+                SizedBox(height: context.getRSize(2)),
+                Text(
+                  value,
+                  style: context.semiBoldStyle(17).copyWith(color: textColor),
+                ),
+              ],
+            ),
           ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primary.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: theme.colorScheme.primary, size: 22),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: textColor.withValues(alpha: 0.5),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    value,
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                      color: textColor,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }
