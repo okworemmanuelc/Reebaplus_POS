@@ -136,10 +136,7 @@ Future<ScreenTestEnvironment> setupScreenTestEnvironment({
   // forever. A widget test ignores its own timeout in this case, so the whole
   // `flutter test` run hangs.
   final db = AppDatabase.forTesting(
-    DatabaseConnection(
-      NativeDatabase.memory(),
-      closeStreamsSynchronously: true,
-    ),
+    DatabaseConnection(NativeDatabase.memory(), closeStreamsSynchronously: true),
   );
   final businessId = UuidV7.generate();
   db.businessIdResolver = () => businessId;
@@ -147,22 +144,16 @@ Future<ScreenTestEnvironment> setupScreenTestEnvironment({
   // Force onCreate before the first insert.
   await db.customSelect('SELECT 1').get();
 
-  await db
-      .into(db.businesses)
-      .insert(
+  await db.into(db.businesses).insert(
         BusinessesCompanion.insert(
           id: Value(businessId),
           name: businessName,
-          type: businessType == null
-              ? const Value.absent()
-              : Value(businessType),
+          type: businessType == null ? const Value.absent() : Value(businessType),
         ),
       );
 
   final storeId = UuidV7.generate();
-  await db
-      .into(db.stores)
-      .insert(
+  await db.into(db.stores).insert(
         StoresCompanion.insert(
           id: Value(storeId),
           businessId: businessId,
@@ -172,9 +163,7 @@ Future<ScreenTestEnvironment> setupScreenTestEnvironment({
   final store = await db.storesDao.getStore(storeId);
 
   final categoryId = UuidV7.generate();
-  await db
-      .into(db.categories)
-      .insert(
+  await db.into(db.categories).insert(
         CategoriesCompanion.insert(
           id: Value(categoryId),
           businessId: businessId,
@@ -185,9 +174,7 @@ Future<ScreenTestEnvironment> setupScreenTestEnvironment({
   final seededManufacturers = <ManufacturerData>[];
   for (int i = 1; i <= manufacturerCount; i++) {
     final mId = UuidV7.generate();
-    await db
-        .into(db.manufacturers)
-        .insert(
+    await db.into(db.manufacturers).insert(
           ManufacturersCompanion.insert(
             id: Value(mId),
             businessId: businessId,
@@ -195,18 +182,15 @@ Future<ScreenTestEnvironment> setupScreenTestEnvironment({
           ),
         );
     seededManufacturers.add(
-      await (db.select(
-        db.manufacturers,
-      )..where((t) => t.id.equals(mId))).getSingle(),
+      await (db.select(db.manufacturers)..where((t) => t.id.equals(mId)))
+          .getSingle(),
     );
   }
 
   final seededProducts = <ProductData>[];
   for (int i = 1; i <= productCount; i++) {
     final pId = UuidV7.generate();
-    await db
-        .into(db.products)
-        .insert(
+    await db.into(db.products).insert(
           ProductsCompanion.insert(
             id: Value(pId),
             businessId: businessId,
@@ -216,9 +200,7 @@ Future<ScreenTestEnvironment> setupScreenTestEnvironment({
             wholesalerPriceKobo: const Value(90000), // ₦900.00
           ),
         );
-    await db
-        .into(db.inventory)
-        .insert(
+    await db.into(db.inventory).insert(
           InventoryCompanion.insert(
             id: Value(UuidV7.generate()),
             businessId: businessId,
@@ -228,9 +210,8 @@ Future<ScreenTestEnvironment> setupScreenTestEnvironment({
           ),
         );
     seededProducts.add(
-      await (db.select(
-        db.products,
-      )..where((t) => t.id.equals(pId))).getSingle(),
+      await (db.select(db.products)..where((t) => t.id.equals(pId)))
+          .getSingle(),
     );
   }
 
@@ -373,7 +354,6 @@ Future<BuildContext> pumpScreen(
     UncontrolledProviderScope(
       container: container,
       child: MaterialApp(
-        debugShowCheckedModeBanner: false,
         theme: theme ?? AppTheme.dark(),
         // Size is read from the view rather than pinned to [size] (they start
         // equal), so a test that rotates via tester.view.physicalSize reaches
@@ -448,7 +428,8 @@ void expectNoOverflow(WidgetTester tester, {String? reason}) {
   expect(
     exception,
     isNull,
-    reason: reason ?? 'A layout overflow was reported: $exception',
+    reason: reason ??
+        'A layout overflow was reported: $exception',
   );
 }
 
@@ -490,8 +471,7 @@ Future<int> expectContentRowVisible(
   expect(
     count,
     greaterThanOrEqualTo(minimum),
-    reason:
-        reason ??
+    reason: reason ??
         'Expected at least $minimum complete content row(s) laid out and '
             'hit-testable, found $count. A zero-height list reports no '
             'overflow — this is the silent failure mode.',
@@ -512,9 +492,7 @@ Future<int> _scrollUntilRowsVisible(
   for (var step = 0; step < 8 && best < minimum; step++) {
     final position = tester
         .state<ScrollableState>(
-          find
-              .descendant(of: scrollable, matching: find.byType(Scrollable))
-              .first,
+          find.descendant(of: scrollable, matching: find.byType(Scrollable)).first,
         )
         .position;
     final before = position.pixels;
@@ -529,16 +507,14 @@ Future<int> _scrollUntilRowsVisible(
 /// Counts widgets matched by [rows] that are laid out with non-zero size, fall
 /// entirely inside the viewport, and hit-test to themselves at their centre.
 int visibleRowCount(WidgetTester tester, Finder rows) {
-  final viewport =
-      Offset.zero & tester.view.physicalSize / tester.view.devicePixelRatio;
+  final viewport = Offset.zero & tester.view.physicalSize / tester.view.devicePixelRatio;
   var count = 0;
   for (final element in rows.evaluate()) {
     final box = element.findRenderObject() as RenderBox?;
     if (box == null || !box.hasSize) continue;
     if (box.size.height <= 0 || box.size.width <= 0) continue;
     final rect = box.localToGlobal(Offset.zero) & box.size;
-    final fullyVisible =
-        rect.top >= viewport.top - 0.5 &&
+    final fullyVisible = rect.top >= viewport.top - 0.5 &&
         rect.bottom <= viewport.bottom + 0.5 &&
         rect.left >= viewport.left - 0.5 &&
         rect.right <= viewport.right + 0.5;
