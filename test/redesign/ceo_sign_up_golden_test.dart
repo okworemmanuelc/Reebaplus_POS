@@ -171,36 +171,62 @@ void main() {
     }
   }
 
-  // No overflow with the keyboard up, on every step.
+  // No overflow on every step at the sizes the app supports.
+  const overflowSizes = <String, (Size, EdgeInsets, double)>{
+    '360x640@1.3': (Size(360, 640), EdgeInsets.only(top: 24, bottom: 24), 1.3),
+    '390x844': (Size(390, 844), EdgeInsets.only(top: 24, bottom: 24), 1.0),
+    '844x390': (Size(844, 390), EdgeInsets.only(top: 24, right: 48), 1.0),
+    '800x1280': (Size(800, 1280), EdgeInsets.zero, 1.0),
+    '1280x800': (Size(1280, 800), EdgeInsets.zero, 1.0),
+  };
   for (final (name, step, email) in _steps) {
-    testWidgets('CEO sign-up $name: no overflow, keyboard up sideways', (
-      tester,
-    ) async {
-      await pumpStep(
-        tester,
-        step: step,
-        verifiedEmail: email,
-        size: const Size(844, 390),
-        padding: const EdgeInsets.only(top: 24, right: 48),
-        brightness: Brightness.light,
-        viewInsets: const EdgeInsets.only(bottom: 200),
-      );
-      expect(tester.takeException(), isNull);
-    });
-    testWidgets('CEO sign-up $name: no overflow at 360dp, text 1.3', (
-      tester,
-    ) async {
-      await pumpStep(
-        tester,
-        step: step,
-        verifiedEmail: email,
-        size: const Size(360, 640),
-        padding: const EdgeInsets.only(top: 24, bottom: 24),
-        brightness: Brightness.dark,
-        viewInsets: const EdgeInsets.only(bottom: 280),
-        textScaler: const TextScaler.linear(1.3),
-      );
-      expect(tester.takeException(), isNull);
-    });
+    for (final e in overflowSizes.entries) {
+      final (size, padding, scale) = e.value;
+      testWidgets('CEO sign-up $name: no overflow at ${e.key}', (tester) async {
+        await pumpStep(
+          tester,
+          step: step,
+          verifiedEmail: email,
+          size: size,
+          padding: padding,
+          brightness: Brightness.light,
+          textScaler: TextScaler.linear(scale),
+        );
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
+  // Keyboard up (~300dp) at text scale 1.15, on every step (every text field:
+  // business name, contact, full name, email, OTP). The sign-up has no pop-up
+  // holding a text box. Pattern: test/orders/orders_dialog_keyboard_test.dart.
+  const keyboardSizes = <String, (Size, EdgeInsets)>{
+    '360x640': (Size(360, 640), EdgeInsets.only(top: 24, bottom: 24)),
+    '844x390': (Size(844, 390), EdgeInsets.only(top: 24, right: 48)),
+  };
+  for (final (name, step, email) in _steps) {
+    for (final e in keyboardSizes.entries) {
+      final (size, padding) = e.value;
+      testWidgets('CEO sign-up $name: keyboard up at ${e.key}', (tester) async {
+        await pumpScreen(
+          tester,
+          env: env,
+          size: size,
+          padding: padding,
+          bottomNavHeight: 0,
+          followView: true,
+          textScaler: const TextScaler.linear(1.15),
+          theme: AppTheme.dark(),
+          screen: CeoSignUpScreen(verifiedEmail: email, initialStep: step),
+          settle: false,
+        );
+        await tester.pump(const Duration(milliseconds: 600));
+        tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+        addTearDown(tester.view.resetViewInsets);
+        await tester.pump(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(tester.takeException(), isNull);
+      });
+    }
   }
 }
