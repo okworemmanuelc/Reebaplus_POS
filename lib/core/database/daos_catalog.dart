@@ -419,6 +419,15 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     return query.watch();
   }
 
+  /// Every non-deleted product of the current business (Add Product's
+  /// name-match list). Business-scoped: a device holding two businesses never
+  /// mixes their products.
+  Future<List<ProductData>> getActiveProducts() {
+    return (select(
+      products,
+    )..where((t) => whereBusiness(t) & t.isDeleted.not())).get();
+  }
+
   Future<ProductData?> findById(String id) {
     return (select(
       products,

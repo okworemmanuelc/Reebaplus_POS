@@ -274,9 +274,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     final suppliers = await db.catalogDao.getAllSuppliers();
     final manufacturers = await db.inventoryDao.getAllManufacturers();
     final cats = await db.inventoryDao.getAllCategories();
-    final productsList = await (db.select(
-      db.products,
-    )..where((t) => t.isDeleted.not())).get();
+    final productsList = await db.catalogDao.getActiveProducts();
     final uniqueUnits = await db.catalogDao.getUniqueProductUnits();
     // Edit mode: resolve a renderable path for the saved photo (downloads it
     // once if only the cloud URL is known), as the old Edit pop-up did.
@@ -936,9 +934,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         }
       }
 
-      final newProduct = await (db.select(
-        db.products,
-      )..where((t) => t.id.equals(productId))).getSingle();
+      final newProduct = (await db.catalogDao.findById(productId))!;
       final userName = auth.currentUser?.name ?? 'Unknown';
       if (widget.receiveMode) {
         ref
@@ -1121,9 +1117,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
 
       if (mounted) {
         AppNotification.showSuccess(context, '$name updated successfully');
-        final updated = await (db.select(
-          db.products,
-        )..where((t) => t.id.equals(old.id))).getSingle();
+        // Business-scoped read (never a raw select of a tenant table).
+        final updated = await db.catalogDao.findById(old.id);
         if (mounted) Navigator.pop(context, updated);
       }
     } catch (e, st) {
