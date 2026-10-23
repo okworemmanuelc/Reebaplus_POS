@@ -50,7 +50,7 @@ void main() {
     return rows.map((r) => r.read<String>('name')).toSet();
   }
 
-  test('v83 to v84 preserves categories and adds optional online mapping', () async {
+  test('v84 to v85 preserves categories and adds optional online mapping', () async {
     var db = await openAndInit();
     final businessId = UuidV7.generate();
     final categoryId = UuidV7.generate();
@@ -59,7 +59,7 @@ void main() {
     await db.into(db.categories).insert(CategoriesCompanion.insert(
         id: Value(categoryId), name: 'Seasonal', businessId: businessId));
     await db.customStatement('ALTER TABLE categories DROP COLUMN marketplace_category');
-    await db.customStatement('PRAGMA user_version = 83');
+    await db.customStatement('PRAGMA user_version = 84');
     await db.close();
     db = await openAndInit();
     try {
@@ -3772,6 +3772,123 @@ void main() {
           )
           .getSingle();
       expect(row.read<String?>('reason'), 'burnt');
+    });
+  });
+
+  group('onUpgrade v83 -> v84 (products.units_per_pack, #487)', () {
+    Future<String> seedProduct(AppDatabase db, {int? unitsPerPack}) async {
+      final biz = UuidV7.generate();
+      final id = UuidV7.generate();
+      await db
+          .into(db.businesses)
+          .insert(
+            BusinessesCompanion.insert(id: Value(biz), name: 'Sample Biz'),
+          );
+      await db
+          .into(db.products)
+          .insert(
+            ProductsCompanion.insert(
+              id: Value(id),
+              businessId: biz,
+              name: 'Star Lager',
+              unit: const Value('Bottle'),
+              unitsPerPack: Value(unitsPerPack),
+            ),
+          );
+      return id;
+    }
+
+    Future<Object?> unitsPerPackOf(AppDatabase db, String id) async {
+      final row = await db
+          .customSelect(
+            'SELECT units_per_pack FROM products WHERE id = ?',
+            variables: [Variable<String>(id)],
+          )
+          .getSingle();
+      return row.data['units_per_pack'];
+    }
+
+    test(
+      'adds a NULL units_per_pack column with its > 0 CHECK, keeping rows',
+      () async {
+        final db1 = await openAndInit();
+        final id = await seedProduct(db1);
+        // Revert to the v83 shape: the column is a column constraint, so SQLite
+        // drops its CHECK with it.
+        await db1.customStatement(
+          'ALTER TABLE products DROP COLUMN units_per_pack',
+        );
+        expect(
+          await columnsOf(db1, 'products'),
+          isNot(contains('units_per_pack')),
+          reason: 'teeth: the v83 shape must genuinely lack the column',
+        );
+        await db1.customStatement('PRAGMA user_version = 83');
+        await db1.close();
+
+        final db2 = await openAndInit();
+        addTearDown(db2.close);
+
+        expect(await columnsOf(db2, 'products'), contains('units_per_pack'));
+        expect(
+          await unitsPerPackOf(db2, id),
+          isNull,
+          reason: 'nothing is backfilled',
+        );
+        final product = await (db2.select(
+          db2.products,
+        )..where((t) => t.id.equals(id))).getSingle();
+        expect(product.name, 'Star Lager');
+        expect(product.unit, 'Bottle');
+
+        await db2.customStatement(
+          'UPDATE products SET units_per_pack = 12 WHERE id = ?',
+          [id],
+        );
+        expect(await unitsPerPackOf(db2, id), 12);
+        await expectLater(
+          db2.customStatement(
+            'UPDATE products SET units_per_pack = 0 WHERE id = ?',
+            [id],
+          ),
+          throwsA(anything),
+          reason: 'the CHECK rides the plain ADD COLUMN',
+        );
+      },
+    );
+
+    test('a pre-v62 DB comes through the products rebuild with NULL, not the '
+        "string 'units_per_pack' (stale-column trap)", () async {
+      final db1 = await openAndInit();
+      final id = await seedProduct(db1);
+      await db1.customStatement(
+        'ALTER TABLE products DROP COLUMN units_per_pack',
+      );
+      // From v61 the v62 TableMigration rebuild of products runs, copying
+      // every column of the CURRENT schema — units_per_pack included — before
+      // the v84 step. Unpinned, SQLite would copy the column NAME as a string.
+      await db1.customStatement('PRAGMA user_version = 61');
+      await db1.close();
+
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+
+      expect(await unitsPerPackOf(db2, id), isNull);
+      final product = await (db2.select(
+        db2.products,
+      )..where((t) => t.id.equals(id))).getSingle();
+      expect(product.unitsPerPack, isNull);
+    });
+
+    test('the step is idempotent and never nulls a real value', () async {
+      final db1 = await openAndInit();
+      final id = await seedProduct(db1, unitsPerPack: 24);
+      await db1.customStatement('PRAGMA user_version = 83');
+      await db1.close();
+
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+      expect(await unitsPerPackOf(db2, id), 24);
     });
   });
 }

@@ -772,7 +772,8 @@ class InventorySuggestionList extends StatelessWidget {
 }
 
 /// One suggestion: primary icon + SemiBold 14 label; a 48dp row. [emphasis]
-/// draws the label in primary ("Create …").
+/// draws the label in primary ("Create …"). An optional [trailing] (a tag such
+/// as "Archived", #487) sits at the end.
 class InventorySuggestionTile extends StatelessWidget {
   const InventorySuggestionTile({
     super.key,
@@ -780,12 +781,14 @@ class InventorySuggestionTile extends StatelessWidget {
     required this.onTap,
     this.icon = AppIcons.user,
     this.emphasis = false,
+    this.trailing,
   });
 
   final String label;
   final IconData icon;
   final bool emphasis;
   final VoidCallback onTap;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -820,6 +823,10 @@ class InventorySuggestionTile extends StatelessWidget {
                       ),
                 ),
               ),
+              if (trailing != null) ...[
+                SizedBox(width: context.getRSize(8)),
+                trailing!,
+              ],
             ],
           ),
         ),

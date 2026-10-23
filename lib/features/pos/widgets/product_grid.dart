@@ -21,6 +21,7 @@ import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/category_visual.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/fly_to_cart.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/product_tile.dart';
+import 'package:reebaplus_pos/core/utils/product_unit.dart';
 
 /// Key prefix on every product tile, so a test can find the *complete* tiles
 /// the cashier can actually reach (issue #259 / PRD #239). The two-assertion
@@ -63,9 +64,14 @@ double posTileExtent(BuildContext context) {
 /// "60cl · Crate": the product's description (its subtitle), its size and
 /// its unit, the blanks skipped, joined with the mockup's " · " (#384). The
 /// tile showed size + unit before; the description leads now, as on Request
-/// Stock's tiles (#380), and the size word stays so nothing is lost.
-String? posTileSubtitle(ProductData product) {
-  final parts = [product.subtitle, product.size, product.unit]
+/// Stock's tiles (#380), and the size word stays so nothing is lost. [crates]
+/// is `businessTracksCrates` for the active business (see [unitLabel]).
+String? posTileSubtitle(ProductData product, {required bool crates}) {
+  final parts = [
+    product.subtitle,
+    product.size,
+    unitLabel(product.unit, crates: crates),
+  ]
       .where((s) => s != null && s.trim().isNotEmpty && s != 'null')
       .map((s) => s!.trim())
       .toList();
@@ -315,6 +321,10 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
     final level = isOutOfStock
         ? StockLevel.out
         : (isLowStock ? StockLevel.low : StockLevel.ok);
+    final subtitle = posTileSubtitle(
+      product,
+      crates: businessTracksCrates(ref.watch(currentBusinessProvider)),
+    );
 
     return ValueListenableBuilder<List<Map<String, dynamic>>>(
       valueListenable: ref.watch(cartProvider),
@@ -338,7 +348,7 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
         if (widget.isListView) {
           return _PosProductListRow(
             name: product.name,
-            subtitle: posTileSubtitle(product),
+            subtitle: subtitle,
             priceLabel: formatCurrency(price),
             stockLabel: '$stock',
             stockLevel: level,
@@ -351,7 +361,7 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
         }
         return ProductTile(
           name: product.name,
-          subtitle: posTileSubtitle(product),
+          subtitle: subtitle,
           priceLabel: formatCurrency(price),
           stockLabel: '$stock',
           stockLevel: level,

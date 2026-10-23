@@ -109,22 +109,22 @@ void main() {
     test('missing name → Product Name', () {
       final result = resolveFastAdd(input(name: '  '), ctx());
       expect(result, isA<FastAddInvalid>());
-      expect((result as FastAddInvalid).field, 'Product Name');
+      expect((result as FastAddInvalid).field, FastAddField.name);
     });
 
     test('missing selling price → Selling Price', () {
       final result = resolveFastAdd(input(sellingPrice: ''), ctx());
-      expect((result as FastAddInvalid).field, 'Selling Price');
+      expect((result as FastAddInvalid).field, FastAddField.sellingPrice);
     });
 
     test('missing quantity → Quantity', () {
       final result = resolveFastAdd(input(quantity: ''), ctx());
-      expect((result as FastAddInvalid).field, 'Quantity');
+      expect((result as FastAddInvalid).field, FastAddField.quantity);
     });
 
     test('zero quantity → Quantity', () {
       final result = resolveFastAdd(input(quantity: '0'), ctx());
-      expect((result as FastAddInvalid).field, 'Quantity');
+      expect((result as FastAddInvalid).field, FastAddField.quantity);
     });
   });
 
@@ -146,13 +146,16 @@ void main() {
   });
 
   group('manufacturer is optional', () {
-    test('crate business with no manufacturer resolves (can be added later)', () {
-      final result = resolveFastAdd(
-        input(hasManufacturer: false),
-        ctx(tracksCrates: true),
-      );
-      expect(result, isA<FastAddIntent>());
-    });
+    test(
+      'crate business with no manufacturer resolves (can be added later)',
+      () {
+        final result = resolveFastAdd(
+          input(hasManufacturer: false),
+          ctx(tracksCrates: true),
+        );
+        expect(result, isA<FastAddIntent>());
+      },
+    );
 
     test('crate business with a manufacturer resolves', () {
       final result = resolveFastAdd(
@@ -200,7 +203,7 @@ void main() {
         ctx(),
       );
       expect(result, isA<FastAddInvalid>());
-      expect((result as FastAddInvalid).field, 'Buying Price');
+      expect((result as FastAddInvalid).field, FastAddField.buyingPrice);
     });
   });
 
@@ -219,7 +222,7 @@ void main() {
         ctx(storeIds: const ['a', 'b']),
       );
       expect(result, isA<FastAddInvalid>());
-      expect((result as FastAddInvalid).field, 'Store');
+      expect((result as FastAddInvalid).field, FastAddField.store);
     });
 
     test('multi-store uses the supplied selection', () {
@@ -232,15 +235,18 @@ void main() {
   });
 
   group('effective crate tracking + value', () {
-    test('non-crate business never tracks empties even if the toggle is on', () {
-      final result = resolveFastAdd(
-        input(trackEmpties: true, emptyCrateValue: '100'),
-        ctx(),
-      );
-      final intent = result as FastAddIntent;
-      expect(intent.trackEmpties, isFalse);
-      expect(intent.emptyCrateValueKobo, isNull);
-    });
+    test(
+      'non-crate business never tracks empties even if the toggle is on',
+      () {
+        final result = resolveFastAdd(
+          input(trackEmpties: true, emptyCrateValue: '100'),
+          ctx(),
+        );
+        final intent = result as FastAddIntent;
+        expect(intent.trackEmpties, isFalse);
+        expect(intent.emptyCrateValueKobo, isNull);
+      },
+    );
 
     test('crate + bottle + value populates the crate deposit', () {
       final result = resolveFastAdd(
@@ -280,6 +286,67 @@ void main() {
     test('a supplied low-stock threshold is kept', () {
       final result = resolveFastAdd(input(lowStock: '12'), ctx());
       expect((result as FastAddIntent).lowStockThreshold, 12);
+    });
+  });
+
+  group('#487: receive mode and "how many in one"', () {
+    test('Receive Stock needs no store: the quantity goes onto the delivery '
+        'list', () {
+      final result = resolveFastAdd(
+        input(quantity: '20'),
+        const FastAddContext(
+          tracksCrates: false,
+          canEditBuying: true,
+          storeIds: ['a', 'b'],
+          routesToReceiveCart: true,
+        ),
+      );
+      final intent = result as FastAddIntent;
+      expect(intent.storeId, isNull);
+      expect(intent.initialStock, 20);
+    });
+
+    test('Receive Stock still needs a quantity above 0', () {
+      final result = resolveFastAdd(
+        input(quantity: '0'),
+        const FastAddContext(
+          tracksCrates: false,
+          canEditBuying: true,
+          storeIds: ['a'],
+          routesToReceiveCart: true,
+        ),
+      );
+      expect((result as FastAddInvalid).field, FastAddField.quantity);
+    });
+
+    FastAddResult withPack(String? unit, String pack, {bool crates = true}) =>
+        resolveFastAdd(
+          FastAddInput(
+            name: 'Star 60cl',
+            sellingPrice: '500',
+            quantity: '1',
+            unit: unit,
+            unitsPerPack: pack,
+          ),
+          ctx(tracksCrates: crates),
+        );
+
+    test('a count is kept for a unit that offers the box', () {
+      expect((withPack('Bottle', '12') as FastAddIntent).unitsPerPack, 12);
+      expect(
+        (withPack('Pack', ' 6 ', crates: false) as FastAddIntent).unitsPerPack,
+        6,
+      );
+    });
+
+    test('blank, zero, another unit, or a non-crate Bottle: no count', () {
+      expect((withPack('Bottle', '') as FastAddIntent).unitsPerPack, isNull);
+      expect((withPack('Bottle', '0') as FastAddIntent).unitsPerPack, isNull);
+      expect((withPack('Can', '12') as FastAddIntent).unitsPerPack, isNull);
+      expect(
+        (withPack('Bottle', '12', crates: false) as FastAddIntent).unitsPerPack,
+        isNull,
+      );
     });
   });
 }

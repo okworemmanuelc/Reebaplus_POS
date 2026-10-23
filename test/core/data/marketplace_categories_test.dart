@@ -28,16 +28,16 @@ void main() {
   test('every Lexicon starter has a valid industry-aware mapping', () {
     for (final industry in Industry.values) {
       for (final name in lexiconFor(industry).starterCategories) {
-        final slug = starterMarketplaceCategory(industry, name);
+        final slug = starterMarketplaceCategory(industry: industry, name: name);
         expect(marketplaceCategories.any((c) => c.slug == slug), isTrue,
             reason: '$industry / $name');
       }
     }
-    expect(starterMarketplaceCategory(Industry.boutique, 'Accessories'),
+    expect(starterMarketplaceCategory(industry: Industry.boutique, name: 'Accessories'),
         'fashion-accessories');
-    expect(starterMarketplaceCategory(Industry.phoneAndGadgets, 'Accessories'),
+    expect(starterMarketplaceCategory(industry: Industry.phoneAndGadgets, name: 'Accessories'),
         'phone-accessories');
-    expect(starterMarketplaceCategory(Industry.beverage, 'Seasonal'), isNull);
+    expect(starterMarketplaceCategory(industry: Industry.beverage, name: 'Seasonal'), isNull);
     expect(marketplaceCategoryFor(null).slug, 'other');
     expect(marketplaceCategoryFor('unknown-future-slug').slug, 'other');
   });

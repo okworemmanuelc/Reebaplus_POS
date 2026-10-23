@@ -27,7 +27,7 @@ import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/core/providers/first_run_tour_state.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
-import 'package:reebaplus_pos/features/pos/providers/pos_providers.dart';
+import 'package:reebaplus_pos/shared/scanner/scanner_providers.dart';
 import 'package:reebaplus_pos/features/pos/screens/pos_home_screen.dart';
 import 'package:reebaplus_pos/features/pos/widgets/edit_item_modal.dart';
 import 'package:reebaplus_pos/features/pos/widgets/pos_barcode_scan_button.dart';

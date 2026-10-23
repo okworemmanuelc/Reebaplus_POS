@@ -88,6 +88,18 @@ void main() {
     expect((await categoryById(id)).marketplaceCategory, isNull);
   });
 
+  test('mapping never changes a category owned by another business', () async {
+    final otherBusiness = UuidV7.generate();
+    final otherCategory = UuidV7.generate();
+    await db.into(db.businesses).insert(
+        BusinessesCompanion.insert(id: Value(otherBusiness), name: 'Other shop'));
+    await db.into(db.categories).insert(CategoriesCompanion.insert(
+        id: Value(otherCategory), businessId: otherBusiness, name: 'Private'));
+    await db.catalogDao.mapCategory(otherCategory, 'phones');
+    expect((await categoryById(otherCategory)).marketplaceCategory, isNull);
+    expect(await getPendingQueue(db), isEmpty);
+  });
+
   test('renameCategory updates the local name and full-row enqueues it', () async {
     final id = await newCategory('Sodas');
     await newProduct(name: 'Cola', categoryId: id); // untouched by a rename

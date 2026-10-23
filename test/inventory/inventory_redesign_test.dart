@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/core/permissions/gate.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
+import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
 import 'package:reebaplus_pos/features/inventory/screens/inventory_screen.dart';
 import 'package:reebaplus_pos/features/inventory/screens/manufacturer_screen.dart';
 import 'package:reebaplus_pos/features/inventory/screens/product_detail_screen.dart';
@@ -16,7 +17,6 @@ import 'package:reebaplus_pos/features/inventory/screens/supplier_detail_screen.
 import 'package:reebaplus_pos/features/inventory/widgets/add_manufacturer_sheet.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/inventory_parts.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/manage_categories_sheet.dart';
-import 'package:reebaplus_pos/features/inventory/widgets/update_product_sheet.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/coach_hint_banner.dart';
@@ -152,7 +152,8 @@ void main() {
         find.byKey(const ValueKey('inventory-manage-categories')),
         findsOneWidget,
       );
-      expect(find.byType(CoachHintBanner), findsOneWidget);
+      // No "press and hold to edit" tip any more (#487 PR 4).
+      expect(find.byType(CoachHintBanner), findsNothing);
       expect(productRow('Eva Water'), findsOneWidget);
       // Expiry pill and stock pills keep their words.
       expect(find.text('Expires in 10d'), findsOneWidget);
@@ -217,23 +218,16 @@ void main() {
       await disposeScreen(tester);
     });
 
-    testWidgets('a row opens Product Detail, a hold opens the editor', (
+    testWidgets('a row opens Product Detail; a hold never opens the editor', (
       tester,
     ) async {
       await pump(tester);
       await tester.longPress(productRow('Eva Water'));
-      await tester.pump(const Duration(milliseconds: 600));
-      expect(find.byType(UpdateProductSheet), findsOneWidget);
-      Navigator.of(tester.element(find.byType(UpdateProductSheet))).pop();
       for (var i = 0; i < 10; i++) {
         await tester.pump(const Duration(milliseconds: 100));
       }
-      expect(find.byType(UpdateProductSheet), findsNothing);
-
-      await tester.tap(productRow('Eva Water'));
-      for (var i = 0; i < 10; i++) {
-        await tester.pump(const Duration(milliseconds: 100));
-      }
+      // A hold is just a slow tap now: Product Details, never an edit form.
+      expect(find.byType(AddProductScreen), findsNothing);
       expect(find.byType(ProductDetailScreen), findsOneWidget);
       await disposeScreen(tester);
     });

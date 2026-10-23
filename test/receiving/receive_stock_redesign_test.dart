@@ -10,7 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
-import 'package:reebaplus_pos/features/inventory/widgets/update_product_sheet.dart';
+import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
 import 'package:reebaplus_pos/features/receiving/screens/receive_cart_screen.dart';
 import 'package:reebaplus_pos/features/receiving/screens/receive_stock_screen.dart';
 import 'package:reebaplus_pos/features/receiving/widgets/receive_parts.dart';
@@ -90,7 +90,7 @@ void main() {
     await tester.tap(tile(i));
   }
 
-  testWidgets('renders the top bar, search toggle, chips, hint, New Product '
+  testWidgets('renders the top bar, search toggle, chips, New Product '
       'and the tiles with today\'s content', (tester) async {
     await open(tester);
     expect(find.text('Receive Stock'), findsOneWidget);
@@ -100,8 +100,8 @@ void main() {
     for (final chip in ['All', 'Beer', 'Malt', 'Water', 'Stout']) {
       expect(find.text(chip), findsWidgets);
     }
-    expect(find.byKey(ReceiveKeys.hint), findsOneWidget);
-    expect(find.text('Tap and hold a product to edit it.'), findsOneWidget);
+    // No "tap and hold to edit" tip any more (#487 PR 4).
+    expect(find.text('Tap and hold a product to edit it.'), findsNothing);
     expect(find.byKey(ReceiveKeys.newProduct), findsOneWidget);
     expect(find.text('New Product'), findsOneWidget);
     // Name, "size · unit" (the crate size and unit, as before), "Current: N"
@@ -114,6 +114,17 @@ void main() {
     // No lines yet → no review bar.
     expect(find.byKey(ReceiveKeys.reviewBar), findsNothing);
     expect(tester.takeException(), isNull);
+    await disposeScreen(tester);
+  });
+
+  testWidgets('an archived product is not offered for receiving (#487)', (
+    tester,
+  ) async {
+    await fx.env.db.catalogDao.setProductArchived(fx.productIds[0], true);
+    await open(tester);
+    expect(tile(0), findsNothing);
+    expect(find.text('Star Lager'), findsNothing);
+    expect(tile(1), findsOneWidget);
     await disposeScreen(tester);
   });
 
@@ -209,30 +220,24 @@ void main() {
     await disposeScreen(tester);
   });
 
-  testWidgets('hold opens the edit sheet in receive mode', (tester) async {
+  testWidgets('a hold opens no editor (no long-press edit)', (tester) async {
     await open(tester);
     await tester.ensureVisible(tile(0));
     await tester.pump();
     await tester.longPress(tile(0));
     await tester.pumpAndSettle();
-    expect(find.byType(UpdateProductSheet), findsOneWidget);
+    expect(find.byType(AddProductScreen), findsNothing);
     await disposeScreen(tester);
   });
 
-  testWidgets('stock keeper (stock.add only): no New Product, no hint, hold '
-      'is refused; tap still adds', (tester) async {
+  testWidgets('stock keeper (stock.add only): no New Product; tap still '
+      'adds', (tester) async {
     await open(tester, keys: const {'stock.add'});
     expect(find.byKey(ReceiveKeys.newProduct), findsNothing);
-    expect(find.byKey(ReceiveKeys.hint), findsNothing);
-    await tester.ensureVisible(tile(0));
-    await tester.pump();
-    await tester.longPress(tile(0));
-    await tester.pumpAndSettle();
-    expect(find.byType(UpdateProductSheet), findsNothing);
     await tapTile(tester, 0);
     await tester.pump();
     expect(fx.cartQty(tester, 0), 1);
-    // Let the flight and the denial notice run out.
+    // Let the flight run out.
     await tester.pump(const Duration(seconds: 6));
     await disposeScreen(tester);
   });
@@ -241,19 +246,6 @@ void main() {
     await open(tester, keys: const {'sales.make'});
     expect(find.byType(ProductTile), findsNothing);
     expect(find.byKey(ReceiveKeys.searchToggle), findsNothing);
-    await disposeScreen(tester);
-  });
-
-  testWidgets('the hint ✕ dismisses it', (tester) async {
-    await open(tester);
-    await tester.tap(
-      find.descendant(
-        of: find.byKey(ReceiveKeys.hint),
-        matching: find.byType(IconButton),
-      ),
-    );
-    await tester.pump();
-    expect(find.byKey(ReceiveKeys.hint), findsNothing);
     await disposeScreen(tester);
   });
 

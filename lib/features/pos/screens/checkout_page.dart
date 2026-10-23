@@ -26,7 +26,7 @@ import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
-import 'package:reebaplus_pos/features/pos/widgets/sales_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/sales_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/category_visual.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/icon_tile.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/section_header.dart';
@@ -1290,6 +1290,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                   manufacturerNames: _manufacturerNames,
                   storeAddress: _storeAddress,
                   businessName: ref.watch(currentBusinessNameProvider),
+                  tracksCrates: businessTracksCrates(
+                    ref.watch(currentBusinessProvider),
+                  ),
                   logoPath: ref
                       .watch(currentBusinessLogoPathProvider)
                       .valueOrNull,
@@ -1521,6 +1524,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         riderName: 'Pick-up Order',
         storeAddress: _storeAddress,
         businessName: ref.read(currentBusinessNameProvider),
+        tracksCrates: businessTracksCrates(
+          ref.read(currentBusinessProvider),
+        ),
         manufacturerNames: _manufacturerNames,
         paperSize: paperSize,
       );

@@ -130,6 +130,16 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
+  /// One product's stock in every store that holds a row for it, keyed by
+  /// store id (#487, Product Details' Stock by Store card). Business-scoped and
+  /// live: an Adjust Stock, a sale or a sync landing re-emits.
+  Stream<Map<String, int>> watchStockByStoreForProduct(String productId) {
+    return (select(inventory)
+          ..where((i) => whereBusiness(i) & i.productId.equals(productId)))
+        .watch()
+        .map((rows) => {for (final r in rows) r.storeId: r.quantity});
+  }
+
   Future<List<ProductDataWithStock>> getProductsWithStock({
     String? storeId,
   }) async {
@@ -908,6 +918,7 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
     DateTime? startDate,
     DateTime? endDate,
     String? movementType,
+    String? productId,
     ({DateTime createdAt, String id})? cursor,
     int? limit,
   }) {
@@ -915,6 +926,10 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
       innerJoin(products, products.id.equalsExp(stockTransactions.productId)),
       innerJoin(users, users.id.equalsExp(stockTransactions.performedBy)),
       leftOuterJoin(stores, stores.id.equalsExp(stockTransactions.locationId)),
+      leftOuterJoin(
+        stockAdjustments,
+        stockAdjustments.id.equalsExp(stockTransactions.adjustmentId),
+      ),
     ]);
     query.where(
       whereBusiness(stockTransactions) & stockTransactions.voidedAt.isNull(),
@@ -930,6 +945,9 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
     }
     if (movementType != null) {
       query.where(stockTransactions.movementType.equals(movementType));
+    }
+    if (productId != null) {
+      query.where(stockTransactions.productId.equals(productId));
     }
     if (cursor != null) {
       query.where(
@@ -965,6 +983,7 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
       referenceId: s.orderId ?? s.transferId ?? s.adjustmentId ?? s.shipmentId,
       createdAt: s.createdAt,
       unitPriceKobo: p.retailerPriceKobo,
+      adjustmentReason: row.readTableOrNull(stockAdjustments)?.reason,
     );
   }
 
@@ -973,12 +992,14 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
     DateTime? startDate,
     DateTime? endDate,
     String? movementType,
+    String? productId,
   }) {
     return _buildFilteredQuery(
       storeId: storeId,
       startDate: startDate,
       endDate: endDate,
       movementType: movementType,
+      productId: productId,
     ).watch().map((rows) => rows.map(_mapRow).toList());
   }
 
@@ -987,12 +1008,14 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
     DateTime? startDate,
     DateTime? endDate,
     String? movementType,
+    String? productId,
   }) async {
     final rows = await _buildFilteredQuery(
       storeId: storeId,
       startDate: startDate,
       endDate: endDate,
       movementType: movementType,
+      productId: productId,
     ).get();
     return rows.map(_mapRow).toList();
   }
@@ -1002,6 +1025,7 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
     DateTime? startDate,
     DateTime? endDate,
     String? movementType,
+    String? productId,
     ({DateTime createdAt, String id})? cursor,
     int limit = 30,
   }) async {
@@ -1010,6 +1034,7 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
       startDate: startDate,
       endDate: endDate,
       movementType: movementType,
+      productId: productId,
       cursor: cursor,
       limit: limit,
     ).get();
@@ -1021,6 +1046,7 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
     DateTime? startDate,
     DateTime? endDate,
     String? movementType,
+    String? productId,
     int limit = 30,
   }) {
     return _buildFilteredQuery(
@@ -1028,6 +1054,7 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
       startDate: startDate,
       endDate: endDate,
       movementType: movementType,
+      productId: productId,
       limit: limit,
     ).watch().map((rows) => rows.map(_mapRow).toList());
   }
@@ -1244,6 +1271,9 @@ class StockTransactionWithDetails {
   final DateTime createdAt;
   final int unitPriceKobo;
 
+  /// The reason of the adjustment this movement came from (null otherwise).
+  final String? adjustmentReason;
+
   StockTransactionWithDetails({
     required this.transactionId,
     required this.productId,
@@ -1256,6 +1286,7 @@ class StockTransactionWithDetails {
     this.referenceId,
     required this.createdAt,
     required this.unitPriceKobo,
+    this.adjustmentReason,
   });
 
   int get valueKobo => quantityDelta.abs() * unitPriceKobo;

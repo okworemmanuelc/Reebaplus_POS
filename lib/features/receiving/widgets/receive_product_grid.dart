@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
-import 'package:reebaplus_pos/features/inventory/widgets/update_product_sheet.dart';
 import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
 import 'package:reebaplus_pos/features/receiving/widgets/new_product_card.dart';
 import 'package:reebaplus_pos/features/receiving/widgets/receive_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/fly_to_cart.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/product_tile.dart';
+import 'package:reebaplus_pos/core/utils/product_unit.dart';
 
 /// The key on Receive Stock's tile for [productId] (#394).
 ValueKey<String> receiveProductTileKey(String productId) =>
@@ -45,11 +45,12 @@ double receiveTileExtent(BuildContext context) {
 }
 
 /// "60cl · Bottle": the product's size and unit, blanks skipped — the same
-/// two values the receive card showed before (#394).
-String? receiveTileSubtitle(ProductData product) {
+/// two values the receive card showed before (#394). [crates] is
+/// `businessTracksCrates` for the active business (see [unitLabel]).
+String? receiveTileSubtitle(ProductData product, {required bool crates}) {
   final parts = [
     product.size,
-    product.unit,
+    unitLabel(product.unit, crates: crates),
   ].where((s) => s != null && s.trim().isNotEmpty).map((s) => s!.trim());
   return parts.isEmpty ? null : parts.join(' · ');
 }
@@ -168,29 +169,6 @@ class _ReceiveProductTileState extends ConsumerState<_ReceiveProductTile> {
     WidgetsBinding.instance.ensureVisualUpdate();
   }
 
-  void _edit() {
-    HapticFeedback.mediumImpact();
-    // Fire-time re-check: a stale card can't open the edit sheet after the
-    // grant was revoked mid-session.
-    if (!Gates.editProductPrice.allowsNow(ref)) {
-      showGateDenied(context, Gates.editProductPrice);
-      return;
-    }
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => UpdateProductSheet(
-        product: widget.item.product,
-        totalStock: widget.item.totalStock,
-        receiveMode: true,
-        onProductUpdated: (updatedProduct) {
-          // Cart addition is handled inside UpdateProductSheet
-        },
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final product = widget.item.product;
@@ -204,7 +182,10 @@ class _ReceiveProductTileState extends ConsumerState<_ReceiveProductTile> {
     final isOutOfStock = totalStock <= 0;
     return ProductTile(
       name: product.name,
-      subtitle: receiveTileSubtitle(product),
+      subtitle: receiveTileSubtitle(
+        product,
+        crates: businessTracksCrates(ref.watch(currentBusinessProvider)),
+      ),
       stockLabel: isOutOfStock ? 'No stock' : 'Current: $totalStock',
       stockLevel: isOutOfStock ? StockLevel.out : StockLevel.ok,
       categoryName: widget.categoryName,
@@ -212,7 +193,6 @@ class _ReceiveProductTileState extends ConsumerState<_ReceiveProductTile> {
       inCartQty: cartQty,
       tappableWhenOut: true,
       onTap: _add,
-      onLongPress: _edit,
     );
   }
 }

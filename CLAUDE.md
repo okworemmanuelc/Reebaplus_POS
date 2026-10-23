@@ -19,6 +19,9 @@ or making any architectural decision:
 Update `context/progress-tracker.md` after each
 meaningful implementation change.
 
+Follow the **Token-Saving Rules** in
+`CONTEXT/ai-workflow-rules.md` (all agents, all platforms).
+
 If implementation changes the architecture, scope, or
 standards documented in the context files, update the
 relevant file before continuing.

@@ -744,6 +744,14 @@ class Products extends Table {
   // pass-through push table) so every device shows the same picture; the local
   // [imagePath] continues to serve offline render. Null = no photo.
   TextColumn get imageUrl => text().nullable()();
+  // How many in one (schema v84, #487): "12" for 12 bottles in one crate, 6
+  // pieces in one pack. DISPLAY ONLY ("Crate of 12") — it never feeds stock,
+  // prices, crate counts or any money. Null = not given. The column CHECK
+  // mirrors supabase/migrations/0187_products_units_per_pack.sql; being a
+  // column constraint it rides the plain ADD COLUMN of the v84 step.
+  IntColumn get unitsPerPack => integer().nullable().check(
+    const CustomExpression<bool>('units_per_pack > 0'),
+  )();
   IntColumn get version => integer().withDefault(const Constant(1))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
@@ -2920,7 +2928,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 84;
+  int get schemaVersion => 85;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3753,7 +3761,19 @@ class AppDatabase extends _$AppDatabase {
         // bump_products_version trigger (re-creates them from sqlite_master),
         // so nothing here needs manual recreation. Mirrors
         // supabase/migrations/0065_widen_product_unit_check.sql.
-        await m.alterTable(TableMigration(products));
+        //
+        // `columnTransformer`: TableMigration rebuilds from the CURRENT schema,
+        // so a column added after v24 is emitted as a bare "name" identifier
+        // that SQLite degrades to the STRING 'name'. units_per_pack (v84, #487)
+        // did not exist at v24: pin it to NULL (see the v64 note).
+        await m.alterTable(
+          TableMigration(
+            products,
+            columnTransformer: {
+              products.unitsPerPack: const Constant<int>(null),
+            },
+          ),
+        );
       }
       if (from < 25) {
         // v25 (Ring 0 #2, §24.4/§26.2): activity_logs generic shape +
@@ -5127,7 +5147,18 @@ class AppDatabase extends _$AppDatabase {
         // from sqlite_master), so nothing here needs manual recreation (same as
         // the v24 products rebuild). Mirrors
         // supabase/migrations/0151_products_unit_nullable.sql.
-        await m.alterTable(TableMigration(products));
+        //
+        // `columnTransformer`: units_per_pack (v84, #487) did not exist at
+        // v62, so pin it to NULL rather than let SQLite copy the string
+        // 'units_per_pack' into every row (the stale-column trap, see v64).
+        await m.alterTable(
+          TableMigration(
+            products,
+            columnTransformer: {
+              products.unitsPerPack: const Constant<int>(null),
+            },
+          ),
+        );
       }
       if (from < 63) {
         // v63 (#157 crate-pool prefactor): seed one reconciling opening-balance
@@ -6339,16 +6370,6 @@ class AppDatabase extends _$AppDatabase {
         }
       }
 
-      if (from < 84) {
-        final exists = await customSelect(
-          "SELECT 1 FROM pragma_table_info('categories') "
-          "WHERE name = 'marketplace_category'",
-        ).get();
-        if (exists.isEmpty) {
-          await m.addColumn(categories, categories.marketplaceCategory);
-        }
-      }
-
       if (from < 83) {
         // ── v83 — #297/#299: a damage movement carries its reason ───────────
         //
@@ -6373,6 +6394,33 @@ class AppDatabase extends _$AppDatabase {
           _ledgerTables.firstWhere((l) => l.table == 'crate_ledger'),
         )) {
           await customStatement(stmt);
+        }
+      }
+
+      if (from < 84) {
+        // ── v84 — #487: products.units_per_pack ("how many in one") ────────
+        //
+        // Mirrors supabase/migrations/0187_products_units_per_pack.sql. One
+        // nullable INTEGER column whose CHECK (> 0) is a column constraint, so
+        // a plain ADD COLUMN carries it (no rebuild). Display only: nothing is
+        // backfilled. Guarded, because a DB that came through the v24 or v62
+        // products rebuild already has it (both pin it to NULL).
+        final hasUnitsPerPack = (await customSelect(
+          "SELECT 1 FROM pragma_table_info('products') "
+          "WHERE name = 'units_per_pack'",
+        ).get()).isNotEmpty;
+        if (!hasUnitsPerPack) {
+          await m.addColumn(products, products.unitsPerPack);
+        }
+      }
+      if (from < 85) {
+        // #472: existing shop categories stay sellable with no online mapping.
+        final exists = await customSelect(
+          "SELECT 1 FROM pragma_table_info('categories') "
+          "WHERE name = 'marketplace_category'",
+        ).get();
+        if (exists.isEmpty) {
+          await m.addColumn(categories, categories.marketplaceCategory);
         }
       }
     },

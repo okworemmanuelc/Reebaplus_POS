@@ -10731,6 +10731,18 @@ class $ProductsTable extends Products
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _unitsPerPackMeta = const VerificationMeta(
+    'unitsPerPack',
+  );
+  @override
+  late final GeneratedColumn<int> unitsPerPack = GeneratedColumn<int>(
+    'units_per_pack',
+    aliasedName,
+    true,
+    check: () => const CustomExpression<bool>('units_per_pack > 0'),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _versionMeta = const VerificationMeta(
     'version',
   );
@@ -10800,6 +10812,7 @@ class $ProductsTable extends Products
     expiryDate,
     imagePath,
     imageUrl,
+    unitsPerPack,
     version,
     createdAt,
     lastUpdatedAt,
@@ -11042,6 +11055,15 @@ class $ProductsTable extends Products
         imageUrl.isAcceptableOrUnknown(data['image_url']!, _imageUrlMeta),
       );
     }
+    if (data.containsKey('units_per_pack')) {
+      context.handle(
+        _unitsPerPackMeta,
+        unitsPerPack.isAcceptableOrUnknown(
+          data['units_per_pack']!,
+          _unitsPerPackMeta,
+        ),
+      );
+    }
     if (data.containsKey('version')) {
       context.handle(
         _versionMeta,
@@ -11192,6 +11214,10 @@ class $ProductsTable extends Products
         DriftSqlType.string,
         data['${effectivePrefix}image_url'],
       ),
+      unitsPerPack: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}units_per_pack'],
+      ),
       version: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}version'],
@@ -11244,6 +11270,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
   final DateTime? expiryDate;
   final String? imagePath;
   final String? imageUrl;
+  final int? unitsPerPack;
   final int version;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
@@ -11278,6 +11305,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     this.expiryDate,
     this.imagePath,
     this.imageUrl,
+    this.unitsPerPack,
     required this.version,
     required this.createdAt,
     required this.lastUpdatedAt,
@@ -11343,6 +11371,9 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     if (!nullToAbsent || imageUrl != null) {
       map['image_url'] = Variable<String>(imageUrl);
     }
+    if (!nullToAbsent || unitsPerPack != null) {
+      map['units_per_pack'] = Variable<int>(unitsPerPack);
+    }
     map['version'] = Variable<int>(version);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
@@ -11403,6 +11434,9 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       imageUrl: imageUrl == null && nullToAbsent
           ? const Value.absent()
           : Value(imageUrl),
+      unitsPerPack: unitsPerPack == null && nullToAbsent
+          ? const Value.absent()
+          : Value(unitsPerPack),
       version: Value(version),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
@@ -11451,6 +11485,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       expiryDate: serializer.fromJson<DateTime?>(json['expiryDate']),
       imagePath: serializer.fromJson<String?>(json['imagePath']),
       imageUrl: serializer.fromJson<String?>(json['imageUrl']),
+      unitsPerPack: serializer.fromJson<int?>(json['unitsPerPack']),
       version: serializer.fromJson<int>(json['version']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
@@ -11490,6 +11525,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       'expiryDate': serializer.toJson<DateTime?>(expiryDate),
       'imagePath': serializer.toJson<String?>(imagePath),
       'imageUrl': serializer.toJson<String?>(imageUrl),
+      'unitsPerPack': serializer.toJson<int?>(unitsPerPack),
       'version': serializer.toJson<int>(version),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
@@ -11527,6 +11563,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     Value<DateTime?> expiryDate = const Value.absent(),
     Value<String?> imagePath = const Value.absent(),
     Value<String?> imageUrl = const Value.absent(),
+    Value<int?> unitsPerPack = const Value.absent(),
     int? version,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
@@ -11567,6 +11604,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     expiryDate: expiryDate.present ? expiryDate.value : this.expiryDate,
     imagePath: imagePath.present ? imagePath.value : this.imagePath,
     imageUrl: imageUrl.present ? imageUrl.value : this.imageUrl,
+    unitsPerPack: unitsPerPack.present ? unitsPerPack.value : this.unitsPerPack,
     version: version ?? this.version,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -11641,6 +11679,9 @@ class ProductData extends DataClass implements Insertable<ProductData> {
           : this.expiryDate,
       imagePath: data.imagePath.present ? data.imagePath.value : this.imagePath,
       imageUrl: data.imageUrl.present ? data.imageUrl.value : this.imageUrl,
+      unitsPerPack: data.unitsPerPack.present
+          ? data.unitsPerPack.value
+          : this.unitsPerPack,
       version: data.version.present ? data.version.value : this.version,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       lastUpdatedAt: data.lastUpdatedAt.present
@@ -11682,6 +11723,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
           ..write('expiryDate: $expiryDate, ')
           ..write('imagePath: $imagePath, ')
           ..write('imageUrl: $imageUrl, ')
+          ..write('unitsPerPack: $unitsPerPack, ')
           ..write('version: $version, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
@@ -11721,6 +11763,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     expiryDate,
     imagePath,
     imageUrl,
+    unitsPerPack,
     version,
     createdAt,
     lastUpdatedAt,
@@ -11759,6 +11802,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
           other.expiryDate == this.expiryDate &&
           other.imagePath == this.imagePath &&
           other.imageUrl == this.imageUrl &&
+          other.unitsPerPack == this.unitsPerPack &&
           other.version == this.version &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
@@ -11795,6 +11839,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
   final Value<DateTime?> expiryDate;
   final Value<String?> imagePath;
   final Value<String?> imageUrl;
+  final Value<int?> unitsPerPack;
   final Value<int> version;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
@@ -11830,6 +11875,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     this.expiryDate = const Value.absent(),
     this.imagePath = const Value.absent(),
     this.imageUrl = const Value.absent(),
+    this.unitsPerPack = const Value.absent(),
     this.version = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -11866,6 +11912,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     this.expiryDate = const Value.absent(),
     this.imagePath = const Value.absent(),
     this.imageUrl = const Value.absent(),
+    this.unitsPerPack = const Value.absent(),
     this.version = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -11903,6 +11950,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     Expression<DateTime>? expiryDate,
     Expression<String>? imagePath,
     Expression<String>? imageUrl,
+    Expression<int>? unitsPerPack,
     Expression<int>? version,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
@@ -11943,6 +11991,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
       if (expiryDate != null) 'expiry_date': expiryDate,
       if (imagePath != null) 'image_path': imagePath,
       if (imageUrl != null) 'image_url': imageUrl,
+      if (unitsPerPack != null) 'units_per_pack': unitsPerPack,
       if (version != null) 'version': version,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
@@ -11981,6 +12030,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     Value<DateTime?>? expiryDate,
     Value<String?>? imagePath,
     Value<String?>? imageUrl,
+    Value<int?>? unitsPerPack,
     Value<int>? version,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
@@ -12017,6 +12067,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
       expiryDate: expiryDate ?? this.expiryDate,
       imagePath: imagePath ?? this.imagePath,
       imageUrl: imageUrl ?? this.imageUrl,
+      unitsPerPack: unitsPerPack ?? this.unitsPerPack,
       version: version ?? this.version,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -12119,6 +12170,9 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     if (imageUrl.present) {
       map['image_url'] = Variable<String>(imageUrl.value);
     }
+    if (unitsPerPack.present) {
+      map['units_per_pack'] = Variable<int>(unitsPerPack.value);
+    }
     if (version.present) {
       map['version'] = Variable<int>(version.value);
     }
@@ -12167,6 +12221,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
           ..write('expiryDate: $expiryDate, ')
           ..write('imagePath: $imagePath, ')
           ..write('imageUrl: $imageUrl, ')
+          ..write('unitsPerPack: $unitsPerPack, ')
           ..write('version: $version, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
@@ -70449,6 +70504,7 @@ typedef $$ProductsTableCreateCompanionBuilder =
       Value<DateTime?> expiryDate,
       Value<String?> imagePath,
       Value<String?> imageUrl,
+      Value<int?> unitsPerPack,
       Value<int> version,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -70486,6 +70542,7 @@ typedef $$ProductsTableUpdateCompanionBuilder =
       Value<DateTime?> expiryDate,
       Value<String?> imagePath,
       Value<String?> imageUrl,
+      Value<int?> unitsPerPack,
       Value<int> version,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -70956,6 +71013,11 @@ class $$ProductsTableFilterComposer
 
   ColumnFilters<String> get imageUrl => $composableBuilder(
     column: $table.imageUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get unitsPerPack => $composableBuilder(
+    column: $table.unitsPerPack,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -71500,6 +71562,11 @@ class $$ProductsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get unitsPerPack => $composableBuilder(
+    column: $table.unitsPerPack,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get version => $composableBuilder(
     column: $table.version,
     builder: (column) => ColumnOrderings(column),
@@ -71742,6 +71809,11 @@ class $$ProductsTableAnnotationComposer
 
   GeneratedColumn<String> get imageUrl =>
       $composableBuilder(column: $table.imageUrl, builder: (column) => column);
+
+  GeneratedColumn<int> get unitsPerPack => $composableBuilder(
+    column: $table.unitsPerPack,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<int> get version =>
       $composableBuilder(column: $table.version, builder: (column) => column);
@@ -72223,6 +72295,7 @@ class $$ProductsTableTableManager
                 Value<DateTime?> expiryDate = const Value.absent(),
                 Value<String?> imagePath = const Value.absent(),
                 Value<String?> imageUrl = const Value.absent(),
+                Value<int?> unitsPerPack = const Value.absent(),
                 Value<int> version = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -72258,6 +72331,7 @@ class $$ProductsTableTableManager
                 expiryDate: expiryDate,
                 imagePath: imagePath,
                 imageUrl: imageUrl,
+                unitsPerPack: unitsPerPack,
                 version: version,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -72295,6 +72369,7 @@ class $$ProductsTableTableManager
                 Value<DateTime?> expiryDate = const Value.absent(),
                 Value<String?> imagePath = const Value.absent(),
                 Value<String?> imageUrl = const Value.absent(),
+                Value<int?> unitsPerPack = const Value.absent(),
                 Value<int> version = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -72330,6 +72405,7 @@ class $$ProductsTableTableManager
                 expiryDate: expiryDate,
                 imagePath: imagePath,
                 imageUrl: imageUrl,
+                unitsPerPack: unitsPerPack,
                 version: version,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,

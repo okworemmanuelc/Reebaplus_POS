@@ -185,6 +185,10 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
             'p_image_path': productJson['image_path'],
           if (productJson.containsKey('expiry_date'))
             'p_expiry_date': productJson['expiry_date'],
+          // NOTE (#487): pos_create_product_v2 has no units_per_pack
+          // parameter, so this flag-ON path does not carry it to the cloud
+          // (the v1 path below does, in the products upsert). Add the RPC
+          // parameter before this flag is ever turned on.
           if (hasInitialStock)
             'p_initial_stock': <String, dynamic>{
               'store_id': storeId,
@@ -290,7 +294,7 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     final mapping = companion.marketplaceCategory.present
         ? companion.marketplaceCategory
         : Value(starterMarketplaceCategory(
-            industryOf(business.type), companion.name.value));
+            industry: industryOf(business.type), name: companion.name.value));
     final row = companion.copyWith(
       id: Value(id),
       marketplaceCategory: mapping,
@@ -326,9 +330,9 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
   /// add_product_screen.dart.
   Future<bool> categoryNameExists(String name, {String? excludeId}) async {
     final target = name.trim().toLowerCase();
-    final rows = await (select(categories)
-          ..where((t) => whereBusiness(t) & t.isDeleted.not()))
-        .get();
+    final rows = await (select(
+      categories,
+    )..where((t) => whereBusiness(t) & t.isDeleted.not())).get();
     return rows.any(
       (c) => c.id != excludeId && c.name.trim().toLowerCase() == target,
     );
@@ -340,8 +344,9 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
   /// The full re-read preserves the untouched `description`. The caller guards
   /// against a collision via [categoryNameExists] first.
   Future<void> renameCategory(String id, {required String name}) async {
-    await (update(categories)..where((t) => t.id.equals(id) & whereBusiness(t)))
-        .write(
+    await (update(
+      categories,
+    )..where((t) => t.id.equals(id) & whereBusiness(t))).write(
       CategoriesCompanion(
         name: Value(name),
         lastUpdatedAt: Value(DateTime.now()),
@@ -382,28 +387,27 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
   Future<int> softDeleteCategoryAndReassign(String id) async {
     final now = DateTime.now();
     return transaction(() async {
-      final affected = await (select(products)
-            ..where(
-              (t) =>
-                  t.categoryId.equals(id) &
-                  whereBusiness(t) &
-                  t.isDeleted.not(),
-            ))
-          .get();
+      final affected =
+          await (select(products)..where(
+                (t) =>
+                    t.categoryId.equals(id) &
+                    whereBusiness(t) &
+                    t.isDeleted.not(),
+              ))
+              .get();
       for (final p in affected) {
-        final comp = p.toCompanion(true).copyWith(
-          categoryId: const Value(null),
-          lastUpdatedAt: Value(now),
-        );
+        final comp = p
+            .toCompanion(true)
+            .copyWith(categoryId: const Value(null), lastUpdatedAt: Value(now));
         await (update(
           products,
         )..where((t) => t.id.equals(p.id) & whereBusiness(t))).write(comp);
         await db.syncDao.enqueueUpsert('products', comp);
       }
 
-      await (update(categories)
-            ..where((t) => t.id.equals(id) & whereBusiness(t)))
-          .write(
+      await (update(
+        categories,
+      )..where((t) => t.id.equals(id) & whereBusiness(t))).write(
         CategoriesCompanion(
           isDeleted: const Value(true),
           lastUpdatedAt: Value(now),
@@ -437,6 +441,15 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
       query.where((t) => t.categoryId.equals(categoryId));
     }
     return query.watch();
+  }
+
+  /// Every non-deleted product of the current business (Add Product's
+  /// name-match list). Business-scoped: a device holding two businesses never
+  /// mixes their products.
+  Future<List<ProductData>> getActiveProducts() {
+    return (select(
+      products,
+    )..where((t) => whereBusiness(t) & t.isDeleted.not())).get();
   }
 
   Future<ProductData?> findById(String id) {
@@ -640,6 +653,10 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     // null to clear locally) is written; a set value pushes because the partial
     // companion enqueued below serializes present, non-null values.
     Object? barcode = _unset,
+    // "How many in one" (#487, display only). Sentinel-defaulted like the
+    // fields above: omit to leave the column untouched, so an edit that
+    // doesn't carry it never wipes it to null.
+    Object? unitsPerPack = _unset,
   }) async {
     final now = DateTime.now();
     final comp = ProductsCompanion(
@@ -689,11 +706,52 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
       barcode: identical(barcode, _unset)
           ? const Value.absent()
           : Value(barcode as String?),
+      unitsPerPack: identical(unitsPerPack, _unset)
+          ? const Value.absent()
+          : Value(unitsPerPack as int?),
       lastUpdatedAt: Value(now),
     );
     await (update(
       products,
     )..where((t) => t.id.equals(productId) & whereBusiness(t))).write(comp);
+    await db.syncDao.enqueueUpsert('products', comp);
+  }
+
+  /// Re-enqueues the FULL product row after an Edit Product save, keeping an
+  /// explicit null for each column the edit CLEARED (#487 PR 4).
+  ///
+  /// [_enqueueFullProduct] uses `toCompanion(true)`, which drops nulls, and a
+  /// later full enqueue (the photo URL) replaces the partial one from
+  /// [updateProductDetails] in the outbox. Without this, clearing units per
+  /// pack, description, barcode, expiry, supplier or brand would stay stale in
+  /// the cloud. Only the named columns carry a null, so a never-set column
+  /// still pushes no key.
+  Future<void> enqueueProductEdit(
+    String productId, {
+    bool clearedUnitsPerPack = false,
+    bool clearedSubtitle = false,
+    bool clearedBarcode = false,
+    bool clearedExpiry = false,
+    bool clearedSupplier = false,
+    bool clearedManufacturer = false,
+    bool clearedCategory = false,
+  }) async {
+    final row =
+        await (select(products)
+              ..where((t) => t.id.equals(productId) & whereBusiness(t)))
+            .getSingleOrNull();
+    if (row == null) return;
+    final comp = row
+        .toCompanion(true)
+        .copyWith(
+          unitsPerPack: clearedUnitsPerPack ? const Value(null) : null,
+          subtitle: clearedSubtitle ? const Value(null) : null,
+          barcode: clearedBarcode ? const Value(null) : null,
+          expiryDate: clearedExpiry ? const Value(null) : null,
+          supplierId: clearedSupplier ? const Value(null) : null,
+          manufacturerId: clearedManufacturer ? const Value(null) : null,
+          categoryId: clearedCategory ? const Value(null) : null,
+        );
     await db.syncDao.enqueueUpsert('products', comp);
   }
 
@@ -709,9 +767,9 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
   /// concurrent name/price edits. Re-reading and pushing every column keeps
   /// those edits (and satisfies the cloud's NOT NULL columns).
   Future<void> setProductImageUrl(String productId, String? imageUrl) async {
-    await (update(products)
-          ..where((t) => t.id.equals(productId) & whereBusiness(t)))
-        .write(
+    await (update(
+      products,
+    )..where((t) => t.id.equals(productId) & whereBusiness(t))).write(
       ProductsCompanion(
         imageUrl: Value(imageUrl),
         lastUpdatedAt: Value(DateTime.now()),
@@ -729,16 +787,13 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
   /// Enqueues the FULL row (via [_enqueueFullProduct]): a partial products
   /// upsert omits the NOT NULL name (23502). Returns the updated product, or
   /// null when [productId] isn't one of this business's products.
-  Future<ProductData?> setProductBarcode(
-    String productId,
-    String barcode,
-  ) {
+  Future<ProductData?> setProductBarcode(String productId, String barcode) {
     // One transaction: a pull landing between the write and the full-row
     // re-read could otherwise enqueue a payload without the barcode.
     return transaction(() async {
-      await (update(products)
-            ..where((t) => t.id.equals(productId) & whereBusiness(t)))
-          .write(
+      await (update(
+        products,
+      )..where((t) => t.id.equals(productId) & whereBusiness(t))).write(
         ProductsCompanion(
           barcode: Value(barcode.trim()),
           lastUpdatedAt: Value(DateTime.now()),
@@ -781,6 +836,33 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     return stmt.get();
   }
 
+  /// Archives a product, or brings it back (#487). Archive reuses
+  /// `products.is_available`: false = archived. An archived product is off
+  /// sale (the POS grid and the scanner already skip it), hidden from the
+  /// Inventory list and from Receive Stock, and keeps its stock, history and
+  /// reports. Nothing is deleted.
+  ///
+  /// Business-scoped: writes ONLY `isAvailable` + an explicit `lastUpdatedAt`
+  /// (the pull is last-write-wins on it), so another business's product id is
+  /// never touched. Then enqueues the FULL row (via [_enqueueFullProduct]): a
+  /// partial products upsert omits the NOT NULL name (23502) and, coalesced
+  /// over a pending details edit, would drop it.
+  Future<void> setProductArchived(String productId, bool archived) {
+    // One transaction: a pull landing between the write and the full-row
+    // re-read could otherwise enqueue a payload with the old flag.
+    return transaction(() async {
+      await (update(
+        products,
+      )..where((t) => t.id.equals(productId) & whereBusiness(t))).write(
+        ProductsCompanion(
+          isAvailable: Value(!archived),
+          lastUpdatedAt: Value(DateTime.now()),
+        ),
+      );
+      await _enqueueFullProduct(productId);
+    });
+  }
+
   Future<void> updateProductPrices(
     String productId, {
     required int buyingPriceKobo,
@@ -795,9 +877,9 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
       wholesalerPriceKobo: Value(wholesalerPriceKobo),
       lastUpdatedAt: Value(now),
     );
-    await (update(products)
-          ..where((t) => t.id.equals(productId) & whereBusiness(t)))
-        .write(comp);
+    await (update(
+      products,
+    )..where((t) => t.id.equals(productId) & whereBusiness(t))).write(comp);
     await _enqueueFullProduct(productId);
   }
 
