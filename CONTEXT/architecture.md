@@ -4,6 +4,21 @@
 
 Reebaplus POS is an offline-first Flutter application backed by Supabase. The device is the source of truth for the active session: every read and write hits a local Drift (SQLite) database first, and a background sync engine reconciles that local state with Postgres on Supabase. The app is built so that a cashier can run the entire selling loop — cart, checkout, receipt, wallet update — with no network at all, and have it converge with every other device in the same business once a connection returns. This document defines the technology stack, the folder-level boundaries, the storage model, the auth and access model, the sync (background task) model, and the invariants the codebase must never violate.
 
+## Planned Shopper boundary — #422, pending owner sign-off
+
+Online ordering adds a Shopper surface alongside the offline-first business till.
+The proposed decisions are [ADR 0030: identity](../docs/adr/0030-shopper-identity.md)
+and [ADR 0031: storefront boundary](../docs/adr/0031-shopper-storefront-boundary.md).
+They contain the exact proposed invariant wording/scope, eligibility rules and
+release gate. The Invariants below remain the current rules until owner approval;
+#422 introduces no Shopper screens, routing or storefront RPCs.
+
+The [Shopper isolation audit](../docs/security/0422-shopper-isolation.md) records
+the deployed access paths, migration and outstanding release blockers. In
+particular, current_user_business_ids() currently reads profiles.business_id;
+a membership-less identity must not be able to forge that pointer. Treat
+authenticated identity and business membership as separate checks.
+
 ## Stack
 
 | Layer | Technology | Role |
