@@ -16,7 +16,7 @@ import 'package:reebaplus_pos/core/permissions/gate.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/features/inventory/screens/product_detail_screen.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/product_detail_cards.dart';
-import 'package:reebaplus_pos/features/inventory/widgets/update_product_sheet.dart';
+import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
 
 import '../helpers/inventory_seed.dart';
 import '../helpers/product_detail_seed.dart';
@@ -714,12 +714,17 @@ void main() {
   });
 
   group('top bar actions', () {
-    testWidgets('Edit Product opens the existing editor sheet', (tester) async {
+    testWidgets('Edit Product opens the form in edit mode', (tester) async {
       await pump(tester);
       await openMenu(tester);
       await tester.tap(find.text('Edit Product'));
       await tester.pumpAndSettle();
-      expect(find.byType(UpdateProductSheet), findsOneWidget);
+      expect(
+        tester
+            .widget<AddProductScreen>(find.byType(AddProductScreen))
+            .editProduct,
+        isNotNull,
+      );
       await disposeScreen(tester);
     });
 
@@ -747,7 +752,12 @@ void main() {
       expect(find.byTooltip('More options'), findsNothing);
       await tester.tap(find.text('Edit Product'));
       await tester.pumpAndSettle();
-      expect(find.byType(UpdateProductSheet), findsOneWidget);
+      expect(
+        tester
+            .widget<AddProductScreen>(find.byType(AddProductScreen))
+            .editProduct,
+        isNotNull,
+      );
       await disposeScreen(tester);
     });
 

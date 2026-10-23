@@ -16,11 +16,9 @@ import 'package:reebaplus_pos/features/receiving/screens/receive_cart_screen.dar
 import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
 import 'package:reebaplus_pos/features/receiving/widgets/receive_parts.dart';
 import 'package:reebaplus_pos/features/receiving/widgets/receive_product_grid.dart';
-import 'package:reebaplus_pos/shared/services/ui_hint_service.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
-import 'package:reebaplus_pos/shared/widgets/coach_hint_banner.dart';
 import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/fly_to_cart.dart';
 
@@ -45,7 +43,6 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
   String _searchQuery = '';
   bool _isSearching = false;
   bool _isLoading = true;
-  bool _showReceiveHint = false;
 
   StreamSubscription? _productsSub;
   StreamSubscription? _categoriesSub;
@@ -53,14 +50,6 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
   @override
   void initState() {
     super.initState();
-    uiHintService.shouldShow(UiHintService.hintReceiveLongpress).then((show) {
-      if (show && mounted) {
-        setState(() => _showReceiveHint = true);
-        // Count this display as a passive view so an ignored hint still retires
-        // after `_retireAfter` visits (never shown forever).
-        uiHintService.markShown(UiHintService.hintReceiveLongpress);
-      }
-    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _initStreams();
     });
@@ -241,31 +230,6 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
             ),
           ),
         ),
-        if (_showReceiveHint && Gates.editProductPrice.allows(ref))
-          SliverPadding(
-            padding: EdgeInsets.fromLTRB(
-              gutter,
-              context.getRSize(12),
-              gutter,
-              0,
-            ),
-            sliver: SliverToBoxAdapter(
-              // Only for roles that can edit price, as before.
-              child: CoachHintBanner(
-                key: ReceiveKeys.hint,
-                message: 'Tap and hold a product to edit it.',
-                onDismiss: () {
-                  setState(() => _showReceiveHint = false);
-                  // Deliberate close retires the hint immediately so it never
-                  // reappears (was markShown, which let it surface a second
-                  // time).
-                  uiHintService.markDismissed(
-                    UiHintService.hintReceiveLongpress,
-                  );
-                },
-              ),
-            ),
-          ),
         SliverToBoxAdapter(child: SizedBox(height: context.getRSize(16))),
         ReceiveProductGrid(
           products: _filteredProducts,

@@ -1,11 +1,10 @@
-// Visual goldens for Add Product (#487 PR 2) and the Update Product sheet
-// (#392 PR 2).
+// Visual goldens for Add Product (#487 PR 2) and Edit Product (#487 PR 4).
 //
 // Add Product empty and filled in (a Bottle Crate product with cost, prices,
 // brand and category, so the profit rows and Track Empty Crates show) at
 // 390x844 (phone, gesture nav, bottom 24), 844x390 (status bar 24, 3-button
 // nav on the right 48: two columns), 800x1280 (two columns) and 1280x800 (two
-// columns + Preview), plus a filled 1024x700 (Preview in a short window). The Update Product sheet at 390x844 and 844x390. Light +
+// columns + Preview), plus a filled 1024x700 (Preview in a short window). Edit Product at 390x844 and 1280x800, light only. Light +
 // dark. No relative dates or times anywhere. Regenerate with:
 //
 //     flutter test --update-goldens test/redesign/add_product_golden_test.dart
@@ -20,8 +19,6 @@ import 'package:reebaplus_pos/core/permissions/gate.dart';
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
-import 'package:reebaplus_pos/features/inventory/screens/inventory_screen.dart';
-import 'package:reebaplus_pos/features/inventory/widgets/update_product_sheet.dart';
 
 import '../helpers/inventory_seed.dart';
 import '../helpers/screen_harness.dart';
@@ -72,7 +69,6 @@ void main() {
     ('800x1280', Size(800, 1280), FakeViewPadding(top: 24, bottom: 24)),
     ('1280x800', Size(1280, 800), FakeViewPadding(top: 24)),
   ];
-  final phones = [all[0], all[1]];
 
   Future<void> pump(
     WidgetTester tester, {
@@ -191,41 +187,25 @@ void main() {
         await snap(tester, 'add_product_filled_${sizeName}_$theme');
       });
     }
+  }
 
-    for (final (sizeName, size, insets) in phones) {
-      testWidgets('update product sheet, $sizeName $theme', (tester) async {
-        await pump(
-          tester,
-          screen: const InventoryScreen(),
-          size: size,
-          insets: insets,
-          brightness: brightness,
-          bottomNavHeight: kBottomNavBodyHeight,
-        );
-        // Coca-Cola (first row by name) has no expiry date, so nothing in
-        // the sheet depends on today.
-        final row = find.byKey(
-          inventoryProductRowKey(sample.productIds['Coca-Cola']!),
-        );
-        // Sideways, the figure cards push the rows below the fold: drag the
-        // page up until the first row is on screen.
-        bool onScreen() =>
-            row.evaluate().isNotEmpty &&
-            tester.getCenter(row).dy < size.height - 60;
-        for (var i = 0; i < 10 && !onScreen(); i++) {
-          await tester.drag(
-            find.byType(NestedScrollView),
-            const Offset(0, -120),
-          );
-          await tester.pumpAndSettle();
-        }
-        await tester.longPress(row);
-        for (var i = 0; i < 10; i++) {
-          await tester.pump(const Duration(milliseconds: 100));
-        }
-        expect(find.byType(UpdateProductSheet), findsOneWidget);
-        await snap(tester, 'update_product_sheet_${sizeName}_$theme');
-      });
-    }
+  // Edit Product (#487 PR 4): the same form opened on a saved product. Phone
+  // and the wide layout, light only.
+  for (final (sizeName, size, insets) in [all[0], all[3]]) {
+    testWidgets('edit product, $sizeName light', (tester) async {
+      final product =
+          await (env.db.select(env.db.products)
+                ..where((t) => t.id.equals(sample.productIds['Coca-Cola']!)))
+              .getSingle();
+      await pump(
+        tester,
+        screen: AddProductScreen(editProduct: product),
+        size: size,
+        insets: insets,
+        brightness: Brightness.light,
+      );
+      await tester.pumpAndSettle();
+      await snap(tester, 'edit_product_${sizeName}_light');
+    });
   }
 }
