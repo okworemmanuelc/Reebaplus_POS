@@ -7,6 +7,15 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Wave 2 batch D COMPLETE: #462 PRs 2–3 + #463 PRs 1–2 (2026-10-23)
+Sonnet subagents, supervisor-reviewed; PRs #482, #484, #483, #485 (after #464). Restyle only: no auth/onboarding/data logic changed.
+- **#462 PR 2 (#482)**: Email entry, OTP verification, Existing account, No account found, stale-business prompt; 36 goldens; `test/auth/signin_screens_layout_test.dart` (no-overflow at 360@1.3 + 4 sizes, keyboard-up).
+- **#462 PR 3 (#484)**: lock screen (+ `_UserPickerSheet`, SuccessOverlay), Create PIN, Biometric setup, PinDialog, `_SessionExpiredScreen`. `isShortViewport` replaced by a measured LayoutBuilder rule: two columns only when one column doesn't fit and width ≥ 560, passing `maxWidth: kSettingsMaxContentWidth` to BrandedAuthBackground (keyboard excluded from the measure). `buildSessionExpiredScreenForTest` seam in main.dart. 44 goldens. Closes #462.
+- **#463 PR 1 (#483)**: CEO sign-up every step; new shared `lib/features/auth/widgets/sign_up_step_dots.dart` (`SignUpStepDots`); 44 goldens + overflow/keyboard tests.
+- **#463 PR 2 (#485)**: staff sign-up (uses `SignUpStepDots`), Access granted, Success entry, Get started card (`lib/features/dashboard/widgets/get_started_card.dart`; `get_started_checklist.dart` is logic only, untouched). 64 goldens. Closes #463.
+- Golden tests hide the debug banner with `WidgetsApp.debugAllowBannerOverride = false` in setUp/tearDown. NEVER change `test/helpers/screen_harness.dart` for this (it re-renders every pumpScreen golden).
+- Known: the viewport sweep's ERROR rows (ProductDetail, BusinessInfo, StaffManagement, Login, SuccessDashboardEntry) are MissingPlugin/PartialPull harness gaps, not overflows.
+
 ### Issue #462 PR 1: Auth parts + welcome/coming soon + delete AuthBackground (Wave 2 D, 2026-10-22)
 Branch `feat/redesign-w2-auth`. Sub-Issue #462 PR 1 of 3.
 - **Restyle only: no logic/money/permissions/routing/wipe changes.**
