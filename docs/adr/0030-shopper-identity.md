@@ -1,6 +1,6 @@
 # Shopper identity is separate from business membership
 
-**Status: proposed — owner sign-off on invariant #9 wording pending.**
+**Status: accepted — owner approved the identity rule in chat on 2026-10-23.**
 Source: #421 (owner decisions through 2026-10-22), groundwork #422.
 
 One email identifies one login with **at most one business membership**. Shopping
@@ -22,7 +22,7 @@ requests and unlinks shop Customers; the shop retains its own records. A login
 with a business membership keeps that business and login. Business deletion
 remains exclusively the Danger Zone operation.
 
-## Proposed replacement for invariant #9
+## Approved invariant #9
 
 > **One email is one identity with at most one business membership.** Email OTP
 > and Google with the same resolved email identify the same login. A Shopper is
@@ -30,5 +30,5 @@ remains exclusively the Danger Zone operation.
 > email. A login already linked to a business, including a staff login, cannot
 > create or join a second business. Shopping never changes that restriction.
 
-This ADR proposes the wording; it does not change authentication or routing in
-#422. The protected Invariants section remains unchanged until owner sign-off.
+The approved rule is recorded in architecture.md. This decision does not change
+authentication or routing in #422; those runtime changes belong to later slices.

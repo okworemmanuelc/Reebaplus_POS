@@ -11,10 +11,11 @@ The human updates it when resolving open questions or making architectural decis
 Branch `feat/422-shopper-groundwork`, isolated worktree `../drinkPosApp-wt-422`,
 base `985e80be` (latest origin/main when started). Owner authorized #422 only;
 other #421 slices remain held.
-- Proposed ADRs 0030/0031: identity versus membership, online-first storefront,
+- Owner approved ADRs 0030/0031 in chat on 2026-10-23: identity versus membership,
+  online-first storefront,
   eligibility and release gates. Glossary adds Shopper, Online Order, Send to
-  till, Pay on delivery, Browse, Sponsored and Listing. Invariants unchanged
-  pending owner wording sign-off.
+  till, Pay on delivery, Browse, Sponsored and Listing. Invariants #1/#4/#5/#8/#9
+  now record the approved scope; no runtime or deployment change.
 - Read-only live catalogue audit: 69 business_id tables; deployed through 0186.
   RLS authority is the writable profiles pointer, not an independent membership
   check. Prepared 0188 to constrain direct profile binding, revoke five
@@ -28,7 +29,7 @@ other #421 slices remain held.
   flutter analyze clean. The six new Tier-2 tests compile and skip without
   dedicated credentials; this is not a passing live security audit. SQL parsed
   with pglast; policy semantics still require the dedicated migrated backend.
-- Open: owner invariant approval; deletion-tombstone read contract versus literal
+- Open: deletion-tombstone read contract versus literal
   zero-tenant-row criterion; separate #467/#468;
   live execution on a dedicated migrated test project. Do not close #422 yet.
 

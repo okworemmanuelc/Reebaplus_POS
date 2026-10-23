@@ -7,7 +7,8 @@ when connectivity returns. The **web app** is online-first: it reads and writes 
 cloud live, through PostgREST/Realtime and server-authoritative RPCs, with no local
 source of truth (ADRs 0007–0012). The two clients share **one database schema and
 one RPC write-contract** — nothing else. The offline invariants (#1 local-source-of-
-truth, #4 every-write-through-the-outbox) are mobile-scoped, not app-wide.
+truth, #4 every-write-through-the-outbox) apply to the mobile business till.
+The mobile Shopper surface is an approved online-first exception (ADR 0031).
 
 ## Language
 
@@ -15,7 +16,7 @@ truth, #4 every-write-through-the-outbox) are mobile-scoped, not app-wide.
 
 **Shopper**:
 A person shopping with a Reebaplus login. Shopping is not a business membership;
-a business member may also shop with the same login (proposed ADR 0030).
+a business member may also shop with the same login (ADR 0030).
 _Avoid_: Customer (the shop's own record), staff membership.
 
 **Online Order**:

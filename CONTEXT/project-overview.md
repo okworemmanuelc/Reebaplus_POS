@@ -14,9 +14,9 @@ phones retain PIN/till entry and offline operation. Browse-first stays behind a
 switch until the full ordering loop works, and screen slices await owner designs.
 
 Groundwork #422 is authorized in its own workspace. Other slices remain on hold.
-The architecture exceptions and identity wording are proposed in ADRs 0030/0031
-and await owner sign-off; the existing flows described below remain implemented
-behaviour. See [the audit](../docs/security/0422-shopper-isolation.md) for launch
+The owner approved the architecture exceptions and identity wording in ADRs
+0030/0031 on 2026-10-23; the existing flows described below remain implemented
+behaviour until their later runtime slices land. See [the audit](../docs/security/0422-shopper-isolation.md) for launch
 security prerequisites, including the separate #467 and #468 fixes.
 
 ## Goals

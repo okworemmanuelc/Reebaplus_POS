@@ -1,6 +1,6 @@
 # The Shopper surface is online-first behind a public storefront contract
 
-**Status: proposed — owner sign-off on invariant exceptions pending.**
+**Status: accepted — owner approved the Shopper boundary in chat on 2026-10-23.**
 Source: #421 (latest owner decisions 2026-10-22), groundwork #422.
 
 The Shopper surface reads and writes through a small, server-validated set of
@@ -11,7 +11,7 @@ catalogues into Drift, would expose private tenant data and add offline sync to
 a surface that needs current availability. Like the Web POS (ADR 0007), this is
 an explicit exception, not a change to the till's offline-first contract.
 
-## Proposed invariant scope (owner review)
+## Approved invariant scope
 
 - **#1:** the business till uses Drift; the Shopper surface requires connectivity
   and renders only public storefront RPC results or the device-local cart.
@@ -23,8 +23,9 @@ an explicit exception, not a change to the till's offline-first contract.
   expose explicitly public listing fields across businesses. Base tenant rows,
   buying prices, cost batches and other customers remain inaccessible.
 
-The protected Invariants section stays unchanged pending approval. These proposed
-exceptions authorize no implementation beyond #422; screens and routing are later slices.
+The approved exceptions are recorded in architecture.md. They authorize no
+implementation beyond #422; screens and routing are later slices. Approval does
+not waive live security verification or resolve the deletion-tombstone question.
 
 ## Eligibility and public listings
 

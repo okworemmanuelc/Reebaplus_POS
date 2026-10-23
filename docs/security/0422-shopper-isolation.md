@@ -1,7 +1,7 @@
 # Shopper isolation groundwork — #422
 
-Status: implementation prepared; owner wording approval and live verification
-remain outstanding. Parent #421 is still held for all later slices.
+Status: implementation prepared; owner approved the architecture rules in chat
+on 2026-10-23. Live verification and the tombstone decision remain outstanding. Parent #421 is still held for all later slices.
 
 ## Evidence (read-only catalogue audit, 2026-10-23)
 
@@ -55,8 +55,9 @@ the audit. No remote schema or production data was changed.
    grants without breaking intentional invite/onboarding previews. The live
    catalogue still shows those grants. Do not blanket-revoke all public RPCs:
    browsing and some existing pre-auth flows intentionally need public access.
-4. **Owner sign-off:** ADRs 0030 and 0031 contain proposed wording for invariants
-   #9 and #1/#4/#5/#8 respectively. The protected Invariants section is unchanged.
+4. **Owner sign-off recorded (2026-10-23):** ADRs 0030 and 0031 and invariants
+   #9 and #1/#4/#5/#8 now record the approved identity and Shopper boundary. This
+   approval does not resolve the tombstone question or waive live verification.
 
 ## Verification
 
@@ -90,7 +91,7 @@ failures**. The six new live tests are skipped without dedicated credentials.
 The migration and audit SQL pass a PostgreSQL parser check. No remote policy
 semantics, onboarding compatibility or ACL change is claimed live-verified.
 
-Do not close #422 or enable Shopper access until the owner signs off, #467/#468
-are resolved, the tombstone/remote-RPC decisions are recorded, and live isolation
+Do not close #422 or enable Shopper access until #467/#468 are resolved,
+the tombstone decision is recorded, and live isolation
 tests pass against the migrated schema. Screens, Shopper tables and storefront
 RPCs remain owned by later slices.
