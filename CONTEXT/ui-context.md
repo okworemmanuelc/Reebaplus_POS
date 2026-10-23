@@ -838,3 +838,29 @@ Widgets must **never** reference an icon set package or icon class directly. Alw
 ### Exceptions and compatibility:
 - **Google Brand Logo**: `AppIcons.googleBrand` holds a direct `IconData(0xf1a0, fontFamily: 'FontAwesomeBrands', fontPackage: 'font_awesome_flutter')` constant until replaced by an SVG asset in Wave 2 (TODO #346).
 - **Saved Codepoints**: Legacy FontAwesome codepoints persisted in the local SQLite database or cart lines (e.g. `kStoredIconBeerMug = 0xf0fc`, `kStoredIconBox = 0xf466`, `kStoredIconBolt = 0xf0e7`, `kStoredIconWineBottle = 0xf72f`) are translated on read to the corresponding `AppIcons` constant via `productIconFromCodePoint` (`lib/shared/utils/product_icon_helper.dart`).
+
+
+## Shared area picker (#471)
+
+Owner authorised agent-designed screens on 2026-10-23, using the supplied
+Browse/product-detail images as visual references and the existing theme.
+`showAreaPicker` opens a Surface sheet (640dp cap, 90% available height), with
+rounded top corners, a handle, location IconTile, title and a 48dp close target.
+Country/state buttons lead back to searchable lists. A Nigerian LGA tap returns
+the choice; "Whole state" is present only for callers allowing it. Other
+countries use free-text state/district fields and "Use this area". State is
+required; district is required unless the allowed "Whole state" choice is on.
+Every stage is one scroll surface, including its header/search/form/results,
+so landscape and keyboard-up layouts retain reachable controls. Dismissal
+returns no choice and preserves the caller's saved value. No device location
+permission or network call. Uses `AppInput`, `AppButton`, `IconTile`, `AppIcons`,
+DM Sans/theme colours, responsive spacing and the **actual** existing radius
+token `AppSpacing.borderRadiusXL` in `design_tokens.dart` (the older AppRadius
+name in this document has no implementation). Light/dark portrait and 844×390
+landscape goldens live in `test/redesign/goldens/area_picker_*`.
+
+New picker strings live in `lib/l10n/area_en.arb`, generated with Flutter
+`gen-l10n` (`l10n.yaml`). The picker uses an installed AreaLocalizations when
+available and generated English as fallback for today's non-localised app.
+This adds only Flutter's SDK localisation dependency; existing screens are
+not converted. The caller supplies initial values and owns persistence.
