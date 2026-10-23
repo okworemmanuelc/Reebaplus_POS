@@ -49,11 +49,11 @@ import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
-import 'package:reebaplus_pos/features/pos/providers/pos_providers.dart';
-import 'package:reebaplus_pos/features/pos/widgets/barcode_scan_page.dart';
+import 'package:reebaplus_pos/shared/scanner/scanner_providers.dart';
+import 'package:reebaplus_pos/shared/scanner/barcode_scan_page.dart';
 import 'package:reebaplus_pos/features/pos/widgets/edit_item_modal.dart';
 import 'package:reebaplus_pos/features/pos/widgets/pos_barcode_scan_button.dart';
-import 'package:reebaplus_pos/features/pos/widgets/scan_cart_count.dart';
+import 'package:reebaplus_pos/shared/scanner/scan_cart_count.dart';
 import 'package:reebaplus_pos/features/pos/widgets/scan_link_product_sheet.dart';
 import 'package:reebaplus_pos/features/pos/widgets/scan_unknown_choice_sheet.dart';
 import 'package:reebaplus_pos/features/pos/widgets/scan_which_one_sheet.dart';
@@ -267,16 +267,17 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('scan button is always visible (not gated on the cart) and textless', (
-    tester,
-  ) async {
-    await tester.pumpWidget(host(FakeBarcodeScanner(null), loaded: const []));
-    // Rendered with an empty cart — the button is present regardless.
-    expect(find.byType(PosBarcodeScanButton), findsOneWidget);
-    expect(find.text('Scan'), findsNothing);
-    expect(find.byTooltip('Scan barcode'), findsOneWidget);
-    expect(cart.value, isEmpty);
-  });
+  testWidgets(
+    'scan button is always visible (not gated on the cart) and textless',
+    (tester) async {
+      await tester.pumpWidget(host(FakeBarcodeScanner(null), loaded: const []));
+      // Rendered with an empty cart — the button is present regardless.
+      expect(find.byType(PosBarcodeScanButton), findsOneWidget);
+      expect(find.text('Scan'), findsNothing);
+      expect(find.byTooltip('Scan barcode'), findsOneWidget);
+      expect(cart.value, isEmpty);
+    },
+  );
 
   group('found and sellable — opens the Add to Cart sheet (#317)', () {
     testWidgets('confirming 3 puts 3 in the cart at the active tier', (
@@ -339,30 +340,31 @@ void main() {
       await clearToast(tester);
     });
 
-    testWidgets('already ×2 in the cart → starts on 3 with "2 already in cart"', (
-      tester,
-    ) async {
-      final product = await seedProduct(name: 'Star Lager', barcode: 'BC-1');
-      cart.addItem(product, qty: 2, maxStock: 10, tier: PriceTier.retailer);
-      await tester.pumpWidget(
-        host(
-          FakeBarcodeScanner('BC-1'),
-          loaded: [ProductDataWithStock(product: product, totalStock: 10)],
-        ),
-      );
+    testWidgets(
+      'already ×2 in the cart → starts on 3 with "2 already in cart"',
+      (tester) async {
+        final product = await seedProduct(name: 'Star Lager', barcode: 'BC-1');
+        cart.addItem(product, qty: 2, maxStock: 10, tier: PriceTier.retailer);
+        await tester.pumpWidget(
+          host(
+            FakeBarcodeScanner('BC-1'),
+            loaded: [ProductDataWithStock(product: product, totalStock: 10)],
+          ),
+        );
 
-      await scan(tester);
+        await scan(tester);
 
-      expect(qtyText(tester), '3');
-      expect(find.text('2 already in cart'), findsOneWidget);
+        expect(qtyText(tester), '3');
+        expect(find.text('2 already in cart'), findsOneWidget);
 
-      // The field is the cart TOTAL: confirming 3 leaves one line of 3.
-      await tapSheetButton(tester, 'Add to Cart');
-      expect(cart.value.single['qty'], 3);
-      expect(find.text('Star Lager ×3 added'), findsOneWidget);
+        // The field is the cart TOTAL: confirming 3 leaves one line of 3.
+        await tapSheetButton(tester, 'Add to Cart');
+        expect(cart.value.single['qty'], 3);
+        expect(find.text('Star Lager ×3 added'), findsOneWidget);
 
-      await clearToast(tester);
-    });
+        await clearToast(tester);
+      },
+    );
 
     testWidgets('the start value never passes the store stock', (tester) async {
       final product = await seedProduct(name: 'Star Lager', barcode: 'BC-1');
@@ -422,27 +424,28 @@ void main() {
       expect(find.textContaining('added'), findsNothing);
     });
 
-    testWidgets('back (dismiss) adds nothing, and leaves an existing line alone', (
-      tester,
-    ) async {
-      final product = await seedProduct(name: 'Star Lager', barcode: 'BC-1');
-      cart.addItem(product, qty: 2, maxStock: 10, tier: PriceTier.retailer);
-      await tester.pumpWidget(
-        host(
-          FakeBarcodeScanner('BC-1'),
-          loaded: [ProductDataWithStock(product: product, totalStock: 10)],
-        ),
-      );
+    testWidgets(
+      'back (dismiss) adds nothing, and leaves an existing line alone',
+      (tester) async {
+        final product = await seedProduct(name: 'Star Lager', barcode: 'BC-1');
+        cart.addItem(product, qty: 2, maxStock: 10, tier: PriceTier.retailer);
+        await tester.pumpWidget(
+          host(
+            FakeBarcodeScanner('BC-1'),
+            loaded: [ProductDataWithStock(product: product, totalStock: 10)],
+          ),
+        );
 
-      await scan(tester);
-      expect(find.byType(EditItemModal), findsOneWidget);
-      await tester.binding.handlePopRoute();
-      await tester.pumpAndSettle();
+        await scan(tester);
+        expect(find.byType(EditItemModal), findsOneWidget);
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
 
-      expect(find.byType(EditItemModal), findsNothing);
-      expect(cart.value.single['qty'], 2);
-      expect(find.textContaining('added'), findsNothing);
-    });
+        expect(find.byType(EditItemModal), findsNothing);
+        expect(cart.value.single['qty'], 2);
+        expect(find.textContaining('added'), findsNothing);
+      },
+    );
   });
 
   group('found but not sellable — a message and no sheet (#317)', () {
@@ -468,22 +471,26 @@ void main() {
       await clearToast(tester);
     });
 
-    testWidgets('not stocked in this store → out of stock (no store name yet)', (
-      tester,
-    ) async {
-      await seedProduct(name: 'Gulder', barcode: 'BC-2');
-      await tester.pumpWidget(
-        host(FakeBarcodeScanner('BC-2'), loaded: const [], storeName: null),
-      );
+    testWidgets(
+      'not stocked in this store → out of stock (no store name yet)',
+      (tester) async {
+        await seedProduct(name: 'Gulder', barcode: 'BC-2');
+        await tester.pumpWidget(
+          host(FakeBarcodeScanner('BC-2'), loaded: const [], storeName: null),
+        );
 
-      await scan(tester);
+        await scan(tester);
 
-      expect(find.byType(EditItemModal), findsNothing);
-      expect(cart.value, isEmpty);
-      expect(find.text('Gulder is out of stock at this store'), findsOneWidget);
+        expect(find.byType(EditItemModal), findsNothing);
+        expect(cart.value, isEmpty);
+        expect(
+          find.text('Gulder is out of stock at this store'),
+          findsOneWidget,
+        );
 
-      await clearToast(tester);
-    });
+        await clearToast(tester);
+      },
+    );
 
     testWidgets('cart already holds all the stock → all in cart', (
       tester,
@@ -606,7 +613,10 @@ void main() {
 
     testWidgets('the pick starts on its OWN cart qty + 1', (tester) async {
       final extra = await seedProduct(name: 'Panadol Extra', barcode: 'BC-DUP');
-      final junior = await seedProduct(name: 'Panadol Junior', barcode: 'BC-DUP');
+      final junior = await seedProduct(
+        name: 'Panadol Junior',
+        barcode: 'BC-DUP',
+      );
       cart.addItem(junior, qty: 2, maxStock: 10, tier: PriceTier.retailer);
       await tester.pumpWidget(
         host(
@@ -663,7 +673,10 @@ void main() {
     testWidgets('the pick is checked against the CURRENT catalogue, not the '
         'one captured at scan time', (tester) async {
       final extra = await seedProduct(name: 'Panadol Extra', barcode: 'BC-DUP');
-      final junior = await seedProduct(name: 'Panadol Junior', barcode: 'BC-DUP');
+      final junior = await seedProduct(
+        name: 'Panadol Junior',
+        barcode: 'BC-DUP',
+      );
       // What the grid held when the scan started: Junior has 4 here.
       var current = [
         ProductDataWithStock(product: extra, totalStock: 10),
@@ -694,29 +707,33 @@ void main() {
       await clearToast(tester);
     });
 
-    testWidgets('picking an out-of-stock row shows its message, not the sheet', (
-      tester,
-    ) async {
-      final empty = await seedProduct(name: 'Gulder', barcode: 'BC-DUP');
-      final ok = await seedProduct(name: 'Star Lager', barcode: 'BC-DUP');
-      await tester.pumpWidget(
-        host(
-          FakeBarcodeScanner('BC-DUP'),
-          // Gulder isn't stocked in this store at all.
-          loaded: [ProductDataWithStock(product: ok, totalStock: 10)],
-        ),
-      );
+    testWidgets(
+      'picking an out-of-stock row shows its message, not the sheet',
+      (tester) async {
+        final empty = await seedProduct(name: 'Gulder', barcode: 'BC-DUP');
+        final ok = await seedProduct(name: 'Star Lager', barcode: 'BC-DUP');
+        await tester.pumpWidget(
+          host(
+            FakeBarcodeScanner('BC-DUP'),
+            // Gulder isn't stocked in this store at all.
+            loaded: [ProductDataWithStock(product: ok, totalStock: 10)],
+          ),
+        );
 
-      await scan(tester);
-      expect(find.text('0 in stock here · Out of stock'), findsOneWidget);
-      await pick(tester, empty);
+        await scan(tester);
+        expect(find.text('0 in stock here · Out of stock'), findsOneWidget);
+        await pick(tester, empty);
 
-      expect(find.byType(EditItemModal), findsNothing);
-      expect(cart.value, isEmpty);
-      expect(find.text('Gulder is out of stock at Main Store'), findsOneWidget);
+        expect(find.byType(EditItemModal), findsNothing);
+        expect(cart.value, isEmpty);
+        expect(
+          find.text('Gulder is out of stock at Main Store'),
+          findsOneWidget,
+        );
 
-      await clearToast(tester);
-    });
+        await clearToast(tester);
+      },
+    );
 
     testWidgets('closing or backing out of the list adds nothing', (
       tester,
@@ -1157,7 +1174,10 @@ void main() {
       await scan(tester);
       await chooseLink(tester);
       expect(
-        find.descendant(of: linkRow(gulder), matching: find.text('Barcode OLD-1')),
+        find.descendant(
+          of: linkRow(gulder),
+          matching: find.text('Barcode OLD-1'),
+        ),
         findsOneWidget,
       );
       await tapLinkRow(tester, gulder);
@@ -1214,9 +1234,7 @@ void main() {
     });
 
     testWidgets('a linked product with no stock here → the found-scan '
-        'out-of-stock message', (
-      tester,
-    ) async {
+        'out-of-stock message', (tester) async {
       await seedStore();
       final malta = await seedProduct(name: 'Malta', barcode: null);
       await tester.pumpWidget(
@@ -1234,10 +1252,7 @@ void main() {
 
       expect((await reload(malta)).barcode, code);
       expect(find.byType(EditItemModal), findsNothing);
-      expect(
-        find.text('Malta is out of stock at Main Store'),
-        findsOneWidget,
-      );
+      expect(find.text('Malta is out of stock at Main Store'), findsOneWidget);
       expect(find.textContaining('Saved.'), findsNothing);
       expect(scanner.camera!.isRunning, isTrue);
       await clearToast(tester);
@@ -1256,7 +1271,8 @@ void main() {
           final seeded = <ProductData>[
             for (var i = 0; i < 30; i++)
               await seedProduct(
-                name: 'Product ${i.toString().padLeft(2, '0')} with a long name',
+                name:
+                    'Product ${i.toString().padLeft(2, '0')} with a long name',
                 barcode: null,
                 size: 'big',
               ),

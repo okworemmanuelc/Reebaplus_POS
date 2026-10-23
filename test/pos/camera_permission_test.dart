@@ -9,9 +9,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
-import 'package:reebaplus_pos/features/pos/services/camera_permission.dart';
-import 'package:reebaplus_pos/features/pos/services/mobile_scanner_scan_camera.dart';
-import 'package:reebaplus_pos/features/pos/widgets/camera_permission_sheet.dart';
+import 'package:reebaplus_pos/shared/scanner/camera_permission.dart';
+import 'package:reebaplus_pos/shared/scanner/mobile_scanner_scan_camera.dart';
+import 'package:reebaplus_pos/shared/scanner/camera_permission_sheet.dart';
 
 class _FakePermission implements CameraPermission {
   _FakePermission({
@@ -117,23 +117,24 @@ void main() {
       expect(find.byType(CameraPermissionSheet), findsNothing);
     });
 
-    testWidgets('blocked: no prompt; "Open settings" opens the phone settings', (
-      tester,
-    ) async {
-      final permission = _FakePermission(current: CameraAccess.blocked);
-      final results = await _pumpHost(tester, permission);
+    testWidgets(
+      'blocked: no prompt; "Open settings" opens the phone settings',
+      (tester) async {
+        final permission = _FakePermission(current: CameraAccess.blocked);
+        final results = await _pumpHost(tester, permission);
 
-      expect(permission.requests, 0);
-      expect(find.text('Camera is off'), findsOneWidget);
+        expect(permission.requests, 0);
+        expect(find.text('Camera is off'), findsOneWidget);
 
-      await tester.tap(find.byKey(kCameraPermissionOpenSettingsKey));
-      await tester.pumpAndSettle();
+        await tester.tap(find.byKey(kCameraPermissionOpenSettingsKey));
+        await tester.pumpAndSettle();
 
-      expect(permission.settingsOpened, 1);
-      // The scanner stays closed; the cashier taps Scan again once back.
-      expect(results, [false]);
-      expect(find.byType(CameraPermissionSheet), findsNothing);
-    });
+        expect(permission.settingsOpened, 1);
+        // The scanner stays closed; the cashier taps Scan again once back.
+        expect(results, [false]);
+        expect(find.byType(CameraPermissionSheet), findsNothing);
+      },
+    );
 
     testWidgets('settings could not open: says where to go instead', (
       tester,
@@ -202,11 +203,7 @@ void main() {
     });
 
     testWidgets('other camera errors: no settings shortcut', (tester) async {
-      await pumpView(
-        tester,
-        isPermissionDenied: false,
-        onOpenSettings: () {},
-      );
+      await pumpView(tester, isPermissionDenied: false, onOpenSettings: () {});
 
       expect(find.textContaining('Camera unavailable'), findsOneWidget);
       expect(find.text('Open settings'), findsNothing);
