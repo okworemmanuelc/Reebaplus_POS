@@ -235,6 +235,7 @@ class Categories extends Table {
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get name => text()();
   TextColumn get description => text().nullable()();
+  TextColumn get marketplaceCategory => text().nullable()();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
@@ -2919,7 +2920,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 83;
+  int get schemaVersion => 84;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -6335,6 +6336,16 @@ class AppDatabase extends _$AppDatabase {
           _ledgerTables.firstWhere((l) => l.table == 'crate_ledger'),
         )) {
           await customStatement(stmt);
+        }
+      }
+
+      if (from < 84) {
+        final exists = await customSelect(
+          "SELECT 1 FROM pragma_table_info('categories') "
+          "WHERE name = 'marketplace_category'",
+        ).get();
+        if (exists.isEmpty) {
+          await m.addColumn(categories, categories.marketplaceCategory);
         }
       }
 

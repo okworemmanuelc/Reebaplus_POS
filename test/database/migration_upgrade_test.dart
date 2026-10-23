@@ -50,6 +50,29 @@ void main() {
     return rows.map((r) => r.read<String>('name')).toSet();
   }
 
+  test('v83 to v84 preserves categories and adds optional online mapping', () async {
+    var db = await openAndInit();
+    final businessId = UuidV7.generate();
+    final categoryId = UuidV7.generate();
+    await db.into(db.businesses).insert(
+        BusinessesCompanion.insert(id: Value(businessId), name: 'Shop'));
+    await db.into(db.categories).insert(CategoriesCompanion.insert(
+        id: Value(categoryId), name: 'Seasonal', businessId: businessId));
+    await db.customStatement('ALTER TABLE categories DROP COLUMN marketplace_category');
+    await db.customStatement('PRAGMA user_version = 83');
+    await db.close();
+    db = await openAndInit();
+    try {
+      expect(await columnsOf(db, 'categories'), contains('marketplace_category'));
+      final category = await (db.select(db.categories)
+        ..where((c) => c.id.equals(categoryId))).getSingle();
+      expect(category.name, 'Seasonal');
+      expect(category.marketplaceCategory, isNull);
+    } finally {
+      await db.close();
+    }
+  });
+
 
   // Reverts the v20 (Funds Register) delta: drop the three funds tables (their
   // indexes + triggers drop with them). Shared by the scenarios below.
