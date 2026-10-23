@@ -1,9 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/main_layout.dart';
-import 'package:reebaplus_pos/features/auth/widgets/auth_background.dart';
+import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
 import 'package:reebaplus_pos/shared/widgets/smooth_route.dart';
 
@@ -48,63 +52,58 @@ class _SuccessDashboardEntryScreenState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : Colors.black;
+    final f = theme.extension<AppFixedColors>() ?? AppFixedColors.light;
 
-    return AuthBackground(
-      child: SafeArea(
-        child: AuthCenteredScroll(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            // Success Icon
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.greenAccent.withValues(alpha: 0.15),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                AppIcons.checkCircle,
-                color: Colors.greenAccent,
-                size: 80,
-              ),
-            ),
-            const SizedBox(height: 32),
-
-            // Success Text
-            Text(
-              'Your business is ready!',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.w700,
-                color: textColor,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 40),
-              child: Text(
-                'Preparing your dashboard...',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: textColor.withValues(alpha: 0.7),
-                  height: 1.4,
+    return Scaffold(
+      body: BrandedAuthBackground(
+        child: SafeArea(
+          child: AuthCenteredScroll(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Success Icon
+              Container(
+                padding: EdgeInsets.all(context.getRSize(24)),
+                decoration: BoxDecoration(
+                  color: f.greenTint,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  AppIcons.checkCircle,
+                  color: f.green,
+                  size: context.getRSize(80),
                 ),
               ),
-            ),
-            const SizedBox(height: 48),
+              SizedBox(height: context.getRSize(32)),
 
-            SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.5,
-                color: theme.colorScheme.primary,
+              // Success Text
+              Text(
+                'Your business is ready!',
+                textAlign: TextAlign.center,
+                style: context
+                    .extraBoldStyle(30)
+                    .copyWith(color: authTextPrimary(context)),
               ),
-            ),
-          ],
+              SizedBox(height: context.getRSize(12)),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: context.getRSize(40)),
+                child: Text(
+                  'Preparing your dashboard...',
+                  textAlign: TextAlign.center,
+                  style: authSubtitleStyle(context),
+                ),
+              ),
+              SizedBox(height: context.getRSize(48)),
+
+              SizedBox(
+                width: context.getRSize(24),
+                height: context.getRSize(24),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

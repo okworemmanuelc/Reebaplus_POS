@@ -11,6 +11,42 @@ The human updates it when resolving open questions or making architectural decis
 Branch `feat/fast-add-open-details-on-catalogue-photo`, worktree `../drinkPosApp-wt-moredetails`. Owner approved the #332 follow-up.
 - `_applyCatalogueSuggestion` (add_product_screen.dart) sets `_showMoreDetails = true` when it fills the photo, because the photo box lives in the collapsed "More details" section and would otherwise be saved unseen. Name/unit-only fills leave it closed. Tests: `test/inventory/add_product_catalogue_prefill_test.dart` (+2).
 
+### Wave 2 batch D COMPLETE: #462 PRs 2–3 + #463 PRs 1–2 (2026-10-23)
+Sonnet subagents, supervisor-reviewed; PRs #482, #484, #483, #485 (after #464). Restyle only: no auth/onboarding/data logic changed.
+- **#462 PR 2 (#482)**: Email entry, OTP verification, Existing account, No account found, stale-business prompt; 36 goldens; `test/auth/signin_screens_layout_test.dart` (no-overflow at 360@1.3 + 4 sizes, keyboard-up).
+- **#462 PR 3 (#484)**: lock screen (+ `_UserPickerSheet`, SuccessOverlay), Create PIN, Biometric setup, PinDialog, `_SessionExpiredScreen`. `isShortViewport` replaced by a measured LayoutBuilder rule: two columns only when one column doesn't fit and width ≥ 560, passing `maxWidth: kSettingsMaxContentWidth` to BrandedAuthBackground (keyboard excluded from the measure). `buildSessionExpiredScreenForTest` seam in main.dart. 44 goldens. Closes #462.
+- **#463 PR 1 (#483)**: CEO sign-up every step; new shared `lib/features/auth/widgets/sign_up_step_dots.dart` (`SignUpStepDots`); 44 goldens + overflow/keyboard tests.
+- **#463 PR 2 (#485)**: staff sign-up (uses `SignUpStepDots`), Access granted, Success entry, Get started card (`lib/features/dashboard/widgets/get_started_card.dart`; `get_started_checklist.dart` is logic only, untouched). 64 goldens. Closes #463.
+- Golden tests hide the debug banner with `WidgetsApp.debugAllowBannerOverride = false` in setUp/tearDown. NEVER change `test/helpers/screen_harness.dart` for this (it re-renders every pumpScreen golden).
+- Known: the viewport sweep's ERROR rows (ProductDetail, BusinessInfo, StaffManagement, Login, SuccessDashboardEntry) are MissingPlugin/PartialPull harness gaps, not overflows.
+
+### Issue #462 PR 1: Auth parts + welcome/coming soon + delete AuthBackground (Wave 2 D, 2026-10-22)
+Branch `feat/redesign-w2-auth`. Sub-Issue #462 PR 1 of 3.
+- **Restyle only: no logic/money/permissions/routing/wipe changes.**
+- **Auth parts restyled**:
+  - `lib/features/auth/widgets/branded_auth_background.dart`: base layer is now `AppDecorations.pageBackground(context)` (glows + dot grid on top; `adBg` untouched in lib/core). Keeps the raw 480 content cap on every size; new optional `maxWidth` (default 480) lets a too-short screen (phone sideways) ask for a wider two-column cap.
+  - `lib/features/auth/widgets/otp_input.dart`: flat boxes (surface fill, hairline divider border, primary when active, error border kept). `shake_widget.dart` needs no change (no colours).
+  - `lib/features/auth/widgets/auth_form_kit.dart`: Replaced `glassCard` with `AppDecorations.card(context)` in `AuthInputCard`, added theme border and 48dp minimum item height for `AutocompleteField`.
+  - `lib/features/auth/widgets/onboarding_step_indicator.dart`: Cleaned up to use `theme.colorScheme.onSurface`, `theme.colorScheme.onPrimary`, and `theme.dividerColor`.
+  - `lib/features/auth/widgets/pin_keypad.dart`: Replaced `glassCard` with `AppDecorations.card(context, radius: 16)`.
+- **Swapped AuthBackground callers**:
+  - `lib/features/auth/screens/biometric_setup_screen.dart`: background swap only (`Scaffold(body: BrandedAuthBackground(...))`); its restyle is PR 3.
+  - `lib/features/auth/screens/success_dashboard_entry_screen.dart`: Swapped background to `Scaffold(body: BrandedAuthBackground(...))` (D2 file: only background touched).
+  - `lib/features/auth/screens/access_granted_screen.dart`: Swapped background to `Scaffold(body: BrandedAuthBackground(...))` (D2 file: only background touched).
+  - `lib/main.dart`: `_SessionExpiredScreen` background swap only (restyle is PR 3). `_BrandedSplash` deliberately unchanged: its pure black/white must match the native launch screen or the app flashes on open.
+- **Deleted `AuthBackground` & Enforced Ban**:
+  - Deleted `lib/features/auth/widgets/auth_background.dart`.
+  - Updated `test/core/theme/no_backdrop_blur_ban_test.dart` to remove the exception; verified zero `BackdropFilter` or `ImageFilter.blur` in `lib/`.
+- **Restyled PR 1 screens**:
+  - `lib/features/auth/screens/coming_soon_screen.dart`: Restyled with solid surface AppBar + hairline divider and `BrandedAuthBackground`.
+  - `lib/features/auth/screens/welcome_screen.dart`: `_SignInLink` is a ≥48dp InkWell (width cap comes from BrandedAuthBackground).
+- **Tests**:
+  - `test/redesign/auth_golden_test.dart`: 16 golden PNGs (`welcome_*` and `coming_soon_*` across 4 sizes × 2 themes).
+  - `test/redesign/auth_parts_golden_test.dart`: 14 `auth_parts_*` goldens (input card, autocomplete, step indicator, PIN keypad, OTP row, background at 480 and 720; light + dark). `session_expired_*` goldens move to PR 3 with its restyle (the class is private to main.dart).
+  - `test/discovery/viewport_sweep_test.dart`: Handled connectivity mock setup in `main()`.
+  - `test/core/theme/no_backdrop_blur_ban_test.dart` and `test/auth/` (139 tests passed).
+  - `flutter analyze` passed with 0 issues.
+
 ### Issue #455: Migrate raw permission checks to NamedGate & add static ban test (2026-10-20)
 Branch `feat/455-gate-permissions`, worktree `../drinkPosApp-wt-455`. PR #455.
 - Migrated all remaining raw permission checks (`currentUserPermissionsProvider.contains(...)`, `perms.contains(...)`) across `lib/` to `Gates.*` and `gateContextProvider.isReady`.

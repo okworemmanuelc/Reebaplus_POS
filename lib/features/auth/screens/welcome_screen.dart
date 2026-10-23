@@ -91,7 +91,9 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                       const SizedBox(height: 44),
                       AppButton(
                         text: 'Create a new business',
-                        onPressed: () => _push(const EmailEntryScreen(createBusinessIntent: true)),
+                        onPressed: () => _push(
+                          const EmailEntryScreen(createBusinessIntent: true),
+                        ),
                       ),
                       const SizedBox(height: 14),
                       AppButton(
@@ -121,27 +123,32 @@ class _SignInLink extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return InkWell(
       onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Text.rich(
-        TextSpan(
-          text: 'Already have an account? ',
-          style: TextStyle(
-            fontSize: 14,
-            color: authTextPrimary(context).withValues(alpha: 0.65),
-          ),
-          children: [
+      borderRadius: BorderRadius.circular(8),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: kMinInteractiveDimension),
+        child: Center(
+          child: Text.rich(
             TextSpan(
-              text: 'Sign in',
+              text: 'Already have an account? ',
               style: TextStyle(
-                color: Theme.of(context).colorScheme.primary,
-                fontWeight: FontWeight.w700,
+                fontSize: 14,
+                color: authTextPrimary(context).withValues(alpha: 0.65),
               ),
+              children: [
+                TextSpan(
+                  text: 'Sign in',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
             ),
-          ],
+            textAlign: TextAlign.center,
+          ),
         ),
-        textAlign: TextAlign.center,
       ),
     );
   }

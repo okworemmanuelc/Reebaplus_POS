@@ -1,7 +1,12 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/core/settings/settings_screen.dart'
+    show kSettingsMaxContentWidth;
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -575,37 +580,66 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       resizeToAvoidBottomInset: false,
-      body: BrandedAuthBackground(
-        child: SafeArea(
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 300),
-            child: _loginSuccess
-                ? SuccessOverlay(
-                    key: const ValueKey('success'),
-                    user: _loggedInUser!,
-                    checkScale: _checkScale,
-                    checkFade: _checkFade,
-                  )
-                : _PinPad(
-                    pinNotifier: _pinNotifier,
-                    emailController: _emailController,
-                    checking: _checking,
-                    identifiedUser: _identifiedUser,
-                    warningText: _pinWarning,
-                    onDigit: _onDigit,
-                    onBackspace: _onBackspace,
-                    onSwitchToEmail: _switchToEmail,
-                    onForgotPin: _forgotPin,
-                    biometricsAvailable: _biometricsAvailable,
-                    onBiometrics: _biometricsAvailable
-                        ? _triggerBiometrics
-                        : null,
-                  ),
-          ),
-        ),
+      // The body is measured AFTER the safe-area insets. One column when it
+      // fits (or when the screen is too narrow for two); two columns only when
+      // the height is short and the width can hold them (a phone sideways).
+      // The keyboard is deliberately left out of the measure so opening it
+      // never flips the layout under a focused field.
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final pad = MediaQuery.paddingOf(context);
+          final availH = constraints.maxHeight - pad.top - pad.bottom;
+          final availW = constraints.maxWidth - pad.left - pad.right;
+          final twoColumn = _lockUsesTwoColumns(context, availW, availH);
+          return BrandedAuthBackground(
+            maxWidth: twoColumn ? kSettingsMaxContentWidth : 480.0,
+            child: SafeArea(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                child: _loginSuccess
+                    ? SuccessOverlay(
+                        key: const ValueKey('success'),
+                        user: _loggedInUser!,
+                        checkScale: _checkScale,
+                        checkFade: _checkFade,
+                      )
+                    : _PinPad(
+                        pinNotifier: _pinNotifier,
+                        emailController: _emailController,
+                        checking: _checking,
+                        identifiedUser: _identifiedUser,
+                        warningText: _pinWarning,
+                        onDigit: _onDigit,
+                        onBackspace: _onBackspace,
+                        onSwitchToEmail: _switchToEmail,
+                        onForgotPin: _forgotPin,
+                        biometricsAvailable: _biometricsAvailable,
+                        onBiometrics: _biometricsAvailable
+                            ? _triggerBiometrics
+                            : null,
+                        twoColumn: twoColumn,
+                      ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
+}
+
+/// Height (base dp, at text scale 1) that the one-column lock layout needs:
+/// avatar, greeting, email box, hint, dots, keypad and both links.
+const double _kLockOneColumnHeight = 700;
+
+/// Narrowest body that can hold two columns (a 240 keypad plus the left side).
+const double _kLockTwoColumnMinWidth = 560;
+
+bool _lockUsesTwoColumns(BuildContext context, double availW, double availH) {
+  if (availW < _kLockTwoColumnMinWidth) return false;
+  final scale = MediaQuery.textScalerOf(context).scale(1.0);
+  final need = _kLockOneColumnHeight * (scale > 1 ? scale : 1.0);
+  return availH < need;
 }
 
 // ── Success overlay ────────────────────────────────────────────────────────
@@ -634,14 +668,15 @@ class SuccessOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textColor = authTextPrimary(context);
-    final subtextColor = authTextPrimary(context).withValues(alpha: 0.65);
+    final subtextColor = authTextMuted(context);
     final avatarColor = _hexColor(context, user.avatarColor);
+    final circle = context.getRSize(96);
 
     return Center(
       child: FadeTransition(
         opacity: checkFade,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: SingleChildScrollView(
+          padding: context.rPaddingSymmetric(horizontal: 24, vertical: 16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -649,35 +684,35 @@ class SuccessOverlay extends StatelessWidget {
               ScaleTransition(
                 scale: checkScale,
                 child: Container(
-                  width: 96,
-                  height: 96,
+                  width: circle,
+                  height: circle,
                   decoration: BoxDecoration(
                     color: avatarColor.withValues(alpha: 0.15),
                     shape: BoxShape.circle,
                     border: Border.all(color: avatarColor, width: 3),
                   ),
-                  child: Icon(AppIcons.check, size: 52, color: avatarColor),
+                  child: Icon(
+                    AppIcons.check,
+                    size: context.getRSize(52),
+                    color: avatarColor,
+                  ),
                 ),
               ),
-              const SizedBox(height: 24),
+              SizedBox(height: context.getRSize(24)),
 
               // ── Welcome text ─────────────────────────────────────────────
               Text(
                 'Welcome, ${user.name}',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: textColor,
-                ),
+                style: context.boldStyle(22).copyWith(color: textColor),
               ),
-              const SizedBox(height: 6),
+              SizedBox(height: context.getRSize(6)),
               Text(
                 'Opening Reebaplus POS...',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: subtextColor),
+                style: context.regularStyle(14).copyWith(color: subtextColor),
               ),
-              const SizedBox(height: 32),
+              SizedBox(height: context.getRSize(32)),
 
               // ── Small loading dots ────────────────────────────────────────
               _LoadingDots(color: avatarColor),
@@ -714,11 +749,13 @@ class _LoadingDotsState extends State<_LoadingDots>
       );
       _controllers.add(ctrl);
       // Stagger each dot by 200ms
-      _timers.add(Timer(Duration(milliseconds: i * 200), () {
-        if (mounted) {
-          ctrl.repeat(reverse: true);
-        }
-      }));
+      _timers.add(
+        Timer(Duration(milliseconds: i * 200), () {
+          if (mounted) {
+            ctrl.repeat(reverse: true);
+          }
+        }),
+      );
     }
   }
 
@@ -735,21 +772,22 @@ class _LoadingDotsState extends State<_LoadingDots>
 
   @override
   Widget build(BuildContext context) {
+    final w = context.getRSize(8);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: List.generate(3, (i) {
         return AnimatedBuilder(
           animation: _controllers[i],
-          builder: (_, __) {
+          builder: (_, _) {
             return Container(
-              margin: const EdgeInsets.symmetric(horizontal: 5),
-              width: 8,
-              height: 8 + _controllers[i].value * 8, // grows from 8 to 16
+              margin: EdgeInsets.symmetric(horizontal: context.getRSize(5)),
+              width: w,
+              height: w + _controllers[i].value * w, // grows from 8 to 16
               decoration: BoxDecoration(
                 color: widget.color.withValues(
                   alpha: 0.4 + _controllers[i].value * 0.6,
                 ),
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.circular(w / 2),
               ),
             );
           },
@@ -774,6 +812,9 @@ class _PinPad extends StatelessWidget {
   final bool biometricsAvailable;
   final VoidCallback? onBiometrics;
 
+  /// Two columns (identity left, keypad right) for a body too short for one.
+  final bool twoColumn;
+
   const _PinPad({
     required this.pinNotifier,
     required this.emailController,
@@ -786,6 +827,7 @@ class _PinPad extends StatelessWidget {
     this.onForgotPin,
     this.biometricsAvailable = false,
     this.onBiometrics,
+    this.twoColumn = false,
   });
 
   Color _hexColor(BuildContext context, String hex) {
@@ -796,320 +838,230 @@ class _PinPad extends StatelessWidget {
     }
   }
 
-  Widget _buildLandscapeLayout(
-    BuildContext context,
-    Color textColor,
-    Color subtextColor,
-  ) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // ── Left Column: Avatar, greeting, email/dots, actions ──────────
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                if (identifiedUser != null) ...[
-                  CircleAvatar(
-                    radius: 22,
-                    backgroundColor: _hexColor(
-                      context,
-                      identifiedUser!.avatarColor,
-                    ).withValues(alpha: 0.2),
-                    child: Text(
-                      identifiedUser!.name.isNotEmpty
-                          ? identifiedUser!.name[0].toUpperCase()
-                          : '?',
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(18),
-                        fontWeight: FontWeight.bold,
-                        color: _hexColor(context, identifiedUser!.avatarColor),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Welcome back, ${identifiedUser!.name.split(' ').first}',
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(15),
-                      fontWeight: FontWeight.w700,
-                      color: textColor,
-                    ),
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ] else ...[
-                  const ReebaplusLogo(height: 36),
-                  const SizedBox(height: 4),
-                ],
-                if (identifiedUser == null)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: TextFormField(
-                      controller: emailController,
-                      style: TextStyle(
-                        color: textColor,
-                        fontSize: context.getRFontSize(13),
-                      ),
-                      decoration: AppDecorations.authInputDecoration(
-                        context,
-                        label: 'Email Address',
-                        prefixIcon: AppIcons.email,
-                      ),
-                      keyboardType: TextInputType.emailAddress,
-                      textInputAction: TextInputAction.next,
-                    ),
-                  )
-                else if (emailController.text.isNotEmpty)
-                  Text(
-                    emailController.text,
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(12),
-                      color: subtextColor,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                const SizedBox(height: 4),
-                Text(
-                  'Enter your 6-digit PIN to continue',
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(12),
-                    color: subtextColor,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 6),
-                ValueListenableBuilder<String>(
-                  valueListenable: pinNotifier,
-                  builder: (context, currentPin, _) =>
-                      PinDots(filled: currentPin.length),
-                ),
-                SizedBox(
-                  height: 18,
-                  child: warningText != null
-                      ? Center(
-                          child: Text(
-                            warningText!,
-                            style: TextStyle(
-                              color: Colors.orangeAccent,
-                              fontSize: context.getRFontSize(11),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        )
-                      : null,
-                ),
-                if (onForgotPin != null && identifiedUser != null)
-                  TextButton(
-                    onPressed: onForgotPin,
-                    style: TextButton.styleFrom(
-                      minimumSize: const Size(48, kMinInteractiveDimension),
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                    ),
-                    child: Text(
-                      'Forgot PIN?',
-                      style: TextStyle(
-                        color: textColor.withValues(alpha: 0.6),
-                        fontSize: context.getRFontSize(12),
-                      ),
-                    ),
-                  ),
-                if (onSwitchToEmail != null)
-                  TextButton(
-                    onPressed: onSwitchToEmail,
-                    style: TextButton.styleFrom(
-                      minimumSize: const Size(48, kMinInteractiveDimension),
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                    ),
-                    child: Text(
-                      identifiedUser != null
-                          ? 'Not you? Switch account'
-                          : 'Login with different account',
-                      style: TextStyle(
-                        color: textColor.withValues(alpha: 0.65),
-                        fontSize: context.getRFontSize(12),
-                        decoration: TextDecoration.underline,
-                      ),
-                    ),
-                  ),
-              ],
+  // ── Pieces ─────────────────────────────────────────────────────────────────
+
+  Widget _avatarAndGreeting(BuildContext context, {required bool compact}) {
+    final textColor = authTextPrimary(context);
+    final user = identifiedUser;
+    if (user == null) {
+      return ReebaplusLogo(height: context.getRSize(compact ? 44 : 60));
+    }
+    final color = _hexColor(context, user.avatarColor);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        CircleAvatar(
+          radius: context.getRSize(compact ? 28 : 32),
+          backgroundColor: color.withValues(alpha: 0.2),
+          child: Text(
+            user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
+            style: context.boldStyle(compact ? 22 : 26).copyWith(color: color),
+          ),
+        ),
+        SizedBox(height: context.getRSize(12)),
+        Text(
+          'Welcome back, ${user.name.split(' ').first}',
+          textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: context.boldStyle(20).copyWith(color: textColor),
+        ),
+      ],
+    );
+  }
+
+  Widget _emailField(BuildContext context) {
+    return TextFormField(
+      controller: emailController,
+      // When we already know who's signing in (returning device user or a
+      // preset staff member), the email is fixed — it scopes the PIN check, so
+      // editing it would let it drift away from the identified user. Switch
+      // accounts via the link below.
+      readOnly: identifiedUser != null,
+      style: context.mediumStyle(14).copyWith(color: authTextPrimary(context)),
+      decoration: AppDecorations.authInputDecoration(
+        context,
+        label: 'Email Address',
+        prefixIcon: AppIcons.email,
+      ),
+      keyboardType: TextInputType.emailAddress,
+      textInputAction: TextInputAction.next,
+    );
+  }
+
+  Widget _hint(BuildContext context) => Text(
+    'Enter your 6-digit PIN to continue',
+    style: context.regularStyle(14).copyWith(color: authTextMuted(context)),
+    textAlign: TextAlign.center,
+  );
+
+  Widget _dots() => ValueListenableBuilder<String>(
+    valueListenable: pinNotifier,
+    builder: (context, currentPin, _) => PinDots(filled: currentPin.length),
+  );
+
+  Widget _warning(BuildContext context) {
+    final f =
+        Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light;
+    return SizedBox(
+      height: context.getRSize(24),
+      child: warningText != null
+          ? Center(
+              child: Text(
+                warningText!,
+                textAlign: TextAlign.center,
+                style: context.semiBoldStyle(13).copyWith(color: f.warning),
+              ),
+            )
+          : const SizedBox.shrink(),
+    );
+  }
+
+  /// Numeric keypad (biometric fills the bottom-left slot), centred, ≤ 280.
+  Widget _keypad() => Center(
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 280),
+      child: PinKeypad(
+        onDigit: onDigit,
+        onBackspace: onBackspace,
+        leadingKey: biometricsAvailable && onBiometrics != null
+            ? PinKey(icon: AppIcons.biometrics, onTap: onBiometrics!)
+            : null,
+      ),
+    ),
+  );
+
+  Widget _switchLink(BuildContext context) {
+    if (onSwitchToEmail == null) return const SizedBox.shrink();
+    return TextButton(
+      onPressed: onSwitchToEmail,
+      style: TextButton.styleFrom(
+        minimumSize: const Size(48, kMinInteractiveDimension),
+      ),
+      child: Text(
+        identifiedUser != null
+            ? 'Not ${identifiedUser!.name.split(' ').first}? Switch account'
+            : 'Login with a different account',
+        textAlign: TextAlign.center,
+        style: context
+            .mediumStyle(14)
+            .copyWith(
+              color: authTextMuted(context),
+              decoration: TextDecoration.underline,
             ),
-          ),
-          const SizedBox(width: 16),
-          // ── Right Column: Keypad ─────────────────────────────────────
-          PinKeypad(
-            onDigit: onDigit,
-            onBackspace: onBackspace,
-            leadingKey: biometricsAvailable && onBiometrics != null
-                ? PinKey(
-                    icon: AppIcons.biometrics,
-                    onTap: onBiometrics!,
-                  )
-                : null,
-          ),
-        ],
       ),
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final textColor = authTextPrimary(context);
-    final subtextColor = authTextPrimary(context).withValues(alpha: 0.65);
-
-    if (context.isShortViewport) {
-      return Center(
-        child: _buildLandscapeLayout(context, textColor, subtextColor),
-      );
+  Widget _forgotLink(BuildContext context) {
+    if (identifiedUser == null || onForgotPin == null) {
+      return const SizedBox.shrink();
     }
+    return TextButton(
+      onPressed: onForgotPin,
+      style: TextButton.styleFrom(
+        minimumSize: const Size(48, kMinInteractiveDimension),
+      ),
+      child: Text(
+        'Forgot PIN?',
+        style: context
+            .regularStyle(13)
+            .copyWith(color: authTextMuted(context, 0.55)),
+      ),
+    );
+  }
 
+  // ── Layouts ────────────────────────────────────────────────────────────────
+
+  Widget _twoColumns(BuildContext context) {
+    final subtext = authTextMuted(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // Left: who is signing in, and the ways out.
+        Expanded(
+          child: SingleChildScrollView(
+            padding: context.rPaddingSymmetric(horizontal: 12, vertical: 8),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _avatarAndGreeting(context, compact: true),
+                SizedBox(height: context.getRSize(8)),
+                if (identifiedUser == null)
+                  _emailField(context)
+                else if (emailController.text.isNotEmpty)
+                  Text(
+                    emailController.text,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.regularStyle(13).copyWith(color: subtext),
+                  ),
+                SizedBox(height: context.getRSize(8)),
+                _forgotLink(context),
+                _switchLink(context),
+              ],
+            ),
+          ),
+        ),
+        // Right: the PIN.
+        Expanded(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: context.rPaddingSymmetric(horizontal: 12, vertical: 4),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _hint(context),
+                  SizedBox(height: context.getRSize(6)),
+                  _dots(),
+                  _warning(context),
+                  _keypad(),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _oneColumn(BuildContext context) {
     return Center(
       child: SingleChildScrollView(
         padding: context.rPaddingSymmetric(horizontal: 32, vertical: 16),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // ── Header/Avatar ──────────────────────────────────────────
-            if (identifiedUser != null) ...[
-              CircleAvatar(
-                radius: context.getRSize(32),
-                backgroundColor: _hexColor(
-                  context,
-                  identifiedUser!.avatarColor,
-                ).withValues(alpha: 0.2),
-                child: Text(
-                  identifiedUser!.name.isNotEmpty
-                      ? identifiedUser!.name[0].toUpperCase()
-                      : '?',
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(26),
-                    fontWeight: FontWeight.bold,
-                    color: _hexColor(context, identifiedUser!.avatarColor),
-                  ),
-                ),
-              ),
-              SizedBox(height: context.getRSize(12)),
-              Text(
-                'Welcome back, ${identifiedUser!.name.split(' ').first}',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: context.getRFontSize(20),
-                  fontWeight: FontWeight.w700,
-                  color: textColor,
-                ),
-              ),
-            ] else ...[
-              ReebaplusLogo(height: context.getRSize(60)),
-              SizedBox(height: context.getRSize(12)),
-            ],
-
+            _avatarAndGreeting(context, compact: false),
             SizedBox(height: context.getRSize(16)),
-            // ── Email Input ──────────────────────────────────────────
             Padding(
               padding: EdgeInsets.only(bottom: context.getRSize(16)),
-              child: TextFormField(
-                controller: emailController,
-                // When we already know who's signing in (returning device user
-                // or a preset staff member), the email is fixed — it
-                // scopes the PIN check, so editing it would let it drift away
-                // from the identified user. Switch accounts via the link below.
-                readOnly: identifiedUser != null,
-                style: TextStyle(color: textColor),
-                decoration: AppDecorations.authInputDecoration(
-                  context,
-                  label: 'Email Address',
-                  prefixIcon: AppIcons.email,
-                ),
-                keyboardType: TextInputType.emailAddress,
-                textInputAction: TextInputAction.next,
-              ),
+              child: _emailField(context),
             ),
-            Text(
-              'Enter your 6-digit PIN to continue',
-              style: TextStyle(
-                fontSize: context.getRFontSize(14),
-                color: subtextColor,
-              ),
-              textAlign: TextAlign.center,
-            ),
+            _hint(context),
             SizedBox(height: context.getRSize(20)),
-
-            ...[
-              // ── Six dots ────────────────────────────────────────────────
-              ValueListenableBuilder<String>(
-                valueListenable: pinNotifier,
-                builder: (context, currentPin, _) =>
-                    PinDots(filled: currentPin.length),
-              ),
-
-              // ── Warning Message ────────────────────────────────────────────
-              SizedBox(
-                height: context.getRSize(24),
-                child: warningText != null
-                    ? Center(
-                        child: Text(
-                          warningText!,
-                          style: TextStyle(
-                            color: Colors.orangeAccent,
-                            fontSize: context.getRFontSize(13),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      )
-                    : const SizedBox.shrink(),
-              ),
-
-              // ── Numeric keypad (biometric fills the bottom-left slot) ─────
-              PinKeypad(
-                onDigit: onDigit,
-                onBackspace: onBackspace,
-                leadingKey: biometricsAvailable && onBiometrics != null
-                    ? PinKey(
-                        icon: AppIcons.biometrics,
-                        onTap: onBiometrics!,
-                      )
-                    : null,
-              ),
-
-              SizedBox(height: context.getRSize(20)),
-
-              // ── Switch-account / Not You link ──────────────────────────────
-              if (onSwitchToEmail != null)
-                TextButton(
-                  onPressed: onSwitchToEmail,
-                  child: Text(
-                    identifiedUser != null
-                        ? 'Not ${identifiedUser!.name.split(' ').first}? Switch account'
-                        : 'Login with a different account',
-                    style: TextStyle(
-                      color: textColor.withValues(alpha: 0.65),
-                      fontSize: context.getRFontSize(14),
-                      decoration: TextDecoration.underline,
-                    ),
-                  ),
-                ),
-
-              // ── Forgot PIN link ──────────────────────────────────────────
-              if (identifiedUser != null && onForgotPin != null)
-                TextButton(
-                  onPressed: onForgotPin,
-                  child: Text(
-                    'Forgot PIN?',
-                    style: TextStyle(
-                      color: textColor.withValues(alpha: 0.5),
-                      fontSize: context.getRFontSize(13),
-                    ),
-                  ),
-                ),
-            ],
+            _dots(),
+            _warning(context),
+            _keypad(),
+            SizedBox(height: context.getRSize(20)),
+            _switchLink(context),
+            _forgotLink(context),
           ],
         ),
       ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // The keyboard (email field when nobody is identified) must be able to
+    // scroll the field into view: the Scaffold does not resize for it here.
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+    final body = twoColumn ? _twoColumns(context) : _oneColumn(context);
+    return Padding(
+      padding: EdgeInsets.only(bottom: keyboard),
+      child: body,
     );
   }
 }
@@ -1124,91 +1076,102 @@ class _UserPickerSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final surface = Theme.of(context).colorScheme.surface;
-    final textColor = Theme.of(context).colorScheme.onSurface;
+    final theme = Theme.of(context);
+    final textColor = theme.colorScheme.onSurface;
     final subtextColor =
-        Theme.of(context).textTheme.bodySmall?.color ??
-        Theme.of(context).iconTheme.color!;
+        theme.textTheme.bodySmall?.color ?? theme.iconTheme.color!;
 
     return Container(
       decoration: BoxDecoration(
-        color: surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        color: theme.colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(AppSpacing.borderRadiusXL),
+        ),
+        border: Border(top: BorderSide(color: theme.dividerColor)),
       ),
-      padding: EdgeInsets.fromLTRB(24, 16, 24, context.bottomInset + 16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: subtextColor.withValues(alpha: 0.4),
-              borderRadius: BorderRadius.circular(2),
+      padding: EdgeInsets.fromLTRB(
+        context.getRSize(24),
+        context.getRSize(12),
+        context.getRSize(24),
+        context.deviceBottomPadding + context.getRSize(16),
+      ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: context.screenHeight * 0.85),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: subtextColor.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            'Who is logging in?',
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-              color: textColor,
+            SizedBox(height: context.getRSize(16)),
+            Text(
+              'Who is logging in?',
+              style: context.extraBoldStyle(18).copyWith(color: textColor),
             ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Multiple accounts share this PIN. Tap your name.',
-            style: TextStyle(fontSize: 13, color: subtextColor),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 20),
-          ...users.map(
-            // Transparent Material gives the row an ink target above the
-            // surface-coloured wrapper so its tap-ripple shows (cf. cart_screen).
-            (u) => Material(
-              type: MaterialType.transparency,
-              child: ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: CircleAvatar(
-                backgroundColor: _hexColor(context, u.avatarColor),
-                child: Text(
-                  u.name.isNotEmpty ? u.name[0].toUpperCase() : '?',
-                  style: TextStyle(
-                    color:
-                        u.avatarColor.toLowerCase().contains('ff') &&
-                            u.avatarColor.length >= 8
-                        ? Colors.white
-                        : Colors
-                              .white, // Simplification, usually avatar text is white
-                    fontWeight: FontWeight.w700,
-                  ),
+            SizedBox(height: context.getRSize(6)),
+            Text(
+              'Multiple accounts share this PIN. Tap your name.',
+              style: context.regularStyle(13).copyWith(color: subtextColor),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: context.getRSize(12)),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final u in users)
+                      // Transparent Material gives the row an ink target above
+                      // the surface-coloured wrapper so its tap-ripple shows.
+                      Material(
+                        type: MaterialType.transparency,
+                        child: ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          minVerticalPadding: 0,
+                          leading: CircleAvatar(
+                            backgroundColor: _hexColor(context, u.avatarColor),
+                            child: Text(
+                              u.name.isNotEmpty ? u.name[0].toUpperCase() : '?',
+                              style: context
+                                  .boldStyle(16)
+                                  .copyWith(color: theme.colorScheme.onPrimary),
+                            ),
+                          ),
+                          title: Text(
+                            u.name,
+                            style: context
+                                .semiBoldStyle(15)
+                                .copyWith(color: textColor),
+                          ),
+                          subtitle: Consumer(
+                            builder: (context, ref, _) {
+                              final role = ref.watch(userRoleProvider(u.id));
+                              return Text(
+                                role?.name ?? 'Member',
+                                style: context
+                                    .semiBoldStyle(12)
+                                    .copyWith(
+                                      color: role == null
+                                          ? subtextColor
+                                          : roleTagColor(role.slug),
+                                    ),
+                              );
+                            },
+                          ),
+                          onTap: () => onSelected(u),
+                        ),
+                      ),
+                  ],
                 ),
               ),
-              title: Text(
-                u.name,
-                style: TextStyle(fontWeight: FontWeight.w600, color: textColor),
-              ),
-              subtitle: Consumer(
-                builder: (context, ref, _) {
-                  final role = ref.watch(userRoleProvider(u.id));
-                  return Text(
-                    role?.name ?? 'Member',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: role == null
-                          ? subtextColor
-                          : roleTagColor(role.slug),
-                    ),
-                  );
-                },
-              ),
-              onTap: () => onSelected(u),
             ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

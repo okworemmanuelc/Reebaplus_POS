@@ -9,18 +9,15 @@
 // rasterization overhead, glitches on route transitions, and keep the
 // design language unified.
 //
-// Single exception: `lib/features/auth/widgets/auth_background.dart`, which
-// blurs a background photo on the sign-in screens pending the Wave 2 Auth redesign.
+// Zero exceptions: BackdropFilter and ImageFilter.blur are banned across lib/.
 
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-const _allowedException = 'lib/features/auth/widgets/auth_background.dart';
-
 void main() {
   test(
-    'no BackdropFilter or ImageFilter.blur appears in lib/ outside auth_background.dart',
+    'no BackdropFilter or ImageFilter.blur appears anywhere in lib/',
     () {
       final offenders = <String>[];
 
@@ -28,11 +25,6 @@ void main() {
         if (entity is! File || !entity.path.endsWith('.dart')) continue;
 
         final normalizedPath = entity.path.replaceAll(r'\', '/');
-        if (normalizedPath == _allowedException ||
-            normalizedPath.endsWith('/auth_background.dart')) {
-          continue;
-        }
-
         final lines = entity.readAsLinesSync();
         for (var i = 0; i < lines.length; i++) {
           final line = lines[i];

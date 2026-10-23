@@ -6,6 +6,8 @@ import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/otp_verification_screen.dart';
@@ -105,7 +107,9 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
         if (businesses.length == 1) businessId = businesses.first.id;
       }
       if (businessId != null) {
-        final count = await db.userBusinessesDao.countDeviceStaffForBusiness(businessId);
+        final count = await db.userBusinessesDao.countDeviceStaffForBusiness(
+          businessId,
+        );
         if (mounted) {
           setState(() {
             _hasDeviceAuthenticatedUser = count >= 1;
@@ -198,9 +202,10 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
           email: email,
           account: account,
         ),
-        NoAccountFoundRoute() => widget.createBusinessIntent
-            ? CeoSignUpScreen(verifiedEmail: email)
-            : NoAccountFoundScreen(email: email),
+        NoAccountFoundRoute() =>
+          widget.createBusinessIntent
+              ? CeoSignUpScreen(verifiedEmail: email)
+              : NoAccountFoundScreen(email: email),
         LoginRoute(:final user) => LoginScreen(presetUser: user),
         CreatePinRoute(:final user) => CreatePinScreen(user: user),
         // #285: both leave the phone exactly as it was found, so there is
@@ -272,7 +277,8 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
         existing = null; // lookup failure → fall through to the normal OTP path
       }
       if (!mounted) return;
-      final hasRealPin = existing != null &&
+      final hasRealPin =
+          existing != null &&
           existing.pin.isNotEmpty &&
           existing.pin != AuthService.setupRequiredPin;
       if (hasRealPin) {
@@ -355,10 +361,10 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) =>
             OtpVerificationScreen(
-          user: localUser,
-          email: email,
-          createBusinessIntent: widget.createBusinessIntent,
-        ),
+              user: localUser,
+              email: email,
+              createBusinessIntent: widget.createBusinessIntent,
+            ),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(opacity: animation, child: child);
         },
@@ -400,7 +406,9 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
       body: BrandedAuthBackground(
         child: SafeArea(
           child: AuthFormShell(
-            title: widget.createBusinessIntent ? 'Create your business' : 'Sign in',
+            title: widget.createBusinessIntent
+                ? 'Create your business'
+                : 'Sign in',
             subtitle: widget.createBusinessIntent
                 ? "First, confirm your email — we'll check it isn't already linked to a business."
                 : 'Enter your email to continue.',
@@ -414,7 +422,7 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
                   readOnly: widget.lockedEmail,
                   textInputAction: TextInputAction.done,
                   onSubmitted: (_) => _loading ? null : _submit(),
-                  style: TextStyle(color: textColor),
+                  style: context.mediumStyle(15).copyWith(color: textColor),
                   decoration: AppDecorations.authInputDecoration(
                     context,
                     label: widget.lockedEmail
@@ -424,18 +432,19 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: context.getRSize(16)),
 
               // Terms and Privacy Policy
               Center(
                 child: RichText(
                   textAlign: TextAlign.center,
                   text: TextSpan(
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: textColor.withValues(alpha: 0.6),
-                      height: 1.5,
-                    ),
+                    style: context
+                        .regularStyle(12)
+                        .copyWith(
+                          color: authTextMuted(context, 0.6),
+                          height: 1.5,
+                        ),
                     children: const [
                       TextSpan(text: 'By continuing, you agree to our\n'),
                       TextSpan(
@@ -458,84 +467,92 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
                 ),
               ),
 
-              const SizedBox(height: 24),
+              SizedBox(height: context.getRSize(24)),
 
               AppButton(
                 text: 'Send Code',
                 isLoading: _loading,
                 onPressed: (_loading || !_isEmailValid) ? null : _submit,
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: context.getRSize(16)),
 
               // OR divider
               Row(
                 children: [
                   Expanded(
-                    child: Divider(color: textColor.withValues(alpha: 0.2)),
+                    child: Divider(color: Theme.of(context).dividerColor),
                   ),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: Text(
                       'OR',
-                      style: TextStyle(
-                        color: textColor.withValues(alpha: 0.5),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: context
+                          .semiBoldStyle(12)
+                          .copyWith(color: authTextMuted(context, 0.5)),
                     ),
                   ),
                   Expanded(
-                    child: Divider(color: textColor.withValues(alpha: 0.2)),
+                    child: Divider(color: Theme.of(context).dividerColor),
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: context.getRSize(16)),
 
               // Google Sign-In button
               Container(
-                decoration: AppDecorations.glassCard(context),
+                decoration: AppDecorations.card(context),
                 child: Material(
                   color: Colors.transparent,
                   child: InkWell(
                     onTap: _loading ? null : _signInWithGoogle,
-                    borderRadius: BorderRadius.circular(12),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            AppIcons.googleBrand,
-                            size: 20,
-                            color: textColor.withValues(alpha: 0.8),
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            'Sign in with Google',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
+                    borderRadius: BorderRadius.circular(context.getRSize(16)),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        minHeight: kMinInteractiveDimension,
+                      ),
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(
+                          vertical: context.getRSize(14),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              AppIcons.googleBrand,
+                              size: 20,
                               color: textColor.withValues(alpha: 0.8),
                             ),
-                          ),
-                        ],
+                            const SizedBox(width: 12),
+                            Text(
+                              'Sign in with Google',
+                              style: context
+                                  .semiBoldStyle(15)
+                                  .copyWith(color: authTextMuted(context, 0.8)),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
+              SizedBox(height: context.getRSize(20)),
 
               if (_hasDeviceAuthenticatedUser) ...[
                 Center(
                   child: TextButton(
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(
+                        kMinInteractiveDimension,
+                        kMinInteractiveDimension,
+                      ),
+                    ),
                     onPressed: _goToPinDirectly,
                     child: Text(
                       'Already set up on this device? Login with PIN',
-                      style: TextStyle(
-                        color: textColor.withValues(alpha: 0.65),
-                        fontSize: 13,
-                      ),
+                      style: context
+                          .regularStyle(13)
+                          .copyWith(color: authTextMuted(context)),
                       textAlign: TextAlign.center,
                     ),
                   ),

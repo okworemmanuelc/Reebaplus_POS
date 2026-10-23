@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -105,6 +106,10 @@ import '../helpers/viewports.dart';
 ///     VIEWPORT_SWEEP=1 flutter test test/discovery/viewport_sweep_test.dart
 ///
 /// Each result prints one `SWEEP|` line; grep for them.
+
+const _connectivityChannel = MethodChannel(
+  'dev.fluttercommunity.plus/connectivity',
+);
 
 /// A vertical viewport shorter than this cannot show one complete row.
 const double _kRowFloor = 48.0;
@@ -673,6 +678,11 @@ Future<void> _sweep(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(
+        _connectivityChannel,
+        (call) async => call.method == 'check' ? <String>['wifi'] : null,
+      );
   final enabled = Platform.environment['VIEWPORT_SWEEP'] == '1';
 
   for (final populated in [false, true]) {

@@ -113,9 +113,8 @@ class _OnboardingStepIndicatorState extends State<OnboardingStepIndicator>
 
   Widget _buildDot(int step) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
     final activeColor = theme.colorScheme.primary;
-    final textColor = isDark ? Colors.white : Colors.black;
+    final textColor = theme.colorScheme.onSurface;
 
     final isCompleted = step < widget.currentStep;
     final isCurrent = step == widget.currentStep;
@@ -158,8 +157,12 @@ class _OnboardingStepIndicatorState extends State<OnboardingStepIndicator>
         ),
       ),
       child: isCompleted
-          ? const Center(
-              child: Icon(AppIcons.check, size: 10, color: Colors.white),
+          ? Center(
+              child: Icon(
+                AppIcons.check,
+                size: 10,
+                color: theme.colorScheme.onPrimary,
+              ),
             )
           : null,
     );
@@ -167,9 +170,8 @@ class _OnboardingStepIndicatorState extends State<OnboardingStepIndicator>
 
   Widget _buildLine(int leftStep) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
     final activeColor = theme.colorScheme.primary;
-    final textColor = isDark ? Colors.white : Colors.black;
+    final lineBg = theme.dividerColor;
 
     final isCompleted = leftStep < widget.currentStep;
 
@@ -183,7 +185,7 @@ class _OnboardingStepIndicatorState extends State<OnboardingStepIndicator>
               // Background line (always visible)
               Container(
                 decoration: BoxDecoration(
-                  color: textColor.withValues(alpha: 0.1),
+                  color: lineBg,
                   borderRadius: BorderRadius.circular(1),
                 ),
               ),
@@ -209,8 +211,7 @@ class _OnboardingStepIndicatorState extends State<OnboardingStepIndicator>
 
   Widget _buildLabel(int step) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : Colors.black;
+    final textColor = theme.colorScheme.onSurface;
     final activeColor = theme.colorScheme.primary;
 
     final isActiveOrDone = step <= widget.currentStep;
