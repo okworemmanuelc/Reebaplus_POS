@@ -28,9 +28,7 @@ import 'package:reebaplus_pos/core/services/product_image_service.dart';
 import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/catalogue_filled_note.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/product_form_parts.dart';
-import 'package:reebaplus_pos/features/inventory/widgets/update_product_sheet.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
-import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 
 /// A real factory GTIN (EAN-13, Nigeria prefix 615) and a second one.
@@ -226,12 +224,6 @@ void main() {
 
   String textOf(WidgetTester tester, String labelPart) =>
       tester.widget<TextFormField>(fieldFor(labelPart)).controller!.text;
-
-  AppDropdown<String?> unitDropdown(WidgetTester tester) =>
-      tester.widget<AppDropdown<String?>>(find.byType(AppDropdown<String?>));
-
-  List<String?> unitOptions(WidgetTester tester) =>
-      unitDropdown(tester).items.map((i) => i.value).toList();
 
   // Add Product's unit chips (#487), by their saved values.
   Iterable<ProductUnitChip> chips(WidgetTester tester) =>
@@ -485,15 +477,12 @@ void main() {
       await unmount(tester);
     });
 
-    testWidgets('edit mode (Update Product) never looks up', (tester) async {
+    testWidgets('edit mode never looks up', (tester) async {
       catalogue.answer = withPhoto(fullSuggestion);
       final product = await (db.select(
         db.products,
       )..where((t) => t.id.equals('prod-coke'))).getSingle();
-      await pumpWidgetUnder(
-        tester,
-        Scaffold(body: UpdateProductSheet(product: product, totalStock: 0)),
-      );
+      await pumpWidgetUnder(tester, AddProductScreen(editProduct: product));
 
       final field = fieldFor('Barcode');
       await tester.ensureVisible(field);
@@ -632,13 +621,6 @@ void main() {
           ),
         );
 
-    String? itemLabel(WidgetTester tester, String value) {
-      final item = unitDropdown(
-        tester,
-      ).items.firstWhere((i) => i.value == value);
-      return (item.child as Text).data;
-    }
-
     testWidgets('a new product is not offered plain Crate, even when another '
         'product uses it; Bottle reads "Bottle Crate"', (tester) async {
       await addCrateProduct();
@@ -666,20 +648,16 @@ void main() {
       await unmount(tester);
     });
 
-    testWidgets('Update Product on a product saved as Crate still shows and '
+    testWidgets('Edit Product on a product saved as Crate still shows and '
         'offers Crate', (tester) async {
       await addCrateProduct();
       final product = await (db.select(
         db.products,
       )..where((t) => t.id.equals('prod-crate'))).getSingle();
-      await pumpWidgetUnder(
-        tester,
-        Scaffold(body: UpdateProductSheet(product: product, totalStock: 0)),
-      );
+      await pumpWidgetUnder(tester, AddProductScreen(editProduct: product));
 
-      expect(unitDropdown(tester).currentValue, 'Crate');
-      expect(unitOptions(tester), contains('Crate'));
-      expect(itemLabel(tester, 'Bottle'), 'Bottle Crate');
+      expect(selectedUnit(tester), 'Crate');
+      expect(chipUnits(tester), contains('Crate'));
 
       await unmount(tester);
     });

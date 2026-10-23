@@ -1,4 +1,4 @@
-// The Add Product form (#487 PR 2) and the Update Product sheet (#392 PR 2)
+// The Add Product form (#487 PR 2) and its edit mode (#487 PR 4)
 // keep every control and permission rule, hold their content at every
 // redesign viewport (and with the keyboard up), lay out by their measured
 // width and keep their controls 48dp targets.
@@ -12,11 +12,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/core/permissions/gate.dart';
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
-import 'package:reebaplus_pos/features/inventory/screens/inventory_screen.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/inventory_parts.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/product_form_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
-import 'package:reebaplus_pos/features/inventory/widgets/update_product_sheet.dart';
 
 import '../helpers/inventory_seed.dart';
 import '../helpers/screen_harness.dart';
@@ -488,41 +486,63 @@ void main() {
     }
   });
 
-  group('Update Product sheet', () {
-    Finder row(String name) =>
-        find.byKey(inventoryProductRowKey(sample.productIds[name]!));
-
-    Future<void> openSheet(
+  group('Edit Product (the form in edit mode)', () {
+    Future<void> openEdit(
       WidgetTester tester, {
       Size size = const Size(390, 844),
       FakeViewPadding insets = _gesture,
     }) async {
+      final product =
+          await (env.db.select(env.db.products)
+                ..where((p) => p.id.equals(sample.productIds['Coca-Cola']!)))
+              .getSingle();
       await pump(
         tester,
-        screen: const InventoryScreen(),
+        screen: AddProductScreen(editProduct: product),
         size: size,
         insets: insets,
-        bottomNavHeight: kBottomNavBodyHeight,
       );
-      final r = row('Coca-Cola');
-      bool onScreen() =>
-          r.evaluate().isNotEmpty && tester.getCenter(r).dy < size.height - 60;
-      for (var i = 0; i < 10 && !onScreen(); i++) {
-        await tester.drag(find.byType(NestedScrollView), const Offset(0, -120));
-        await tester.pumpAndSettle();
-      }
-      await tester.longPress(r);
       await settleSheet(tester);
-      expect(find.byType(UpdateProductSheet), findsOneWidget);
     }
 
-    testWidgets('a hold opens it; the photo button is a 48dp target', (
+    String textIn(WidgetTester tester, Key key) =>
+        tester.widget<EditableText>(box(key)).controller.text;
+
+    testWidgets('opens filled in, titled Edit Product', (tester) async {
+      await openEdit(tester);
+      expect(find.text('Edit Product'), findsOneWidget);
+      expect(find.text("Update this item's details"), findsOneWidget);
+      expect(textIn(tester, AddProductKeys.name), 'Coca-Cola');
+      expect(find.text('Soft Drinks'), findsWidgets);
+      expect(find.text('Coca-Cola HBC'), findsWidgets);
+      expect(find.byKey(AddProductKeys.save), findsOneWidget);
+      expect(find.text('Save Changes'), findsOneWidget);
+      expect(find.byKey(AddProductKeys.saveAndNew), findsNothing);
+      expect(tester.takeException(), isNull);
+      await disposeScreen(tester);
+    });
+
+    testWidgets('Store and Opening Quantity are hidden', (tester) async {
+      await openEdit(tester);
+      expect(find.byKey(AddProductKeys.store), findsNothing);
+      expect(find.byKey(AddProductKeys.quantity), findsNothing);
+      expect(find.text('Opening Quantity'), findsNothing);
+      expect(find.byKey(AddProductKeys.lowStock), findsOneWidget);
+      await disposeScreen(tester);
+    });
+
+    testWidgets('wide layout: Preview offers Save Changes and Cancel', (
       tester,
     ) async {
-      await openSheet(tester);
-      expect(find.text('Update Product'), findsWidgets);
-      expectTarget(tester, find.byTooltip('Change photo'));
-      expect(tester.takeException(), isNull);
+      await openEdit(
+        tester,
+        size: const Size(1280, 800),
+        insets: const FakeViewPadding(top: 24),
+      );
+      expect(find.byKey(AddProductKeys.preview), findsOneWidget);
+      expect(find.text('Save Changes'), findsOneWidget);
+      expect(find.text('Cancel'), findsOneWidget);
+      expect(find.text('Save & Add Another'), findsNothing);
       await disposeScreen(tester);
     });
 
@@ -533,20 +553,14 @@ void main() {
       testWidgets('$name, keyboard up on the name field: no overflow', (
         tester,
       ) async {
-        await openSheet(tester, size: size, insets: insets);
-        final input = find
-            .descendant(
-              of: find.byType(UpdateProductSheet),
-              matching: find.byType(EditableText),
-            )
-            .first;
+        await openEdit(tester, size: size, insets: insets);
+        final input = box(AddProductKeys.name);
         await tester.tap(input);
         await tester.pump();
         await raiseKeyboard(tester, insets, keyboard);
+        await tester.ensureVisible(input);
+        await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
-        // In the app the frame Scaffold already lifts the sheet's navigator
-        // above the keyboard (ui-context "Safe-area rule"); here the focused
-        // field must sit clear of it and nothing may overflow.
         expect(
           tester.getRect(input).bottom,
           lessThanOrEqualTo(size.height - keyboard + 0.5),
@@ -554,57 +568,5 @@ void main() {
         await disposeScreen(tester);
       });
     }
-
-    testWidgets('holds at the 640 sheet width on a 1280 screen', (
-      tester,
-    ) async {
-      await openSheet(
-        tester,
-        size: const Size(1280, 800),
-        insets: const FakeViewPadding(top: 24),
-      );
-      expect(
-        tester.getSize(find.byType(UpdateProductSheet)).width,
-        lessThanOrEqualTo(640),
-      );
-      await disposeScreen(tester);
-    });
-
-    testWidgets('receive mode shows Stock Management', (tester) async {
-      final product =
-          await (env.db.select(env.db.products)
-                ..where((p) => p.id.equals(sample.productIds['Coca-Cola']!)))
-              .getSingle();
-      await pump(
-        tester,
-        screen: Builder(
-          builder: (context) => Scaffold(
-            body: Center(
-              child: TextButton(
-                onPressed: () => showModalBottomSheet<void>(
-                  context: context,
-                  isScrollControlled: true,
-                  backgroundColor: Colors.transparent,
-                  builder: (_) => UpdateProductSheet(
-                    product: product,
-                    totalStock: 52,
-                    receiveMode: true,
-                  ),
-                ),
-                child: const Text('Open sheet'),
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.tap(find.text('Open sheet'));
-      await settleSheet(tester);
-      expect(
-        find.text('Stock Management', skipOffstage: false),
-        findsOneWidget,
-      );
-      expect(tester.takeException(), isNull);
-      await disposeScreen(tester);
-    });
   });
 }

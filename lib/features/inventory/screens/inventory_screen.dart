@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
@@ -16,7 +15,6 @@ import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
-import 'package:reebaplus_pos/shared/widgets/coach_hint_banner.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
@@ -33,7 +31,6 @@ import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/inventory_history_tab.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/inventory_manufacturers_tab.dart';
-import 'package:reebaplus_pos/features/inventory/widgets/update_product_sheet.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/manage_categories_sheet.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/product_details_route.dart';
 import 'package:reebaplus_pos/core/constants/category_filter.dart';
@@ -47,7 +44,6 @@ import 'package:reebaplus_pos/shared/widgets/tabbed_sliver_scaffold.dart';
 import 'package:reebaplus_pos/core/providers/first_download_state.dart';
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
-import 'package:reebaplus_pos/shared/services/ui_hint_service.dart';
 import 'package:reebaplus_pos/shared/widgets/spotlight_target.dart';
 import 'package:reebaplus_pos/core/utils/product_unit.dart';
 
@@ -106,21 +102,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   String? _selectedCategoryId;
   // Products-tab header search (§16.4, amended — reuses the POS toggle pattern).
   bool _showSearch = false;
-  // Discoverability banner (issue #110): "press and hold to edit". Seeded from
-  // the UI-hint service in initState (per staff member, local-only); the render
-  // also checks Gates.editProductPrice so it only reaches users who can actually
-  // long-press-edit. Dismissing it retires the banner permanently for that user.
-  bool _showLongPressHint = false;
-  // The banner's dismissal is "per staff member" (issue #110 AC), so scope the
-  // shared UI-hint key to the current device user. Falls back to the bare key
-  // when no user is resolved (not expected on this authenticated screen).
-  String get _longPressHintKey {
-    final userId = ref.read(deviceUserIdProvider).value;
-    return userId == null || userId.isEmpty
-        ? UiHintService.hintInventoryLongpress
-        : '${UiHintService.hintInventoryLongpress}_$userId';
-  }
-
   String _searchQuery = '';
   final _searchCtrl = TextEditingController();
   int _totalCrateAssetsSum = 0;
@@ -266,18 +247,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     super.initState();
     _tabController = TabController(length: _tabKeys.length, vsync: this);
     _tabController.addListener(_onTabChanged);
-
-    // Issue #110: surface the "press and hold to edit" banner a couple of times
-    // per staff member. Visibility is further gated on Gates.editProductPrice at
-    // render time, so it only reaches users who can use the gesture.
-    uiHintService.shouldShow(_longPressHintKey).then((show) {
-      if (show && mounted) {
-        setState(() => _showLongPressHint = true);
-        // Count this display as a passive view so an ignored hint still retires
-        // after `_retireAfter` visits (never shown forever).
-        uiHintService.markShown(_longPressHintKey);
-      }
-    });
 
     // Defer all DB stream subscriptions until after the first frame so that
     // frame renders immediately without competing with 8+ SQL queries on the
@@ -804,27 +773,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     return [
       if (_showSearch) SliverToBoxAdapter(child: _buildSearchField(context)),
       SliverToBoxAdapter(child: _buildSupplierFilter(context)),
-      // Issue #110: press-and-hold-to-edit discoverability banner. Shown only
-      // to staff the price-edit gate lets long-press-edit (matching the
-      // gesture's own guard on `_buildProductRow`), only while there are
-      // products to hold, and only until this staff member dismisses it
-      // (which retires it permanently for them).
-      if (_showLongPressHint &&
-          list.isNotEmpty &&
-          Gates.editProductPrice.allows(ref))
-        _cappedBox(
-          EdgeInsets.only(top: context.getRSize(4)),
-          CoachHintBanner(
-            message:
-                'Press and hold a '
-                '${ref.watch(industryLexiconProvider).itemLower}'
-                ' to edit it.',
-            onDismiss: () {
-              setState(() => _showLongPressHint = false);
-              uiHintService.markDismissed(_longPressHintKey);
-            },
-          ),
-        ),
       if (list.isEmpty)
         // Genuinely empty catalogue (not a filter/search miss) hands off to the
         // persona-aware first-run empty state — the "Add your first product"
@@ -1244,25 +1192,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           : (isLow ? InventoryStockState.low : InventoryStockState.ok),
       expiryLabel: _expiryLabel(product),
       expired: expiry != null && _daysToExpiry(expiry) < 0,
-      // Long-press opens the full product editor (name/prices/details), so it
-      // is gated on `products.edit_price` (hard rule #6/#7 — hide, don't
-      // disable). Stock-only roles add stock via the product-detail Update
-      // Stock sheet instead, never this editor.
-      onLongPress: Gates.editProductPrice.allows(ref)
-          ? () {
-              HapticFeedback.mediumImpact();
-              showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                backgroundColor: Colors.transparent,
-                builder: (ctx) => UpdateProductSheet(
-                  product: product,
-                  totalStock: currentStock,
-                  onProductUpdated: (_) => setState(() {}),
-                ),
-              );
-            }
-          : null,
       onTap: () => openProductDetails(
         context,
         product,

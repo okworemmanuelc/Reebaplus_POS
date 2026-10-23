@@ -14,7 +14,7 @@ import 'package:reebaplus_pos/features/inventory/widgets/product_detail_figures.
 import 'package:reebaplus_pos/features/inventory/widgets/product_detail_parts.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/product_sales_history_cards.dart';
 import 'package:reebaplus_pos/features/inventory/screens/product_stock_history_screen.dart';
-import 'package:reebaplus_pos/features/inventory/widgets/update_product_sheet.dart';
+import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 import 'package:reebaplus_pos/core/result.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
@@ -605,31 +605,22 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   // ACTIONS — every one re-checks its gate on tap
   // ═══════════════════════════════════════════════════════════════════════════
 
-  /// Edit Product opens the existing product editor sheet, exactly as
-  /// Inventory's long-press does. PR 4 rewires this one method to the new form.
-  void _openEditProduct() {
+  /// Edit Product opens the Add Product form in edit mode (#487 PR 4) and
+  /// refreshes this page when it comes back.
+  Future<void> _openEditProduct() async {
     if (!Gates.editProductPrice.allowsNow(ref)) {
       showGateDenied(context, Gates.editProductPrice);
       return;
     }
     final product = _productData;
     if (product == null) return;
-    final total =
-        (ref.read(productStockByStoreProvider(widget.item.id)).valueOrNull ??
-                const <String, int>{})
-            .values
-            .fold<int>(0, (a, b) => a + b);
     HapticFeedback.mediumImpact();
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => UpdateProductSheet(
-        product: product,
-        totalStock: total,
-        onProductUpdated: (_) => widget.onUpdateStock(),
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => AddProductScreen(editProduct: product),
       ),
     );
+    if (mounted) widget.onUpdateStock();
   }
 
   /// Writes the description ([setSubtitle], null clears it) or the monthly
