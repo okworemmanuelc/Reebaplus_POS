@@ -350,6 +350,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       if (photo != null) {
         _pendingImageBytes = photo;
         _isPhotoFromCatalogue = true;
+        // The photo box sits in "More details": open it so the filled photo
+        // is seen rather than saved unnoticed.
+        _showMoreDetails = true;
       }
     });
   }

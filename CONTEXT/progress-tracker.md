@@ -7,6 +7,10 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Fast-Add: a shared-list photo opens "More details" (2026-10-23)
+Branch `feat/fast-add-open-details-on-catalogue-photo`, worktree `../drinkPosApp-wt-moredetails`. Owner approved the #332 follow-up.
+- `_applyCatalogueSuggestion` (add_product_screen.dart) sets `_showMoreDetails = true` when it fills the photo, because the photo box lives in the collapsed "More details" section and would otherwise be saved unseen. Name/unit-only fills leave it closed. Tests: `test/inventory/add_product_catalogue_prefill_test.dart` (+2).
+
 ### Wave 2 batch D COMPLETE: #462 PRs 2–3 + #463 PRs 1–2 (2026-10-23)
 Sonnet subagents, supervisor-reviewed; PRs #482, #484, #483, #485 (after #464). Restyle only: no auth/onboarding/data logic changed.
 - **#462 PR 2 (#482)**: Email entry, OTP verification, Existing account, No account found, stale-business prompt; 36 goldens; `test/auth/signin_screens_layout_test.dart` (no-overflow at 360@1.3 + 4 sizes, keyboard-up).
