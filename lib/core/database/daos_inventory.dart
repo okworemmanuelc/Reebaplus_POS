@@ -130,6 +130,16 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
+  /// One product's stock in every store that holds a row for it, keyed by
+  /// store id (#487, Product Details' Stock by Store card). Business-scoped and
+  /// live: an Adjust Stock, a sale or a sync landing re-emits.
+  Stream<Map<String, int>> watchStockByStoreForProduct(String productId) {
+    return (select(inventory)
+          ..where((i) => whereBusiness(i) & i.productId.equals(productId)))
+        .watch()
+        .map((rows) => {for (final r in rows) r.storeId: r.quantity});
+  }
+
   Future<List<ProductDataWithStock>> getProductsWithStock({
     String? storeId,
   }) async {

@@ -14,7 +14,7 @@ import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
-import 'package:reebaplus_pos/features/pos/widgets/sales_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/sales_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/icon_tile.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';

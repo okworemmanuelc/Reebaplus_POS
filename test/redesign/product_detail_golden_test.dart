@@ -1,9 +1,11 @@
-// Visual goldens for Product Detail (#392 PR 3, Wave 2 A): the solid top bar,
-// the identity card, Pricing, Stock & Info, Sales Summary / Target and Last
-// Delivery. Screens at 390x844 (gesture nav, bottom 24), 844x390 (status bar
-// 24, 3-button nav on the right 48), 800x1280 and 1280x800; light + dark.
-// Sample data has no orders or shipments, so nothing depends on the clock.
-// Regenerate with:
+// Visual goldens for Product Details (#487 PR 3): the hero, Description,
+// Prices & Profit, Stock by Store, Sales Target, the two plain cards and
+// Manage Product, in one, two and three columns. Screens at 390x2200 (gesture
+// nav, bottom 24), 844x390 (status bar 24, 3-button nav on the right 48),
+// 800x1500 (two columns) and 1280x1000 (three columns); light + dark. Also an
+// archived product and a cashier's view-only look. The clock is pinned (22
+// Oct 2026), and the sample has no orders or shipments, so nothing depends on
+// the real date. Regenerate with:
 //
 //     flutter test --update-goldens test/redesign/product_detail_golden_test.dart
 
@@ -15,10 +17,10 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:reebaplus_pos/core/permissions/gate.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
-import 'package:reebaplus_pos/features/inventory/data/models/inventory_item.dart';
 import 'package:reebaplus_pos/features/inventory/screens/product_detail_screen.dart';
 
 import '../helpers/inventory_seed.dart';
+import '../helpers/product_detail_seed.dart';
 import '../helpers/screen_harness.dart';
 
 void main() {
@@ -54,65 +56,110 @@ void main() {
   tearDown(() => env.dispose());
 
   const sizes = <(String, Size, FakeViewPadding)>[
-    ('390x844', Size(390, 844), FakeViewPadding(top: 24, bottom: 24)),
+    // The page scrolls, so the tall sizes are tall enough to show every card:
+    // 390x2200 is one column, 800x1500 two columns, 1280x1000 three columns,
+    // and 844x390 is the phone sideways (its top slice).
+    ('390x2200', Size(390, 2200), FakeViewPadding(top: 24, bottom: 24)),
     ('844x390', Size(844, 390), FakeViewPadding(top: 24, right: 48)),
-    ('800x1280', Size(800, 1280), FakeViewPadding(top: 24, bottom: 24)),
-    ('1280x800', Size(1280, 800), FakeViewPadding(top: 24)),
+    ('800x1500', Size(800, 1500), FakeViewPadding(top: 24, bottom: 24)),
+    ('1280x1000', Size(1280, 1000), FakeViewPadding(top: 24)),
   ];
+
+  const ceoKeys = {
+    ...kInventorySampleGrants,
+    'products.edit_buying_price',
+    'products.delete',
+  };
+
+  Future<void> shoot(
+    WidgetTester tester, {
+    required String name,
+    required Size size,
+    required FakeViewPadding insets,
+    required Brightness brightness,
+    Set<String> grants = ceoKeys,
+    String roleSlug = 'ceo',
+    int roleRank = GateTier.ceo,
+  }) async {
+    tester.view.padding = insets;
+    tester.view.viewPadding = insets;
+    addTearDown(tester.view.resetPadding);
+    addTearDown(tester.view.resetViewPadding);
+    await pumpScreen(
+      tester,
+      env: env,
+      size: size,
+      screen: ProductDetailScreen(
+        item: detailItemFor(env, sample),
+        onUpdateStock: () {},
+        selectedStoreId: env.storeId,
+        clock: () => DateTime(2026, 10, 22, 12),
+      ),
+      followView: true,
+      settle: false,
+      grantedKeys: grants,
+      roleSlug: roleSlug,
+      roleRank: roleRank,
+      theme: brightness == Brightness.light
+          ? AppTheme.light()
+          : AppTheme.dark(),
+    );
+    for (var i = 0; i < 8; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump(const Duration(milliseconds: 250));
+    }
+    expect(tester.takeException(), isNull);
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/product_detail_$name.png'),
+    );
+    await disposeScreen(tester);
+  }
 
   for (final brightness in Brightness.values) {
     final themeName = brightness == Brightness.light ? 'light' : 'dark';
     for (final (sizeName, size, insets) in sizes) {
       testWidgets('product detail, $sizeName $themeName', (tester) async {
-        tester.view.padding = insets;
-        tester.view.viewPadding = insets;
-        addTearDown(tester.view.resetPadding);
-        addTearDown(tester.view.resetViewPadding);
-        await pumpScreen(
+        await seedDetailSample(env, sample);
+        await shoot(
           tester,
-          env: env,
+          name: '${sizeName}_$themeName',
           size: size,
-          screen: ProductDetailScreen(
-            item: InventoryItem(
-              id: sample.productIds['Gulder']!,
-              productName: 'Gulder',
-              subtitle: '60cl',
-              icon: Icons.local_drink,
-              color: Colors.blue,
-              storeStock: {env.storeId: 4},
-              lowStockThreshold: 5,
-              unit: 'Bottle',
-            ),
-            onUpdateStock: () {},
-            selectedStoreId: env.storeId,
-          ),
-          followView: true,
-          settle: false,
-          grantedKeys: const {
-            ...kInventorySampleGrants,
-            'products.edit_buying_price',
-            'products.delete',
-          },
-          roleRank: GateTier.ceo,
-          theme: brightness == Brightness.light
-              ? AppTheme.light()
-              : AppTheme.dark(),
+          insets: insets,
+          brightness: brightness,
         );
-        for (var i = 0; i < 8; i++) {
-          await tester.runAsync(
-            () => Future<void>.delayed(const Duration(milliseconds: 20)),
-          );
-          await tester.pump(const Duration(milliseconds: 250));
-        }
-        expect(tester.takeException(), isNull);
-        await expectLater(
-          find.byType(MaterialApp),
-          matchesGoldenFile(
-            'goldens/product_detail_${sizeName}_$themeName.png',
-          ),
-        );
-        await disposeScreen(tester);
       });
     }
   }
+
+  testWidgets('product detail, archived product, 390x2200 light', (
+    tester,
+  ) async {
+    await seedDetailSample(env, sample, archived: true);
+    await shoot(
+      tester,
+      name: 'archived_390x2200_light',
+      size: const Size(390, 2200),
+      insets: const FakeViewPadding(top: 24, bottom: 24),
+      brightness: Brightness.light,
+    );
+  });
+
+  testWidgets('product detail, cashier view-only, 390x2200 light', (
+    tester,
+  ) async {
+    await seedDetailSample(env, sample);
+    await shoot(
+      tester,
+      name: 'cashier_390x2200_light',
+      size: const Size(390, 2200),
+      insets: const FakeViewPadding(top: 24, bottom: 24),
+      brightness: Brightness.light,
+      grants: const {'sales.make', 'stock.view'},
+      roleSlug: 'cashier',
+      roleRank: GateTier.cashier,
+    );
+  });
 }

@@ -1,29 +1,29 @@
-// ignore_for_file: unused_element, unused_field
+import 'dart:math' as math;
 
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
-import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/core/utils/factory_barcode.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/inventory_parts.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/product_detail_cards.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/product_detail_figures.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/product_detail_parts.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/update_product_sheet.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 import 'package:reebaplus_pos/core/result.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 
 import 'package:reebaplus_pos/shared/widgets/auto_lock_wrapper.dart';
-import 'package:reebaplus_pos/core/theme/colors.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
-import 'package:reebaplus_pos/core/utils/stock_calculator.dart';
 import 'package:reebaplus_pos/features/inventory/data/models/inventory_item.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/catalogue_report_link.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
@@ -33,9 +33,15 @@ import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/core/utils/product_unit.dart';
+import 'package:reebaplus_pos/core/theme/colors.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ProductDetailScreen — full-screen product information view
+// ProductDetailScreen — full-screen product information view (#487 PR 3)
+//
+// Read-only cards in the redesign's style. Nothing is edited inline: the
+// Description and Sales Target have a small pencil pop-up, "Edit Product" opens
+// the product editor, "Adjust Stock" the stock sheet, and Archive / Delete sit
+// in Manage Product.
 // ─────────────────────────────────────────────────────────────────────────────
 
 class ProductDetailScreen extends ConsumerStatefulWidget {
@@ -44,11 +50,16 @@ class ProductDetailScreen extends ConsumerStatefulWidget {
   final String?
   selectedStoreId; // null = "All Stores" — quantity editing blocked
 
+  /// The clock the Sales Target and expiry words read; tests pin it.
+  @visibleForTesting
+  final DateTime Function()? clock;
+
   const ProductDetailScreen({
     super.key,
     required this.item,
     required this.onUpdateStock,
     this.selectedStoreId,
+    this.clock,
   });
 
   @override
@@ -56,36 +67,10 @@ class ProductDetailScreen extends ConsumerStatefulWidget {
       _ProductDetailScreenState();
 }
 
+enum _MenuAction { adjustStock, editProduct, report }
+
 class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
-  late TextEditingController _nameController;
-  late TextEditingController _subtitleController;
-  late TextEditingController _buyingPriceController;
-  late TextEditingController _retailPriceController;
-  late TextEditingController _wholesalerPriceController;
-  late TextEditingController _monthlyTargetController;
-  late TextEditingController _emptyCratesController;
-  late TextEditingController _emptyCrateValueController;
-  late TextEditingController _lowStockController;
-
-  int _monthlyTarget = 0;
-  bool _editMode = false; // top Edit button toggles editing (CEO/Manager)
-  bool _savingChanges = false;
-  late double _liveStock; // live total stock, refreshed after adjustments
-  int? _emptyCrateStock; // original value loaded from DB
-  bool _allowFractionalSales = false;
-  bool _trackEmpties = false;
-  String? _size;
-  DateTime? _expiryDate;
-  String? _selectedManufacturerId; // DB id of the linked manufacturer
-  String? _selectedCategoryId;
-  String? _selectedSupplierId;
-  String? _selectedUnit;
-  List<String> _allUnits = [];
-  List<CategoryData> _allCategories = [];
-  List<ManufacturerData> _allManufacturers = [];
-  List<SupplierData> _allSuppliers = [];
-
-  ProductData? _productData; // full DB row, used by the inline save
+  ProductData? _productData; // full DB row, kept live by the stream below
 
   ProductSalesSummary? _salesSummary;
   LastShipmentInfo? _lastDelivery;
@@ -94,61 +79,38 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   String? _imagePath;
 
   // ── Role gating (master plan §16.6 / §16.7) ────────────────────────────────
-  // The screen is view-only until a CEO/Manager taps Edit (top bar). Editing is
-  // CEO + Manager via `products.edit_price`; delete is gated SEPARATELY on
-  // `products.delete` (see `_canDelete`). The Sales Target is CEO-only
-  // (`_isCeo`). Buying price visibility is `products.edit_buying_price`
-  // (CEO + Manager). Stock keeper can only adjust quantities via the "Update
-  // Stock" modal (`stock.adjust`) and sees a restricted view. Cashier: view-only.
-  // Read (not watch) so these getters are safe to call from non-build handlers.
+  // Read (not watch) so these getters are safe to call from tap handlers; build
+  // watches gateContextProvider, so the screen rebuilds when a role changes.
+  // Editing (Edit Product, the Description pencil, Archive) is
+  // `products.edit_price`; delete is its own `products.delete`; cost and the
+  // profit rows are `products.edit_buying_price`; Adjust Stock needs
+  // `stock.add` or `stock.adjust`. The Sales Target is CEO-only.
   bool get _canEdit => Gates.editProductPrice.allowsNow(ref);
-  // Delete is its own permission, not edit. Granted to CEO + Manager by default;
-  // the CEO can revoke it per role in Roles & Permissions and the change applies
-  // live (build() watches gateContextProvider, so the screen rebuilds
-  // and this getter re-reads).
   bool get _canDelete => Gates.deleteProduct.allowsNow(ref);
   bool get _canEditBuying => Gates.editBuyingPrice.allowsNow(ref);
   bool get _canAdjustStock => Gates.adjustStock.allowsNow(ref);
   // Add-stock is its own permission (§16.7), separate from adjust/remove. The
-  // Update-Stock modal opens if the viewer holds either; the Add and Remove
+  // Adjust Stock sheet opens if the viewer holds either; the Add and Remove
   // modes inside are gated individually (stock.add vs stock.adjust).
   bool get _canAddStock => Gates.addStock.allowsNow(ref);
+  bool get _canOpenAdjust => _canAddStock || _canAdjustStock;
   // Sales Target is CEO-only (a Manager may edit everything else but not the
   // target — explicit user requirement).
   bool get _isCeo => ref.read(currentUserRoleProvider)?.slug == 'ceo';
-  // Suppliers are gated (§16.7): Stock keeper / Cashier don't see the field.
-  bool get _canSeeSuppliers => Gates.manageSuppliers.allowsNow(ref);
+
+  /// Whether a stored `Bottle` reads "Bottle Crate" / "crates" (#487): only in
+  /// a shop that counts empty crates. Watched, for the build-time labels.
+  bool get _crates => businessTracksCrates(ref.watch(currentBusinessProvider));
+
+  DateTime get _now => (widget.clock ?? DateTime.now)();
 
   @override
   void initState() {
     super.initState();
-    _liveStock = widget.item.totalStock;
-    _nameController = TextEditingController(text: widget.item.productName);
-    _subtitleController = TextEditingController(text: widget.item.subtitle);
-    _buyingPriceController = TextEditingController(
-      text: fmtNumber(widget.item.buyingPrice ?? 0),
-    );
-    _retailPriceController = TextEditingController(
-      text: fmtNumber(widget.item.retailerPrice ?? 0),
-    );
-    _wholesalerPriceController = TextEditingController(
-      text: fmtNumber(widget.item.wholesalerPrice ?? 0),
-    );
-    _monthlyTargetController = TextEditingController(text: '0');
-    _emptyCratesController = TextEditingController(text: '0');
-    _emptyCrateValueController = TextEditingController(text: '0');
-    _lowStockController = TextEditingController(
-      text: widget.item.lowStockThreshold.toInt().toString(),
-    );
-    _selectedUnit = widget.item.unit;
-    _size = widget.item.size;
     _imagePath = widget.item.imagePath;
 
-    _retailPriceController.addListener(_onRetailPriceChanged);
-
     // Defer heavy DB calls until after first frame.
-    // _contentReady stays false until _loadProductData() finishes so the
-    // shimmer skeleton is visible while SQLite queries run.
+    // _contentReady stays false until _loadProductData() finishes.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _loadProductData();
     });
@@ -162,13 +124,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     }
 
     final db = ref.read(databaseProvider);
-
-    // Load monthly target, categories, manufacturers from DB
     final product = await db.catalogDao.findById(productId);
-    final categories = await db.inventoryDao.getAllCategories();
-    final manufacturers = await db.inventoryDao.getAllManufacturers();
-    final suppliers = await db.catalogDao.getAllSuppliers();
-    final uniqueUnits = await db.catalogDao.getUniqueProductUnits();
     // Resolve a renderable path for the photo — downloads from Storage once if
     // only the cloud URL is known, so a cross-device photo shows here and
     // renders offline from the cache. #78.
@@ -178,37 +134,11 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
 
     if (mounted) {
       setState(() {
-        _allCategories = categories;
-        _allManufacturers = manufacturers;
-        _allSuppliers = suppliers;
-        _allUnits = {
-          ...kProductUnits,
-          if (_selectedUnit != null) _selectedUnit!,
-          ...uniqueUnits,
-        }.toList()..sort();
-
         if (product != null) {
           _productData = product;
-          _monthlyTarget = product.monthlyTargetUnits;
-          _monthlyTargetController.text = _monthlyTarget.toString();
-          _selectedCategoryId = product.categoryId;
-          _selectedManufacturerId = product.manufacturerId;
-          _selectedSupplierId = product.supplierId;
-          _allowFractionalSales = product.allowFractionalSales;
-          _trackEmpties = product.trackEmpties;
-          _size = product.size;
-          _expiryDate = product.expiryDate;
-          _subtitleController.text = product.subtitle ?? '';
-          _lowStockController.text = product.lowStockThreshold.toString();
-          _emptyCrateValueController.text = (product.emptyCrateValueKobo / 100)
-              .toStringAsFixed(0);
           if (cachedPhoto != null) _imagePath = cachedPhoto;
         }
       });
-      // Load empty crate stock from manufacturer if linked
-      if (product?.manufacturerId != null) {
-        _loadEmptyCrateStock(product!.manufacturerId!);
-      }
     }
 
     // Load sales summary from completed orders
@@ -228,111 +158,6 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     }
   }
 
-  Future<void> _loadEmptyCrateStock(String manufacturerId) async {
-    // #159: the manufacturer's business-wide empties total is DERIVED from the
-    // append-only crate_ledger (not the demoted empty_crate_stock scalar), so
-    // this read-only figure agrees with the Crates tab.
-    final pool = await ref
-        .read(databaseProvider)
-        .cratePoolDao
-        .watchEmptiesPoolByManufacturer()
-        .first;
-    if (mounted) {
-      final count = pool[manufacturerId] ?? 0;
-      setState(() {
-        _emptyCrateStock = count;
-        _emptyCratesController.text = count.toString();
-      });
-    }
-  }
-
-  /// Re-read this product's current total stock (scoped to the selected store,
-  /// or summed across stores when "All Stores" is active) and update the status
-  /// badge + quantity field, so the detail screen reflects a stock change
-  /// without leaving and re-entering (#1).
-  Future<void> _refreshLiveStock() async {
-    final productId = widget.item.id;
-    if (productId.isEmpty) return;
-    final rows = await ref
-        .read(databaseProvider)
-        .inventoryDao
-        .getProductsWithStock(storeId: widget.selectedStoreId);
-    final match = rows.where((r) => r.product.id == productId).firstOrNull;
-    if (match != null && mounted) {
-      setState(() => _liveStock = match.totalStock.toDouble());
-    }
-  }
-
-  /// Re-seed the editable controllers/fields from the loaded product so a
-  /// Cancel discards unsaved edits.
-  /*
-  void _resetEdits() {
-    final product = _productData;
-    setState(() {
-      _nameController.text = widget.item.productName;
-      if (product != null) {
-        _subtitleController.text = product.subtitle ?? '';
-        _buyingPriceController.text = (product.buyingPriceKobo / 100)
-            .toStringAsFixed(0);
-        _retailPriceController.text = (product.retailerPriceKobo / 100)
-            .toStringAsFixed(0);
-        _wholesalerPriceController.text = (product.wholesalerPriceKobo / 100)
-            .toStringAsFixed(0);
-        _emptyCrateValueController.text = (product.emptyCrateValueKobo / 100)
-            .toStringAsFixed(0);
-        _lowStockController.text = product.lowStockThreshold.toString();
-        _monthlyTarget = product.monthlyTargetUnits;
-        _monthlyTargetController.text = _monthlyTarget.toString();
-        _selectedCategoryId = product.categoryId;
-        _selectedManufacturerId = product.manufacturerId;
-        _selectedSupplierId = product.supplierId;
-        _selectedUnit = product.unit;
-        _allowFractionalSales = product.allowFractionalSales;
-        _trackEmpties = product.trackEmpties;
-        _size = product.size;
-        _expiryDate = product.expiryDate;
-        _imagePath = product.imagePath;
-      }
-    });
-  }
-  */
-
-  /// Re-seed the displayed (non-editing) fields from a freshly-synced product
-  /// row so a realtime cloud edit reflects immediately (§5). Synchronous — the
-  /// caller wraps it in setState. Never called while `_editMode` is true.
-  void _seedFieldsFrom(ProductData product) {
-    _nameController.text = product.name;
-    _subtitleController.text = product.subtitle ?? '';
-    _buyingPriceController.text = (product.buyingPriceKobo / 100)
-        .toStringAsFixed(0);
-    _retailPriceController.text = (product.retailerPriceKobo / 100)
-        .toStringAsFixed(0);
-    _wholesalerPriceController.text = (product.wholesalerPriceKobo / 100)
-        .toStringAsFixed(0);
-    _emptyCrateValueController.text = (product.emptyCrateValueKobo / 100)
-        .toStringAsFixed(0);
-    _lowStockController.text = product.lowStockThreshold.toString();
-    _monthlyTarget = product.monthlyTargetUnits;
-    _monthlyTargetController.text = _monthlyTarget.toString();
-    _selectedCategoryId = product.categoryId;
-    _selectedManufacturerId = product.manufacturerId;
-    _selectedSupplierId = product.supplierId;
-    _selectedUnit = product.unit;
-    _allowFractionalSales = product.allowFractionalSales;
-    _trackEmpties = product.trackEmpties;
-    _size = product.size;
-    _expiryDate = product.expiryDate;
-    // Only adopt a non-null legacy imagePath — a cross-device photo has its
-    // renderable path resolved via ensureCached (#78), so don't blank it here
-    // when a synced row carries a null/foreign imagePath.
-    if (product.imagePath != null) _imagePath = product.imagePath;
-    // Keep the unit dropdown inclusive of a (possibly new) synced unit value.
-    // A unitless product (#108) has nothing to add.
-    if (product.unit != null && !_allUnits.contains(product.unit)) {
-      _allUnits = ({..._allUnits, product.unit!}.toList())..sort();
-    }
-  }
-
   /// Re-read the derived blocks (Sales Summary + Last Delivery) after a stock
   /// change syncs in, so they stay live alongside the product fields.
   Future<void> _reloadDerived() async {
@@ -346,152 +171,34 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     if (mounted) setState(() => _lastDelivery = delivery);
   }
 
-  Future<void> _pickExpiry() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _expiryDate ?? now,
-      firstDate: DateTime(now.year - 1),
-      lastDate: DateTime(now.year + 20),
-      helpText: 'Select expiry date',
-    );
-    if (picked != null && mounted) setState(() => _expiryDate = picked);
-  }
-
-  /// CEO / Manager edit-and-save: persist every editable field in a SINGLE
-  /// `products` upsert (so the sync queue can't coalesce away one of two writes
-  /// — that was the bug where the Sales Target never reached the cloud). The
-  /// Sales Target is only included for a CEO. Also mirrors the crate value to
-  /// the manufacturer level (§16.5). Shows a success / error banner.
-  Future<void> _saveChanges() async {
-    final product = _productData;
-    if (product == null) {
-      AppNotification.showError(context, 'Product is still loading.');
-      return;
-    }
-    final db = ref.read(databaseProvider);
-    final auth = ref.read(authProvider);
-    final name = _nameController.text.trim();
-    if (name.isEmpty) {
-      AppNotification.showError(context, 'Product name is required.');
-      return;
-    }
-    setState(() => _savingChanges = true);
-    try {
-      final crateValueKobo =
-          (parseCurrency(_emptyCrateValueController.text) * 100).toInt();
-      // One upsert carries everything — including the Sales Target (CEO only),
-      // so prices + target + flags all reach the cloud in one payload.
-      await db.catalogDao.updateProductDetails(
-        product.id,
-        name: name,
-        manufacturerId: _selectedManufacturerId,
-        buyingPriceKobo: (parseCurrency(_buyingPriceController.text) * 100)
-            .round(),
-        retailerPriceKobo: (parseCurrency(_retailPriceController.text) * 100)
-            .round(),
-        wholesalerPriceKobo:
-            (parseCurrency(_wholesalerPriceController.text) * 100).round(),
-        emptyCrateValueKobo: crateValueKobo,
-        categoryId: _selectedCategoryId,
-        unit: _selectedUnit,
-        trackEmpties: _trackEmpties,
-        allowFractionalSales: _allowFractionalSales,
-        lowStockThreshold:
-            int.tryParse(_lowStockController.text.trim()) ??
-            product.lowStockThreshold,
-        imagePath: _imagePath,
-        monthlyTargetUnits: _isCeo ? _monthlyTarget : null,
-        subtitle: _subtitleController.text.trim().isEmpty
-            ? null
-            : _subtitleController.text.trim(),
-        supplierId: _selectedSupplierId,
-        size: _size,
-        expiryDate: _expiryDate,
-      );
-      // Crate value is shared at the manufacturer level so all products of this
-      // manufacturer share one value (§16.5).
-      if (_selectedManufacturerId != null && crateValueKobo > 0) {
-        await db.catalogDao.updateManufacturerEmptyCrateValue(
-          _selectedManufacturerId!,
-          crateValueKobo,
-        );
-      }
-      await ref
-          .read(activityLogProvider)
-          .logAction(
-            'update_product',
-            '${auth.currentUser?.name ?? 'Unknown'} updated product: $name',
-            productId: product.id,
-          );
-      // Re-read the product so the screen shows the saved values and a fresh
-      // baseline for the next edit.
-      final refreshed = await db.catalogDao.findById(product.id);
-      widget.onUpdateStock();
-      if (mounted) {
-        setState(() {
-          if (refreshed != null) _productData = refreshed;
-          _editMode = false;
-        });
-        AppNotification.showSuccess(context, 'Product updated');
-      }
-    } catch (e, st) {
-      CrashReporter.record(e, st, context: 'inventory.product_detail.save');
-      debugPrint('ProductDetail._saveChanges error: $e');
-      if (mounted) {
-        AppNotification.showError(context, 'Could not update product: $e');
-      }
-    } finally {
-      if (mounted) setState(() => _savingChanges = false);
-    }
-  }
-
-  void _onRetailPriceChanged() {
-    if (mounted) setState(() {});
-  }
-
-  @override
-  void dispose() {
-    _retailPriceController.removeListener(_onRetailPriceChanged);
-    _nameController.dispose();
-    _subtitleController.dispose();
-    _buyingPriceController.dispose();
-    _retailPriceController.dispose();
-    _wholesalerPriceController.dispose();
-    _monthlyTargetController.dispose();
-    _emptyCratesController.dispose();
-    _emptyCrateValueController.dispose();
-    _lowStockController.dispose();
-    super.dispose();
-  }
-
   // ── Theme helpers ─────────────────────────────────────────────────────────
   Color get _bg => Theme.of(context).scaffoldBackgroundColor;
   Color get _surface => Theme.of(context).colorScheme.surface;
-  Color get _cardBg => Theme.of(context).cardColor;
   Color get _text => Theme.of(context).colorScheme.onSurface;
-  Color get _subtext =>
-      Theme.of(context).textTheme.bodySmall?.color ??
-      Theme.of(context).iconTheme.color!;
-  Color get _border => Theme.of(context).dividerColor;
+
+  // ── Derived figures ───────────────────────────────────────────────────────
+  String get _name => _productData?.name ?? widget.item.productName;
+  String? get _unit => _productData?.unit ?? widget.item.unit;
+  int get _alertAt =>
+      _productData?.lowStockThreshold ?? widget.item.lowStockThreshold.toInt();
+  // The saved description; the list row's subtitle only until the row loads.
+  String get _description => _productData == null
+      ? widget.item.subtitle
+      : (_productData!.subtitle ?? '');
+  bool get _archived => _productData != null && !_productData!.isAvailable;
 
   @override
   Widget build(BuildContext context) {
     ref.watch(
       currencySymbolProvider,
     ); // rebuild money displays when currency changes
-    // Subscribe to permission changes so the role-gated UI (buying row,
-    // action button) rebuilds when the role + its grants resolve locally.
-    // The `_canEdit` family of getters read the same provider.
+    // Subscribe to permission changes so the role-gated UI rebuilds when the
+    // role + its grants resolve locally. The `_canEdit` family reads the same
+    // provider.
     ref.watch(gateContextProvider);
 
-    // Realtime sync (§5): watch this product's row + stock so an edit or stock
-    // change on another device reflects here live, without leaving the screen.
-    // The stream's LEFT join always carries the product row (even with 0 stock
-    // in the selected store), so `match.product` gives every field its current
-    // synced value. Stock (a non-editable field here) updates even mid-edit;
-    // editable fields are re-seeded only when NOT editing, so an incoming sync
-    // never clobbers the user's unsaved input.
+    // Realtime sync (§5): watch this product's row so an edit (or an archive)
+    // on another device reflects here live, without leaving the screen.
     ref.listen<AsyncValue<List<ProductDataWithStock>>>(
       productsWithStockProvider(widget.selectedStoreId),
       (prev, next) {
@@ -501,51 +208,25 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             .where((r) => r.product.id == widget.item.id)
             .firstOrNull;
         if (match == null) return;
-        final p = match.product;
-        final newStock = match.totalStock.toDouble();
-        final stockChanged = newStock != _liveStock;
-        setState(() {
-          _liveStock = newStock;
-          _productData = p; // keep the edit baseline fresh
-          if (!_editMode) _seedFieldsFrom(p);
-        });
-        if (!_editMode && p.manufacturerId != null) {
-          _loadEmptyCrateStock(p.manufacturerId!);
-        }
-        // A stock change for this product means a sale/adjustment landed —
-        // refresh the Sales Summary + Last Delivery so those blocks stay live.
-        if (stockChanged) _reloadDerived();
+        setState(() => _productData = match.product);
       },
     );
 
-    // A sale records an order (and its stock delta). The stock listener above
-    // only refreshes the Sales Summary when THIS store's total changes, so a
-    // sale in another store — or any timing where the stock tick is missed —
-    // wouldn't update the numbers. Watch the orders stream directly so every
-    // sale (this device or synced from another) refreshes the summary live.
+    // A stock change for this product (an Adjust Stock, a sale, a sync) means
+    // the Sales Summary + Last Delivery may have moved too.
+    ref.listen(productStockByStoreProvider(widget.item.id), (prev, next) {
+      if (prev?.valueOrNull == null || next.valueOrNull == null) return;
+      _reloadDerived();
+    });
+
+    // A sale records an order (and its stock delta). Watch the orders stream
+    // directly so every sale (this device or synced from another) refreshes
+    // the summary live, including one in another store.
     ref.listen(allOrdersProvider, (prev, next) {
       if (next.valueOrNull == null || !mounted) return;
       _reloadDerived();
     });
 
-    // Keep the dropdown OPTION lists live (§5): a category / manufacturer /
-    // supplier added or renamed on another device relabels here without a
-    // reopen. The existing dropdowns read these instance fields directly.
-    ref.listen(allCategoriesProvider, (prev, next) {
-      final v = next.valueOrNull;
-      if (v != null && mounted) setState(() => _allCategories = v);
-    });
-    ref.listen(allManufacturersProvider, (prev, next) {
-      final v = next.valueOrNull;
-      if (v != null && mounted) setState(() => _allManufacturers = v);
-    });
-    ref.listen(allSuppliersProvider, (prev, next) {
-      final v = next.valueOrNull;
-      if (v != null && mounted) setState(() => _allSuppliers = v);
-    });
-
-    // Show shimmer skeleton while DB data loads (_contentReady becomes true
-    // at the end of _loadProductData once all queries complete).
     if (!_contentReady) {
       return Scaffold(
         backgroundColor: _bg,
@@ -553,689 +234,391 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       );
     }
 
-    return Container(
-      decoration: AppDecorations.pageBackground(context),
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        resizeToAvoidBottomInset: false,
-        appBar: _buildTopBar(context),
-        body: SafeArea(
-          top: false,
-          bottom: false,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              // Detail screens cap at a fixed 960 and centre (#392); the header
-              // cards pair up from a measured 900, never a viewport predicate.
-              final gutter = detailGutter(context, constraints.maxWidth);
-              final sideBySide = constraints.maxWidth >= kDetailSideBySideWidth;
-              return SingleChildScrollView(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final wide = width >= kProductDetailThreeColumnWidth;
+        return Container(
+          decoration: AppDecorations.pageBackground(context),
+          child: Scaffold(
+            backgroundColor: Colors.transparent,
+            resizeToAvoidBottomInset: false,
+            appBar: _buildTopBar(context, wide),
+            body: SafeArea(
+              top: false,
+              bottom: false,
+              child: SingleChildScrollView(
                 padding: EdgeInsets.fromLTRB(
-                  gutter,
+                  _gutter(context, width),
                   context.getRSize(16),
-                  gutter,
+                  _gutter(context, width),
                   context.getRSize(16) + context.deviceBottomPadding,
                 ),
-                child: _buildBody(context, sideBySide),
-              );
-            },
+                child: _buildBody(context, width),
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
+  double _gutter(BuildContext context, double width) => math.max(
+    context.getRSize(16),
+    (width - kProductDetailMaxContentWidth) / 2,
+  );
+
   // ═══════════════════════════════════════════════════════════════════════════
-  // TOP BAR — the solid Inventory bar (#392)
+  // TOP BAR — back, title, and the actions
   // ═══════════════════════════════════════════════════════════════════════════
 
-  PreferredSizeWidget _buildTopBar(BuildContext context) {
+  PreferredSizeWidget _buildTopBar(BuildContext context, bool wide) {
     final f =
         Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light;
-    return InventoryTopBar(
-      icon: AppIcons.tag,
-      title: 'Product Details',
+    final t = Theme.of(context);
+    final canAdjust = _canOpenAdjust;
+    final canEdit = _canEdit;
+    final hasReport = _hasReportLink;
+    // The wide bar shows Adjust Stock and Edit Product as buttons, so the menu
+    // keeps only what is left; the phone bar keeps everything in the menu.
+    final menuHasAdjust = !wide && canAdjust;
+    final menuHasEdit = !wide && canEdit;
+    final showMenu = menuHasAdjust || menuHasEdit || hasReport;
+    return ProductDetailTopBar(
       height: inventoryTopBarHeight(context),
-      leading: IconButton(
-        tooltip: MaterialLocalizations.of(context).backButtonTooltip,
-        constraints: const BoxConstraints(
-          minWidth: kMinInteractiveDimension,
-          minHeight: kMinInteractiveDimension,
-        ),
-        onPressed: () => Navigator.pop(context),
-        icon: AppIcon(
-          AppIcons.arrowBack,
-          size: context.getRSize(24),
-          color: Theme.of(context).colorScheme.onSurface,
-        ),
-      ),
+      onBack: () => Navigator.pop(context),
       actions: [
-        // The Edit toggle (CEO/Manager) is hidden per owner request: the
-        // fields stay read-only (see git history for the old button).
-        if (_canDelete)
-          IconButton(
-            tooltip: 'Delete product',
-            constraints: const BoxConstraints(
-              minWidth: kMinInteractiveDimension,
-              minHeight: kMinInteractiveDimension,
-            ),
-            onPressed: () {
-              if (!Gates.deleteProduct.allowsNow(ref)) {
-                showGateDenied(context, Gates.deleteProduct);
-                return;
-              }
-              _confirmDelete(context);
-            },
-            icon: AppIcon(
-              AppIcons.delete,
-              size: context.getRSize(24),
-              color: f.danger,
-            ),
+        if (wide && canAdjust)
+          DetailTonalButton(
+            label: 'Adjust Stock',
+            icon: AppIcons.tune,
+            fill: f.infoTint,
+            ink: f.info,
+            expand: false,
+            onTap: _openAdjustStock,
           ),
-      ],
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // HERO CARD — photo / icon, name, stock status
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  Widget _buildHero(BuildContext context) {
-    final isLow = _liveStock > 0 && _liveStock <= widget.item.lowStockThreshold;
-    final isOut = _liveStock == 0;
-    var statusTone = TagPillTone.green;
-    var statusLabel = 'In Stock';
-    if (isOut) {
-      statusTone = TagPillTone.danger;
-      statusLabel = 'Out of Stock';
-    } else if (isLow) {
-      statusTone = TagPillTone.warning;
-      statusLabel = 'Low Stock';
-    }
-    final t = Theme.of(context);
-    final edge = context.getRSize(72);
-    final radius = BorderRadius.circular(AppSpacing.borderRadiusL);
-    final fallback = IconTile(
-      icon: widget.item.icon,
-      tone: IconTileTone.neutral,
-      tint: widget.item.color.withValues(alpha: 0.15),
-      iconColor: widget.item.color,
-      size: 72,
-    );
-
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(context.getRSize(16)),
-      decoration: AppDecorations.card(context),
-      child: Row(
-        children: [
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              SizedBox(
-                width: edge,
-                height: edge,
-                child: _imagePath != null
-                    ? ClipRRect(
-                        borderRadius: radius,
-                        child: Image.file(
-                          File(_imagePath!),
-                          width: edge,
-                          height: edge,
-                          fit: BoxFit.cover,
-                          errorBuilder: (ctx, _, __) => fallback,
-                        ),
-                      )
-                    : fallback,
-              ),
-              if (_editMode)
-                Positioned(
-                  right: -context.getRSize(12),
-                  bottom: -context.getRSize(12),
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: _pickImage,
-                    child: Padding(
-                      // A 48dp target around the small badge.
-                      padding: EdgeInsets.all(context.getRSize(14)),
-                      child: Container(
-                        padding: EdgeInsets.all(context.getRSize(4)),
-                        decoration: BoxDecoration(
-                          color: t.colorScheme.primary,
-                          shape: BoxShape.circle,
-                        ),
-                        child: AppIcon(
-                          AppIcons.edit,
-                          color: t.colorScheme.onPrimary,
-                          size: context.getRSize(12),
-                        ),
-                      ),
-                    ),
-                  ),
+        if (wide && canEdit)
+          AppButton(
+            text: 'Edit Product',
+            icon: AppIcons.edit,
+            isFullWidth: false,
+            onPressed: _openEditProduct,
+          ),
+        if (showMenu)
+          PopupMenuButton<_MenuAction>(
+            tooltip: 'More options',
+            color: t.colorScheme.surface,
+            onSelected: _onMenu,
+            itemBuilder: (_) => [
+              if (menuHasAdjust)
+                _menuItem(
+                  _MenuAction.adjustStock,
+                  AppIcons.tune,
+                  'Adjust Stock',
+                ),
+              if (menuHasEdit)
+                _menuItem(
+                  _MenuAction.editProduct,
+                  AppIcons.edit,
+                  'Edit Product',
+                ),
+              if (hasReport)
+                _menuItem(
+                  _MenuAction.report,
+                  AppIcons.flag,
+                  CatalogueReportLink.label,
                 ),
             ],
-          ),
-          SizedBox(width: context.getRSize(16)),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AppInput(
-                  controller: _nameController,
-                  readOnly: !_editMode,
-                  style: context
-                      .extraBoldStyle(20)
-                      .copyWith(color: t.colorScheme.onSurface),
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.zero,
-                  hintText: 'Product Name',
-                  fillColor: Colors.transparent,
-                  onChanged: (v) => setState(() {}),
-                ),
-                SizedBox(height: context.getRSize(8)),
-                TagPill(label: statusLabel, tone: statusTone),
-              ],
+            child: const IgnorePointer(
+              child: DetailBarSquare(icon: AppIcons.moreVertical),
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // BODY — all detail sections
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  Widget _buildBody(BuildContext context, bool sideBySide) {
-    final t = Theme.of(context);
-    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
-    final gap = SizedBox(height: context.getRSize(24));
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildHero(context),
-        gap,
-
-        // Wide: Stock & Info on the left, the money and sales cards stacked
-        // on the right. Narrow: one column in the same order.
-        DetailPair(
-          sideBySide: sideBySide,
-          first: DetailSection(
-            title: 'Stock & Info',
-            child: _stockInfoCard(context),
-          ),
-          second: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (!sideBySide) SizedBox(height: context.getRSize(8)),
-              DetailSection(title: 'Pricing', child: _pricingCard(context)),
-              gap,
-              DetailSection(
-                title: 'Sales Summary',
-                child: _buildSalesGrid(context),
-              ),
-              gap,
-              // Editable by CEO only, in edit mode.
-              DetailSection(
-                title: 'Sales Target',
-                subtitle: (_editMode && !_isCeo) ? '(CEO only)' : null,
-                child: _buildTargetGrid(context),
-              ),
-              gap,
-              DetailSection(
-                title: 'Last Delivery',
-                child: _buildDeliveryCard(context),
-              ),
-            ],
-          ),
-        ),
-        SizedBox(height: context.getRSize(24)),
-
-        // ── Read-only notice ─────────────────────────────────────────────
-        Container(
-          width: double.infinity,
-          constraints: const BoxConstraints(
-            minHeight: kMinInteractiveDimension,
-          ),
-          padding: EdgeInsets.all(context.getRSize(16)),
-          decoration: AppDecorations.card(context),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              AppIcon(AppIcons.lock, size: context.getRSize(14), color: muted),
-              SizedBox(width: context.getRSize(6)),
-              Text(
-                'VIEW ONLY',
-                style: context
-                    .extraBoldStyle(12)
-                    .copyWith(letterSpacing: 0.8, color: muted),
-              ),
-            ],
-          ),
-        ),
-        // Shown only for a factory barcode (ADR 0029 §6, #335).
-        CatalogueReportLink(barcode: _productData?.barcode),
-        SizedBox(height: context.getRSize(16)),
       ],
     );
   }
 
-  /// Whether a stored `Bottle` reads "Bottle Crate" (#487): only in a shop
-  /// that counts empty crates. Watched, for the build-time unit labels.
-  bool get _unitCrates =>
-      businessTracksCrates(ref.watch(currentBusinessProvider));
-
-  Widget _stockInfoCard(BuildContext context) {
-    return DetailCard(
-      children: [
-        // Quantity is read-only here — it changes via Add Product
-        // (restock) or the Stock keeper's Update Stock modal, never inline.
-        _infoRow(
-          context,
-          AppIcons.crates,
-          'Total Quantity',
-          '${_liveStock.toStringAsFixed(_liveStock % 1 == 0 ? 0 : 1)}'
-              '${_selectedUnit != null ? ' ${unitLabel(_selectedUnit, crates: _unitCrates)!}' : ''}',
-          IconTileTone.info,
-        ),
-        _divider(context),
-        // Description / subtitle
-        _infoRow(
-          context,
-          AppIcons.description,
-          'Description',
-          _editMode ? '' : _subtitleController.text,
-          IconTileTone.info,
-          trailing: _editMode
-              ? _textTrailing(_subtitleController, width: 150)
-              : null,
-        ),
-        _divider(context),
-        _infoRow(
-          context,
-          AppIcons.manufacturer,
-          'Manufacturer',
-          '',
-          IconTileTone.info,
-          trailing: SizedBox(
-            width: context.getRSize(160),
-            child: AppDropdown<String?>(
-              value: _selectedManufacturerId,
-              items: [
-                DropdownMenuItem<String?>(
-                  value: null,
-                  child: Text(
-                    'None',
-                    style: TextStyle(
-                      color: _subtext,
-                      fontSize: context.getRFontSize(12),
-                    ),
-                  ),
-                ),
-                ..._allManufacturers.map(
-                  (m) => DropdownMenuItem<String?>(
-                    value: m.id,
-                    child: Text(m.name, overflow: TextOverflow.ellipsis),
-                  ),
-                ),
-              ],
-              onChanged: _editMode
-                  ? (v) => setState(() {
-                      _selectedManufacturerId = v;
-                      // Crate value is shared at the manufacturer level —
-                      // autofill from the chosen manufacturer (§16.5).
-                      final m = _allManufacturers
-                          .where((x) => x.id == v)
-                          .firstOrNull;
-                      if (m != null && m.depositAmountKobo > 0) {
-                        _emptyCrateValueController.text =
-                            (m.depositAmountKobo / 100).toStringAsFixed(0);
-                      }
-                    })
-                  : (_) {},
-            ),
-          ),
-        ),
-        // Supplier (gated — Stock keeper / Cashier don't see it, §16.7)
-        if (_canSeeSuppliers) ...[
-          _divider(context),
-          _infoRow(
-            context,
-            AppIcons.supplier,
-            'Supplier',
-            '',
-            IconTileTone.info,
-            trailing: SizedBox(
-              width: context.getRSize(160),
-              child: AppDropdown<String?>(
-                value: _allSuppliers.any((s) => s.id == _selectedSupplierId)
-                    ? _selectedSupplierId
-                    : null,
-                items: [
-                  DropdownMenuItem<String?>(
-                    value: null,
-                    child: Text(
-                      'None',
-                      style: TextStyle(
-                        color: _subtext,
-                        fontSize: context.getRFontSize(12),
-                      ),
-                    ),
-                  ),
-                  ..._allSuppliers.map(
-                    (s) => DropdownMenuItem<String?>(
-                      value: s.id,
-                      child: Text(s.name, overflow: TextOverflow.ellipsis),
-                    ),
-                  ),
-                ],
-                onChanged: _editMode
-                    ? (v) => setState(() => _selectedSupplierId = v)
-                    : (_) {},
-              ),
-            ),
-          ),
-        ],
-        _divider(context),
-        // Category Dropdown
-        _infoRow(
-          context,
-          AppIcons.tag,
-          'Category',
-          '',
-          IconTileTone.green,
-          trailing: SizedBox(
-            width: context.getRSize(150),
-            child: AppDropdown<String?>(
-              value: _selectedCategoryId,
-              items: [
-                const DropdownMenuItem<String?>(
-                  value: null,
-                  child: Text("None"),
-                ),
-                ..._allCategories.map(
-                  (c) => DropdownMenuItem<String?>(
-                    value: c.id,
-                    child: Text(c.name),
-                  ),
-                ),
-              ],
-              onChanged: _editMode
-                  ? (val) => setState(() => _selectedCategoryId = val)
-                  : (_) {},
-            ),
-          ),
-        ),
-        _divider(context),
-        // Product Unit Dropdown
-        _infoRow(
-          context,
-          AppIcons.box,
-          'Product Unit',
-          '',
-          IconTileTone.warning,
-          trailing: SizedBox(
-            width: context.getRSize(150),
-            child: AppDropdown<String?>(
-              value: _selectedUnit,
-              hintText: 'No unit',
-              // "No unit" (#108) clears the unit — a product with just a
-              // name, hidden everywhere the unit would render.
-              items: [
-                const DropdownMenuItem<String?>(
-                  value: null,
-                  child: Text('No unit'),
-                ),
-                // Plain "Crate" only while it is this product's unit
-                // (#487); a stored Bottle reads "Bottle Crate" in a shop
-                // that counts empty crates.
-                ...unitChoices(
-                  _allUnits,
-                  keep: [_selectedUnit, _productData?.unit ?? widget.item.unit],
-                ).map(
-                  (u) => DropdownMenuItem<String?>(
-                    value: u,
-                    child: Text(unitLabel(u, crates: _unitCrates)!),
-                  ),
-                ),
-              ],
-              onChanged: _editMode
-                  ? (val) => setState(() => _selectedUnit = val)
-                  : (_) {},
-            ),
-          ),
-        ),
-        _divider(context),
-        // Low Stock Alert
-        _infoRow(
-          context,
-          AppIcons.warning,
-          'Low Stock Alert',
-          '',
-          IconTileTone.danger,
-          trailing: _textTrailing(
-            _lowStockController,
-            width: 70,
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          ),
-        ),
-        _divider(context),
-        // Size dropdown
-        _infoRow(
-          context,
-          AppIcons.category,
-          'Size',
-          '',
-          IconTileTone.malt,
-          trailing: SizedBox(
-            width: context.getRSize(130),
-            child: AppDropdown<String?>(
-              value: _size,
-              items: const [
-                DropdownMenuItem(value: null, child: Text('None')),
-                DropdownMenuItem(value: 'big', child: Text('Big')),
-                DropdownMenuItem(value: 'medium', child: Text('Medium')),
-                DropdownMenuItem(value: 'small', child: Text('Small')),
-              ],
-              onChanged: _editMode ? (v) => setState(() => _size = v) : (_) {},
-            ),
-          ),
-        ),
-        _divider(context),
-        // Expiry date (editable)
-        _infoRow(
-          context,
-          AppIcons.calendarCancel,
-          'Expiry Date',
-          '',
-          IconTileTone.warning,
-          trailing: _expiryTrailing(context),
-        ),
-        _divider(context),
-        // Allow fractional sales
-        _infoRow(
-          context,
-          AppIcons.divide,
-          'Allow fractional sales',
-          '',
-          IconTileTone.info,
-          trailing: Switch.adaptive(
-            value: _allowFractionalSales,
-            onChanged: _editMode
-                ? (v) => setState(() => _allowFractionalSales = v)
-                : null,
-          ),
-        ),
-        _divider(context),
-        // Track empty crate returns
-        _infoRow(
-          context,
-          AppIcons.recycle,
-          'Track empty crates',
-          '',
-          IconTileTone.green,
-          trailing: Switch.adaptive(
-            value: _trackEmpties,
-            onChanged: _editMode
-                ? (v) => setState(() => _trackEmpties = v)
-                : null,
-          ),
-        ),
-        if (_trackEmpties) ...[
-          _divider(context),
-          // Empty Crate Value — shared at the manufacturer level (§16.5)
-          _infoRow(
-            context,
-            AppIcons.deposit,
-            'Empty Crate Value',
-            '',
-            IconTileTone.green,
-            trailing: _textTrailing(
-              _emptyCrateValueController,
-              width: 90,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              inputFormatters: [CurrencyInputFormatter()],
-              prefix: activeCurrencySymbol,
-            ),
-          ),
-          _divider(context),
-          // Empty Crates — manufacturer total (read-only)
-          _infoRow(
-            context,
-            AppIcons.beerMug,
-            'Empty Crates',
-            _emptyCrateStock?.toString() ?? '0',
-            IconTileTone.warning,
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _pricingCard(BuildContext context) {
-    final double totalStockValue = stockValue(
-      parseCurrency(_retailPriceController.text),
-      _liveStock,
-    );
-    return DetailCard(
-      children: [
-        // Buying price is hidden from roles without `products.edit_buying_price`
-        // (Cashier, Stock keeper) — master plan §16.6 / §16.7.
-        if (_canEditBuying) ...[
-          _infoRow(
-            context,
-            AppIcons.price,
-            'Buying Price',
-            '',
-            IconTileTone.warning,
-            trailing: _inlinePriceInput(_buyingPriceController),
-          ),
-          _divider(context),
-        ],
-        _infoRow(
-          context,
-          AppIcons.tag,
-          'Retailer Price',
-          '',
-          IconTileTone.info,
-          trailing: _inlinePriceInput(_retailPriceController),
-        ),
-        _divider(context),
-        _infoRow(
-          context,
-          AppIcons.customers,
-          'Wholesaler Price',
-          '',
-          IconTileTone.malt,
-          trailing: _inlinePriceInput(_wholesalerPriceController),
-        ),
-        _divider(context),
-        _infoRow(
-          context,
-          AppIcons.analytics,
-          'Total Stock Value',
-          formatCurrency(totalStockValue),
-          IconTileTone.info,
-        ),
-      ],
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // SHARED WIDGETS
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  Widget _infoRow(
-    BuildContext context,
+  PopupMenuItem<_MenuAction> _menuItem(
+    _MenuAction value,
     IconData icon,
     String label,
-    String value,
-    IconTileTone tone, {
-    Widget? trailing,
-  }) {
-    return DetailInfoRow(
-      icon: icon,
-      tone: tone,
-      label: label,
+  ) {
+    return PopupMenuItem<_MenuAction>(
       value: value,
-      trailing: trailing,
+      child: Row(
+        children: [
+          AppIcon(icon, size: 20, color: _text),
+          const SizedBox(width: 12),
+          Flexible(child: Text(label)),
+        ],
+      ),
     );
   }
 
-  Widget _divider(BuildContext context) => const DetailDivider();
+  /// The "Report a problem" menu item is for a factory barcode only (ADR 0029
+  /// §6, #335); the link itself renders nothing otherwise.
+  bool get _hasReportLink {
+    final code = _productData?.barcode;
+    if (code == null) return false;
+    return FactoryBarcode.tryParse(code) != null;
+  }
 
-  // ── Sales Summary Grid — reads from DB ───────────────────────────────────
-  Widget _buildSalesGrid(BuildContext context) {
+  void _onMenu(_MenuAction action) {
+    switch (action) {
+      case _MenuAction.adjustStock:
+        _openAdjustStock();
+      case _MenuAction.editProduct:
+        _openEditProduct();
+      case _MenuAction.report:
+        final code = _productData?.barcode;
+        if (code != null) CatalogueReportLink.open(context, code);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // BODY — one, two or three columns by the measured width
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  Widget _buildBody(BuildContext context, double width) {
+    final gap = SizedBox(height: context.getRSize(16));
+    final columns = width >= kProductDetailThreeColumnWidth
+        ? 3
+        : (width >= kProductDetailTwoColumnWidth ? 2 : 1);
+
+    final stores = ref.watch(allStoresProvider).valueOrNull ?? const [];
+    final stockMap =
+        ref.watch(productStockByStoreProvider(widget.item.id)).valueOrNull ??
+        const <String, int>{};
+    final rows = [
+      for (final s in stores)
+        StoreStockRow(
+          storeId: s.id,
+          name: s.name,
+          quantity: stockMap[s.id] ?? 0,
+        ),
+    ];
+    final total = stores.isEmpty
+        ? widget.item.totalStock.toInt()
+        : rows.fold<int>(0, (a, r) => a + r.quantity);
+
+    final hero = _buildHero(context, total);
+    final description = ProductDescriptionCard(
+      text: _description,
+      onEdit: _canEdit ? _editDescription : null,
+    );
+    final prices = _buildPrices(context);
+    final stock = ProductStockByStoreCard(
+      rows: rows,
+      alertAt: _alertAt,
+      unit: _unit,
+      crates: _crates,
+    );
+    final target = _buildTarget(context);
+    final salesSummary = _buildSalesSummary(context);
+    final delivery = _buildDeliveryCard(context);
+    final manage = _buildManage(context, columns >= 2);
+
+    List<Widget> column(List<Widget?> cards) => [
+      for (final c in cards)
+        if (c != null) ...[c, gap],
+    ];
+
+    Widget cols(List<List<Widget?>> groups) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var i = 0; i < groups.length; i++) ...[
+            if (i > 0) SizedBox(width: context.getRSize(16)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: column(groups[i]),
+              ),
+            ),
+          ],
+        ],
+      );
+    }
+
+    final Widget body = switch (columns) {
+      3 => cols([
+        [hero, description, manage],
+        [prices, stock, target],
+        [salesSummary, delivery],
+      ]),
+      2 => cols([
+        [hero, description, prices, manage],
+        [stock, target, salesSummary, delivery],
+      ]),
+      _ => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: column([
+          hero,
+          description,
+          prices,
+          stock,
+          target,
+          salesSummary,
+          delivery,
+          manage,
+        ]),
+      ),
+    };
+    return body;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CARDS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  Widget _buildHero(BuildContext context, int total) {
+    final p = _productData;
+    final level = stockLevelOf(total, _alertAt);
+    final categories = ref.watch(allCategoriesProvider).valueOrNull ?? const [];
+    final manufacturers =
+        ref.watch(allManufacturersProvider).valueOrNull ?? const [];
+    final categoryName = categories
+        .where((c) => c.id == p?.categoryId)
+        .map((c) => c.name)
+        .firstOrNull;
+    final manufacturer =
+        manufacturers
+            .where((m) => m.id == p?.manufacturerId)
+            .map((m) => m.name)
+            .firstOrNull ??
+        widget.item.manufacturer;
+    final expiry = p?.expiryDate;
+    final retailKobo =
+        p?.retailerPriceKobo ??
+        ((widget.item.retailerPrice ?? 0) * 100).round();
+    final visual = categoryVisual(
+      categoryName,
+      Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light,
+    );
+    return ProductHeroCard(
+      name: _name,
+      kindLine: productKindLine(
+        manufacturer: manufacturer,
+        unit: _unit,
+        unitsPerPack: p?.unitsPerPack,
+        crates: _crates,
+      ),
+      barcode: p?.barcode,
+      retailPrice: formatCurrency(retailKobo / 100),
+      perNoun: unitCountNoun(_unit, 1, crates: _crates),
+      categoryName: categoryName,
+      stockLabel: level == StockLevel.out
+          ? 'Out of stock'
+          : '$total ${unitCountNoun(_unit, total, crates: _crates)} in stock',
+      stockLevel: level,
+      imagePath: _imagePath,
+      // The same category picture as the POS and Receive Stock tiles.
+      fallbackIcon: visual.icon,
+      fallbackColor: visual.iconColor,
+      expiry: expiry == null ? null : expiryPillFor(expiry, _now),
+      archived: _archived,
+      onChangePhoto: _canEdit ? _pickImage : null,
+    );
+  }
+
+  Widget _buildPrices(BuildContext context) {
+    final p = _productData;
+    final costKobo =
+        p?.buyingPriceKobo ?? ((widget.item.buyingPrice ?? 0) * 100).round();
+    final retailKobo =
+        p?.retailerPriceKobo ??
+        ((widget.item.retailerPrice ?? 0) * 100).round();
+    final wholesaleKobo =
+        p?.wholesalerPriceKobo ??
+        ((widget.item.wholesalerPrice ?? 0) * 100).round();
+    final canSeeCost = _canEditBuying;
+    return ProductPricesCard(
+      perNoun: unitCountNoun(_unit, 1, crates: _crates),
+      retailKobo: retailKobo,
+      wholesaleKobo: wholesaleKobo,
+      costKobo: canSeeCost ? costKobo : null,
+      showProfit: canSeeCost && costKobo > 0,
+    );
+  }
+
+  Widget _buildTarget(BuildContext context) {
+    return ProductSalesTargetCard(
+      figures: SalesTargetFigures(
+        sold: _salesSummary?.monthUnits ?? 0,
+        target: _productData?.monthlyTargetUnits ?? 0,
+        now: _now,
+      ),
+      unit: _unit,
+      crates: _crates,
+      onEdit: _isCeo ? _editTarget : null,
+    );
+  }
+
+  Widget? _buildManage(BuildContext context, bool sideBySide) {
+    final canArchive = _canEdit;
+    final canDelete = _canDelete;
+    if (!canArchive && !canDelete) return null;
+    return ProductManageCard(
+      archived: _archived,
+      sideBySide: sideBySide,
+      onArchiveToggle: canArchive
+          ? (_archived ? _unarchive : _confirmArchive)
+          : null,
+      onDelete: canDelete ? () => _confirmDelete(context) : null,
+    );
+  }
+
+  // ── Sales Summary + Last Delivery: plain cards until PR 5 replaces them with
+  // the Sales chart and Stock History ──────────────────────────────────────────
+
+  Widget _plainCard(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required List<Widget> children,
+  }) {
+    return DetailPanel(
+      padding: EdgeInsets.symmetric(vertical: context.getRSize(16)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: context.getRSize(16)),
+            child: DetailPanelHeader(icon: icon, title: title),
+          ),
+          SizedBox(height: context.getRSize(6)),
+          ...children,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSalesSummary(BuildContext context) {
     final s = _salesSummary;
-    return DetailCard(
+    String units(int n) => '$n ${unitCountNoun(_unit, n, crates: _crates)}';
+    return _plainCard(
+      context,
+      icon: AppIcons.analytics,
+      title: 'Sales Summary',
       children: [
         _statRow(
           context,
           'Today',
-          s != null ? '${s.todayUnits} units' : '—',
+          s != null ? units(s.todayUnits) : '—',
           s != null ? formatCurrency(s.todayRevenueKobo / 100) : '—',
         ),
-        _divider(context),
+        const DetailDivider(),
         _statRow(
           context,
           'This Week',
-          s != null ? '${s.weekUnits} units' : '—',
+          s != null ? units(s.weekUnits) : '—',
           s != null ? formatCurrency(s.weekRevenueKobo / 100) : '—',
         ),
-        _divider(context),
+        const DetailDivider(),
         _statRow(
           context,
           'This Month',
-          s != null ? '${s.monthUnits} units' : '—',
+          s != null ? units(s.monthUnits) : '—',
           s != null ? formatCurrency(s.monthRevenueKobo / 100) : '—',
-        ),
-      ],
-    );
-  }
-
-  // ── Sales Target Grid — reads monthly target from DB ─────────────────────
-  Widget _buildTargetGrid(BuildContext context) {
-    final s = _salesSummary;
-    final int currentMonthly = s?.monthUnits ?? 0;
-    final int currentWeekly = s?.weekUnits ?? 0;
-    final int currentDaily = s?.todayUnits ?? 0;
-
-    return DetailCard(
-      children: [
-        _targetRow(context, 'Daily', currentDaily, _monthlyTarget ~/ 30),
-        _divider(context),
-        _targetRow(context, 'Weekly', currentWeekly, _monthlyTarget ~/ 4),
-        _divider(context),
-        _targetRow(
-          context,
-          'Monthly',
-          currentMonthly,
-          _monthlyTarget,
-          isEditable: true,
         ),
       ],
     );
@@ -1254,13 +637,13 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       constraints: const BoxConstraints(minHeight: kMinInteractiveDimension),
       child: Padding(
         padding: EdgeInsets.symmetric(
-          horizontal: context.getRSize(14),
+          horizontal: context.getRSize(16),
           vertical: context.getRSize(12),
         ),
         child: Row(
           children: [
             Expanded(
-              flex: 2,
+              flex: 3,
               child: Text(
                 period,
                 style: context.semiBoldStyle(13).copyWith(color: muted),
@@ -1290,158 +673,81 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     );
   }
 
-  Widget _targetRow(
-    BuildContext context,
-    String period,
-    int current,
-    int target, {
-    bool isEditable = false,
-  }) {
-    final t = Theme.of(context);
-    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
-    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
-    final progress = target > 0 ? (current / target).clamp(0.0, 1.0) : 0.0;
-    final pct = (progress * 100).toInt();
-    final figure = context
-        .boldStyle(12)
-        .copyWith(color: t.colorScheme.onSurface);
-
-    return Padding(
-      padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(14),
-        vertical: context.getRSize(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                period,
-                style: context.semiBoldStyle(13).copyWith(color: muted),
-              ),
-              if (isEditable)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('$current / ', style: figure),
-                    SizedBox(
-                      width: context.getRSize(40),
-                      child: AppInput(
-                        controller: _monthlyTargetController,
-                        readOnly: !(_editMode && _isCeo),
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                        ],
-                        onChanged: (val) {
-                          setState(() {
-                            _monthlyTarget = int.tryParse(val) ?? 0;
-                          });
-                        },
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.zero,
-                        fillColor: Colors.transparent,
-                      ),
-                    ),
-                    Text(' units ($pct%)', style: figure),
-                  ],
-                )
-              else
-                Text('$current / $target units  ($pct%)', style: figure),
-            ],
-          ),
-          SizedBox(height: context.getRSize(8)),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(AppSpacing.borderRadiusS),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: context.getRSize(6),
-              backgroundColor: t.dividerColor,
-              valueColor: AlwaysStoppedAnimation<Color>(
-                progress >= 1.0 ? f.green : t.colorScheme.primary,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   // ── Last Delivery Card — reads from Shipments table ───────────────────────
   Widget _buildDeliveryCard(BuildContext context) {
     final t = Theme.of(context);
     final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    Widget note(Widget child) => Padding(
+      padding: EdgeInsets.all(context.getRSize(24)),
+      child: Center(child: child),
+    );
     if (!_deliveryLoaded) {
-      return DetailCard(
+      return _plainCard(
+        context,
+        icon: AppIcons.vanDelivery,
+        title: 'Last Delivery',
         children: [
-          Padding(
-            padding: EdgeInsets.all(context.getRSize(24)),
-            child: Center(
-              child: SizedBox(
-                width: context.getRSize(20),
-                height: context.getRSize(20),
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: t.colorScheme.primary,
-                ),
+          note(
+            SizedBox(
+              width: context.getRSize(20),
+              height: context.getRSize(20),
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: t.colorScheme.primary,
               ),
             ),
           ),
         ],
       );
     }
-
-    if (_lastDelivery == null) {
-      return DetailCard(
+    final d = _lastDelivery;
+    if (d == null) {
+      return _plainCard(
+        context,
+        icon: AppIcons.vanDelivery,
+        title: 'Last Delivery',
         children: [
-          Padding(
-            padding: EdgeInsets.all(context.getRSize(24)),
-            child: Center(
-              child: Text(
-                'No deliveries recorded yet',
-                style: context.regularStyle(13).copyWith(color: muted),
-              ),
+          note(
+            Text(
+              'No deliveries recorded yet',
+              style: context.regularStyle(13).copyWith(color: muted),
             ),
           ),
         ],
       );
     }
-
-    final d = _lastDelivery!;
-    return DetailCard(
+    return _plainCard(
+      context,
+      icon: AppIcons.vanDelivery,
+      title: 'Last Delivery',
       children: [
-        _infoRow(
-          context,
-          AppIcons.calendar,
-          'Date',
-          _fmtDate(d.date),
-          IconTileTone.info,
+        DetailInfoRow(
+          icon: AppIcons.calendar,
+          tone: IconTileTone.info,
+          label: 'Date',
+          value: _fmtDate(d.date),
         ),
-        _divider(context),
-        _infoRow(
-          context,
-          AppIcons.vanDelivery,
-          'Quantity Received',
-          '${d.quantity} units',
-          IconTileTone.info,
+        const DetailDivider(),
+        DetailInfoRow(
+          icon: AppIcons.vanDelivery,
+          tone: IconTileTone.info,
+          label: 'Quantity Received',
+          value:
+              '${d.quantity} ${unitCountNoun(_unit, d.quantity, crates: _crates)}',
         ),
-        _divider(context),
-        _infoRow(
-          context,
-          AppIcons.price,
-          'Price Per Unit',
-          formatCurrency(d.unitPriceKobo / 100),
-          IconTileTone.warning,
+        const DetailDivider(),
+        DetailInfoRow(
+          icon: AppIcons.price,
+          tone: IconTileTone.warning,
+          label: 'Price Per Unit',
+          value: formatCurrency(d.unitPriceKobo / 100),
         ),
-        _divider(context),
-        _infoRow(
-          context,
-          AppIcons.receipt,
-          'Total Delivery Cost',
-          formatCurrency(d.totalKobo / 100),
-          IconTileTone.green,
+        const DetailDivider(),
+        DetailInfoRow(
+          icon: AppIcons.receipt,
+          tone: IconTileTone.green,
+          label: 'Total Delivery Cost',
+          value: formatCurrency(d.totalKobo / 100),
         ),
       ],
     );
@@ -1465,8 +771,373 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     return '${dt.day} ${months[dt.month - 1]} ${dt.year}';
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ACTIONS — every one re-checks its gate on tap
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /// Edit Product opens the existing product editor sheet, exactly as
+  /// Inventory's long-press does. PR 4 rewires this one method to the new form.
+  void _openEditProduct() {
+    if (!Gates.editProductPrice.allowsNow(ref)) {
+      showGateDenied(context, Gates.editProductPrice);
+      return;
+    }
+    final product = _productData;
+    if (product == null) return;
+    final total =
+        (ref.read(productStockByStoreProvider(widget.item.id)).valueOrNull ??
+                const <String, int>{})
+            .values
+            .fold<int>(0, (a, b) => a + b);
+    HapticFeedback.mediumImpact();
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => UpdateProductSheet(
+        product: product,
+        totalStock: total,
+        onProductUpdated: (_) => widget.onUpdateStock(),
+      ),
+    );
+  }
+
+  /// Writes the description ([setSubtitle], null clears it) or the monthly
+  /// target ([monthlyTarget]) through the same product-update path every other
+  /// edit uses: the row is re-read first, so a price or name another device
+  /// changed a moment ago is written back as it is now, and the DAO stamps
+  /// `lastUpdatedAt` and enqueues the push. Returns an error message or null.
+  Future<String?> _saveProductField({
+    bool setSubtitle = false,
+    String? subtitle,
+    int? monthlyTarget,
+  }) async {
+    final db = ref.read(databaseProvider);
+    try {
+      final fresh = await db.catalogDao.findById(widget.item.id);
+      if (fresh == null) return 'This product is no longer available.';
+      if (setSubtitle) {
+        await db.catalogDao.updateProductDetails(
+          fresh.id,
+          name: fresh.name,
+          manufacturerId: fresh.manufacturerId,
+          buyingPriceKobo: fresh.buyingPriceKobo,
+          retailerPriceKobo: fresh.retailerPriceKobo,
+          wholesalerPriceKobo: fresh.wholesalerPriceKobo,
+          categoryId: fresh.categoryId,
+          subtitle: subtitle,
+        );
+      } else {
+        await db.catalogDao.updateProductDetails(
+          fresh.id,
+          name: fresh.name,
+          manufacturerId: fresh.manufacturerId,
+          buyingPriceKobo: fresh.buyingPriceKobo,
+          retailerPriceKobo: fresh.retailerPriceKobo,
+          wholesalerPriceKobo: fresh.wholesalerPriceKobo,
+          categoryId: fresh.categoryId,
+          monthlyTargetUnits: monthlyTarget,
+        );
+      }
+      final refreshed = await db.catalogDao.findById(fresh.id);
+      if (mounted && refreshed != null) {
+        setState(() => _productData = refreshed);
+      }
+      widget.onUpdateStock();
+      return null;
+    } catch (e, st) {
+      CrashReporter.record(e, st, context: 'inventory.product_detail.save');
+      debugPrint('ProductDetail._saveProductField error: $e');
+      return 'Could not save: $e';
+    }
+  }
+
+  Future<void> _editDescription() async {
+    if (!Gates.editProductPrice.allowsNow(ref)) {
+      showGateDenied(context, Gates.editProductPrice);
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (_) => ProductEditDialog(
+        title: 'Description',
+        initialText: _description,
+        hint: 'What is this product?',
+        maxLines: 4,
+        onSave: (text) async {
+          if (!Gates.editProductPrice.allowsNow(ref)) {
+            return 'You no longer have access to Edit Price.';
+          }
+          return _saveProductField(
+            setSubtitle: true,
+            subtitle: text.isEmpty ? null : text,
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _editTarget() async {
+    if (!_isCeo) {
+      AppNotification.showError(
+        context,
+        'Only the CEO can change the sales target.',
+      );
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (_) => ProductEditDialog(
+        title: 'Sales Target',
+        fieldLabel: 'Crates to sell each month',
+        helper: 'Leave it at 0 for no target.',
+        initialText: '${_productData?.monthlyTargetUnits ?? 0}',
+        numbersOnly: true,
+        onSave: (text) async {
+          if (!_isCeo) return 'Only the CEO can change the sales target.';
+          return _saveProductField(monthlyTarget: int.tryParse(text) ?? 0);
+        },
+      ),
+    );
+  }
+
+  Future<void> _confirmArchive() async {
+    if (!Gates.editProductPrice.allowsNow(ref)) {
+      showGateDenied(context, Gates.editProductPrice);
+      return;
+    }
+    final name = _name;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        scrollable: true,
+        backgroundColor: _surface,
+        title: Text(
+          'Archive Product',
+          style: ctx.screenTitleStyle.copyWith(color: _text),
+        ),
+        content: Text(
+          'Archive $name? It will be hidden from sale. Its sales history is '
+          'kept.',
+          style: ctx.regularStyle(14).copyWith(color: _text),
+        ),
+        actions: [
+          AppButton(
+            text: 'Cancel',
+            variant: AppButtonVariant.ghost,
+            isFullWidth: false,
+            onPressed: () => Navigator.pop(ctx, false),
+          ),
+          AppButton(
+            text: 'Archive',
+            isFullWidth: false,
+            onPressed: () => Navigator.pop(ctx, true),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    await _setArchived(true);
+  }
+
+  Future<void> _unarchive() async {
+    if (!Gates.editProductPrice.allowsNow(ref)) {
+      showGateDenied(context, Gates.editProductPrice);
+      return;
+    }
+    await _setArchived(false);
+  }
+
+  Future<void> _setArchived(bool archived) async {
+    if (!Gates.editProductPrice.allowsNow(ref)) {
+      showGateDenied(context, Gates.editProductPrice);
+      return;
+    }
+    final db = ref.read(databaseProvider);
+    final name = _name;
+    try {
+      await db.catalogDao.setProductArchived(widget.item.id, archived);
+      // The change is saved; a failed log line must not read as a failed
+      // archive.
+      try {
+        final actor = ref.read(authProvider).currentUser?.name ?? 'Unknown';
+        await ref
+            .read(activityLogProvider)
+            .logAction(
+              archived ? 'archive_product' : 'unarchive_product',
+              '$actor ${archived ? 'archived' : 'unarchived'} product: $name',
+              productId: widget.item.id,
+            );
+      } catch (e, st) {
+        CrashReporter.record(
+          e,
+          st,
+          context: 'inventory.product_detail.archive_log',
+        );
+      }
+      final refreshed = await db.catalogDao.findById(widget.item.id);
+      if (!mounted) return;
+      if (refreshed != null) setState(() => _productData = refreshed);
+      widget.onUpdateStock();
+      AppNotification.showSuccess(
+        context,
+        archived ? '$name archived' : '$name is back on sale',
+      );
+    } catch (e, st) {
+      CrashReporter.record(e, st, context: 'inventory.product_detail.archive');
+      if (mounted) {
+        AppNotification.showError(
+          context,
+          'Could not ${archived ? 'archive' : 'unarchive'} the product. '
+          'Please try again.',
+        );
+      }
+    }
+  }
+
+  /// "Adjust Stock" sheet (master plan §16.6): add / remove a quantity against
+  /// a store, with a required reason on removal, optional notes, and — on an
+  /// add — what the goods cost per unit (#197, PRD #155 US 22), which is what
+  /// prices the FIFO batch the increase mints. A **stock keeper**'s change is
+  /// queued for Manager/CEO approval (§16.6.1) via `requestStockAdjustment`,
+  /// carrying that cost on the request — inventory is untouched until approved.
+  /// A Manager/CEO applies it directly through `adjustStock` (cloud delta
+  /// envelope enqueued) and logs to History.
+  Future<void> _openAdjustStock() async {
+    if (!_canOpenAdjust) {
+      showGateDenied(context, Gates.adjustStock);
+      return;
+    }
+    final product = _productData;
+    if (product == null) return;
+    final db = ref.read(databaseProvider);
+    final stores = await db.storesDao.getActiveStores();
+    if (!mounted) return;
+    if (stores.isEmpty) {
+      AppNotification.showError(context, 'No store to adjust stock against.');
+      return;
+    }
+
+    // The sheet owns its own text controllers and disposes them in its
+    // State.dispose() (matches every other sheet in the app). Disposing them
+    // here, after `await showModalBottomSheet`, raced the closing animation and
+    // threw "TextEditingController used after being disposed".
+    // Flipped by onSave when a stock keeper's change is queued for approval
+    // (§16.6.1) rather than applied directly — drives the confirmation toast.
+    var sentForApproval = false;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _UpdateStockSheet(
+        product: product,
+        stores: stores,
+        initialStoreId: widget.selectedStoreId,
+        // Add and Remove are gated separately (stock.add vs stock.adjust).
+        canAdd: _canAddStock,
+        canRemove: _canAdjustStock,
+        // Re-checked live at save time (hard rule #6) in case a permission is
+        // revoked while the sheet is open — these getters read live perms.
+        canAddNow: () => _canAddStock,
+        canRemoveNow: () => _canAdjustStock,
+        onSave:
+            ({
+              required bool isRemove,
+              required int qty,
+              required StoreData store,
+              String? reason,
+              required String notes,
+              int? unitCostKobo,
+            }) async {
+              final auth = ref.read(authProvider);
+              final actorName = auth.currentUser?.name ?? 'Unknown';
+              final delta = isRemove ? -qty : qty;
+              final note = isRemove
+                  ? '${reason!}${notes.isEmpty ? '' : ': $notes'}'
+                  : (notes.isEmpty ? 'Stock added by $actorName' : notes);
+              final unitWord = unitLabel(
+                product.unit,
+                crates: businessTracksCrates(ref.read(currentBusinessProvider)),
+              );
+              final summary =
+                  '$actorName ${isRemove ? 'removed' : 'added'} $qty '
+                  '${unitWord != null ? '$unitWord(s) ' : ''}of ${product.name} '
+                  '(${store.name})'
+                  '${isRemove ? ' — ${reason!}' : ''}';
+              final isStockKeeper =
+                  ref.read(currentUserRoleProvider)?.slug == 'stock_keeper';
+              try {
+                if (isStockKeeper) {
+                  // §16.6.1 — a stock keeper's change needs Manager/CEO approval.
+                  // Record a pending request; inventory stays untouched until it is
+                  // approved in the Reports hub. The DAO fires the approval-request
+                  // notification to the CEO + the affected store's Manager(s).
+                  // #197 (US 22): the captured cost rides ON the request, so the
+                  // batch the approval mints is priced at what the goods
+                  // actually cost instead of whatever could be inferred later.
+                  await db.stockAdjustmentRequestsDao.requestStockAdjustment(
+                    productId: product.id,
+                    storeId: store.id,
+                    quantityDiff: delta,
+                    reason: note,
+                    summary: summary,
+                    requestedBy: auth.currentUser?.id,
+                    unitCostKobo: unitCostKobo,
+                  );
+                  sentForApproval = true;
+                  return null;
+                }
+                // Manager / CEO adjust directly — no approval needed. Their add
+                // mints the same inflow batch an approval does, so the sheet's
+                // cost has to reach it here too (#197); null keeps #189's
+                // recorded-price fallback.
+                await db.inventoryDao.adjustStock(
+                  product.id,
+                  store.id,
+                  delta,
+                  note,
+                  auth.currentUser?.id,
+                  inflowUnitCostKobo: unitCostKobo,
+                );
+                await ref
+                    .read(activityLogProvider)
+                    .logAction(
+                      'stock_adjustment',
+                      summary,
+                      productId: product.id,
+                      storeId: store.id,
+                    );
+                widget.onUpdateStock();
+                return null;
+              } catch (e, st) {
+                CrashReporter.record(
+                  e,
+                  st,
+                  context: 'inventory.product_detail.stock_adjust',
+                );
+                debugPrint('UpdateStock modal save error: $e');
+                return isStockKeeper
+                    ? 'Could not send for approval: $e'
+                    : 'Could not update stock: $e';
+              }
+            },
+      ),
+    );
+    if (!mounted) return;
+    if (sentForApproval) {
+      AppNotification.showSuccess(
+        context,
+        'Sent for approval. A manager or the CEO must approve before the '
+        'stock changes.',
+      );
+    }
+  }
+
   Future<void> _pickImage() async {
-    if (!_editMode) return;
+    if (!Gates.editProductPrice.allowsNow(ref)) {
+      showGateDenied(context, Gates.editProductPrice);
+      return;
+    }
 
     AutoLockWrapper.suppressNextResume = true;
     final imgSvc = ref.read(productImageServiceProvider);
@@ -1522,293 +1193,6 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         AppNotification.showError(context, 'Failed to update image: $e');
       }
     }
-  }
-
-  String _formatDate(DateTime d) =>
-      '${d.day.toString().padLeft(2, '0')}/'
-      '${d.month.toString().padLeft(2, '0')}/${d.year}';
-
-  /// Near-expiry badge (§16.6): red "Expired" once past, amber "Expires soon"
-  /// within 30 days, otherwise nothing (the date row alone is enough).
-  Widget? _expiryBadge(BuildContext context, DateTime expiry) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final days = DateTime(
-      expiry.year,
-      expiry.month,
-      expiry.day,
-    ).difference(today).inDays;
-    String label;
-    TagPillTone tone;
-    if (days < 0) {
-      label = 'Expired';
-      tone = TagPillTone.danger;
-    } else if (days <= 30) {
-      label = days == 0 ? 'Expires today' : 'Expires soon';
-      tone = TagPillTone.warning;
-    } else {
-      return null;
-    }
-    return TagPill(label: label, tone: tone);
-  }
-
-  /// "Update Stock" modal (master plan §16.6): add / remove a quantity against
-  /// a store, with a required reason on removal, optional notes, and — on an
-  /// add — what the goods cost per unit (#197, PRD #155 US 22), which is what
-  /// prices the FIFO batch the increase mints. A **stock keeper**'s change is
-  /// queued for Manager/CEO approval (§16.6.1) via `requestStockAdjustment`,
-  /// carrying that cost on the request — inventory is untouched until approved.
-  /// A Manager/CEO applies it directly through `adjustStock` (cloud delta
-  /// envelope enqueued) and logs to History.
-  Future<void> _showUpdateStockModal() async {
-    final product = _productData;
-    if (product == null) return;
-    final db = ref.read(databaseProvider);
-    final stores = await db.storesDao.getActiveStores();
-    if (!mounted) return;
-    if (stores.isEmpty) {
-      AppNotification.showError(context, 'No store to adjust stock against.');
-      return;
-    }
-
-    // The sheet owns its own text controllers and disposes them in its
-    // State.dispose() (matches every other sheet in the app). Disposing them
-    // here, after `await showModalBottomSheet`, raced the closing animation and
-    // threw "TextEditingController used after being disposed".
-    // Flipped by onSave when a stock keeper's change is queued for approval
-    // (§16.6.1) rather than applied directly — drives the confirmation toast.
-    var sentForApproval = false;
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _UpdateStockSheet(
-        product: product,
-        stores: stores,
-        initialStoreId: widget.selectedStoreId,
-        // Add and Remove are gated separately (stock.add vs stock.adjust).
-        canAdd: _canAddStock,
-        canRemove: _canAdjustStock,
-        // Re-checked live at save time (hard rule #6) in case a permission is
-        // revoked while the sheet is open — these getters read live perms.
-        canAddNow: () => _canAddStock,
-        canRemoveNow: () => _canAdjustStock,
-        onSave:
-            ({
-              required bool isRemove,
-              required int qty,
-              required StoreData store,
-              String? reason,
-              required String notes,
-              int? unitCostKobo,
-            }) async {
-              final auth = ref.read(authProvider);
-              final actorName = auth.currentUser?.name ?? 'Unknown';
-              final delta = isRemove ? -qty : qty;
-              final unitWord = unitLabel(
-                product.unit,
-                crates: businessTracksCrates(
-                  ref.read(currentBusinessProvider),
-                ),
-              );
-              final note = isRemove
-                  ? '${reason!}${notes.isEmpty ? '' : ': $notes'}'
-                  : (notes.isEmpty ? 'Stock added by $actorName' : notes);
-              final summary =
-                  '$actorName ${isRemove ? 'removed' : 'added'} $qty '
-                  '${unitWord != null ? '$unitWord(s) ' : ''}of ${product.name} '
-                  '(${store.name})'
-                  '${isRemove ? ' — ${reason!}' : ''}';
-              final isStockKeeper =
-                  ref.read(currentUserRoleProvider)?.slug == 'stock_keeper';
-              try {
-                if (isStockKeeper) {
-                  // §16.6.1 — a stock keeper's change needs Manager/CEO approval.
-                  // Record a pending request; inventory stays untouched until it is
-                  // approved in the Reports hub. The DAO fires the approval-request
-                  // notification to the CEO + the affected store's Manager(s).
-                  // #197 (US 22): the captured cost rides ON the request, so the
-                  // batch the approval mints is priced at what the goods
-                  // actually cost instead of whatever could be inferred later.
-                  await db.stockAdjustmentRequestsDao.requestStockAdjustment(
-                    productId: product.id,
-                    storeId: store.id,
-                    quantityDiff: delta,
-                    reason: note,
-                    summary: summary,
-                    requestedBy: auth.currentUser?.id,
-                    unitCostKobo: unitCostKobo,
-                  );
-                  sentForApproval = true;
-                  return null;
-                }
-                // Manager / CEO adjust directly — no approval needed. Their add
-                // mints the same inflow batch an approval does, so the sheet's
-                // cost has to reach it here too (#197); null keeps #189's
-                // recorded-price fallback.
-                await db.inventoryDao.adjustStock(
-                  product.id,
-                  store.id,
-                  delta,
-                  note,
-                  auth.currentUser?.id,
-                  inflowUnitCostKobo: unitCostKobo,
-                );
-                await ref
-                    .read(activityLogProvider)
-                    .logAction(
-                      'stock_adjustment',
-                      summary,
-                      productId: product.id,
-                      storeId: store.id,
-                    );
-                widget.onUpdateStock();
-                // Reflect the change on this screen immediately (#1).
-                await _refreshLiveStock();
-                return null;
-              } catch (e, st) {
-                CrashReporter.record(
-                  e,
-                  st,
-                  context: 'inventory.product_detail.stock_adjust',
-                );
-                debugPrint('UpdateStock modal save error: $e');
-                return isStockKeeper
-                    ? 'Could not send for approval: $e'
-                    : 'Could not update stock: $e';
-              }
-            },
-      ),
-    );
-    if (!mounted) return;
-    if (sentForApproval) {
-      AppNotification.showSuccess(
-        context,
-        'Sent for approval. A manager or the CEO must approve before the '
-        'stock changes.',
-      );
-    }
-  }
-
-  /// Inline text/number field used as a row trailing: a themed box that is
-  /// always a 48dp target. Editable only in edit mode (CEO/Manager);
-  /// read-only otherwise.
-  Widget _trailingBox({required double width, required Widget field}) {
-    final t = Theme.of(context);
-    return Container(
-      width: context.getRSize(width),
-      constraints: const BoxConstraints(minHeight: kMinInteractiveDimension),
-      alignment: Alignment.center,
-      padding: EdgeInsets.symmetric(horizontal: context.getRSize(10)),
-      decoration: BoxDecoration(
-        color: t.scaffoldBackgroundColor,
-        borderRadius: BorderRadius.circular(AppSpacing.borderRadiusM),
-        border: Border.all(color: t.dividerColor),
-      ),
-      child: field,
-    );
-  }
-
-  Widget _textTrailing(
-    TextEditingController controller, {
-    double width = 120,
-    TextInputType? keyboardType,
-    List<TextInputFormatter>? inputFormatters,
-    String? prefix,
-  }) {
-    return _trailingBox(
-      width: width,
-      field: AppInput(
-        controller: controller,
-        readOnly: !_editMode,
-        keyboardType: keyboardType,
-        inputFormatters: inputFormatters,
-        textAlign: TextAlign.end,
-        onChanged: (v) => setState(() {}),
-        border: InputBorder.none,
-        contentPadding: EdgeInsets.zero,
-        prefixText: prefix,
-        fillColor: Colors.transparent,
-      ),
-    );
-  }
-
-  /// Expiry-date trailing: shows the date (+ near-expiry badge when viewing),
-  /// and in edit mode is tappable to open the date picker with a clear button.
-  Widget _expiryTrailing(BuildContext context) {
-    final t = Theme.of(context);
-    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
-    final has = _expiryDate != null;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        InkWell(
-          onTap: _editMode ? _pickExpiry : null,
-          borderRadius: BorderRadius.circular(AppSpacing.borderRadiusM),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(
-              minHeight: kMinInteractiveDimension,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (has && !_editMode) ...[
-                  _expiryBadge(context, _expiryDate!) ??
-                      const SizedBox.shrink(),
-                  SizedBox(width: context.getRSize(6)),
-                ],
-                Text(
-                  has ? _formatDate(_expiryDate!) : 'None',
-                  style: context
-                      .boldStyle(13)
-                      .copyWith(color: has ? t.colorScheme.onSurface : muted),
-                ),
-                if (_editMode) ...[
-                  SizedBox(width: context.getRSize(6)),
-                  AppIcon(
-                    AppIcons.calendarMonth,
-                    size: context.getRSize(16),
-                    color: t.colorScheme.primary,
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-        if (_editMode && has)
-          IconButton(
-            tooltip: 'Clear date',
-            constraints: const BoxConstraints(
-              minWidth: kMinInteractiveDimension,
-              minHeight: kMinInteractiveDimension,
-            ),
-            onPressed: () => setState(() => _expiryDate = null),
-            icon: AppIcon(
-              AppIcons.close,
-              size: context.getRSize(16),
-              color: muted,
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _inlinePriceInput(TextEditingController controller) {
-    return _trailingBox(
-      width: 110,
-      field: AppInput(
-        controller: controller,
-        readOnly: !_editMode,
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        inputFormatters: [CurrencyInputFormatter()],
-        textAlign: TextAlign.end,
-        onChanged: (v) => setState(() {}),
-        border: InputBorder.none,
-        contentPadding: EdgeInsets.zero,
-        prefixText: activeCurrencySymbol,
-        fillColor: Colors.transparent,
-      ),
-    );
   }
 
   void _confirmDelete(BuildContext context) {
@@ -1920,7 +1304,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// _UpdateStockSheet — the Stock keeper's "Update Stock" bottom sheet (§16.6).
+// _UpdateStockSheet — the Stock keeper's "Adjust Stock" bottom sheet (§16.6).
 //
 // Owns its own text controllers and disposes them in State.dispose(), so the
 // framework tears the fields down before the controllers go away. The previous
@@ -2161,7 +1545,7 @@ class _UpdateStockSheetState extends ConsumerState<_UpdateStockSheet> {
             ),
             const SizedBox(height: 16),
             Text(
-              'Update Stock',
+              'Adjust Stock',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,

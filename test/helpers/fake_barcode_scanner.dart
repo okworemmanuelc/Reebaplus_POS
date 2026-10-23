@@ -9,9 +9,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import 'package:reebaplus_pos/features/pos/services/barcode_scanner.dart';
-import 'package:reebaplus_pos/features/pos/services/scan_camera.dart';
-import 'package:reebaplus_pos/features/pos/widgets/barcode_scan_page.dart';
+import 'package:reebaplus_pos/shared/scanner/barcode_scanner.dart';
+import 'package:reebaplus_pos/shared/scanner/scan_camera.dart';
+import 'package:reebaplus_pos/shared/scanner/barcode_scan_page.dart';
 
 /// A camera that "reads" whatever the test passes to [read], and records what
 /// the page asked of it.
