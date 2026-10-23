@@ -91,6 +91,17 @@ path):
 All ordinary business writes still go to Drift first and drain through the
 `sync_queue`.
 
+## Nigeria area reference (#471)
+
+`ng_areas(state, lga)` is a cloud-only, public read-only reference with a
+composite primary key and 774 rows (including the six FCT area councils).
+Only the service role writes. It is not tenant data, is not mirrored in Drift,
+and is never in the sync registry or outbox. The shared AreaPicker reads the
+bundled Dart reference offline and returns a plain AreaSelection; callers own
+persistence. Later store/address/delivery migrations can validate against the
+cloud table. See `docs/data/nigerian-areas.md`; migration 0189 is prepared,
+not deployed. No architecture invariant changes.
+
 ## Storage Model
 
 Four storage locations, with a strict rule for what lives where. Business data goes to Drift (and syncs); secrets and pointers go to secure storage (and never sync); sync engine state goes to Drift (and never syncs); operator audit records go to Supabase only (and never reach the client). Nothing durable lives only in memory.

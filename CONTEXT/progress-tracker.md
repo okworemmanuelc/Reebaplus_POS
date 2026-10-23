@@ -7,6 +7,28 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #471: Nigeria area reference + shared picker (2026-10-23, in progress)
+- Owner selected #471 before #423 and authorised agent-designed picker UI after
+  providing Browse/product-detail references. Only this prerequisite is unparked.
+- Branch `feat/471-nigeria-area-picker`, isolated workspace under the current
+  chat's `work/reebaplus-471`, base `985e80be` (fresh origin/main).
+- Verified constitution First Schedule (FAO legal archive) and INEC counts;
+  count regression failed on the old Katsina list (32 vs 34).
+- Corrected missing entries, spurious names and clear typos; recognised historic
+  aliases stay stable. Two data tests pass: per-state counts/uniqueness (774)
+  and exact migration-seed parity. Read-only tier-2 comparison compiles and skips
+  without TEST_SUPABASE_URL/TEST_SUPABASE_ANON_KEY; no database changes deployed.
+- Prepared migration 0189 (0187 web and 0188 #422 reserved). POS parity issue:
+  https://github.com/okworemmanuelc/reebaplus-web/issues/135.
+- Shared UI implemented with search, caller-controlled whole-state selection,
+  free-text foreign regions, cancellation and ARB-generated strings. Eleven
+  widget checks and twelve portrait/landscape light/dark goldens pass;
+  keyboard-open cases include 360×640, 390×844 and 844×390 at 1.3 text scale.
+  Flutter analysis is clean. Full suite and two-axis review pending.
+- The repo has no ARB/localisation infrastructure despite its code standard.
+  This slice will add Flutter's SDK localisation support for the new picker only;
+  existing screens are outside scope. No #423/#425/#426 screen is wired yet.
+
 ### Fast-Add: a shared-list photo opens "More details" (2026-10-23)
 Branch `feat/fast-add-open-details-on-catalogue-photo`, worktree `../drinkPosApp-wt-moredetails`. Owner approved the #332 follow-up.
 - `_applyCatalogueSuggestion` (add_product_screen.dart) sets `_showMoreDetails = true` when it fills the photo, because the photo box lives in the collapsed "More details" section and would otherwise be saved unseen. Name/unit-only fills leave it closed. Tests: `test/inventory/add_product_catalogue_prefill_test.dart` (+2).

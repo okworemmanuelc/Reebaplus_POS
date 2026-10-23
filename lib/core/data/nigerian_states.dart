@@ -1,8 +1,5 @@
 /// The 36 Nigerian states + the Federal Capital Territory, alphabetical.
-/// Used as searchable suggestions for the "state" field on the CEO Sign Up
-/// store-details step (master plan §5.1). The field accepts free text too —
-/// these are suggestions, not a hard constraint (a non-Nigeria country may
-/// have its own regions the user types in).
+/// Canonical state keys for the shared area picker and ng_areas cloud reference.
 const List<String> kNigerianStates = [
   'Abia',
   'Adamawa',
