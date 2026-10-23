@@ -51,6 +51,7 @@ import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
 import 'package:reebaplus_pos/shared/services/ui_hint_service.dart';
 import 'package:reebaplus_pos/shared/widgets/spotlight_target.dart';
+import 'package:reebaplus_pos/core/utils/product_unit.dart';
 
 /// Key prefix marking one complete product row in the Products tab. The
 /// viewport regression suite (PRD #239) asserts that at least one row carrying
@@ -82,8 +83,26 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   // Mirrors the §12.1 nav-drawer store picker ('all' = "All Stores"). Synced
   // from `lockedStoreProvider` in `_buildSupplierFilter`; no per-screen dropdown.
   String _selectedStoreId = 'all';
-  String _stockFilter = 'all'; // 'all' | 'low' | 'out' | 'expiry'
+  // 'all' | 'low' | 'out' | 'expiry' | 'archived'
+  String _stockFilter = 'all';
   List<ProductDataWithStock> _dbProducts = [];
+
+  /// The products the normal list and the figure cards count: archived ones
+  /// (`isAvailable == false`, #487) left out. The other tabs keep every product.
+  List<ProductDataWithStock> get _activeProducts =>
+      _dbProducts.where((p) => p.product.isAvailable).toList();
+
+  /// Archived products (#487), shown only under the Archived filter.
+  List<ProductDataWithStock> get _archivedProducts =>
+      _dbProducts.where((p) => !p.product.isAvailable).toList();
+
+  /// [_stockFilter], falling back to 'all' once nothing is archived (a synced
+  /// unarchive can empty the Archived filter while it is selected; its card
+  /// then disappears, so the list must not stay stuck on it).
+  String get _effectiveStockFilter =>
+      _stockFilter == 'archived' && _archivedProducts.isEmpty
+      ? 'all'
+      : _stockFilter;
   List<ManufacturerData> _dbManufacturers = [];
   List<CategoryData> _dbCategories = [];
   String? _selectedCategoryId;
@@ -530,7 +549,11 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
 
   Widget _buildSummaryCards(BuildContext context) {
     if (_isFirstLoad) return const SizedBox.shrink();
-    final products = _dbProducts;
+    // Archived products (#487) are not on sale and not counted here; they have
+    // their own card.
+    final products = _activeProducts;
+    final archivedCount = _archivedProducts.length;
+    final filter = _effectiveStockFilter;
 
     final totalItems = products.length;
     final lowStock = products
@@ -552,7 +575,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         value: '$totalItems',
         icon: AppIcons.category,
         tone: IconTileTone.info,
-        selected: _stockFilter == 'all',
+        selected: filter == 'all',
         onTap: () => setState(() {
           _stockFilter = 'all';
           _tabController.animateTo(0);
@@ -564,7 +587,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         value: '$lowStock',
         icon: AppIcons.warning,
         tone: IconTileTone.warning,
-        selected: _stockFilter == 'low',
+        selected: filter == 'low',
         onTap: () => setState(() {
           _stockFilter = 'low';
           _tabController.animateTo(0);
@@ -576,7 +599,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         value: '$outOfStock',
         icon: AppIcons.block,
         tone: IconTileTone.danger,
-        selected: _stockFilter == 'out',
+        selected: filter == 'out',
         onTap: () => setState(() {
           _stockFilter = 'out';
           _tabController.animateTo(0);
@@ -605,12 +628,28 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         value: '$nearExpiry',
         icon: AppIcons.pending,
         tone: IconTileTone.warning,
-        selected: _stockFilter == 'expiry',
+        selected: filter == 'expiry',
         onTap: () => setState(() {
           _stockFilter = 'expiry';
           _tabController.animateTo(0);
         }),
       ),
+      // Archived (#487) — only once something is archived, so a shop that
+      // never archives sees no extra card. Tapping lists just the archived
+      // products; each still opens Product Details.
+      if (archivedCount > 0)
+        InventoryFigureCard(
+          key: const ValueKey('inventory-summary-archived'),
+          label: 'Archived',
+          value: '$archivedCount',
+          icon: AppIcons.archive,
+          tone: IconTileTone.neutral,
+          selected: filter == 'archived',
+          onTap: () => setState(() {
+            _stockFilter = 'archived';
+            _tabController.animateTo(0);
+          }),
+        ),
     ];
 
     // Measured, not a viewport predicate (#392): the cards share one row when
@@ -712,18 +751,20 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       ];
     }
 
-    var list = _dbProducts;
+    // Archived products (#487) show only under their own filter.
+    final filter = _effectiveStockFilter;
+    var list = filter == 'archived' ? _archivedProducts : _activeProducts;
 
-    if (_stockFilter == 'low') {
+    if (filter == 'low') {
       list = list
           .where(
             (p) =>
                 p.totalStock > 0 && p.totalStock <= p.product.lowStockThreshold,
           )
           .toList();
-    } else if (_stockFilter == 'out') {
+    } else if (filter == 'out') {
       list = list.where((p) => p.totalStock == 0).toList();
-    } else if (_stockFilter == 'expiry') {
+    } else if (filter == 'expiry') {
       list = list.where((p) => _isNearExpiry(p.product)).toList();
     }
 
@@ -759,6 +800,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     list = _sortNearExpiryFirst(list);
 
     final categoryNames = {for (final c in _dbCategories) c.id: c.name};
+    // "Bottle Crate" only in a shop that counts empty crates (#487).
+    final crates = businessTracksCrates(ref.watch(currentBusinessProvider));
 
     return [
       if (_showSearch) SliverToBoxAdapter(child: _buildSearchField(context)),
@@ -818,6 +861,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                 context,
                 list[i],
                 categoryNames[list[i].product.categoryId],
+                crates: crates,
               ),
             ),
           ),
@@ -1171,8 +1215,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   Widget _buildProductRow(
     BuildContext context,
     ProductDataWithStock item,
-    String? categoryName,
-  ) {
+    String? categoryName, {
+    required bool crates,
+  }) {
     final product = item.product;
     final currentStock = item.totalStock;
     final isLow = currentStock > 0 && currentStock <= product.lowStockThreshold;
@@ -1189,12 +1234,17 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       // (PRD #239): a starved list renders at zero height, shows nothing, and
       // reports no overflow, so "no red band" alone cannot catch it.
       key: inventoryProductRowKey(product.id),
-      name: productDisplayName(product.name, product.size, unit: product.unit),
+      name: productDisplayName(
+        product.name,
+        product.size,
+        unit: product.unit,
+        crates: crates,
+      ),
       subtitle: product.subtitle,
       categoryName: categoryName,
       photoPath: product.imagePath,
       stockLabel: currentStock.toString(),
-      unit: product.unit,
+      unit: unitLabel(product.unit, crates: crates),
       state: isOut
           ? InventoryStockState.out
           : (isLow ? InventoryStockState.low : InventoryStockState.ok),

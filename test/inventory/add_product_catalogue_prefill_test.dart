@@ -642,5 +642,70 @@ void main() {
 
       await unmount(tester);
     });
+
+    // #487: "Bottle" reads "Bottle Crate" (the saved value stays Bottle), and
+    // plain "Crate" is not offered to a new product.
+    Future<void> addCrateProduct() => db
+        .into(db.products)
+        .insert(
+          ProductsCompanion.insert(
+            id: const Value('prod-crate'),
+            businessId: businessId,
+            name: 'Old Crate Lager',
+            unit: const Value('Crate'),
+          ),
+        );
+
+    String? itemLabel(WidgetTester tester, String value) {
+      final item = unitDropdown(
+        tester,
+      ).items.firstWhere((i) => i.value == value);
+      return (item.child as Text).data;
+    }
+
+    testWidgets('a new product is not offered plain Crate, even when another '
+        'product uses it; Bottle reads "Bottle Crate"', (tester) async {
+      await addCrateProduct();
+      await pumpScreen(tester);
+
+      expect(unitOptions(tester), isNot(contains('Crate')));
+      expect(unitOptions(tester), contains('Bottle'));
+      expect(itemLabel(tester, 'Bottle'), 'Bottle Crate');
+      expect(itemLabel(tester, 'Can'), 'Can');
+
+      await unmount(tester);
+    });
+
+    testWidgets('a suggested plain Crate is not filled in', (tester) async {
+      catalogue.answer = const BarcodeSuggestion(
+        name: 'Crate Lager',
+        unit: 'Crate',
+      );
+      await pumpScreen(tester, prefilledBarcode: _gtin);
+
+      expect(textOf(tester, 'Name'), 'Crate Lager');
+      expect(unitDropdown(tester).currentValue, isNull);
+      expect(unitOptions(tester), isNot(contains('Crate')));
+
+      await unmount(tester);
+    });
+
+    testWidgets('Update Product on a product saved as Crate still shows and '
+        'offers Crate', (tester) async {
+      await addCrateProduct();
+      final product = await (db.select(
+        db.products,
+      )..where((t) => t.id.equals('prod-crate'))).getSingle();
+      await pumpWidgetUnder(
+        tester,
+        Scaffold(body: UpdateProductSheet(product: product, totalStock: 0)),
+      );
+
+      expect(unitDropdown(tester).currentValue, 'Crate');
+      expect(unitOptions(tester), contains('Crate'));
+      expect(itemLabel(tester, 'Bottle'), 'Bottle Crate');
+
+      await unmount(tester);
+    });
   });
 }

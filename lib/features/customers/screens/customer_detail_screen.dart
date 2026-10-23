@@ -881,30 +881,39 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                       ),
                       child: Screenshot(
                         controller: _screenshotCtrl,
-                        child: ReceiptWidget(
-                          orderId: order.orderNumber,
-                          cart: items,
-                          subtotal: totals.subtotalKobo / 100.0,
-                          discount: totals.discountKobo / 100.0,
-                          crateDeposit: totals.depositKobo / 100.0,
-                          total: totals.totalKobo / 100.0,
-                          paymentMethod: paymentMethodLabel(order.paymentType),
-                          customerName: _name,
-                          customerPhone: _phone,
-                          customerAddress: _address,
-                          cashReceived: order.amountPaidKobo / 100.0,
-                          orderStatus:
-                              order.status[0].toUpperCase() +
-                              order.status.substring(1),
-                          riderName: order.riderName,
-                          reprintDate: reprintDate,
-                          reshareDate: reshareDate,
-                          storeAddress: storeAddress,
-                          businessName: ref.read(currentBusinessNameProvider),
-                          manufacturerNames: manufacturerNames,
-                          logoPath: ref
-                              .read(currentBusinessLogoPathProvider)
-                              .valueOrNull,
+                        child: Consumer(
+                          builder: (_, receiptRef, _) => ReceiptWidget(
+                            orderId: order.orderNumber,
+                            cart: items,
+                            subtotal: totals.subtotalKobo / 100.0,
+                            discount: totals.discountKobo / 100.0,
+                            crateDeposit: totals.depositKobo / 100.0,
+                            total: totals.totalKobo / 100.0,
+                            paymentMethod: paymentMethodLabel(
+                              order.paymentType,
+                            ),
+                            customerName: _name,
+                            customerPhone: _phone,
+                            customerAddress: _address,
+                            cashReceived: order.amountPaidKobo / 100.0,
+                            orderStatus:
+                                order.status[0].toUpperCase() +
+                                order.status.substring(1),
+                            riderName: order.riderName,
+                            reprintDate: reprintDate,
+                            reshareDate: reshareDate,
+                            storeAddress: storeAddress,
+                            businessName: ref.read(currentBusinessNameProvider),
+                            // Watched, so the label follows the business row
+                            // even when nothing else keeps it loaded (#487).
+                            tracksCrates: businessTracksCrates(
+                              receiptRef.watch(currentBusinessProvider),
+                            ),
+                            manufacturerNames: manufacturerNames,
+                            logoPath: ref
+                                .read(currentBusinessLogoPathProvider)
+                                .valueOrNull,
+                          ),
                         ),
                       ),
                     ),
@@ -1014,6 +1023,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
             refundAmount: order.amountPaidKobo / 100.0,
             storeAddress: storeAddress,
             businessName: ref.read(currentBusinessNameProvider),
+            tracksCrates: businessTracksCrates(
+              ref.read(currentBusinessProvider),
+            ),
             manufacturerNames: manufacturerNames,
             paperSize: paperSize,
           );

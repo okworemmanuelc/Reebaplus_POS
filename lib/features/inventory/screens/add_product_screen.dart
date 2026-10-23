@@ -33,6 +33,7 @@ import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
 import 'package:reebaplus_pos/features/payments/widgets/supplier_form_sheet.dart';
+import 'package:reebaplus_pos/core/utils/product_unit.dart';
 
 /// Add Product — a full pushed screen (master plan §16.5, amended 2026-05-30:
 /// the form outgrew a bottom-sheet modal). Also doubles as the "add stock to an
@@ -328,7 +329,10 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     final unit = suggestion.unit == null
         ? null
         : _matchListedUnit(suggestion.unit!);
-    final fillUnit = unit != null && _unit == null;
+    // A suggested plain Crate is not filled in: new products can't pick it
+    // (#487).
+    final fillUnit =
+        unit != null && _unit == null && !isUnitHiddenForNewProducts(unit);
     final photo = _showsPhotoField && _pendingImageBytes == null
         ? _processCataloguePhoto(suggestion.photoBytes)
         : null;
@@ -729,6 +733,11 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   /// deposit UI into the cart/checkout and accrue crate-owed ledger rows).
   bool get _isCrateBusiness =>
       businessTracksCrates(ref.read(currentBusinessProvider));
+
+  /// Whether a stored `Bottle` reads "Bottle Crate" (#487): only in a shop
+  /// that counts empty crates. Watched, for the build-time unit labels.
+  bool get _unitCrates =>
+      businessTracksCrates(ref.watch(currentBusinessProvider));
 
   /// The adaptive Fast-Add layout is used for creating a brand-new product in
   /// direct mode. Receive Stock's mini-form and the "add stock to an existing
@@ -1478,6 +1487,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                 _selectedExistingProduct!.name,
                 _selectedExistingProduct!.size,
                 unit: _selectedExistingProduct!.unit,
+                crates: _unitCrates,
               ),
               onClose: _clearExistingProduct,
               closeTooltip: 'Clear',
@@ -1877,11 +1887,20 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     value: _unit,
     hintText: 'No unit',
     // "No unit" (#108) clears the unit — the product saves with just its
-    // name and is hidden wherever the unit would render.
+    // name and is hidden wherever the unit would render. Plain "Crate" is
+    // not offered to a new product (#487); a picked existing product saved as
+    // Crate keeps it. A stored Bottle reads "Bottle Crate" (only in a shop
+    // that counts empty crates) but saves Bottle.
     items: [
       const DropdownMenuItem<String?>(value: null, child: Text('No unit')),
-      ..._dynamicUnits.map(
-        (u) => DropdownMenuItem<String?>(value: u, child: Text(u)),
+      ...unitChoices(
+        _dynamicUnits,
+        keep: [_unit, _selectedExistingProduct?.unit],
+      ).map(
+        (u) => DropdownMenuItem<String?>(
+          value: u,
+          child: Text(unitLabel(u, crates: _unitCrates)!),
+        ),
       ),
     ],
     onChanged: _onUnitPicked,
@@ -2043,7 +2062,12 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     children: [
       for (final p in _productSuggestions)
         InventorySuggestionTile(
-          label: productDisplayName(p.name, p.size, unit: p.unit),
+          label: productDisplayName(
+            p.name,
+            p.size,
+            unit: p.unit,
+            crates: _unitCrates,
+          ),
           onTap: () => _selectProduct(p),
         ),
     ],

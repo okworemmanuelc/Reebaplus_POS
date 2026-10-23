@@ -26,6 +26,7 @@ import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/inventory_parts.dart';
 import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
+import 'package:reebaplus_pos/core/utils/product_unit.dart';
 
 class UpdateProductSheet extends ConsumerStatefulWidget {
   final ProductData product;
@@ -754,6 +755,8 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    // "Bottle Crate" only in a shop that counts empty crates (#487).
+    final crates = businessTracksCrates(ref.watch(currentBusinessProvider));
     final gutter = context.getRSize(20);
     final gap = context.getRSize(14);
     final section = context.getRSize(16);
@@ -994,9 +997,17 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                         value: null,
                         child: Text('No unit'),
                       ),
-                      ..._dynamicUnits.map(
-                        (u) =>
-                            DropdownMenuItem<String?>(value: u, child: Text(u)),
+                      // Plain "Crate" only while it is this product's
+                      // unit (#487); a stored Bottle reads "Bottle Crate"
+                      // in a shop that counts empty crates.
+                      ...unitChoices(
+                        _dynamicUnits,
+                        keep: [_unit, widget.product.unit],
+                      ).map(
+                        (u) => DropdownMenuItem<String?>(
+                          value: u,
+                          child: Text(unitLabel(u, crates: crates)!),
+                        ),
                       ),
                     ],
                     onChanged: (v) {

@@ -117,6 +117,17 @@ void main() {
     await disposeScreen(tester);
   });
 
+  testWidgets('an archived product is not offered for receiving (#487)', (
+    tester,
+  ) async {
+    await fx.env.db.catalogDao.setProductArchived(fx.productIds[0], true);
+    await open(tester);
+    expect(tile(0), findsNothing);
+    expect(find.text('Star Lager'), findsNothing);
+    expect(tile(1), findsOneWidget);
+    await disposeScreen(tester);
+  });
+
   testWidgets('tap adds one (badge + review bar) and flies to "Review Items"', (
     tester,
   ) async {

@@ -185,6 +185,10 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
             'p_image_path': productJson['image_path'],
           if (productJson.containsKey('expiry_date'))
             'p_expiry_date': productJson['expiry_date'],
+          // NOTE (#487): pos_create_product_v2 has no units_per_pack
+          // parameter, so this flag-ON path does not carry it to the cloud
+          // (the v1 path below does, in the products upsert). Add the RPC
+          // parameter before this flag is ever turned on.
           if (hasInitialStock)
             'p_initial_stock': <String, dynamic>{
               'store_id': storeId,
@@ -616,6 +620,10 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     // null to clear locally) is written; a set value pushes because the partial
     // companion enqueued below serializes present, non-null values.
     Object? barcode = _unset,
+    // "How many in one" (#487, display only). Sentinel-defaulted like the
+    // fields above: omit to leave the column untouched, so an edit that
+    // doesn't carry it never wipes it to null.
+    Object? unitsPerPack = _unset,
   }) async {
     final now = DateTime.now();
     final comp = ProductsCompanion(
@@ -665,6 +673,9 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
       barcode: identical(barcode, _unset)
           ? const Value.absent()
           : Value(barcode as String?),
+      unitsPerPack: identical(unitsPerPack, _unset)
+          ? const Value.absent()
+          : Value(unitsPerPack as int?),
       lastUpdatedAt: Value(now),
     );
     await (update(
@@ -755,6 +766,33 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
       stmt.where((t) => t.name.like('%$q%', escapeChar: r'\'));
     }
     return stmt.get();
+  }
+
+  /// Archives a product, or brings it back (#487). Archive reuses
+  /// `products.is_available`: false = archived. An archived product is off
+  /// sale (the POS grid and the scanner already skip it), hidden from the
+  /// Inventory list and from Receive Stock, and keeps its stock, history and
+  /// reports. Nothing is deleted.
+  ///
+  /// Business-scoped: writes ONLY `isAvailable` + an explicit `lastUpdatedAt`
+  /// (the pull is last-write-wins on it), so another business's product id is
+  /// never touched. Then enqueues the FULL row (via [_enqueueFullProduct]): a
+  /// partial products upsert omits the NOT NULL name (23502) and, coalesced
+  /// over a pending details edit, would drop it.
+  Future<void> setProductArchived(String productId, bool archived) {
+    // One transaction: a pull landing between the write and the full-row
+    // re-read could otherwise enqueue a payload with the old flag.
+    return transaction(() async {
+      await (update(
+        products,
+      )..where((t) => t.id.equals(productId) & whereBusiness(t))).write(
+        ProductsCompanion(
+          isAvailable: Value(!archived),
+          lastUpdatedAt: Value(DateTime.now()),
+        ),
+      );
+      await _enqueueFullProduct(productId);
+    });
   }
 
   Future<void> updateProductPrices(

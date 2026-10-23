@@ -1290,6 +1290,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                   manufacturerNames: _manufacturerNames,
                   storeAddress: _storeAddress,
                   businessName: ref.watch(currentBusinessNameProvider),
+                  tracksCrates: businessTracksCrates(
+                    ref.watch(currentBusinessProvider),
+                  ),
                   logoPath: ref
                       .watch(currentBusinessLogoPathProvider)
                       .valueOrNull,
@@ -1521,6 +1524,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         riderName: 'Pick-up Order',
         storeAddress: _storeAddress,
         businessName: ref.read(currentBusinessNameProvider),
+        tracksCrates: businessTracksCrates(
+          ref.read(currentBusinessProvider),
+        ),
         manufacturerNames: _manufacturerNames,
         paperSize: paperSize,
       );

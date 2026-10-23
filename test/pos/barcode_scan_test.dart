@@ -178,6 +178,10 @@ void main() {
         authProvider.overrideWith((ref) => auth),
         cartProvider.overrideWith((ref) => cart),
         barcodeScannerProvider.overrideWithValue(fake),
+        // A plain shop (#487: "Bottle", not "Bottle Crate"). Fixed, so the
+        // "Which one?" rows don't open a Drift business stream this
+        // in-memory database can't close inside the test.
+        currentBusinessProvider.overrideWithValue(null),
         gateContextProvider.overrideWithValue(
           GateContext(grantedKeys: grantedKeys, roleRank: null, isReady: true),
         ),

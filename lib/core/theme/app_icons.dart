@@ -54,6 +54,7 @@ abstract final class AppIcons {
 
   // --- Inventory ---
   static const IconData acUnit = Symbols.ac_unit;
+  static const IconData archive = Symbols.archive;
   static const IconData barcode = Symbols.barcode_scanner;
   static const IconData category = Symbols.category;
   static const IconData checkroom = Symbols.checkroom;

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
@@ -9,6 +11,7 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/sales_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/icon_tile.dart';
 import 'package:reebaplus_pos/features/pos/services/barcode_scan_resolver.dart';
+import 'package:reebaplus_pos/core/utils/product_unit.dart';
 
 /// Key prefix for a "Which one?" row; the product id follows (tests find a row
 /// by it).
@@ -84,19 +87,22 @@ class ScanWhichOneSheet extends StatelessWidget {
 
 /// One tappable row of the "Which one?" list. Unsellable rows are dimmed and
 /// name their reason, but stay tappable: the pick shows that product's message.
-class _ScanChoiceRow extends StatelessWidget {
+class _ScanChoiceRow extends ConsumerWidget {
   const _ScanChoiceRow({required this.choice});
 
   final ScanChoice choice;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final t = Theme.of(context);
     final text = t.colorScheme.onSurface;
     final muted = t.textTheme.bodySmall?.color ?? text;
     final product = choice.product;
     // Same size + unit descriptor the POS grid tile shows under the name.
-    final size = '${product.size ?? ''} ${product.unit ?? ''}'.trim();
+    final crates = businessTracksCrates(ref.watch(currentBusinessProvider));
+    final size =
+        '${product.size ?? ''} ${unitLabel(product.unit, crates: crates) ?? ''}'
+            .trim();
     final reason = _reasonOf(choice.outcome);
     final radius = BorderRadius.circular(AppSpacing.borderRadiusL);
 

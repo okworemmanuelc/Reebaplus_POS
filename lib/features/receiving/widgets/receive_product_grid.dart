@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -12,6 +13,7 @@ import 'package:reebaplus_pos/features/receiving/widgets/new_product_card.dart';
 import 'package:reebaplus_pos/features/receiving/widgets/receive_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/fly_to_cart.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/product_tile.dart';
+import 'package:reebaplus_pos/core/utils/product_unit.dart';
 
 /// The key on Receive Stock's tile for [productId] (#394).
 ValueKey<String> receiveProductTileKey(String productId) =>
@@ -45,11 +47,12 @@ double receiveTileExtent(BuildContext context) {
 }
 
 /// "60cl · Bottle": the product's size and unit, blanks skipped — the same
-/// two values the receive card showed before (#394).
-String? receiveTileSubtitle(ProductData product) {
+/// two values the receive card showed before (#394). [crates] is
+/// `businessTracksCrates` for the active business (see [unitLabel]).
+String? receiveTileSubtitle(ProductData product, {required bool crates}) {
   final parts = [
     product.size,
-    product.unit,
+    unitLabel(product.unit, crates: crates),
   ].where((s) => s != null && s.trim().isNotEmpty).map((s) => s!.trim());
   return parts.isEmpty ? null : parts.join(' · ');
 }
@@ -204,7 +207,10 @@ class _ReceiveProductTileState extends ConsumerState<_ReceiveProductTile> {
     final isOutOfStock = totalStock <= 0;
     return ProductTile(
       name: product.name,
-      subtitle: receiveTileSubtitle(product),
+      subtitle: receiveTileSubtitle(
+        product,
+        crates: businessTracksCrates(ref.watch(currentBusinessProvider)),
+      ),
       stockLabel: isOutOfStock ? 'No stock' : 'Current: $totalStock',
       stockLevel: isOutOfStock ? StockLevel.out : StockLevel.ok,
       categoryName: widget.categoryName,

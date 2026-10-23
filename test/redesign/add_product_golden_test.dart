@@ -163,7 +163,7 @@ void main() {
         );
         await tester.enterText(find.byType(TextField).first, 'Gul');
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Bottle Gulder'));
+        await tester.tap(find.text('Bottle Crate Gulder'));
         await tester.pumpAndSettle();
         FocusManager.instance.primaryFocus?.unfocus();
         await tester.pumpAndSettle();
