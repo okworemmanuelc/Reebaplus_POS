@@ -48,7 +48,7 @@ class _InventoryHistoryTabState extends ConsumerState<InventoryHistoryTab> {
         : widget.storeId;
 
     final pageState = ref.watch(
-      paginatedStockHistoryProvider((storeId: wId, period: _selectedPeriod)),
+      paginatedStockHistoryProvider((storeId: wId, period: _selectedPeriod, productId: null)),
     );
     final statsAsync = ref.watch(
       stockHistoryStatsProvider((storeId: wId, period: _selectedPeriod)),
@@ -112,6 +112,7 @@ class _InventoryHistoryTabState extends ConsumerState<InventoryHistoryTab> {
                                 paginatedStockHistoryProvider((
                                   storeId: wId,
                                   period: _selectedPeriod,
+                                  productId: null,
                                 )).notifier,
                               )
                               .loadMore();

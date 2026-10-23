@@ -10,6 +10,8 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/product_form_parts.dart';
+import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 
@@ -70,6 +72,19 @@ void main() {
 
   tearDown(() => db.close());
 
+  Finder quantityField() => find.descendant(
+        of: find.byKey(AddProductKeys.quantity),
+        matching: find.byType(TextFormField),
+      );
+
+  Finder fieldFor(String labelPart) => find.descendant(
+        of: find.byWidgetPredicate(
+          (w) =>
+              w is AppInput && (w.labelText?.contains(labelPart) ?? false),
+        ),
+        matching: find.byType(TextFormField),
+      );
+
   testWidgets('AddProductScreen prompts confirmation dialog before saving',
       (tester) async {
     final container = ProviderContainer(
@@ -98,22 +113,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    Finder fieldFor(String labelPart) => find.descendant(
-          of: find.ancestor(
-            of: find.textContaining(labelPart),
-            matching: find.byType(AppInput),
-          ),
-          matching: find.byType(TextFormField),
-        );
-
-    // Fill in required Fast-Add fields
+    // Fill in the required fields
     await tester.enterText(fieldFor('Product Name'), 'Biscuits 50g');
-    await tester.enterText(fieldFor('Selling Price'), '250');
-    await tester.enterText(fieldFor('Quantity'), '10');
+    await tester.enterText(fieldFor('Retail Price'), '250');
+    await tester.enterText(quantityField(), '10');
     await tester.pumpAndSettle();
 
-    // Tap Add Product
-    final saveButtonFinder = find.widgetWithText(AppButton, 'Add Product');
+    // Tap Save Product
+    final saveButtonFinder = find.widgetWithText(AppButton, 'Save Product');
     await tester.ensureVisible(saveButtonFinder);
     await tester.tap(saveButtonFinder);
     await tester.pumpAndSettle();
@@ -135,7 +142,7 @@ void main() {
         .get();
     expect(products.isEmpty, isTrue);
 
-    // Tap Add Product again and confirm
+    // Tap Save Product again and confirm
     await tester.tap(saveButtonFinder);
     await tester.pumpAndSettle();
 
@@ -156,7 +163,8 @@ void main() {
   });
 
   testWidgets(
-      'Receive mode classic path does not insert related records before confirmation',
+      'Receive mode: nothing is created before confirmation; the opening '
+      'quantity goes onto the delivery list, not into a store (#487)',
       (tester) async {
     final container = ProviderContainer(
       overrides: [
@@ -184,33 +192,39 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    Future<void> enterField(String labelPart, String text) async {
-      final finder = find.descendant(
-        of: find.byWidgetPredicate(
-          (w) =>
-              w is AppInput &&
-              (w.labelText?.toLowerCase().contains(labelPart.toLowerCase()) ??
-                  false),
-        ),
-        matching: find.byType(TextFormField),
-      );
+    Future<void> enterField(Finder finder, String text) async {
       await tester.ensureVisible(finder);
       await tester.enterText(finder, text);
       await tester.pumpAndSettle();
     }
 
-    // Fill in required fields in classic receive mode
-    await enterField('Product Name', 'Coke 50cl');
-    await enterField('Category', 'Beverages');
-    await enterField('Description', 'Soft drink');
-    await enterField('Retailer Price', '300');
-    await enterField('Wholesaler Price', '280');
-    await enterField('Buying Price', '250');
-    await enterField('Low Stock Alert', '5');
-    await enterField('Manufacturer', 'Coca-Cola');
-    await enterField('Initial Quantity', '20');
+    /// Opens a picker, types [name] and taps "Add new “name”".
+    Future<void> addNew(Key picker, String name) async {
+      await tester.ensureVisible(find.byKey(picker));
+      await tester.tap(find.byKey(picker));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(ProductPickerSheet),
+          matching: find.byType(TextFormField),
+        ),
+        name,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add new “$name”'));
+      await tester.pumpAndSettle();
+    }
 
-    final saveButtonFinder = find.widgetWithText(AppButton, 'Add Product');
+    await enterField(fieldFor('Product Name'), 'Coke 50cl');
+    await addNew(AddProductKeys.category, 'Beverages');
+    await addNew(AddProductKeys.manufacturer, 'Coca-Cola');
+    await enterField(fieldFor('Description'), 'Soft drink');
+    await enterField(fieldFor('Retail Price'), '300');
+    await enterField(fieldFor('Wholesale Price'), '280');
+    await enterField(fieldFor('Cost Price'), '250');
+    await enterField(quantityField(), '20');
+
+    final saveButtonFinder = find.widgetWithText(AppButton, 'Save Product');
     await tester.ensureVisible(saveButtonFinder);
     await tester.tap(saveButtonFinder);
     await tester.pumpAndSettle();
@@ -228,7 +242,7 @@ void main() {
     var manufacturers = await (db.select(db.manufacturers)
           ..where((t) => t.businessId.equals(businessId)))
         .get();
-    var suppliers = await (db.select(db.suppliers)
+    final suppliers = await (db.select(db.suppliers)
           ..where((t) => t.businessId.equals(businessId)))
         .get();
 
@@ -236,7 +250,7 @@ void main() {
     expect(manufacturers.isEmpty, isTrue);
     expect(suppliers.isEmpty, isTrue);
 
-    // Tap Add Product again and confirm
+    // Tap Save Product again and confirm
     await tester.tap(saveButtonFinder);
     await tester.pumpAndSettle();
 
@@ -255,6 +269,19 @@ void main() {
         .get();
     expect(manufacturers.isNotEmpty, isTrue);
     expect(manufacturers.first.name, 'Coca-Cola');
+
+    final product = await (db.select(db.products)
+          ..where((t) => t.name.equals('Coke 50cl')))
+        .getSingle();
+    expect(product.categoryId, categories.first.id);
+    expect(product.manufacturerId, manufacturers.first.id);
+    expect(product.buyingPriceKobo, 25000);
+
+    // The 20 went onto the delivery list, not into the store.
+    final cart = container.read(receiveCartProvider);
+    expect(cart.single.productId, product.id);
+    expect(cart.single.qty, 20);
+    expect(await db.stockLedgerDao.getCurrentStock(product.id, storeId), 0);
 
     await tester.pump(const Duration(seconds: 5));
     container.dispose();
@@ -299,25 +326,17 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    Finder fieldFor(String labelPart) => find.descendant(
-          of: find.ancestor(
-            of: find.textContaining(labelPart),
-            matching: find.byType(AppInput),
-          ),
-          matching: find.byType(TextFormField),
-        );
+    // Brand / Manufacturer shows for every business and is optional.
+    expect(find.text('Brand / Manufacturer'), findsOneWidget);
 
-    // Verify Manufacturer is labeled optional
-    expect(find.text('Manufacturer (optional)'), findsOneWidget);
-
-    // Fill in required Fast-Add fields without Manufacturer
+    // Fill in the required fields without a manufacturer
     await tester.enterText(fieldFor('Product Name'), 'Fanta Orange');
-    await tester.enterText(fieldFor('Selling Price'), '250');
-    await tester.enterText(fieldFor('Quantity'), '15');
+    await tester.enterText(fieldFor('Retail Price'), '250');
+    await tester.enterText(quantityField(), '15');
     await tester.pumpAndSettle();
 
-    // Tap Add Product
-    final saveButtonFinder = find.widgetWithText(AppButton, 'Add Product');
+    // Tap Save Product
+    final saveButtonFinder = find.widgetWithText(AppButton, 'Save Product');
     await tester.ensureVisible(saveButtonFinder);
     await tester.tap(saveButtonFinder);
     await tester.pumpAndSettle();

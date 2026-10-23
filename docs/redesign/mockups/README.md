@@ -22,5 +22,11 @@ All images are at 2× scale. The logical size is half the pixel size.
 | `tablet-cart-panel-dark.png` / `-light` | Tablet upright: cart slide-in panel over a dimmed grid | 800×1280 | dark / light |
 | `wide-pos-cart-dark.png` / `-light` | Wide: POS with the fixed cart panel | 1280×800 | dark / light |
 | `wide-drawer-dark.png` / `-light` | Wide: drawer open over POS | 1280×800 | dark / light |
+| `phone-add-product-light.png` | Phone upright: Add Product (full scroll, #487) | 390 wide | light only |
+| `wide-add-product-light.png` | Wide: Add Product with Preview (#487) | 1280 wide | light only |
+| `phone-product-details-light.png` | Phone upright: Product Details (full scroll, #487) | 390 wide | light only |
+| `wide-product-details-light.png` | Wide: Product Details (#487) | 1280 wide | light only |
+
+The #487 product mockups follow the issue's owner decisions where they differ: "Bottle" is shown as "Bottle Crate" and plain "Crate" is not offered to new products, and List Online stays off Product Details.
 
 The golden snapshot sizes are 390×844, 844×390, 800×1280 and 1280×800 (PRD #346, "Mechanics").

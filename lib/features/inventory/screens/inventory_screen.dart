@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
@@ -11,13 +10,11 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 
 import 'package:reebaplus_pos/core/utils/responsive.dart'; // RESPONSIVE: utility imported
 import 'package:reebaplus_pos/core/utils/number_format.dart';
-import 'package:reebaplus_pos/features/inventory/data/models/inventory_item.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
-import 'package:reebaplus_pos/shared/widgets/coach_hint_banner.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
@@ -30,18 +27,16 @@ import 'package:reebaplus_pos/core/crates/manufacturer_crate_position.dart';
 import 'package:reebaplus_pos/features/inventory/screens/manufacturer_screen.dart';
 import 'package:reebaplus_pos/features/inventory/screens/supplier_detail_screen.dart';
 import 'package:reebaplus_pos/features/inventory/screens/stock_count_screen.dart';
-import 'package:reebaplus_pos/features/inventory/screens/product_detail_screen.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/inventory_history_tab.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/inventory_manufacturers_tab.dart';
-import 'package:reebaplus_pos/features/inventory/widgets/update_product_sheet.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/manage_categories_sheet.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/product_details_route.dart';
 import 'package:reebaplus_pos/core/constants/category_filter.dart';
 import 'package:reebaplus_pos/core/utils/product_name.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
-import 'package:reebaplus_pos/shared/utils/product_icon_helper.dart';
 import 'package:reebaplus_pos/core/widgets/app_speed_dial_fab.dart';
 import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
 import 'package:reebaplus_pos/features/receiving/screens/receive_stock_screen.dart';
@@ -49,8 +44,8 @@ import 'package:reebaplus_pos/shared/widgets/tabbed_sliver_scaffold.dart';
 import 'package:reebaplus_pos/core/providers/first_download_state.dart';
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
-import 'package:reebaplus_pos/shared/services/ui_hint_service.dart';
 import 'package:reebaplus_pos/shared/widgets/spotlight_target.dart';
+import 'package:reebaplus_pos/core/utils/product_unit.dart';
 
 /// Key prefix marking one complete product row in the Products tab. The
 /// viewport regression suite (PRD #239) asserts that at least one row carrying
@@ -82,28 +77,31 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   // Mirrors the §12.1 nav-drawer store picker ('all' = "All Stores"). Synced
   // from `lockedStoreProvider` in `_buildSupplierFilter`; no per-screen dropdown.
   String _selectedStoreId = 'all';
-  String _stockFilter = 'all'; // 'all' | 'low' | 'out' | 'expiry'
+  // 'all' | 'low' | 'out' | 'expiry' | 'archived'
+  String _stockFilter = 'all';
   List<ProductDataWithStock> _dbProducts = [];
+
+  /// The products the normal list and the figure cards count: archived ones
+  /// (`isAvailable == false`, #487) left out. The other tabs keep every product.
+  List<ProductDataWithStock> get _activeProducts =>
+      _dbProducts.where((p) => p.product.isAvailable).toList();
+
+  /// Archived products (#487), shown only under the Archived filter.
+  List<ProductDataWithStock> get _archivedProducts =>
+      _dbProducts.where((p) => !p.product.isAvailable).toList();
+
+  /// [_stockFilter], falling back to 'all' once nothing is archived (a synced
+  /// unarchive can empty the Archived filter while it is selected; its card
+  /// then disappears, so the list must not stay stuck on it).
+  String get _effectiveStockFilter =>
+      _stockFilter == 'archived' && _archivedProducts.isEmpty
+      ? 'all'
+      : _stockFilter;
   List<ManufacturerData> _dbManufacturers = [];
   List<CategoryData> _dbCategories = [];
   String? _selectedCategoryId;
   // Products-tab header search (§16.4, amended — reuses the POS toggle pattern).
   bool _showSearch = false;
-  // Discoverability banner (issue #110): "press and hold to edit". Seeded from
-  // the UI-hint service in initState (per staff member, local-only); the render
-  // also checks Gates.editProductPrice so it only reaches users who can actually
-  // long-press-edit. Dismissing it retires the banner permanently for that user.
-  bool _showLongPressHint = false;
-  // The banner's dismissal is "per staff member" (issue #110 AC), so scope the
-  // shared UI-hint key to the current device user. Falls back to the bare key
-  // when no user is resolved (not expected on this authenticated screen).
-  String get _longPressHintKey {
-    final userId = ref.read(deviceUserIdProvider).value;
-    return userId == null || userId.isEmpty
-        ? UiHintService.hintInventoryLongpress
-        : '${UiHintService.hintInventoryLongpress}_$userId';
-  }
-
   String _searchQuery = '';
   final _searchCtrl = TextEditingController();
   int _totalCrateAssetsSum = 0;
@@ -249,18 +247,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     super.initState();
     _tabController = TabController(length: _tabKeys.length, vsync: this);
     _tabController.addListener(_onTabChanged);
-
-    // Issue #110: surface the "press and hold to edit" banner a couple of times
-    // per staff member. Visibility is further gated on Gates.editProductPrice at
-    // render time, so it only reaches users who can use the gesture.
-    uiHintService.shouldShow(_longPressHintKey).then((show) {
-      if (show && mounted) {
-        setState(() => _showLongPressHint = true);
-        // Count this display as a passive view so an ignored hint still retires
-        // after `_retireAfter` visits (never shown forever).
-        uiHintService.markShown(_longPressHintKey);
-      }
-    });
 
     // Defer all DB stream subscriptions until after the first frame so that
     // frame renders immediately without competing with 8+ SQL queries on the
@@ -530,7 +516,11 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
 
   Widget _buildSummaryCards(BuildContext context) {
     if (_isFirstLoad) return const SizedBox.shrink();
-    final products = _dbProducts;
+    // Archived products (#487) are not on sale and not counted here; they have
+    // their own card.
+    final products = _activeProducts;
+    final archivedCount = _archivedProducts.length;
+    final filter = _effectiveStockFilter;
 
     final totalItems = products.length;
     final lowStock = products
@@ -552,7 +542,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         value: '$totalItems',
         icon: AppIcons.category,
         tone: IconTileTone.info,
-        selected: _stockFilter == 'all',
+        selected: filter == 'all',
         onTap: () => setState(() {
           _stockFilter = 'all';
           _tabController.animateTo(0);
@@ -564,7 +554,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         value: '$lowStock',
         icon: AppIcons.warning,
         tone: IconTileTone.warning,
-        selected: _stockFilter == 'low',
+        selected: filter == 'low',
         onTap: () => setState(() {
           _stockFilter = 'low';
           _tabController.animateTo(0);
@@ -576,7 +566,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         value: '$outOfStock',
         icon: AppIcons.block,
         tone: IconTileTone.danger,
-        selected: _stockFilter == 'out',
+        selected: filter == 'out',
         onTap: () => setState(() {
           _stockFilter = 'out';
           _tabController.animateTo(0);
@@ -605,12 +595,28 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         value: '$nearExpiry',
         icon: AppIcons.pending,
         tone: IconTileTone.warning,
-        selected: _stockFilter == 'expiry',
+        selected: filter == 'expiry',
         onTap: () => setState(() {
           _stockFilter = 'expiry';
           _tabController.animateTo(0);
         }),
       ),
+      // Archived (#487) — only once something is archived, so a shop that
+      // never archives sees no extra card. Tapping lists just the archived
+      // products; each still opens Product Details.
+      if (archivedCount > 0)
+        InventoryFigureCard(
+          key: const ValueKey('inventory-summary-archived'),
+          label: 'Archived',
+          value: '$archivedCount',
+          icon: AppIcons.archive,
+          tone: IconTileTone.neutral,
+          selected: filter == 'archived',
+          onTap: () => setState(() {
+            _stockFilter = 'archived';
+            _tabController.animateTo(0);
+          }),
+        ),
     ];
 
     // Measured, not a viewport predicate (#392): the cards share one row when
@@ -712,18 +718,20 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       ];
     }
 
-    var list = _dbProducts;
+    // Archived products (#487) show only under their own filter.
+    final filter = _effectiveStockFilter;
+    var list = filter == 'archived' ? _archivedProducts : _activeProducts;
 
-    if (_stockFilter == 'low') {
+    if (filter == 'low') {
       list = list
           .where(
             (p) =>
                 p.totalStock > 0 && p.totalStock <= p.product.lowStockThreshold,
           )
           .toList();
-    } else if (_stockFilter == 'out') {
+    } else if (filter == 'out') {
       list = list.where((p) => p.totalStock == 0).toList();
-    } else if (_stockFilter == 'expiry') {
+    } else if (filter == 'expiry') {
       list = list.where((p) => _isNearExpiry(p.product)).toList();
     }
 
@@ -759,31 +767,12 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     list = _sortNearExpiryFirst(list);
 
     final categoryNames = {for (final c in _dbCategories) c.id: c.name};
+    // "Bottle Crate" only in a shop that counts empty crates (#487).
+    final crates = businessTracksCrates(ref.watch(currentBusinessProvider));
 
     return [
       if (_showSearch) SliverToBoxAdapter(child: _buildSearchField(context)),
       SliverToBoxAdapter(child: _buildSupplierFilter(context)),
-      // Issue #110: press-and-hold-to-edit discoverability banner. Shown only
-      // to staff the price-edit gate lets long-press-edit (matching the
-      // gesture's own guard on `_buildProductRow`), only while there are
-      // products to hold, and only until this staff member dismisses it
-      // (which retires it permanently for them).
-      if (_showLongPressHint &&
-          list.isNotEmpty &&
-          Gates.editProductPrice.allows(ref))
-        _cappedBox(
-          EdgeInsets.only(top: context.getRSize(4)),
-          CoachHintBanner(
-            message:
-                'Press and hold a '
-                '${ref.watch(industryLexiconProvider).itemLower}'
-                ' to edit it.',
-            onDismiss: () {
-              setState(() => _showLongPressHint = false);
-              uiHintService.markDismissed(_longPressHintKey);
-            },
-          ),
-        ),
       if (list.isEmpty)
         // Genuinely empty catalogue (not a filter/search miss) hands off to the
         // persona-aware first-run empty state — the "Add your first product"
@@ -818,6 +807,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                 context,
                 list[i],
                 categoryNames[list[i].product.categoryId],
+                crates: crates,
               ),
             ),
           ),
@@ -1171,17 +1161,14 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   Widget _buildProductRow(
     BuildContext context,
     ProductDataWithStock item,
-    String? categoryName,
-  ) {
+    String? categoryName, {
+    required bool crates,
+  }) {
     final product = item.product;
     final currentStock = item.totalStock;
     final isLow = currentStock > 0 && currentStock <= product.lowStockThreshold;
     final isOut = currentStock == 0;
 
-    // The detail screen's hero still reads the product's own colour.
-    final accent = product.colorHex != null
-        ? Color(int.parse(product.colorHex!.replaceFirst('#', '0xFF')))
-        : Theme.of(context).colorScheme.primary;
     final expiry = product.expiryDate;
 
     return InventoryProductRow(
@@ -1189,69 +1176,33 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       // (PRD #239): a starved list renders at zero height, shows nothing, and
       // reports no overflow, so "no red band" alone cannot catch it.
       key: inventoryProductRowKey(product.id),
-      name: productDisplayName(product.name, product.size, unit: product.unit),
+      name: productDisplayName(
+        product.name,
+        product.size,
+        unit: product.unit,
+        crates: crates,
+      ),
       subtitle: product.subtitle,
       categoryName: categoryName,
       photoPath: product.imagePath,
       stockLabel: currentStock.toString(),
-      unit: product.unit,
+      unit: unitLabel(product.unit, crates: crates),
       state: isOut
           ? InventoryStockState.out
           : (isLow ? InventoryStockState.low : InventoryStockState.ok),
       expiryLabel: _expiryLabel(product),
       expired: expiry != null && _daysToExpiry(expiry) < 0,
-      // Long-press opens the full product editor (name/prices/details), so it
-      // is gated on `products.edit_price` (hard rule #6/#7 — hide, don't
-      // disable). Stock-only roles add stock via the product-detail Update
-      // Stock sheet instead, never this editor.
-      onLongPress: Gates.editProductPrice.allows(ref)
-          ? () {
-              HapticFeedback.mediumImpact();
-              showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                backgroundColor: Colors.transparent,
-                builder: (ctx) => UpdateProductSheet(
-                  product: product,
-                  totalStock: currentStock,
-                  onProductUpdated: (_) => setState(() {}),
-                ),
-              );
-            }
-          : null,
-      onTap: () {
-        final inventoryItem = InventoryItem(
-          id: product.id.toString(),
-          productName: product.name,
-          subtitle: product.subtitle ?? '',
-          icon: productIconFromCodePoint(product.iconCodePoint),
-          color: accent,
-          storeStock: {'w1': item.totalStock.toDouble()},
-          lowStockThreshold: product.lowStockThreshold.toDouble(),
-          retailerPrice: product.retailerPriceKobo / 100.0,
-          wholesalerPrice: product.wholesalerPriceKobo / 100.0,
-          buyingPrice: product.buyingPriceKobo / 100.0,
-          category: product.categoryId?.toString(),
-          manufacturer: _dbManufacturers
-              .where((m) => m.id == product.manufacturerId)
-              .map((m) => m.name)
-              .firstOrNull,
-          size: product.size,
-          unit: product.unit,
-        );
-        Navigator.push(
-          context,
-          slideDownRoute<void>(
-            ProductDetailScreen(
-              item: inventoryItem,
-              onUpdateStock: () => setState(() {}),
-              selectedStoreId: _selectedStoreId == 'all'
-                  ? null
-                  : _selectedStoreId,
-            ),
-          ),
-        );
-      },
+      onTap: () => openProductDetails(
+        context,
+        product,
+        manufacturerName: _dbManufacturers
+            .where((m) => m.id == product.manufacturerId)
+            .map((m) => m.name)
+            .firstOrNull,
+        totalStock: item.totalStock.toDouble(),
+        storeId: _selectedStoreId == 'all' ? null : _selectedStoreId,
+        onUpdateStock: () => setState(() {}),
+      ),
     );
   }
 

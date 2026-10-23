@@ -87,3 +87,31 @@ Do not start the next unit until all of the following are true. Verify each one 
 6. `flutter analyze` passes with zero errors and zero new warnings.
 7. `flutter test` passes.
 8. Generated code, if any schema or model changed, was regenerated with `dart run build_runner build` and committed.
+
+## Token-Saving Rules (owner decision 2026-10-23, all agents and platforms)
+
+These apply to every AI agent on this repo: Claude, Gemini, Codex and any other. They also apply to supervisors and to the subagents they start.
+
+1. **Read context once.** Read `CLAUDE.md` / `AGENTS.md` and the `CONTEXT/*.md` files once at the start of a session. After that, re-read only the sections the current task touches. Don't re-read whole files every turn.
+2. **Read files in parts.** For big files (over ~500 lines), search first (grep for the class or method), then read just the needed line ranges. Don't dump whole screens or generated files (`*.g.dart`).
+3. **Pick the cheapest capable model.**
+   - Use the smaller/faster model (e.g. Sonnet) for screens, restyles, wording, tests and routine features.
+   - Use the top model (e.g. Opus) only for database migrations, sync and money rules that have no existing code to copy.
+   - Briefs name the exact existing code to reuse, so a smaller model can follow it.
+4. **Run the full test suite once per PR, and only the supervisor (or the single agent doing the work) runs it.**
+   - Helpers run only the tests for the files they changed.
+   - Never run two full suites at the same time: they fail randomly under load and waste a rerun.
+5. **Merge finished PRs promptly.**
+   - Merge each finished, checked PR into `main` (with the owner's approval) before the next one starts, so new work is cut from `main`.
+   - Avoid long chains of PRs stacked on each other: every chain costs merge-and-fix rounds.
+6. **Keep helpers few.**
+   - At most 2 at a time.
+   - Small related PRs that touch different files may share one helper, run back to back, so it doesn't re-read the same code twice.
+   - A fresh helper is still used per PR unless the owner approves sharing.
+7. **Short reports.**
+   - Reports, PR bodies and replies are short.
+   - A helper's final report is 15 lines or fewer: PR link, what changed, test numbers, open doubts.
+   - No file-by-file essays.
+8. **Look at the fewest screenshots.** When reviewing goldens, open one phone and one wide image per screen, not every size and theme.
+9. **Write it down instead of re-asking.** When a decision is made, record it in the issue or `CONTEXT/` file, so the next agent reads it rather than re-deriving or re-asking it.
+10. **Stop near the limit.** If a usage limit is close, finish and push the current commit (a WIP commit if needed) before starting anything new, so nothing has to be redone.

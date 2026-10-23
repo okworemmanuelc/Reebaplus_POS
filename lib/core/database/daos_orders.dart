@@ -141,8 +141,8 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     final grossCol = (orderItems.quantity * orderItems.unitPriceKobo).sum();
     final grossRow =
         await (selectOnly(orderItems).join([
-              innerJoin(orders, orders.id.equalsExp(orderItems.orderId)),
-            ])
+                innerJoin(orders, orders.id.equalsExp(orderItems.orderId)),
+              ])
               ..addColumns([grossCol])
               ..where(whereThisStaffsRecognizedSale()))
             .getSingle();
@@ -293,18 +293,19 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
 
     if (search != null && search.isNotEmpty) {
       final term = '%$search%';
-      predicate = predicate & (
-        orders.orderNumber.like(term) |
-        orders.id.like(term) |
-        customers.name.like(term)
-      );
+      predicate =
+          predicate &
+          (orders.orderNumber.like(term) |
+              orders.id.like(term) |
+              customers.name.like(term));
     }
 
     if (cursor != null) {
-      predicate = predicate & (
-        orders.createdAt.isSmallerThanValue(cursor.createdAt) |
-        (orders.createdAt.equals(cursor.createdAt) & orders.id.isSmallerThanValue(cursor.id))
-      );
+      predicate =
+          predicate &
+          (orders.createdAt.isSmallerThanValue(cursor.createdAt) |
+              (orders.createdAt.equals(cursor.createdAt) &
+                  orders.id.isSmallerThanValue(cursor.id)));
     }
 
     query.where(predicate);
@@ -419,11 +420,11 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
 
     if (search != null && search.isNotEmpty) {
       final term = '%$search%';
-      predicate = predicate & (
-        orders.orderNumber.like(term) |
-        orders.id.like(term) |
-        customers.name.like(term)
-      );
+      predicate =
+          predicate &
+          (orders.orderNumber.like(term) |
+              orders.id.like(term) |
+              customers.name.like(term));
     }
 
     query.where(predicate);
@@ -524,11 +525,11 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
 
     if (search != null && search.isNotEmpty) {
       final term = '%$search%';
-      predicate = predicate & (
-        orders.orderNumber.like(term) |
-        orders.id.like(term) |
-        customers.name.like(term)
-      );
+      predicate =
+          predicate &
+          (orders.orderNumber.like(term) |
+              orders.id.like(term) |
+              customers.name.like(term));
     }
 
     query.where(predicate);
@@ -585,7 +586,6 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       );
     });
   }
-
 
   // ── Writes ─────────────────────────────────────────────────────────────────
 
@@ -841,7 +841,8 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           if (product == null) continue;
           final mfrId = product.manufacturerId;
           if (mfrId == null) continue;
-          if (product.unit?.toLowerCase() != 'bottle' || !product.trackEmpties) {
+          if (product.unit?.toLowerCase() != 'bottle' ||
+              !product.trackEmpties) {
             continue;
           }
           cratesByManufacturer.update(
@@ -1013,9 +1014,9 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         // The rows this sale enqueued (cost_batches, crate, wallet) — everything
         // added since the pre-child snapshot, i.e. NOT the envelope (enqueued
         // next). Hold them so the drain skips them until the envelope resolves.
-        final childQueueIds = (await db.syncDao.queueRowIds(requireBusinessId()))
-            .difference(queueBeforeChildren)
-            .toList();
+        final childQueueIds = (await db.syncDao.queueRowIds(
+          requireBusinessId(),
+        )).difference(queueBeforeChildren).toList();
         await db.syncDao.enqueue(
           'domain:pos_record_sale_v2',
           jsonEncode(payload),
@@ -1820,11 +1821,9 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       // need re-deriving once this order leaves the ledger (Batch-Boundary
       // Reconciliation, ADR 0005). Quick-sale lines carry no product and are
       // skipped (they were never batched).
-      final cancelledLines =
-          await (select(orderItems)..where(
-                (i) => i.orderId.equals(orderId) & whereBusiness(i),
-              ))
-              .get();
+      final cancelledLines = await (select(
+        orderItems,
+      )..where((i) => i.orderId.equals(orderId) & whereBusiness(i))).get();
       for (final line in cancelledLines) {
         final productId = line.productId;
         if (productId == null || line.quantity <= 0) continue;
@@ -1869,7 +1868,11 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
                     p.orderId.equals(orderId) &
                     whereBusiness(p) &
                     p.voidedAt.isNull() &
-                    p.type.isIn(const ['sale', 'crate_deposit', 'wallet_topup']),
+                    p.type.isIn(const [
+                      'sale',
+                      'crate_deposit',
+                      'wallet_topup',
+                    ]),
               ))
               .get();
       for (final pay in orderPayments) {
@@ -1984,9 +1987,10 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     required String staffId,
   }) async {
     await db.transaction(() async {
-      final order = await (select(
-        orders,
-      )..where((o) => o.id.equals(orderId) & whereBusiness(o))).getSingleOrNull();
+      final order =
+          await (select(orders)
+                ..where((o) => o.id.equals(orderId) & whereBusiness(o)))
+              .getSingleOrNull();
       // Idempotent: nothing to undo if the order is gone or already reversed.
       if (order == null || order.status == 'cancelled') return;
 
@@ -2161,7 +2165,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           orderItems.productId.equals(productId) &
               // Revenue is recognized at checkout ('pending'), not at the
               // ceremonial Confirm ('completed'). Count any non-reversed sale.
-              orders.status.isIn(const ['pending', 'completed']) &
+              orders.status.isIn(orderRevenueStatuses) &
               whereBusiness(orders),
         );
 
@@ -2198,6 +2202,88 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       monthUnits: monthUnits,
       monthRevenueKobo: monthRevKobo,
     );
+  }
+
+  /// One row per local calendar day (business timezone) from the earlier of
+  /// "6 days ago" and "the 1st of this month" up to today, zeros included, for
+  /// the Sales card on Product Details (#487 PR 5). Only recognized sales
+  /// ([orderRevenueStatuses]) count. Revenue = line totals; profit = line total
+  /// minus the per-line cost snapshot (`buying_price_kobo` x qty). An uncosted
+  /// line (cost 0) adds no profit and flags its day [ProductDaySales.hasUncosted].
+  Future<List<ProductDaySales>> getProductSalesByDay(
+    String productId, {
+    DateTime? now,
+  }) async {
+    final business = await (select(
+      businesses,
+    )..where((b) => whereBusiness(b))).getSingleOrNull();
+    final tzName = business?.timezone ?? 'UTC';
+    tz.Location location;
+    try {
+      location = tz.getLocation(tzName);
+    } on tz.LocationNotFoundException {
+      location = tz.UTC;
+    }
+    final today = now == null
+        ? tz.TZDateTime.now(location)
+        : tz.TZDateTime.from(now, location);
+    final first = [
+      DateTime(today.year, today.month, 1),
+      DateTime(today.year, today.month, today.day - 6),
+    ].reduce((a, b) => a.isBefore(b) ? a : b);
+
+    final days = <DateTime, _DayAcc>{};
+    for (
+      var d = first;
+      !d.isAfter(DateTime(today.year, today.month, today.day));
+      d = DateTime(d.year, d.month, d.day + 1)
+    ) {
+      days[d] = _DayAcc();
+    }
+
+    final rows =
+        await (select(orderItems).join([
+              innerJoin(orders, orders.id.equalsExp(orderItems.orderId)),
+            ])..where(
+              orderItems.productId.equals(productId) &
+                  orders.status.isIn(orderRevenueStatuses) &
+                  whereBusiness(orders) &
+                  // Only the chart's window, not the product's whole history
+                  // (local midnight of the first day, in UTC; the loop below
+                  // still drops anything outside the window).
+                  orders.createdAt.isBiggerOrEqualValue(
+                    tz.TZDateTime(
+                      location,
+                      first.year,
+                      first.month,
+                      first.day,
+                    ).toUtc(),
+                  ),
+            ))
+            .get();
+    for (final row in rows) {
+      final item = row.readTable(orderItems);
+      final at = tz.TZDateTime.from(row.readTable(orders).createdAt, location);
+      final acc = days[DateTime(at.year, at.month, at.day)];
+      if (acc == null) continue; // outside the window
+      acc.units += item.quantity;
+      acc.revenue += item.totalKobo;
+      if (item.buyingPriceKobo > 0) {
+        acc.profit += item.totalKobo - item.buyingPriceKobo * item.quantity;
+      } else {
+        acc.uncosted = true;
+      }
+    }
+    return [
+      for (final e in days.entries)
+        ProductDaySales(
+          date: e.key,
+          units: e.value.units,
+          revenueKobo: e.value.revenue,
+          profitKobo: e.value.profit,
+          hasUncosted: e.value.uncosted,
+        ),
+    ];
   }
 
   // ── Cart staleness ─────────────────────────────────────────────────────────
@@ -2324,6 +2410,27 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   }
 }
 
+class _DayAcc {
+  int units = 0, revenue = 0, profit = 0;
+  bool uncosted = false;
+}
+
+/// One local day of a product's sales (see [OrdersDao.getProductSalesByDay]).
+class ProductDaySales {
+  final DateTime date; // local calendar day, y/m/d only
+  final int units;
+  final int revenueKobo;
+  final int profitKobo;
+  final bool hasUncosted;
+  const ProductDaySales({
+    required this.date,
+    required this.units,
+    required this.revenueKobo,
+    required this.profitKobo,
+    required this.hasUncosted,
+  });
+}
+
 class ProductSalesSummary {
   final int todayUnits;
   final int todayRevenueKobo;
@@ -2374,12 +2481,12 @@ class OrdersStats {
   });
 
   factory OrdersStats.empty() => const OrdersStats(
-        count: 0,
-        totalAmountKobo: 0,
-        amountPaidKobo: 0,
-        crateDepositPaidKobo: 0,
-        refundsIssuedKobo: 0,
-      );
+    count: 0,
+    totalAmountKobo: 0,
+    amountPaidKobo: 0,
+    crateDepositPaidKobo: 0,
+    refundsIssuedKobo: 0,
+  );
 }
 
 class OrderWithItems {
@@ -2506,8 +2613,7 @@ class OrderCrateLinesDao extends DatabaseAccessor<AppDatabase>
   }) async {
     final lineOrderIds =
         await (select(orderCrateLines)..where(
-              (t) =>
-                  whereBusiness(t) & t.manufacturerId.equals(manufacturerId),
+              (t) => whereBusiness(t) & t.manufacturerId.equals(manufacturerId),
             ))
             .map((r) => r.orderId)
             .get();
@@ -2531,14 +2637,15 @@ class OrderCrateLinesDao extends DatabaseAccessor<AppDatabase>
   /// made while the brand had no crate value (#298).
   Future<int> countUnratedLines(String manufacturerId) async {
     final countCol = orderCrateLines.id.count();
-    final row = await (selectOnly(orderCrateLines)
-          ..addColumns([countCol])
-          ..where(
-            whereBusiness(orderCrateLines) &
-                orderCrateLines.manufacturerId.equals(manufacturerId) &
-                orderCrateLines.depositRateKobo.equals(0),
-          ))
-        .getSingle();
+    final row =
+        await (selectOnly(orderCrateLines)
+              ..addColumns([countCol])
+              ..where(
+                whereBusiness(orderCrateLines) &
+                    orderCrateLines.manufacturerId.equals(manufacturerId) &
+                    orderCrateLines.depositRateKobo.equals(0),
+              ))
+            .getSingle();
     return row.read(countCol) ?? 0;
   }
 
@@ -2556,29 +2663,32 @@ class OrderCrateLinesDao extends DatabaseAccessor<AppDatabase>
   Future<int> fillUnratedLines(String manufacturerId, int rateKobo) async {
     if (rateKobo <= 0) return 0;
     return transaction(() async {
-      final ids = await (select(orderCrateLines)
-            ..where(
-              (t) =>
-                  whereBusiness(t) &
-                  t.manufacturerId.equals(manufacturerId) &
-                  t.depositRateKobo.equals(0),
-            ))
-          .map((r) => r.id)
-          .get();
+      final ids =
+          await (select(orderCrateLines)..where(
+                (t) =>
+                    whereBusiness(t) &
+                    t.manufacturerId.equals(manufacturerId) &
+                    t.depositRateKobo.equals(0),
+              ))
+              .map((r) => r.id)
+              .get();
       if (ids.isEmpty) return 0;
-      await (update(orderCrateLines)
-            ..where((t) => whereBusiness(t) & t.id.isIn(ids)))
-          .write(
+      await (update(
+        orderCrateLines,
+      )..where((t) => whereBusiness(t) & t.id.isIn(ids))).write(
         OrderCrateLinesCompanion(
           depositRateKobo: Value(rateKobo),
           lastUpdatedAt: Value(DateTime.now()),
         ),
       );
-      final stamped = await (select(orderCrateLines)
-            ..where((t) => whereBusiness(t) & t.id.isIn(ids)))
-          .get();
+      final stamped = await (select(
+        orderCrateLines,
+      )..where((t) => whereBusiness(t) & t.id.isIn(ids))).get();
       for (final row in stamped) {
-        await db.syncDao.enqueueUpsert('order_crate_lines', row.toCompanion(true));
+        await db.syncDao.enqueueUpsert(
+          'order_crate_lines',
+          row.toCompanion(true),
+        );
       }
       return stamped.length;
     });

@@ -17,6 +17,7 @@ import 'package:reebaplus_pos/features/stores/screens/request_stock_screen.dart'
 import 'package:reebaplus_pos/features/stores/widgets/store_transfer_hub.dart';
 import 'package:reebaplus_pos/features/stores/widgets/stores_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
+import 'package:reebaplus_pos/core/utils/product_unit.dart';
 
 class StoreDetailsScreen extends ConsumerStatefulWidget {
   final StoreData store;
@@ -320,6 +321,7 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
   // ── Inventory List ──────────────────────────────────────────────────────────
   Widget _buildInventoryList() {
     final t = Theme.of(context);
+    final crates = businessTracksCrates(ref.watch(currentBusinessProvider));
     final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     final stocked = _inventory.where((p) => p.totalStock > 0).toList()
       ..sort((a, b) => b.totalStock.compareTo(a.totalStock));
@@ -392,7 +394,7 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
                                   ),
                                   if ((item.product.unit ?? '').isNotEmpty)
                                     Text(
-                                      item.product.unit!,
+                                      unitLabel(item.product.unit, crates: crates)!,
                                       style: context
                                           .regularStyle(12)
                                           .copyWith(color: muted),

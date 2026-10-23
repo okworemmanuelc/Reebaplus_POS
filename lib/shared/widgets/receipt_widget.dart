@@ -55,6 +55,12 @@ class ReceiptWidget extends StatelessWidget {
   /// back to name-only display so offline / no-logo receipts work identically.
   final String? logoPath;
 
+  /// Whether the business counts empty crates —
+  /// `businessTracksCrates(currentBusiness)`. Only then does a `Bottle` line
+  /// read "Bottle Crate <name>" (#487); every other shop prints "Bottle".
+  /// Required so no receipt forgets which kind of shop it is for.
+  final bool tracksCrates;
+
   const ReceiptWidget({
     super.key,
     required this.orderId,
@@ -80,6 +86,7 @@ class ReceiptWidget extends StatelessWidget {
     this.storeAddress,
     this.businessName,
     this.logoPath,
+    required this.tracksCrates,
   });
 
   @override
@@ -305,7 +312,7 @@ class ReceiptWidget extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      '${productDisplayName(item['name'] as String, item['size'] as String?, unit: item['unit'] as String?)}  ×${qty.toStringAsFixed(1)}',
+                      '${productDisplayName(item['name'] as String, item['size'] as String?, unit: item['unit'] as String?, crates: tracksCrates)}  ×${qty.toStringAsFixed(1)}',
                       style: TextStyle(
                         fontSize: context.getRFontSize(13),
                         color: textCol,
