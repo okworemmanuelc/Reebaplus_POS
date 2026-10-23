@@ -107,7 +107,7 @@ void main() {
     // Name, "size · unit" (the crate size and unit, as before), "Current: N"
     // — no price.
     expect(find.text('Star Lager'), findsOneWidget);
-    expect(find.text('big · Bottle Crate'), findsWidgets);
+    expect(find.text('big · Bottle'), findsWidgets);
     expect(find.text('Can'), findsOneWidget);
     expect(find.text('Current: 48'), findsOneWidget);
     expect(find.textContaining('₦'), findsNothing);

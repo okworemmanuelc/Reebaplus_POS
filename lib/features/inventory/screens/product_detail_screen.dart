@@ -821,6 +821,11 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     );
   }
 
+  /// Whether a stored `Bottle` reads "Bottle Crate" (#487): only in a shop
+  /// that counts empty crates. Watched, for the build-time unit labels.
+  bool get _unitCrates =>
+      businessTracksCrates(ref.watch(currentBusinessProvider));
+
   Widget _stockInfoCard(BuildContext context) {
     return DetailCard(
       children: [
@@ -831,7 +836,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
           AppIcons.crates,
           'Total Quantity',
           '${_liveStock.toStringAsFixed(_liveStock % 1 == 0 ? 0 : 1)}'
-              '${_selectedUnit != null ? ' ${unitLabel(_selectedUnit)!}' : ''}',
+              '${_selectedUnit != null ? ' ${unitLabel(_selectedUnit, crates: _unitCrates)!}' : ''}',
           IconTileTone.info,
         ),
         _divider(context),
@@ -983,14 +988,15 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                   child: Text('No unit'),
                 ),
                 // Plain "Crate" only while it is this product's unit
-                // (#487); a stored Bottle reads "Bottle Crate".
+                // (#487); a stored Bottle reads "Bottle Crate" in a shop
+                // that counts empty crates.
                 ...unitChoices(
                   _allUnits,
                   keep: [_selectedUnit, _productData?.unit ?? widget.item.unit],
                 ).map(
                   (u) => DropdownMenuItem<String?>(
                     value: u,
-                    child: Text(unitLabel(u)!),
+                    child: Text(unitLabel(u, crates: _unitCrates)!),
                   ),
                 ),
               ],
@@ -1599,12 +1605,18 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               final auth = ref.read(authProvider);
               final actorName = auth.currentUser?.name ?? 'Unknown';
               final delta = isRemove ? -qty : qty;
+              final unitWord = unitLabel(
+                product.unit,
+                crates: businessTracksCrates(
+                  ref.read(currentBusinessProvider),
+                ),
+              );
               final note = isRemove
                   ? '${reason!}${notes.isEmpty ? '' : ': $notes'}'
                   : (notes.isEmpty ? 'Stock added by $actorName' : notes);
               final summary =
                   '$actorName ${isRemove ? 'removed' : 'added'} $qty '
-                  '${product.unit != null ? '${unitLabel(product.unit)}(s) ' : ''}of ${product.name} '
+                  '${unitWord != null ? '$unitWord(s) ' : ''}of ${product.name} '
                   '(${store.name})'
                   '${isRemove ? ' — ${reason!}' : ''}';
               final isStockKeeper =

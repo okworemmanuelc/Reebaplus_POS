@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
@@ -147,7 +148,7 @@ class _ReceiveCartLineCard extends ConsumerWidget {
         'Whls: ${formatCurrency(line.wholesaleKobo / 100)}';
     // A unitless product (#108) shows no unit label — just its prices.
     final detail = (line.unit ?? '').isNotEmpty
-        ? '${unitLabel(line.unit)} · $prices'
+        ? '${unitLabel(line.unit, crates: businessTracksCrates(ref.watch(currentBusinessProvider)))} · $prices'
         : prices;
     final radius = BorderRadius.circular(AppSpacing.borderRadiusXL);
     return Dismissible(

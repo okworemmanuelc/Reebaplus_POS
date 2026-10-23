@@ -5,7 +5,7 @@
 // brand and category, so the profit rows and Track Empty Crates show) at
 // 390x844 (phone, gesture nav, bottom 24), 844x390 (status bar 24, 3-button
 // nav on the right 48: two columns), 800x1280 (two columns) and 1280x800 (two
-// columns + Preview). The Update Product sheet at 390x844 and 844x390. Light +
+// columns + Preview), plus a filled 1024x700 (Preview in a short window). The Update Product sheet at 390x844 and 844x390. Light +
 // dark. No relative dates or times anywhere. Regenerate with:
 //
 //     flutter test --update-goldens test/redesign/add_product_golden_test.dart
@@ -174,7 +174,11 @@ void main() {
       });
     }
 
-    for (final (sizeName, size, insets) in all) {
+    for (final (sizeName, size, insets) in [
+      ...all,
+      // A shorter wide window: the preview scrolls above the pinned buttons.
+      ('1024x700', const Size(1024, 700), const FakeViewPadding(top: 24)),
+    ]) {
       testWidgets('add product filled in, $sizeName $theme', (tester) async {
         await pump(
           tester,

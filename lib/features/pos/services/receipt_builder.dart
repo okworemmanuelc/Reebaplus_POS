@@ -46,6 +46,10 @@ class ThermalReceiptService {
     /// Physical paper width. Defaults to 58mm so existing callers and the
     /// existing 58mm output are unchanged.
     ReceiptPaperSize paperSize = ReceiptPaperSize.mm58,
+    /// Whether the business counts empty crates —
+    /// `businessTracksCrates(currentBusiness)`. Only then does a `Bottle` line
+    /// print "Bottle Crate <name>" (#487); every other shop prints "Bottle".
+    required bool tracksCrates,
   }) async {
     final profile = await CapabilityProfile.load();
     final generator = Generator(paperSize.escPos, profile);
@@ -180,6 +184,7 @@ class ThermalReceiptService {
         item['name'].toString(),
         item['size'] as String?,
         unit: item['unit'] as String?,
+        crates: tracksCrates,
       );
       final double qty = (item['qty'] as num).toDouble();
       final double price = (item['price'] as num).toDouble();

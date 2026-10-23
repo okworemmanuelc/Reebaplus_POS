@@ -10,17 +10,13 @@ library;
 import 'package:reebaplus_pos/core/utils/product_unit.dart';
 import 'package:reebaplus_pos/features/inventory/models/fast_add_product_model.dart';
 
-bool _isBottle(String? unit) => unit?.trim().toLowerCase() == 'bottle';
-
 /// The on-screen label for [unit] in the form (chips, preview).
 String? formUnitLabel(String? unit, {required bool crates}) =>
-    (!crates && _isBottle(unit)) ? unit : unitLabel(unit);
+    unitLabel(unit, crates: crates);
 
 /// The count word after a number ("20 crates", "1 bottle", "3 units").
-String formCountNoun(String? unit, num count, {required bool crates}) {
-  if (!crates && _isBottle(unit)) return count == 1 ? 'bottle' : 'bottles';
-  return unitCountNoun(unit, count);
-}
+String formCountNoun(String? unit, num count, {required bool crates}) =>
+    unitCountNoun(unit, count, crates: crates);
 
 /// The label of the "how many in one" box for [unit], or null when the unit
 /// has no such box ([unitTakesPackCount]).

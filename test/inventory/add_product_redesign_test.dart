@@ -15,6 +15,7 @@ import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart
 import 'package:reebaplus_pos/features/inventory/screens/inventory_screen.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/inventory_parts.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/product_form_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/update_product_sheet.dart';
 
 import '../helpers/inventory_seed.dart';
@@ -407,6 +408,50 @@ void main() {
       expect(low.left, greaterThan(quantity.right));
       await disposeScreen(tester);
     });
+  });
+
+  group('the Preview panel scrolls above its pinned buttons', () {
+    for (final size in const [Size(1280, 800), Size(1024, 700)]) {
+      testWidgets('${size.width.toInt()}x${size.height.toInt()}', (
+        tester,
+      ) async {
+        await pump(tester, size: size, insets: const FakeViewPadding(top: 24));
+        Future<void> type(Key key, String text) async {
+          await tester.enterText(
+            find.descendant(
+              of: find.byKey(key),
+              matching: find.byType(TextFormField),
+            ),
+            text,
+          );
+          await tester.pumpAndSettle();
+        }
+
+        await type(AddProductKeys.cost, '13500');
+        await type(AddProductKeys.retail, '15000');
+        final preview = find.byKey(AddProductKeys.preview);
+        final profit = find.descendant(
+          of: preview,
+          matching: find.byType(ProductProfitBox),
+        );
+        expect(profit, findsOneWidget);
+        // Scrolled to its end, the last profit row sits above the buttons.
+        await tester.ensureVisible(
+          find.descendant(of: profit, matching: find.byType(IconTile)).last,
+        );
+        await tester.pumpAndSettle();
+        final save = tester.getRect(
+          find.descendant(
+            of: preview,
+            matching: find.byKey(AddProductKeys.save),
+          ),
+        );
+        expect(tester.getRect(profit).bottom, lessThanOrEqualTo(save.top));
+        expect(save.bottom, lessThanOrEqualTo(size.height));
+        expect(tester.takeException(), isNull);
+        await disposeScreen(tester);
+      });
+    }
   });
 
   group('keyboard up: the boxes stay reachable', () {

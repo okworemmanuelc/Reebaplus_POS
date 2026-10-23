@@ -870,7 +870,8 @@ class ProductPreviewCard extends StatelessWidget {
 
 /// The wide layout's fixed side panel (#487): Surface with a hairline on its
 /// leading edge; "Preview" and its subtitle, the [preview] card and the
-/// optional [profit] rows scroll; [actions] stay pinned at the bottom.
+/// optional [profit] rows scroll in the space above [actions], which stay
+/// pinned at the bottom in their own band.
 class ProductPreviewPanel extends StatelessWidget {
   const ProductPreviewPanel({
     super.key,
@@ -926,10 +927,16 @@ class ProductPreviewPanel extends StatelessWidget {
               ),
             ),
           ),
-          Padding(
+          // The buttons sit in their own band under a hairline: the preview
+          // scrolls in the space above it and never runs underneath.
+          Container(
+            decoration: BoxDecoration(
+              color: t.colorScheme.surface,
+              border: Border(top: BorderSide(color: t.dividerColor)),
+            ),
             padding: EdgeInsets.fromLTRB(
               pad,
-              context.getRSize(8),
+              context.getRSize(16),
               pad,
               context.getRSize(16) + context.deviceBottomPadding,
             ),
