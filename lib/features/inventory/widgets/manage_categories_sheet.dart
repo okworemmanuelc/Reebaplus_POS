@@ -148,7 +148,10 @@ class _CategoryRow extends ConsumerWidget {
                               maxLines: 1, overflow: TextOverflow.ellipsis)),
                       ],
                       onChanged: (slug) async {
-                        if (!Gates.addProduct.allowsNow(ref)) return;
+                        if (!Gates.addProduct.allowsNow(ref)) {
+                          showGateDenied(context, Gates.addProduct);
+                          return;
+                        }
                         try {
                           await ref.read(databaseProvider).catalogDao
                               .mapCategory(category.id, slug == 'other' ? null : slug);

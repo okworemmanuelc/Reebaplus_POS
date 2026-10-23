@@ -36,5 +36,10 @@ categories. Tenant write tests verify foreign-business IDs cannot be mapped.
 
 Web parity follow-up:
 [reebaplus-web#138](https://github.com/okworemmanuelc/reebaplus-web/issues/138).
-The public cloud parity integration test remains pending until0190 is applied
-to the isolated development backend.
+Migration0190 was applied exclusively to reebaplus-dev on2026-10-24. Public
+cloud parity passed (1 test, 0 skips), matching all46 rows and metadata.
+The rollback-only SQL test at test/integration/sql/marketplace_categories_permissions.sql
+confirmed six write denials (anon/authenticated × insert/update/delete), valid
+mapping acceptance, unknown-slug FK rejection and explicit null clearing.
+Anon/authenticated have SELECT; service_role has write grants. Fixtures rolled
+back. The parity test uses explicit ascending ordering for stable pagination.
