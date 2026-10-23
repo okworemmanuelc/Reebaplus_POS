@@ -7,6 +7,15 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### #492 G1: Sign-up and Business Info offer every shop type plus "Other" (2026-10-23)
+Branch `feat/492-g1-shop-types`, worktree `../drinkPosApp-wt-492-g1`.
+- **Registry:** All nine industries in `Industry.catalogue` have `selectable = true`; `selectableCatalogue` exposes all nine.
+- **CEO sign-up:** Shows all nine industry cards plus "Other" (10th card). When "Other" is selected, an input field asks to specify the business type. Continue button is enabled only after typing a non-empty name. Saves typed type directly in `businesses.type`.
+- **Settings → Business Info:** Dropdown lists all nine catalogue types plus "Other". Custom types load as "Other" with text pre-filled. When "Other" is selected, shows `AppInput` to specify business type. Validates on save.
+- **Crate safety:** Crate switch and crate features are strictly gated via `isCrateBusiness(effectiveType)`. Non-drink shops and custom "Other" types normalize safely to `Industry.generic` without crate UI.
+- **Docs & ADR:** Added 2026-10-23 amendment to ADR 0015 and updated `CONTEXT/project-overview.md`.
+- **Tests & Goldens:** `test/industry/industry_registry_test.dart` (18 tests), `test/auth/ceo_sign_up_shop_types_test.dart` (4 tests), `test/settings/business_info_shop_types_test.dart` (4 tests), `test/redesign/ceo_sign_up_golden_test.dart` (107 tests with updated goldens).
+
 ### #487 PR 6 / #465: scan a barcode on Add Product (2026-10-23)
 Branch `feat/465-scan-add-product`, worktree `../drinkPosApp-wt-487-6`. Scan button beside the barcode box (`barcodeScannerProvider`, camera closes after the first read; POS unchanged). `_onBarcodeChanged` now: own products first (`findProductsByBarcode`), then, factory codes only, the shared list via `lookupOutcome` (offline -> note, never blocks save). Own match offers Open it (Product Details; restock mode is gone) / Create a new product anyway. Edit mode: scan only fills the box. Tests in `add_product_catalogue_prefill_test.dart` (+1 in `add_product_form_test.dart`); Add Product goldens regenerated.
 
