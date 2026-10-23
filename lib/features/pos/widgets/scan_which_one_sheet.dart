@@ -9,6 +9,7 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/pos/widgets/sales_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/icon_tile.dart';
 import 'package:reebaplus_pos/features/pos/services/barcode_scan_resolver.dart';
+import 'package:reebaplus_pos/core/utils/product_unit.dart';
 
 /// Key prefix for a "Which one?" row; the product id follows (tests find a row
 /// by it).
@@ -96,7 +97,8 @@ class _ScanChoiceRow extends StatelessWidget {
     final muted = t.textTheme.bodySmall?.color ?? text;
     final product = choice.product;
     // Same size + unit descriptor the POS grid tile shows under the name.
-    final size = '${product.size ?? ''} ${product.unit ?? ''}'.trim();
+    final size = '${product.size ?? ''} ${unitLabel(product.unit) ?? ''}'
+        .trim();
     final reason = _reasonOf(choice.outcome);
     final radius = BorderRadius.circular(AppSpacing.borderRadiusL);
 

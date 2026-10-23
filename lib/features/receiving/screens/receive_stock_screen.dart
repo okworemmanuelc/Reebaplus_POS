@@ -115,7 +115,11 @@ class _ReceiveStockScreenState extends ConsumerState<ReceiveStockScreen> {
   }
 
   List<ProductDataWithStock> get _filteredProducts {
-    var items = _allProducts.where((item) => !item.product.isDeleted).toList();
+    // Archived products (`isAvailable == false`, #487) are not restocked from
+    // here; Inventory's Archived filter still lists them.
+    var items = _allProducts
+        .where((item) => !item.product.isDeleted && item.product.isAvailable)
+        .toList();
 
     if (_selectedCategoryId != null) {
       items = items

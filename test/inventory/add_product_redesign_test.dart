@@ -203,7 +203,7 @@ void main() {
         tester.getSize(tile.first).height,
         greaterThanOrEqualTo(kMinInteractiveDimension),
       );
-      await tester.tap(find.text('Bottle Gulder'));
+      await tester.tap(find.text('Bottle Crate Gulder'));
       await tester.pumpAndSettle();
       FocusManager.instance.primaryFocus?.unfocus();
       await tester.pumpAndSettle();

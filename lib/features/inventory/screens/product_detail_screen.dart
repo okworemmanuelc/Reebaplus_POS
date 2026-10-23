@@ -32,6 +32,7 @@ import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
+import 'package:reebaplus_pos/core/utils/product_unit.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ProductDetailScreen — full-screen product information view
@@ -830,7 +831,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
           AppIcons.crates,
           'Total Quantity',
           '${_liveStock.toStringAsFixed(_liveStock % 1 == 0 ? 0 : 1)}'
-              '${_selectedUnit != null ? ' ${_selectedUnit!}' : ''}',
+              '${_selectedUnit != null ? ' ${unitLabel(_selectedUnit)!}' : ''}',
           IconTileTone.info,
         ),
         _divider(context),
@@ -981,8 +982,16 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                   value: null,
                   child: Text('No unit'),
                 ),
-                ..._allUnits.map(
-                  (u) => DropdownMenuItem<String?>(value: u, child: Text(u)),
+                // Plain "Crate" only while it is this product's unit
+                // (#487); a stored Bottle reads "Bottle Crate".
+                ...unitChoices(
+                  _allUnits,
+                  keep: [_selectedUnit, _productData?.unit ?? widget.item.unit],
+                ).map(
+                  (u) => DropdownMenuItem<String?>(
+                    value: u,
+                    child: Text(unitLabel(u)!),
+                  ),
                 ),
               ],
               onChanged: _editMode
@@ -1595,7 +1604,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                   : (notes.isEmpty ? 'Stock added by $actorName' : notes);
               final summary =
                   '$actorName ${isRemove ? 'removed' : 'added'} $qty '
-                  '${product.unit != null ? '${product.unit}(s) ' : ''}of ${product.name} '
+                  '${product.unit != null ? '${unitLabel(product.unit)}(s) ' : ''}of ${product.name} '
                   '(${store.name})'
                   '${isRemove ? ' — ${reason!}' : ''}';
               final isStockKeeper =

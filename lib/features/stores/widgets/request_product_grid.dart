@@ -4,6 +4,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/fly_to_cart.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/product_tile.dart';
+import 'package:reebaplus_pos/core/utils/product_unit.dart';
 
 /// The key on Request Stock's tile for [productId] (#380).
 ValueKey<String> requestProductTileKey(String productId) =>
@@ -119,7 +120,7 @@ class _RequestProductTileState extends State<_RequestProductTile> {
     // "60cl · Bottle": the product's own subtitle, then its unit.
     final subtitle = [
       product.subtitle,
-      product.unit,
+      unitLabel(product.unit),
     ].where((s) => s != null && s.trim().isNotEmpty).join(' · ');
     return ProductTile(
       name: product.name,

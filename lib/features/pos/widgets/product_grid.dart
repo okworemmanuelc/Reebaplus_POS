@@ -21,6 +21,7 @@ import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/category_visual.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/fly_to_cart.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/product_tile.dart';
+import 'package:reebaplus_pos/core/utils/product_unit.dart';
 
 /// Key prefix on every product tile, so a test can find the *complete* tiles
 /// the cashier can actually reach (issue #259 / PRD #239). The two-assertion
@@ -65,7 +66,7 @@ double posTileExtent(BuildContext context) {
 /// tile showed size + unit before; the description leads now, as on Request
 /// Stock's tiles (#380), and the size word stays so nothing is lost.
 String? posTileSubtitle(ProductData product) {
-  final parts = [product.subtitle, product.size, product.unit]
+  final parts = [product.subtitle, product.size, unitLabel(product.unit)]
       .where((s) => s != null && s.trim().isNotEmpty && s != 'null')
       .map((s) => s!.trim())
       .toList();

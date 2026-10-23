@@ -26,6 +26,7 @@ import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/inventory_parts.dart';
 import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
+import 'package:reebaplus_pos/core/utils/product_unit.dart';
 
 class UpdateProductSheet extends ConsumerStatefulWidget {
   final ProductData product;
@@ -994,9 +995,16 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                         value: null,
                         child: Text('No unit'),
                       ),
-                      ..._dynamicUnits.map(
-                        (u) =>
-                            DropdownMenuItem<String?>(value: u, child: Text(u)),
+                      // Plain "Crate" only while it is this product's
+                      // unit (#487); a stored Bottle reads "Bottle Crate".
+                      ...unitChoices(
+                        _dynamicUnits,
+                        keep: [_unit, widget.product.unit],
+                      ).map(
+                        (u) => DropdownMenuItem<String?>(
+                          value: u,
+                          child: Text(unitLabel(u)!),
+                        ),
                       ),
                     ],
                     onChanged: (v) {

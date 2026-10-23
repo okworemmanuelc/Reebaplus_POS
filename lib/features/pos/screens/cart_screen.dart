@@ -42,6 +42,7 @@ import 'package:reebaplus_pos/shared/services/cart_service.dart';
 import 'package:reebaplus_pos/shared/services/cart_crate_sync.dart';
 import 'package:reebaplus_pos/shared/services/ui_hint_service.dart';
 import 'package:flutter/services.dart';
+import 'package:reebaplus_pos/core/utils/product_unit.dart';
 
 /// Key prefix on every cart line, so a viewport test can assert a *complete*
 /// line is laid out and hit-testable (PRD #239's second assertion — a list
@@ -1138,7 +1139,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
       // Request Stock tiles). The unit moved here from the front of the name.
       final detail = [
         item['subtitle'] as String?,
-        item['unit'] as String?,
+        unitLabel(item['unit'] as String?),
       ].where((s) => s != null && s.trim().isNotEmpty).join(' · ');
       final card = CartLine(
         key: cartLineKey(

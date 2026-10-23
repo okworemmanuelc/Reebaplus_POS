@@ -18,6 +18,7 @@ import 'package:reebaplus_pos/shared/widgets/redesign/cart_line.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/category_visual.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/icon_tile.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/tag_pill.dart';
+import 'package:reebaplus_pos/core/utils/product_unit.dart';
 
 /// The receiving cart (#394): the lines on this receipt, each a shared
 /// [CartLine] without a stepper (tap opens the Edit sheet, swipe left
@@ -146,7 +147,7 @@ class _ReceiveCartLineCard extends ConsumerWidget {
         'Whls: ${formatCurrency(line.wholesaleKobo / 100)}';
     // A unitless product (#108) shows no unit label — just its prices.
     final detail = (line.unit ?? '').isNotEmpty
-        ? '${line.unit} · $prices'
+        ? '${unitLabel(line.unit)} · $prices'
         : prices;
     final radius = BorderRadius.circular(AppSpacing.borderRadiusXL);
     return Dismissible(

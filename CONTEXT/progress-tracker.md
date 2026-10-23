@@ -7,6 +7,14 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### #487 PR 1: product data groundwork (2026-10-23)
+Branch `feat/487-product-data`, worktree `../drinkPosApp-wt-487-1`. No screen redesign.
+- **Bottle Crate label**: `lib/core/utils/product_unit.dart` — `unitLabel` (stored `Bottle` → "Bottle Crate"), `unitCountNoun` ("crates", "packs", "units"), `unitChoices` / `isUnitHiddenForNewProducts` (plain Crate hidden for new products, kept while it is a product's own unit). Used by `productDisplayName`, the three unit dropdowns (Add Product, Update Product sheet, Product Details), inventory rows, POS tile, cart detail, scan sheets, receive grid/cart, request-stock grid, store details, catalogue report sheet. Saved values, `== 'bottle'` checks, `kProductUnits`, the CHECK and Lexicon untouched. A catalogue suggestion of "Crate" is no longer filled in.
+- **`products.units_per_pack`** (nullable int, CHECK > 0, display only): Drift **v84** (plain guarded ADD COLUMN; the v24 and v62 products `TableMigration` rebuilds pin it to NULL), cloud **0187** (NOT pushed — supervisor deploys before any build that writes it). `updateProductDetails(unitsPerPack:)` is sentinel-defaulted so an edit never wipes it. Known gap: `pos_create_product_v2` (flag OFF) has no parameter for it.
+- **Archive**: `CatalogDao.setProductArchived(id, archived)` writes `isAvailable = !archived` + `lastUpdatedAt`, full-row enqueue. Inventory hides archived products from the Products list and figure cards; an **Archived** figure card (`neutral`, `AppIcons.archive`) appears only while something is archived and lists just those. Receive Stock's grid hides them. Stock count, reports and history keep them. The Archive button lands in PR 3.
+- Mockups copied to `docs/redesign/mockups/`. 44 goldens regenerated (Bottle → Bottle Crate text only).
+- Tests: `test/utils/product_unit_test.dart`, `test/inventory/product_archive_test.dart`, `test/inventory/inventory_archived_filter_test.dart`, `test/sync/product_units_per_pack_sync_test.dart`, v83→v84 group in `migration_upgrade_test.dart`, Crate-hiding cases in `add_product_catalogue_prefill_test.dart`, archived case in `receive_stock_redesign_test.dart`.
+
 ### Fast-Add: a shared-list photo opens "More details" (2026-10-23)
 Branch `feat/fast-add-open-details-on-catalogue-photo`, worktree `../drinkPosApp-wt-moredetails`. Owner approved the #332 follow-up.
 - `_applyCatalogueSuggestion` (add_product_screen.dart) sets `_showMoreDetails = true` when it fills the photo, because the photo box lives in the collapsed "More details" section and would otherwise be saved unseen. Name/unit-only fills leave it closed. Tests: `test/inventory/add_product_catalogue_prefill_test.dart` (+2).

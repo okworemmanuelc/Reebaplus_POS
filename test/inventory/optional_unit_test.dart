@@ -24,10 +24,10 @@ void main() {
       expect(productDisplayName('Goldberg', null, unit: ''), 'Goldberg');
     });
 
-    test('a present unit is still prepended', () {
+    test('a present unit is still prepended (Bottle as its label, #487)', () {
       expect(
         productDisplayName('Goldberg', null, unit: 'Bottle'),
-        'Bottle Goldberg',
+        'Bottle Crate Goldberg',
       );
     });
   });

@@ -16,6 +16,7 @@ import 'package:reebaplus_pos/features/inventory/widgets/inventory_parts.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/supplier_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
+import 'package:reebaplus_pos/core/utils/product_unit.dart';
 
 /// The sheet behind "Report a problem with the shared details" (ADR 0029 §6,
 /// #335). It loads what the shared list shows for [barcode] right now (not
@@ -271,7 +272,7 @@ class _SharedValues extends StatelessWidget {
               children: [
                 _ValueRow(label: 'Name', value: shown.name),
                 SizedBox(height: context.getRSize(6)),
-                _ValueRow(label: 'Unit', value: shown.unit),
+                _ValueRow(label: 'Unit', value: unitLabel(shown.unit)),
                 if (photoUrl == null) ...[
                   SizedBox(height: context.getRSize(6)),
                   const _ValueRow(label: 'Photo', value: null),

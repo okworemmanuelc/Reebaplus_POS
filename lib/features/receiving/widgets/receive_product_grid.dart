@@ -12,6 +12,7 @@ import 'package:reebaplus_pos/features/receiving/widgets/new_product_card.dart';
 import 'package:reebaplus_pos/features/receiving/widgets/receive_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/fly_to_cart.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/product_tile.dart';
+import 'package:reebaplus_pos/core/utils/product_unit.dart';
 
 /// The key on Receive Stock's tile for [productId] (#394).
 ValueKey<String> receiveProductTileKey(String productId) =>
@@ -49,7 +50,7 @@ double receiveTileExtent(BuildContext context) {
 String? receiveTileSubtitle(ProductData product) {
   final parts = [
     product.size,
-    product.unit,
+    unitLabel(product.unit),
   ].where((s) => s != null && s.trim().isNotEmpty).map((s) => s!.trim());
   return parts.isEmpty ? null : parts.join(' · ');
 }

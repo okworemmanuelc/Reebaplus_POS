@@ -11,6 +11,7 @@ import 'package:reebaplus_pos/features/pos/widgets/sales_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/icon_tile.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
+import 'package:reebaplus_pos/core/utils/product_unit.dart';
 
 /// Key prefix for a link-search result row; the product id follows (tests find
 /// a row by it).
@@ -222,7 +223,8 @@ class _ScanLinkRow extends StatelessWidget {
     final text = t.colorScheme.onSurface;
     final muted = t.textTheme.bodySmall?.color ?? text;
     // Same size + unit descriptor the POS grid tile shows under the name.
-    final size = '${product.size ?? ''} ${product.unit ?? ''}'.trim();
+    final size = '${product.size ?? ''} ${unitLabel(product.unit) ?? ''}'
+        .trim();
     final barcode = product.barcode?.trim() ?? '';
     final radius = BorderRadius.circular(AppSpacing.borderRadiusL);
 

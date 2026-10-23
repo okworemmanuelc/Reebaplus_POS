@@ -114,7 +114,7 @@ void main() {
       expect(find.text('12 × ₦7,500'), findsOneWidget);
       expect(find.text('Cost: ₦7,500'), findsNWidgets(2));
       expect(
-        find.text('Bottle · Ret: ₦9,600 • Whls: ₦9,000'),
+        find.text('Bottle Crate · Ret: ₦9,600 • Whls: ₦9,000'),
         findsNWidgets(2),
       );
       expect(find.text('Invoice Total:'), findsOneWidget);
