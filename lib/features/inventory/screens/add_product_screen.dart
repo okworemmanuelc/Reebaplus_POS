@@ -107,12 +107,18 @@ class AddProductScreen extends ConsumerStatefulWidget {
   /// POS is selling from rather than the first store. Ignored when the id is
   /// not among the active stores (falls back to the first store).
   final String? initialStoreId;
+
+  /// Edit mode (#487 PR 4): the product to change. The form opens filled in
+  /// from it, hides Store and Opening Quantity (stock changes go through
+  /// Adjust Stock) and saves through the same calls the old Edit pop-up used.
+  final ProductData? editProduct;
   const AddProductScreen({
     super.key,
     this.onProductAdded,
     this.receiveMode = false,
     this.prefilledBarcode,
     this.initialStoreId,
+    this.editProduct,
   });
 
   @override
@@ -182,6 +188,15 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   /// so [_loadData] re-adds it when it rebuilds [_dynamicUnits].
   String? _catalogueUnit;
 
+  /// Edit mode: the saved photo's local file, shown until a new one is picked.
+  String? _existingImagePath;
+
+  /// Edit mode: the category / brand / supplier are seeded once, on the first
+  /// load, from the product's ids.
+  bool _editSeeded = false;
+
+  bool get _isEdit => widget.editProduct != null;
+
   /// Debounces catalogue lookups while the barcode box is being typed in.
   Timer? _catalogueDebounce;
   static const _catalogueDebounceDelay = Duration(milliseconds: 500);
@@ -216,11 +231,34 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     }
     // #118: seed the Barcode field from a POS scan of an unknown code so the
     // cashier catalogues the just-scanned product without retyping it.
-    final prefillBarcode = widget.prefilledBarcode?.trim() ?? '';
+    final prefillBarcode = _isEdit
+        ? ''
+        : (widget.prefilledBarcode?.trim() ?? '');
     if (prefillBarcode.isNotEmpty) _barcodeCtrl.text = prefillBarcode;
+    if (_isEdit) _seedFromProduct(widget.editProduct!);
     _loadData();
     // #332: a POS scan of an unknown code looks it up in the shared catalogue.
     if (prefillBarcode.isNotEmpty) _lookUpCatalogue(prefillBarcode);
+  }
+
+  /// Edit mode: fills every box from [p]. Money boxes show a blank for a zero
+  /// (an uncosted product), which is what "no cost yet" means.
+  void _seedFromProduct(ProductData p) {
+    String money(int kobo) => kobo == 0 ? '' : (kobo / 100).toStringAsFixed(2);
+    _nameCtrl.text = p.name;
+    _subtitleCtrl.text = p.subtitle ?? '';
+    _barcodeCtrl.text = p.barcode ?? '';
+    _retailPriceCtrl.text = money(p.retailerPriceKobo);
+    _wholesalePriceCtrl.text = money(p.wholesalerPriceKobo);
+    _buyingPriceCtrl.text = money(p.buyingPriceKobo);
+    _emptyCrateValueCtrl.text = money(p.emptyCrateValueKobo);
+    _lowStockCtrl.text = p.lowStockThreshold.toString();
+    _unitsPerPackCtrl.text = p.unitsPerPack?.toString() ?? '';
+    _unit = p.unit;
+    _trackEmpties = p.trackEmpties;
+    _allowFractionalSales = p.allowFractionalSales;
+    _expiryDate = p.expiryDate;
+    _existingImagePath = p.imagePath;
   }
 
   void _onFieldEdited() {
@@ -236,10 +274,16 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     final suppliers = await db.catalogDao.getAllSuppliers();
     final manufacturers = await db.inventoryDao.getAllManufacturers();
     final cats = await db.inventoryDao.getAllCategories();
-    final productsList = await (db.select(
-      db.products,
-    )..where((t) => t.isDeleted.not())).get();
+    final productsList = await db.catalogDao.getActiveProducts();
     final uniqueUnits = await db.catalogDao.getUniqueProductUnits();
+    // Edit mode: resolve a renderable path for the saved photo (downloads it
+    // once if only the cloud URL is known), as the old Edit pop-up did.
+    final edit = widget.editProduct;
+    final cachedPhoto = edit == null
+        ? null
+        : await ref
+              .read(productImageServiceProvider)
+              .ensureCached(productId: edit.id, imageUrl: edit.imageUrl);
 
     if (!mounted) return;
     setState(() {
@@ -250,6 +294,19 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       _allProducts = productsList;
       _dynamicUnits = _mergeUnits(uniqueUnits);
 
+      if (cachedPhoto != null) _existingImagePath = cachedPhoto;
+      if (edit != null && !_editSeeded) {
+        _editSeeded = true;
+        _selectedCategory = cats
+            .where((c) => c.id == edit.categoryId)
+            .firstOrNull;
+        _selectedManufacturer = manufacturers
+            .where((m) => m.id == edit.manufacturerId)
+            .firstOrNull;
+        _selectedSupplier = suppliers
+            .where((s) => s.id == edit.supplierId)
+            .firstOrNull;
+      }
       _selectedCategory = cats
           .where((c) => c.id == _selectedCategory?.id)
           .firstOrNull;
@@ -288,7 +345,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       }
     }
     final extras = <String>[];
-    for (final u in [...inUse, ?_catalogueUnit]) {
+    for (final u in [...inUse, ?_catalogueUnit, ?widget.editProduct?.unit]) {
       if (!listed(u, starters) && !listed(u, extras)) extras.add(u);
     }
     extras.sort();
@@ -322,7 +379,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   /// avoid jamming the offline outbox).
   Future<void> _onBarcodeChanged(String value) async {
     final trimmed = value.trim();
-    _scheduleCatalogueLookup(trimmed);
+    // Edit mode never prefills from the shared barcode list.
+    if (!_isEdit) _scheduleCatalogueLookup(trimmed);
     if (trimmed.isEmpty) {
       if (_barcodeCollisionName != null) {
         setState(() => _barcodeCollisionName = null);
@@ -332,7 +390,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     final db = ref.read(databaseProvider);
     final match = await db.catalogDao.findProductByBarcode(trimmed);
     if (!mounted) return;
-    final collision = match?.name;
+    // Edit mode: the product's own barcode is not a collision.
+    final collision = match?.id == widget.editProduct?.id ? null : match?.name;
     if (collision != _barcodeCollisionName) {
       setState(() => _barcodeCollisionName = collision);
     }
@@ -443,7 +502,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     final q = query.trim().toLowerCase();
     setState(() {
       _isNameFromCatalogue = false;
-      _productSuggestions = q.isEmpty
+      // Edit mode has no name-match list.
+      _productSuggestions = (q.isEmpty || _isEdit)
           ? []
           : _allProducts
                 .where((p) => p.name.toLowerCase().contains(q))
@@ -708,12 +768,22 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       AppNotification.showError(context, 'Account not loaded yet.');
       return;
     }
+    // Defense-in-depth (hard rule #6): bail if the grant was revoked while the
+    // form was open.
+    if (_isEdit && !Gates.editProductPrice.allowsNow(ref)) {
+      AppNotification.showError(
+        context,
+        'You no longer have permission to edit ${_lexicon.itemPluralLower}.',
+      );
+      return;
+    }
 
     final result = resolveFastAdd(
       FastAddInput(
         name: _nameCtrl.text,
         sellingPrice: _retailPriceCtrl.text,
-        quantity: _initialStockCtrl.text,
+        // Edit mode has no opening quantity: any positive count passes.
+        quantity: _isEdit ? '1' : _initialStockCtrl.text,
         buyingPrice: _buyingPriceCtrl.text,
         wholesalePrice: _wholesalePriceCtrl.text,
         lowStock: _lowStockCtrl.text,
@@ -730,7 +800,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         tracksCrates: _isCrateBusiness,
         canEditBuying: _canEditBuying,
         storeIds: _stores.map((s) => s.id).toList(),
-        routesToReceiveCart: widget.receiveMode,
+        // Edit mode has no store either.
+        routesToReceiveCart: widget.receiveMode || _isEdit,
       ),
     );
 
@@ -738,6 +809,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       case FastAddInvalid(:final field, :final message):
         _pointAt(field);
         AppNotification.showError(context, message);
+      case FastAddIntent() when _isEdit:
+        await _persistEdit(result);
       case FastAddIntent():
         final confirmed = await _confirmSaveProduct(result.name);
         if (!confirmed) return;
@@ -861,9 +934,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         }
       }
 
-      final newProduct = await (db.select(
-        db.products,
-      )..where((t) => t.id.equals(productId))).getSingle();
+      final newProduct = (await db.catalogDao.findById(productId))!;
       final userName = auth.currentUser?.name ?? 'Unknown';
       if (widget.receiveMode) {
         ref
@@ -918,6 +989,203 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  /// Edit mode save: EXACTLY what the old Edit pop-up's save did (moved from
+  /// `UpdateProductSheet._save`, #487 PR 4) — details, photo, manufacturer
+  /// crate value, activity log, the cost 0 -> real follow-up and the notice.
+  Future<void> _persistEdit(FastAddIntent intent) async {
+    final old = widget.editProduct!;
+    final db = ref.read(databaseProvider);
+    final auth = ref.read(authProvider);
+    final name = intent.name;
+    final canEditBuying = _canEditBuying;
+    final oldBuyingKobo = old.buyingPriceKobo;
+    // Cost stays untouched for roles without the permission.
+    final buyingKobo = canEditBuying ? intent.buyingPriceKobo : oldBuyingKobo;
+
+    setState(() => _isSaving = true);
+    try {
+      final newManufacturer = _newManufacturerName;
+      if (_selectedManufacturer == null && newManufacturer != null) {
+        _selectedManufacturer = await _getOrCreateManufacturer(newManufacturer);
+        _newManufacturerName = null;
+      }
+      final newSupplier = _newSupplierName;
+      if (_selectedSupplier == null && newSupplier != null) {
+        _selectedSupplier = await _getOrCreateSupplier(newSupplier);
+        _newSupplierName = null;
+      }
+      final newCategory = _newCategoryName;
+      if (_selectedCategory == null && newCategory != null) {
+        _selectedCategory = await _getOrCreateCategory(newCategory);
+        _newCategoryName = null;
+      }
+
+      // Optional product photo (#78): upload a freshly picked image, keyed by
+      // the product id (image_url + the ProductImageService cache).
+      String? newImageUrl;
+      if (_pendingImageBytes != null) {
+        final businessId = auth.currentUser?.businessId;
+        if (businessId != null) {
+          final imgSvc = ref.read(productImageServiceProvider);
+          final res = await imgSvc.save(
+            businessId: businessId,
+            productId: old.id,
+            bytes: _pendingImageBytes!,
+          );
+          _existingImagePath = await imgSvc.localPathFor(old.id);
+          if (res case Ok(:final value)) newImageUrl = value;
+        }
+      }
+
+      final description = _subtitleCtrl.text.trim();
+      // 1. Update product (core + cosmetic fields in one enqueue).
+      await db.catalogDao.updateProductDetails(
+        old.id,
+        name: name,
+        manufacturerId: _selectedManufacturer?.id,
+        buyingPriceKobo: buyingKobo,
+        retailerPriceKobo: intent.retailerPriceKobo,
+        wholesalerPriceKobo: intent.wholesalerPriceKobo,
+        emptyCrateValueKobo: intent.emptyCrateValueKobo,
+        categoryId: _selectedCategory?.id,
+        unit: intent.unit,
+        trackEmpties: intent.trackEmpties,
+        allowFractionalSales: _allowFractionalSales,
+        lowStockThreshold: intent.lowStockThreshold,
+        subtitle: description.isEmpty ? null : description,
+        colorHex: old.colorHex ?? _colorHex,
+        supplierId: _selectedSupplier?.id,
+        size: old.size,
+        expiryDate: _expiryDate,
+        barcode: intent.barcode,
+        unitsPerPack: intent.unitsPerPack,
+      );
+
+      // Patch the cloud image URL so the photo converges cross-device. Null
+      // when offline: the reconnect flush sets it.
+      if (newImageUrl != null) {
+        await db.catalogDao.setProductImageUrl(old.id, newImageUrl);
+      }
+
+      // 2. The crate value is per manufacturer (§16.5).
+      if (_selectedManufacturer != null && intent.emptyCrateValueKobo != null) {
+        await db.catalogDao.updateManufacturerEmptyCrateValue(
+          _selectedManufacturer!.id,
+          intent.emptyCrateValueKobo!,
+        );
+      }
+
+      // 3. A cleared box must reach the cloud: outbox payloads drop nulls, so
+      //    push the full row with an explicit null for each cleared column.
+      await db.catalogDao.enqueueProductEdit(
+        old.id,
+        clearedUnitsPerPack:
+            old.unitsPerPack != null && intent.unitsPerPack == null,
+        clearedSubtitle: (old.subtitle ?? '').isNotEmpty && description.isEmpty,
+        clearedBarcode: old.barcode != null && intent.barcode == null,
+        clearedExpiry: old.expiryDate != null && _expiryDate == null,
+        clearedSupplier: old.supplierId != null && _selectedSupplier == null,
+        clearedManufacturer:
+            old.manufacturerId != null && _selectedManufacturer == null,
+        clearedCategory: old.categoryId != null && _selectedCategory == null,
+      );
+
+      // 4. Log the update.
+      await ref
+          .read(activityLogProvider)
+          .logAction(
+            'update_product',
+            '${auth.currentUser?.name ?? 'Unknown'} updated product: $name',
+            productId: old.id,
+          );
+
+      // 5. Cost just became real (0 -> a positive value): cost the still-
+      //    uncosted batches and offer once to backfill past uncosted sales
+      //    (ADR 0005 "Cost backfill", #41).
+      if (canEditBuying && oldBuyingKobo == 0 && buyingKobo > 0) {
+        final offer = await db.costBatchesDao.onCostBecameReal(
+          old.id,
+          buyingKobo,
+        );
+        if (mounted && !offer.isEmpty) {
+          await _promptCostBackfill(db, offer, name, auth.currentUser?.id);
+        }
+      }
+
+      if (mounted) {
+        AppNotification.showSuccess(context, '$name updated successfully');
+        // Business-scoped read (never a raw select of a tenant table).
+        final updated = await db.catalogDao.findById(old.id);
+        if (mounted) Navigator.pop(context, updated);
+      }
+    } catch (e, st) {
+      CrashReporter.record(e, st, context: 'inventory.update_product');
+      debugPrint('AddProductScreen._persistEdit error: $e');
+      if (mounted) {
+        AppNotification.showError(
+          context,
+          'Could not update ${_lexicon.itemLower}: $e',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  /// One-time prompt (ADR 0005 "Cost backfill", #41) offered when a product's
+  /// cost first becomes real and it has past uncosted sales. On accept,
+  /// restates those lines' snapshots to the new cost (gaps only, each in its
+  /// own period); [applyCostBackfill] writes the single Activity Log row.
+  Future<void> _promptCostBackfill(
+    AppDatabase db,
+    CostBackfillOffer offer,
+    String productName,
+    String? staffId,
+  ) async {
+    final costLabel = formatCurrency(offer.newCostKobo / 100);
+    final apply = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        scrollable: true,
+        title: Text(
+          'Apply cost to past sales?',
+          style: ctx.screenTitleStyle.copyWith(
+            color: Theme.of(ctx).colorScheme.onSurface,
+          ),
+        ),
+        content: Text(
+          'You sold ${offer.unitsUncosted} unit(s) of "$productName" before a '
+          'cost was recorded. Apply $costLabel per unit to those past sales so '
+          'their profit is restated in the period they happened?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Apply'),
+          ),
+        ],
+      ),
+    );
+    if (apply != true) return;
+    final restated = await db.costBatchesDao.applyCostBackfill(
+      offer,
+      description:
+          '$productName: applied $costLabel/unit to ${offer.unitsUncosted} '
+          'unit(s) across ${offer.lineIds.length} past uncosted sale(s)',
+      staffId: staffId,
+    );
+    if (mounted && restated > 0) {
+      AppNotification.showSuccess(
+        context,
+        'Restated $restated past sale(s) of $productName',
+      );
     }
   }
 
@@ -1073,8 +1341,10 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
             resizeToAvoidBottomInset: true,
             appBar: InventoryTopBar(
               icon: AppIcons.addSquare,
-              title: 'Add ${_lexicon.item}',
-              subtitle: 'Add a new item to your inventory',
+              title: _isEdit ? 'Edit ${_lexicon.item}' : 'Add ${_lexicon.item}',
+              subtitle: _isEdit
+                  ? "Update this item's details"
+                  : 'Add a new item to your inventory',
               height: inventoryTopBarHeight(context),
               leading: IconButton(
                 tooltip: MaterialLocalizations.of(context).backButtonTooltip,
@@ -1178,6 +1448,17 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   ];
 
   Widget _footer() {
+    if (_isEdit) {
+      return InventoryFormFooter(
+        child: AppButton(
+          key: AddProductKeys.save,
+          text: 'Save Changes',
+          icon: AppIcons.check,
+          isLoading: _isSaving,
+          onPressed: () => _save(andNew: false),
+        ),
+      );
+    }
     return InventoryFormFooter(
       child: Row(
         children: [
@@ -1224,6 +1505,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
           children: [
             ProductPhotoBox(
               pendingBytes: _pendingImageBytes,
+              existingPath: _existingImagePath,
               onPick: _pickPhoto,
               onRemove: () => setState(() {
                 _pendingImageBytes = null;
@@ -1352,7 +1634,10 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
           children: [
             // Plain "Crate" is not offered to a new product (#487); a stored
             // Bottle reads "Bottle Crate" but saves Bottle.
-            for (final u in unitChoices(_dynamicUnits, keep: [_unit]))
+            for (final u in unitChoices(
+              _dynamicUnits,
+              keep: [_unit, widget.editProduct?.unit],
+            ))
               ProductUnitChip(
                 key: AddProductKeys.unitChip(u),
                 label: formUnitLabel(u, crates: _isCrateBusiness)!,
@@ -1459,7 +1744,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   /// stepper's number (MEASURED).
   Widget _stockCard({required bool allowSideBySide}) {
     final gap = context.getRSize(16);
-    final showsStore = !widget.receiveMode && _stores.length > 1;
+    final showsStore = !widget.receiveMode && !_isEdit && _stores.length > 1;
     return KeyedSubtree(
       // A store error with no store box to show points at the card.
       key: showsStore ? null : _fieldKeys[FastAddField.store],
@@ -1571,6 +1856,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       ],
     );
 
+    // Edit mode: stock changes go through Adjust Stock, so only the alert.
+    if (_isEdit) return lowStockBox;
     if (sideBySide) {
       return Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1694,7 +1981,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       key: AddProductKeys.preview,
       preview: ProductPreviewCard(
         name: name.isEmpty ? '${_lexicon.item} name' : name,
-        stockLabel: '$_openingQuantity in stock',
+        stockLabel: _isEdit ? null : '$_openingQuantity in stock',
         detailLine: previewDetailLine(
           unit: _unit,
           crates: _isCrateBusiness,
@@ -1709,18 +1996,20 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       actions: [
         AppButton(
           key: AddProductKeys.save,
-          text: 'Save ${_lexicon.item}',
+          text: _isEdit ? 'Save Changes' : 'Save ${_lexicon.item}',
           icon: AppIcons.check,
           isLoading: _isSaving,
           onPressed: () => _save(andNew: false),
         ),
-        SizedBox(height: context.getRSize(12)),
-        AppButton(
-          key: AddProductKeys.saveAndNew,
-          text: 'Save & Add Another',
-          variant: AppButtonVariant.secondary,
-          onPressed: _isSaving ? null : () => _save(andNew: true),
-        ),
+        if (!_isEdit) ...[
+          SizedBox(height: context.getRSize(12)),
+          AppButton(
+            key: AddProductKeys.saveAndNew,
+            text: 'Save & Add Another',
+            variant: AppButtonVariant.secondary,
+            onPressed: _isSaving ? null : () => _save(andNew: true),
+          ),
+        ],
         SizedBox(height: context.getRSize(8)),
         AppButton(
           text: 'Cancel',

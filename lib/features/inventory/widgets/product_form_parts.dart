@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -125,10 +126,15 @@ class ProductPhotoBox extends StatelessWidget {
     super.key,
     required this.onPick,
     this.pendingBytes,
+    this.existingPath,
     this.onRemove,
   });
 
   final Uint8List? pendingBytes;
+
+  /// The saved photo's local file, shown until a new one is picked (Edit
+  /// Product, #487 PR 4).
+  final String? existingPath;
   final VoidCallback onPick;
   final VoidCallback? onRemove;
 
@@ -142,6 +148,7 @@ class ProductPhotoBox extends StatelessWidget {
     final side = edge(context);
     final radius = _inputRadius(t);
     final bytes = pendingBytes;
+    final saved = existingPath;
     return SizedBox(
       width: side,
       height: side,
@@ -150,7 +157,9 @@ class ProductPhotoBox extends StatelessWidget {
           Positioned.fill(
             child: Semantics(
               button: true,
-              label: bytes == null ? 'Add photo' : 'Change photo',
+              label: (bytes == null && saved == null)
+                  ? 'Add photo'
+                  : 'Change photo',
               child: Material(
                 color: _inputFill(t),
                 borderRadius: radius,
@@ -159,6 +168,12 @@ class ProductPhotoBox extends StatelessWidget {
                   onTap: onPick,
                   child: bytes != null
                       ? Image.memory(bytes, fit: BoxFit.cover)
+                      : saved != null
+                      ? Image.file(
+                          File(saved),
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                        )
                       : CustomPaint(
                           painter: _DashedBorderPainter(
                             color: _muted(t),
@@ -784,7 +799,9 @@ class ProductPreviewCard extends StatelessWidget {
   });
 
   final String name;
-  final String stockLabel;
+
+  /// Null hides the pill (Edit Product shows no stock).
+  final String? stockLabel;
   final String detailLine;
   final String priceLabel;
   final String? categoryName;
@@ -837,8 +854,10 @@ class ProductPreviewCard extends StatelessWidget {
                             .copyWith(color: t.colorScheme.onSurface),
                       ),
                     ),
-                    SizedBox(width: context.getRSize(8)),
-                    TagPill(label: stockLabel),
+                    if (stockLabel != null) ...[
+                      SizedBox(width: context.getRSize(8)),
+                      TagPill(label: stockLabel!),
+                    ],
                   ],
                 ),
                 if (detailLine.isNotEmpty) ...[
