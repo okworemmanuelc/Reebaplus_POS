@@ -11,7 +11,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
-import 'package:reebaplus_pos/features/pos/services/mobile_scanner_scan_camera.dart';
+import 'package:reebaplus_pos/shared/scanner/mobile_scanner_scan_camera.dart';
 
 /// Mirrors the `mobile_scanner` 7.2.0 rules that matter here: stop does
 /// nothing unless running, stop turns the torch off, start may take a

@@ -13,7 +13,7 @@ import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
-import 'package:reebaplus_pos/features/pos/providers/pos_providers.dart';
+import 'package:reebaplus_pos/shared/scanner/scanner_providers.dart';
 import 'package:reebaplus_pos/features/pos/services/barcode_scan_resolver.dart';
 import 'package:reebaplus_pos/features/pos/widgets/edit_item_modal.dart';
 import 'package:reebaplus_pos/features/pos/widgets/scan_link_product_sheet.dart';

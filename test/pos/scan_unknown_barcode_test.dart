@@ -21,8 +21,8 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
-import 'package:reebaplus_pos/features/pos/providers/pos_providers.dart';
-import 'package:reebaplus_pos/features/pos/widgets/barcode_scan_page.dart';
+import 'package:reebaplus_pos/shared/scanner/scanner_providers.dart';
+import 'package:reebaplus_pos/shared/scanner/barcode_scan_page.dart';
 import 'package:reebaplus_pos/features/pos/widgets/edit_item_modal.dart';
 import 'package:reebaplus_pos/features/pos/widgets/pos_barcode_scan_button.dart';
 import 'package:reebaplus_pos/features/pos/widgets/scan_unknown_choice_sheet.dart';
@@ -104,9 +104,7 @@ void main() {
       ],
     );
     addTearDown(container.dispose);
-    container.read(authProvider).value = await db.storesDao.getUserById(
-      userId,
-    );
+    container.read(authProvider).value = await db.storesDao.getUserById(userId);
     db.businessIdResolver = () => businessId;
     await tester.pumpWidget(
       UncontrolledProviderScope(
@@ -166,7 +164,8 @@ void main() {
 
     expect(find.byType(AddProductScreen), findsOneWidget);
     expect(
-      tester.widget<AddProductScreen>(find.byType(AddProductScreen))
+      tester
+          .widget<AddProductScreen>(find.byType(AddProductScreen))
           .prefilledBarcode,
       'NEW-555',
     );
@@ -229,7 +228,8 @@ void main() {
     await scan(tester);
     expect(find.byType(AddProductScreen), findsOneWidget);
     expect(
-      tester.widget<AddProductScreen>(find.byType(AddProductScreen))
+      tester
+          .widget<AddProductScreen>(find.byType(AddProductScreen))
           .initialStoreId,
       'store-B',
     );

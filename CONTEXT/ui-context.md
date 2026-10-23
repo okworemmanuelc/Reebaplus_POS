@@ -597,7 +597,7 @@ The one form for "a customer paid us": the customer page's Add Credit and Home's
 - **Picker** (no customer given): `AppInput` search ("Search name or phone", matches name, or phone ignoring spaces) over flat `AppDecorations.card` rows — 40 `IconTile` (info, `AppIcons.user`), name Bold 15 (2 lines), phone Regular 12 muted, chevron; whole card taps, ≥ 48dp. No walk-in, no deleted customers. Empty: neutral `IconTile` + "No customers yet" (none at all) or "No customers match".
 - **Form**: the chosen customer as a card (44 `IconTile`, name, phone, balance line Bold 14 — `AppFixedColors.danger` "Owes ₦X", `green` "Has ₦X credit", muted "Nothing owed"; "Change" text button only when picked in the sheet), a full-width secondary "Pay full ₦X" `AppButton` (48dp) only when owing, then Amount (`AppInput`, starts empty), "Payment method" as two side-by-side cards (Cash / Bank Transfer; selected = primary border, `primaryTint` fill, filled primary icon), Note (optional) and the primary submit `AppButton`.
 
-### Checkout + sales sheets (`checkout_page.dart`, `lib/features/pos/widgets/sales_parts.dart`, #393)
+### Checkout + sales sheets (`checkout_page.dart`, `lib/shared/widgets/sales_parts.dart`, #393)
 
 **Restyle only: every Checkout figure, default and validation is pinned by `test/pos/checkout_money_test.dart`.**
 - **Pushed sales screens** (Checkout, the scan page): `SalesTopBar` — solid Surface bar, hairline, `topBarShadow`, `ScreenHeader` with a 48dp back / close (`SalesBackButton`). Checkout's title is "Checkout" with the live payable total as the subtitle ("Receipt" after Confirm). The page body is `pageBackground`; the form and the receipt are capped at `kSettingsMaxContentWidth` (720) and centred (in the cart panel they fill it).

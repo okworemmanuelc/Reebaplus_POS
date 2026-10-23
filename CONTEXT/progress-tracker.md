@@ -7,6 +7,9 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Camera scanner moved to shared code (#487 PR 0, 2026-10-23)
+Part of #487 / #465 (step 4). Branch `feat/487-scanner-seam`. `git mv` of the scanner seam from `lib/features/pos/` to `lib/shared/scanner/` (barcode_scanner, mobile_scanner_*, scan_camera, camera_permission(+sheet), scan_gate, barcode_scan_page, scan_cart_count, and the two providers as `scanner_providers.dart`); `sales_parts.dart` moved to `lib/shared/widgets/` because the scan page uses it. Imports only; no behaviour change. POS keeps the resolver, the scan button and the sheets.
+
 ### Fast-Add: a shared-list photo opens "More details" (2026-10-23)
 Branch `feat/fast-add-open-details-on-catalogue-photo`, worktree `../drinkPosApp-wt-moredetails`. Owner approved the #332 follow-up.
 - `_applyCatalogueSuggestion` (add_product_screen.dart) sets `_showMoreDetails = true` when it fills the photo, because the photo box lives in the collapsed "More details" section and would otherwise be saved unseen. Name/unit-only fills leave it closed. Tests: `test/inventory/add_product_catalogue_prefill_test.dart` (+2).
