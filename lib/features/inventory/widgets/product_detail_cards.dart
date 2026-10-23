@@ -681,8 +681,10 @@ class ProductStockByStoreCard extends StatelessWidget {
     required this.rows,
     required this.alertAt,
     required this.unit,
+    required this.crates,
   });
 
+  final bool crates;
   final List<StoreStockRow> rows;
 
   /// The product's one low-stock alert level.
@@ -701,7 +703,7 @@ class ProductStockByStoreCard extends StatelessWidget {
             icon: AppIcons.warehouse,
             title: 'Stock by Store',
             trailing: Text(
-              '$total ${unitCountNoun(unit, total)}',
+              '$total ${unitCountNoun(unit, total, crates: crates)}',
               style: context
                   .extraBoldStyle(16)
                   .copyWith(color: t.colorScheme.onSurface),
@@ -709,7 +711,7 @@ class ProductStockByStoreCard extends StatelessWidget {
           ),
           for (final r in rows) ...[
             SizedBox(height: context.getRSize(8)),
-            _StoreRow(row: r, alertAt: alertAt, unit: unit),
+            _StoreRow(row: r, alertAt: alertAt, unit: unit, crates: crates),
           ],
         ],
       ),
@@ -722,8 +724,10 @@ class _StoreRow extends StatelessWidget {
     required this.row,
     required this.alertAt,
     required this.unit,
+    required this.crates,
   });
 
+  final bool crates;
   final StoreStockRow row;
   final int alertAt;
   final String? unit;
@@ -744,7 +748,7 @@ class _StoreRow extends StatelessWidget {
         icon: AppIcons.alertCircle,
       ),
       StockLevel.ok => Text(
-        'Alert at $alertAt ${unitCountNoun(unit, alertAt)}',
+        'Alert at $alertAt ${unitCountNoun(unit, alertAt, crates: crates)}',
         style: context.regularStyle(13).copyWith(color: _muted(context)),
       ),
     };
@@ -794,9 +798,11 @@ class ProductSalesTargetCard extends StatelessWidget {
     super.key,
     required this.figures,
     required this.unit,
+    required this.crates,
     this.onEdit,
   });
 
+  final bool crates;
   final SalesTargetFigures figures;
   final String? unit;
 
@@ -808,7 +814,11 @@ class ProductSalesTargetCard extends StatelessWidget {
     final t = Theme.of(context);
     final muted = _muted(context);
     final fg = figures;
-    final soldNoun = unitCountNoun(unit, fg.target > 0 ? fg.target : fg.sold);
+    final soldNoun = unitCountNoun(
+      unit,
+      fg.target > 0 ? fg.target : fg.sold,
+      crates: crates,
+    );
     final String note;
     if (!fg.hasTarget) {
       note = 'No target set';
@@ -816,8 +826,8 @@ class ProductSalesTargetCard extends StatelessWidget {
       note = 'Target reached.';
     } else {
       note =
-          '${fg.remaining} ${unitCountNoun(unit, fg.remaining)} to go. '
-          'That is about ${fg.perDay} ${unitCountNoun(unit, fg.perDay)} a day.';
+          '${fg.remaining} ${unitCountNoun(unit, fg.remaining, crates: crates)} to go. '
+          'That is about ${fg.perDay} ${unitCountNoun(unit, fg.perDay, crates: crates)} a day.';
     }
     return DetailPanel(
       child: Column(
@@ -847,7 +857,7 @@ class ProductSalesTargetCard extends StatelessWidget {
                 child: Text(
                   fg.hasTarget
                       ? 'of ${fg.target} $soldNoun sold'
-                      : '${unitCountNoun(unit, fg.sold)} sold',
+                      : '${unitCountNoun(unit, fg.sold, crates: crates)} sold',
                   style: context.regularStyle(15).copyWith(color: muted),
                 ),
               ),

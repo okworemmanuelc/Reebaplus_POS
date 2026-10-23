@@ -31,8 +31,20 @@ Future<DetailSample> seedDetailSample(
       'Lager beer in 60cl returnable glass bottles, sold by the crate.',
   String? barcode,
   bool archived = false,
+  String businessType = 'Beverage distributor',
+  bool tracksCrates = true,
 }) async {
   final db = env.db;
+  // Crate wording ("Bottle Crate", "crates") is for a shop that counts empty
+  // crates; a pharmacy or such reads plain "Bottle" / "bottles".
+  await (db.update(
+    db.businesses,
+  )..where((b) => b.id.equals(env.businessId))).write(
+    BusinessesCompanion(
+      type: Value(businessType),
+      tracksEmptyCrates: Value(tracksCrates),
+    ),
+  );
   final productId = sample.productIds['Gulder']!;
   await (db.update(db.products)..where((p) => p.id.equals(productId))).write(
     ProductsCompanion(

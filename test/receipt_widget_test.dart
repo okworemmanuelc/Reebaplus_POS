@@ -33,6 +33,7 @@ void main() {
             walletBalance: walletBalance,
             showWalletInfo: showWalletInfo,
             storeAddress: storeAddress,
+            tracksCrates: false,
           ),
         ),
       ),
@@ -100,6 +101,7 @@ void main() {
             paymentMethod: 'Full Cash / Card',
             customerName: 'Walk-in Customer',
             showWalletInfo: false,
+            tracksCrates: false,
           ),
         ),
       ),
@@ -120,10 +122,46 @@ void main() {
             paymentMethod: 'Full Cash / Card',
             customerName: '',
             showWalletInfo: false,
+            tracksCrates: false,
           ),
         ),
       ),
     ));
     expect(find.textContaining('Walk-in Customer'), findsNothing);
+  });
+
+  // #487: "Bottle Crate" only on a receipt from a shop that counts empty
+  // crates; every other shop shows its Bottle product as "Bottle".
+  Widget bottleReceipt({required bool tracksCrates}) => MaterialApp(
+    home: Scaffold(
+      body: SingleChildScrollView(
+        child: ReceiptWidget(
+          orderId: 'ORD-000003',
+          cart: const [
+            {'name': 'Cough Syrup', 'unit': 'Bottle', 'price': 500.0, 'qty': 1.0},
+          ],
+          subtotal: 500,
+          crateDeposit: 0,
+          total: 500,
+          paymentMethod: 'Full Cash / Card',
+          tracksCrates: tracksCrates,
+        ),
+      ),
+    ),
+  );
+
+  testWidgets('a shop that does not count crates shows "Bottle"', (
+    tester,
+  ) async {
+    await tester.pumpWidget(bottleReceipt(tracksCrates: false));
+    expect(find.text('Bottle Cough Syrup  ×1.0'), findsOneWidget);
+    expect(find.textContaining('Bottle Crate'), findsNothing);
+  });
+
+  testWidgets('a shop that counts crates shows "Bottle Crate"', (
+    tester,
+  ) async {
+    await tester.pumpWidget(bottleReceipt(tracksCrates: true));
+    expect(find.text('Bottle Crate Cough Syrup  ×1.0'), findsOneWidget);
   });
 }

@@ -98,6 +98,10 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   // target — explicit user requirement).
   bool get _isCeo => ref.read(currentUserRoleProvider)?.slug == 'ceo';
 
+  /// Whether a stored `Bottle` reads "Bottle Crate" / "crates" (#487): only in
+  /// a shop that counts empty crates. Watched, for the build-time labels.
+  bool get _crates => businessTracksCrates(ref.watch(currentBusinessProvider));
+
   DateTime get _now => (widget.clock ?? DateTime.now)();
 
   @override
@@ -406,6 +410,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       rows: rows,
       alertAt: _alertAt,
       unit: _unit,
+      crates: _crates,
     );
     final target = _buildTarget(context);
     final salesSummary = _buildSalesSummary(context);
@@ -495,14 +500,15 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         manufacturer: manufacturer,
         unit: _unit,
         unitsPerPack: p?.unitsPerPack,
+        crates: _crates,
       ),
       barcode: p?.barcode,
       retailPrice: formatCurrency(retailKobo / 100),
-      perNoun: unitCountNoun(_unit, 1),
+      perNoun: unitCountNoun(_unit, 1, crates: _crates),
       categoryName: categoryName,
       stockLabel: level == StockLevel.out
           ? 'Out of stock'
-          : '$total ${unitCountNoun(_unit, total)} in stock',
+          : '$total ${unitCountNoun(_unit, total, crates: _crates)} in stock',
       stockLevel: level,
       imagePath: _imagePath,
       // The same category picture as the POS and Receive Stock tiles.
@@ -526,7 +532,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         ((widget.item.wholesalerPrice ?? 0) * 100).round();
     final canSeeCost = _canEditBuying;
     return ProductPricesCard(
-      perNoun: unitCountNoun(_unit, 1),
+      perNoun: unitCountNoun(_unit, 1, crates: _crates),
       retailKobo: retailKobo,
       wholesaleKobo: wholesaleKobo,
       costKobo: canSeeCost ? costKobo : null,
@@ -542,6 +548,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         now: _now,
       ),
       unit: _unit,
+      crates: _crates,
       onEdit: _isCeo ? _editTarget : null,
     );
   }
@@ -587,7 +594,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
 
   Widget _buildSalesSummary(BuildContext context) {
     final s = _salesSummary;
-    String units(int n) => '$n ${unitCountNoun(_unit, n)}';
+    String units(int n) => '$n ${unitCountNoun(_unit, n, crates: _crates)}';
     return _plainCard(
       context,
       icon: AppIcons.analytics,
@@ -725,7 +732,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
           icon: AppIcons.vanDelivery,
           tone: IconTileTone.info,
           label: 'Quantity Received',
-          value: '${d.quantity} ${unitCountNoun(_unit, d.quantity)}',
+          value:
+              '${d.quantity} ${unitCountNoun(_unit, d.quantity, crates: _crates)}',
         ),
         const DetailDivider(),
         DetailInfoRow(
@@ -1047,9 +1055,13 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               final note = isRemove
                   ? '${reason!}${notes.isEmpty ? '' : ': $notes'}'
                   : (notes.isEmpty ? 'Stock added by $actorName' : notes);
+              final unitWord = unitLabel(
+                product.unit,
+                crates: businessTracksCrates(ref.read(currentBusinessProvider)),
+              );
               final summary =
                   '$actorName ${isRemove ? 'removed' : 'added'} $qty '
-                  '${product.unit != null ? '${unitLabel(product.unit)}(s) ' : ''}of ${product.name} '
+                  '${unitWord != null ? '$unitWord(s) ' : ''}of ${product.name} '
                   '(${store.name})'
                   '${isRemove ? ' — ${reason!}' : ''}';
               final isStockKeeper =

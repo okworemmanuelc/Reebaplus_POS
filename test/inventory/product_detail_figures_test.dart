@@ -14,6 +14,7 @@ void main() {
           manufacturer: 'Nigerian Breweries',
           unit: 'Bottle',
           unitsPerPack: 12,
+          crates: true,
         ),
         'Nigerian Breweries · Crate of 12 bottles',
       );
@@ -21,44 +22,78 @@ void main() {
 
     test('a Bottle with no count reads "Bottle Crate"', () {
       expect(
-        productKindLine(manufacturer: 'Guinness Nigeria', unit: 'Bottle'),
+        productKindLine(
+          manufacturer: 'Guinness Nigeria',
+          unit: 'Bottle',
+          crates: true,
+        ),
         'Guinness Nigeria · Bottle Crate',
       );
-      expect(productKindLine(unit: 'Bottle', unitsPerPack: 0), 'Bottle Crate');
+      expect(
+        productKindLine(unit: 'Bottle', unitsPerPack: 0, crates: true),
+        'Bottle Crate',
+      );
     });
 
     test('one bottle is singular', () {
       expect(
-        productKindLine(unit: 'Bottle', unitsPerPack: 1),
+        productKindLine(unit: 'Bottle', unitsPerPack: 1, crates: true),
         'Crate of 1 bottle',
       );
     });
 
     test('a Pack, Carton or Box with a count counts pieces', () {
       expect(
-        productKindLine(unit: 'Pack', unitsPerPack: 24),
+        productKindLine(unit: 'Pack', unitsPerPack: 24, crates: true),
         'Pack of 24 pieces',
       );
       expect(
-        productKindLine(unit: 'Carton', unitsPerPack: 6),
+        productKindLine(unit: 'Carton', unitsPerPack: 6, crates: true),
         'Carton of 6 pieces',
       );
       expect(
-        productKindLine(unit: 'Box', unitsPerPack: 10),
+        productKindLine(unit: 'Box', unitsPerPack: 10, crates: true),
         'Box of 10 pieces',
       );
     });
 
     test('another unit ignores the count and keeps its own words', () {
-      expect(productKindLine(unit: 'Can', unitsPerPack: 6), 'Can');
-      expect(productKindLine(unit: 'Crate', unitsPerPack: 12), 'Crate');
+      expect(
+        productKindLine(unit: 'Can', unitsPerPack: 6, crates: true),
+        'Can',
+      );
+      expect(
+        productKindLine(unit: 'Crate', unitsPerPack: 12, crates: true),
+        'Crate',
+      );
+    });
+
+    test('a shop that does not count crates never says crate', () {
+      expect(
+        productKindLine(
+          manufacturer: 'Lagos Pharma',
+          unit: 'Bottle',
+          unitsPerPack: 12,
+          crates: false,
+        ),
+        'Lagos Pharma · Bottle',
+      );
+      expect(productKindLine(unit: 'Bottle', crates: false), 'Bottle');
+      // Packs and cartons are not crates, so they read the same.
+      expect(
+        productKindLine(unit: 'Pack', unitsPerPack: 24, crates: false),
+        'Pack of 24 pieces',
+      );
     });
 
     test('missing parts are left out', () {
-      expect(productKindLine(), '');
-      expect(productKindLine(manufacturer: ' '), '');
-      expect(productKindLine(manufacturer: 'Coca-Cola HBC'), 'Coca-Cola HBC');
-      expect(productKindLine(unit: ''), '');
+      expect(productKindLine(crates: true), '');
+      expect(productKindLine(manufacturer: ' ', crates: true), '');
+      expect(
+        productKindLine(manufacturer: 'Coca-Cola HBC', crates: true),
+        'Coca-Cola HBC',
+      );
+      expect(productKindLine(unit: '', crates: true), '');
     });
   });
 

@@ -734,6 +734,11 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   bool get _isCrateBusiness =>
       businessTracksCrates(ref.read(currentBusinessProvider));
 
+  /// Whether a stored `Bottle` reads "Bottle Crate" (#487): only in a shop
+  /// that counts empty crates. Watched, for the build-time unit labels.
+  bool get _unitCrates =>
+      businessTracksCrates(ref.watch(currentBusinessProvider));
+
   /// The adaptive Fast-Add layout is used for creating a brand-new product in
   /// direct mode. Receive Stock's mini-form and the "add stock to an existing
   /// product" path keep the full classic layout untouched.
@@ -1482,6 +1487,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                 _selectedExistingProduct!.name,
                 _selectedExistingProduct!.size,
                 unit: _selectedExistingProduct!.unit,
+                crates: _unitCrates,
               ),
               onClose: _clearExistingProduct,
               closeTooltip: 'Clear',
@@ -1883,14 +1889,18 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     // "No unit" (#108) clears the unit — the product saves with just its
     // name and is hidden wherever the unit would render. Plain "Crate" is
     // not offered to a new product (#487); a picked existing product saved as
-    // Crate keeps it. A stored Bottle reads "Bottle Crate" but saves Bottle.
+    // Crate keeps it. A stored Bottle reads "Bottle Crate" (only in a shop
+    // that counts empty crates) but saves Bottle.
     items: [
       const DropdownMenuItem<String?>(value: null, child: Text('No unit')),
       ...unitChoices(
         _dynamicUnits,
         keep: [_unit, _selectedExistingProduct?.unit],
       ).map(
-        (u) => DropdownMenuItem<String?>(value: u, child: Text(unitLabel(u)!)),
+        (u) => DropdownMenuItem<String?>(
+          value: u,
+          child: Text(unitLabel(u, crates: _unitCrates)!),
+        ),
       ),
     ],
     onChanged: _onUnitPicked,
@@ -2052,7 +2062,12 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     children: [
       for (final p in _productSuggestions)
         InventorySuggestionTile(
-          label: productDisplayName(p.name, p.size, unit: p.unit),
+          label: productDisplayName(
+            p.name,
+            p.size,
+            unit: p.unit,
+            crates: _unitCrates,
+          ),
           onTap: () => _selectProduct(p),
         ),
     ],

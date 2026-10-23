@@ -143,6 +143,9 @@ class _VanReceiptViewState extends ConsumerState<VanReceiptView> {
             reshareDate: _reshareAt,
             riderName: 'Van Sale',
             businessName: ref.watch(currentBusinessNameProvider),
+            tracksCrates: businessTracksCrates(
+              ref.watch(currentBusinessProvider),
+            ),
           ),
         ),
         SizedBox(height: context.getRSize(16)),
@@ -211,6 +214,9 @@ class _VanReceiptViewState extends ConsumerState<VanReceiptView> {
             reprintDate: _reprintAt,
             riderName: 'Van Sale',
             businessName: ref.read(currentBusinessNameProvider),
+            tracksCrates: businessTracksCrates(
+              ref.read(currentBusinessProvider),
+            ),
             paperSize: paperSize,
           );
       // Auto-print, asking once for a new printer's paper width; the picker

@@ -222,6 +222,35 @@ void main() {
     });
   });
 
+  group('a shop that does not count crates', () {
+    testWidgets('a Bottle product reads Bottle and bottles, never crate', (
+      tester,
+    ) async {
+      detail = await seedDetailSample(
+        env,
+        sample,
+        description: 'Syrup in glass bottles.',
+        businessType: 'Pharmacy',
+        tracksCrates: false,
+      );
+      await pump(tester, seeded: detail);
+      expect(find.text('Nigerian Breweries · Bottle'), findsOneWidget);
+      expect(find.text('32 bottles in stock'), findsOneWidget);
+      expect(find.text('retail, per bottle'), findsOneWidget);
+      expect(find.text('All prices are per bottle.'), findsOneWidget);
+      expect(find.text('32 bottles'), findsOneWidget);
+      expect(find.text('Alert at 5 bottles'), findsOneWidget);
+      expect(find.text('of 200 bottles sold'), findsOneWidget);
+      expect(find.textContaining('bottles to go'), findsOneWidget);
+      expect(find.textContaining('0 bottles'), findsWidgets); // Sales Summary
+      expect(
+        find.textContaining(RegExp('crate', caseSensitive: false)),
+        findsNothing,
+      );
+      await disposeScreen(tester);
+    });
+  });
+
   group('Prices & Profit', () {
     testWidgets('shows cost, retail, wholesale and the two profit rows', (
       tester,

@@ -800,6 +800,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     list = _sortNearExpiryFirst(list);
 
     final categoryNames = {for (final c in _dbCategories) c.id: c.name};
+    // "Bottle Crate" only in a shop that counts empty crates (#487).
+    final crates = businessTracksCrates(ref.watch(currentBusinessProvider));
 
     return [
       if (_showSearch) SliverToBoxAdapter(child: _buildSearchField(context)),
@@ -859,6 +861,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                 context,
                 list[i],
                 categoryNames[list[i].product.categoryId],
+                crates: crates,
               ),
             ),
           ),
@@ -1212,8 +1215,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   Widget _buildProductRow(
     BuildContext context,
     ProductDataWithStock item,
-    String? categoryName,
-  ) {
+    String? categoryName, {
+    required bool crates,
+  }) {
     final product = item.product;
     final currentStock = item.totalStock;
     final isLow = currentStock > 0 && currentStock <= product.lowStockThreshold;
@@ -1230,12 +1234,17 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       // (PRD #239): a starved list renders at zero height, shows nothing, and
       // reports no overflow, so "no red band" alone cannot catch it.
       key: inventoryProductRowKey(product.id),
-      name: productDisplayName(product.name, product.size, unit: product.unit),
+      name: productDisplayName(
+        product.name,
+        product.size,
+        unit: product.unit,
+        crates: crates,
+      ),
       subtitle: product.subtitle,
       categoryName: categoryName,
       photoPath: product.imagePath,
       stockLabel: currentStock.toString(),
-      unit: unitLabel(product.unit),
+      unit: unitLabel(product.unit, crates: crates),
       state: isOut
           ? InventoryStockState.out
           : (isLow ? InventoryStockState.low : InventoryStockState.ok),

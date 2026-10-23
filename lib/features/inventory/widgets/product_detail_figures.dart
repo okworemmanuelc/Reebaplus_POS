@@ -11,34 +11,36 @@ import 'package:reebaplus_pos/shared/widgets/redesign/product_tile.dart'
 /// one" count. Parts that are missing are left out. A Bottle product with no
 /// count reads "Bottle Crate"; with one it reads "Crate of 12 bottles". A Pack,
 /// Carton or Box with a count reads "Pack of 24 pieces". The count never
-/// changes any other unit's words.
+/// changes any other unit's words. [crates] is whether the shop counts empty
+/// crates: only then is a Bottle a crate; otherwise it reads plain "Bottle".
 String productKindLine({
   String? manufacturer,
   String? unit,
   int? unitsPerPack,
+  required bool crates,
 }) {
   final parts = <String>[];
   final mfr = manufacturer?.trim() ?? '';
   if (mfr.isNotEmpty) parts.add(mfr);
-  final kind = _kindWords(unit, unitsPerPack);
+  final kind = _kindWords(unit, unitsPerPack, crates);
   if (kind != null && kind.isNotEmpty) parts.add(kind);
   return parts.join(' · ');
 }
 
-String? _kindWords(String? unit, int? count) {
+String? _kindWords(String? unit, int? count, bool crates) {
   final u = unit?.trim() ?? '';
   if (u.isEmpty) return null;
   final lower = u.toLowerCase();
   final n = (count != null && count > 0) ? count : null;
   if (n != null) {
-    if (lower == 'bottle') {
+    if (lower == 'bottle' && crates) {
       return 'Crate of $n ${n == 1 ? 'bottle' : 'bottles'}';
     }
     if (lower == 'pack' || lower == 'carton' || lower == 'box') {
       return '$u of $n ${n == 1 ? 'piece' : 'pieces'}';
     }
   }
-  return unitLabel(u);
+  return unitLabel(u, crates: crates);
 }
 
 /// Profit as a whole percent of the selling price: `(price − cost) / price`,
