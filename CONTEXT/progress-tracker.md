@@ -7,6 +7,9 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### #487 PR 6 / #465: scan a barcode on Add Product (2026-10-23)
+Branch `feat/465-scan-add-product`, worktree `../drinkPosApp-wt-487-6`. Scan button beside the barcode box (`barcodeScannerProvider`, camera closes after the first read; POS unchanged). `_onBarcodeChanged` now: own products first (`findProductsByBarcode`), then, factory codes only, the shared list via `lookupOutcome` (offline -> note, never blocks save). Own match offers Open it (Product Details; restock mode is gone) / Create a new product anyway. Edit mode: scan only fills the box. Tests in `add_product_catalogue_prefill_test.dart` (+1 in `add_product_form_test.dart`); Add Product goldens regenerated.
+
 ### #487 PR 5: Sales and Stock History cards (2026-10-23)
 Branch `feat/487-sales-history`, worktree `../drinkPosApp-wt-487-5`. Replaces the two placeholder cards on Product Details. New `OrdersDao.getProductSalesByDay` (per business-local day, `orderRevenueStatuses`, profit from `buying_price_kobo` per line, uncosted lines add no profit and flag the day); `getSalesSummaryForProduct` now uses `orderRevenueStatuses` too. `paginatedStockHistoryProvider` arg gained `productId` (Inventory History passes null) and `StockTransactionWithDetails.adjustmentReason`. New `product_sales_history_cards.dart` and `product_stock_history_screen.dart`; `ProductDetailTopBar` takes a `title`. Sales Target now reads this month's units from the same days. Tests: DAO, widget (switch, Profit gate, rows, View All, empty), goldens regenerated with fixed-date seed.
 

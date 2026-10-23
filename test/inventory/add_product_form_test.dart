@@ -5,6 +5,9 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:reebaplus_pos/shared/scanner/barcode_scan_page.dart';
+import 'package:reebaplus_pos/shared/scanner/scanner_providers.dart';
+import '../helpers/fake_barcode_scanner.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/gate.dart';
@@ -58,6 +61,7 @@ void main() {
     Widget screen = const AddProductScreen(),
     Size size = _phone,
     Set<String> grants = _withBuying,
+    FakeBarcodeScanner? scanner,
   }) async {
     tester.view.padding = _insets;
     tester.view.viewPadding = _insets;
@@ -73,6 +77,7 @@ void main() {
       grantedKeys: grants,
       roleRank: GateTier.ceo,
       overrides: [
+        if (scanner != null) barcodeScannerProvider.overrideWithValue(scanner),
         firstRunSurfaceStateProvider.overrideWithValue(
           FirstRunSurfaceState.hasContent,
         ),
@@ -441,6 +446,29 @@ void main() {
       await tester.ensureVisible(find.text('Bottle Crate Star Lager'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Bottle Crate Star Lager'));
+      await settleDetails(tester);
+      expect(find.byType(ProductDetailScreen), findsOneWidget);
+      await finish(tester);
+    });
+
+    testWidgets('scanning a code you already have: Open it opens its Product '
+        'Details (#465)', (tester) async {
+      await (env.db.update(env.db.products)
+            ..where((p) => p.id.equals(sample.productIds['Gulder']!)))
+          .write(const ProductsCompanion(barcode: Value('4455')));
+      final scanner = FakeBarcodeScanner();
+      await pump(tester, scanner: scanner);
+      final button = find.byTooltip('Scan barcode');
+      await tester.ensureVisible(button);
+      await tester.pumpAndSettle();
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+      scanner.camera!.read('4455');
+      await tester.pumpAndSettle();
+      expect(find.byType(BarcodeScanPage), findsNothing);
+      await tester.ensureVisible(find.text('Open it'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Open it'));
       await settleDetails(tester);
       expect(find.byType(ProductDetailScreen), findsOneWidget);
       await finish(tester);

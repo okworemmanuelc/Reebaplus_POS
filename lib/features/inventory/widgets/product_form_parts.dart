@@ -970,3 +970,129 @@ class ProductPreviewPanel extends StatelessWidget {
     );
   }
 }
+
+// ── Scan barcode (#465, #487 PR 6) ───────────────────────────────────────────
+
+/// The square primary scan button beside the barcode box (48dp or more).
+class ProductScanButton extends StatelessWidget {
+  const ProductScanButton({super.key, required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final side = context.getRSize(52) < kMinInteractiveDimension
+        ? kMinInteractiveDimension
+        : context.getRSize(52);
+    return Tooltip(
+      message: 'Scan barcode',
+      child: DecoratedBox(
+        decoration: AppDecorations.primaryButtonGradient(
+          context,
+          radius: AppSpacing.borderRadiusL,
+        ),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(AppSpacing.borderRadiusL),
+            onTap: onTap,
+            child: SizedBox.square(
+              dimension: side,
+              child: Center(
+                child: AppIcon(
+                  AppIcons.barcode,
+                  size: context.getRSize(24),
+                  color: t.colorScheme.onPrimary,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "You already have ‹name›": the shop's own product(s) that carry the scanned
+/// or typed barcode, with Open it per product and "Create a new product
+/// anyway" (barcodes are only softly unique, #113).
+class ProductBarcodeMatchesCard extends StatelessWidget {
+  const ProductBarcodeMatchesCard({
+    super.key,
+    required this.names,
+    required this.onOpen,
+    required this.onCreateAnyway,
+  });
+
+  final List<String> names;
+  final void Function(int index) onOpen;
+  final VoidCallback onCreateAnyway;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
+    return Container(
+      margin: EdgeInsets.only(top: context.getRSize(8)),
+      padding: EdgeInsets.all(context.getRSize(12)),
+      decoration: BoxDecoration(
+        color: f.warningTint,
+        borderRadius: BorderRadius.circular(AppSpacing.borderRadiusL),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            names.length == 1
+                ? 'You already have ${names.first}'
+                : 'You already have ${names.length} products with this barcode',
+            style: context
+                .boldStyle(14)
+                .copyWith(color: t.colorScheme.onSurface),
+          ),
+          for (var i = 0; i < names.length; i++)
+            ConstrainedBox(
+              constraints: const BoxConstraints(
+                minHeight: kMinInteractiveDimension,
+              ),
+              child: Row(
+                children: [
+                  if (names.length > 1)
+                    Expanded(
+                      child: Text(
+                        names[i],
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: context
+                            .regularStyle(14)
+                            .copyWith(color: t.colorScheme.onSurface),
+                      ),
+                    )
+                  else
+                    const Spacer(),
+                  TextButton(
+                    onPressed: () => onOpen(i),
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(
+                        kMinInteractiveDimension,
+                        kMinInteractiveDimension,
+                      ),
+                    ),
+                    child: const Text('Open it'),
+                  ),
+                ],
+              ),
+            ),
+          OutlinedButton(
+            onPressed: onCreateAnyway,
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(kMinInteractiveDimension),
+            ),
+            child: const Text('Create a new product anyway'),
+          ),
+        ],
+      ),
+    );
+  }
+}
