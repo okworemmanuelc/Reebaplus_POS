@@ -24,6 +24,10 @@ import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/welcome_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/otp_verification_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart'
+    show authTextPrimary, authTextMuted;
+import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
 import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/main_layout.dart';
@@ -621,67 +625,68 @@ class _SessionExpiredScreenState extends ConsumerState<_SessionExpiredScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : Colors.black;
+    final textColor = authTextPrimary(context);
     final email = widget.user.email ?? '';
 
     return Scaffold(
       body: BrandedAuthBackground(
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Spacer(),
-                Icon(
-                  AppIcons.lockClock,
-                  size: 72,
-                  color: theme.colorScheme.primary,
+          // Centred and scrollable: it fits a phone sideways and a big text
+          // size by scrolling, never by overflowing.
+          child: AuthCenteredScroll(
+            padding: context.rPaddingSymmetric(horizontal: 28, vertical: 32),
+            children: [
+              Icon(
+                AppIcons.lockClock,
+                size: context.getRSize(72),
+                color: theme.colorScheme.primary,
+              ),
+              SizedBox(height: context.getRSize(20)),
+              Text(
+                'Session expired',
+                textAlign: TextAlign.center,
+                style: context.boldStyle(26).copyWith(color: textColor),
+              ),
+              SizedBox(height: context.getRSize(12)),
+              Text(
+                email.isEmpty
+                    ? "Your sign-in has expired. Verify your email to keep your changes syncing."
+                    : "Your sign-in has expired. We'll send a code to $email to restore your session — your PIN and local data stay intact.",
+                textAlign: TextAlign.center,
+                style: context
+                    .regularStyle(14)
+                    .copyWith(height: 1.4, color: authTextMuted(context, 0.75)),
+              ),
+              SizedBox(height: context.getRSize(32)),
+              AppButton(
+                text: _sending ? 'Sending…' : 'Verify email',
+                onPressed: _sending ? null : _resendOtp,
+              ),
+              SizedBox(height: context.getRSize(12)),
+              TextButton(
+                onPressed: _sending ? null : _signOut,
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(48, kMinInteractiveDimension),
                 ),
-                const SizedBox(height: 20),
-                Text(
-                  'Session expired',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.w700,
-                    color: textColor,
-                  ),
+                child: Text(
+                  'Sign out instead',
+                  style: context
+                      .mediumStyle(14)
+                      .copyWith(color: authTextMuted(context)),
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  email.isEmpty
-                      ? "Your sign-in has expired. Verify your email to keep your changes syncing."
-                      : "Your sign-in has expired. We'll send a code to $email to restore your session — your PIN and local data stay intact.",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    height: 1.4,
-                    color: textColor.withValues(alpha: 0.75),
-                  ),
-                ),
-                const Spacer(),
-                AppButton(
-                  text: _sending ? 'Sending…' : 'Verify email',
-                  onPressed: _sending ? null : _resendOtp,
-                ),
-                const SizedBox(height: 12),
-                TextButton(
-                  onPressed: _sending ? null : _signOut,
-                  child: Text(
-                    'Sign out instead',
-                    style: TextStyle(color: textColor.withValues(alpha: 0.65)),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 }
+
+/// Test seam: lets widget tests mount the private [_SessionExpiredScreen].
+@visibleForTesting
+Widget buildSessionExpiredScreenForTest(UserData user) =>
+    _SessionExpiredScreen(user: user);
 
 // ---------------------------------------------------------------------------
 // Home routing widget — extracted from _ReebaplusPosAppState so all

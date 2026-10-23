@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:reebaplus_pos/core/theme/app_icons.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/auth/widgets/pin_keypad.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
@@ -103,170 +106,114 @@ class _PinDialogState extends ConsumerState<PinDialog> {
     }
   }
 
+  /// Height (base dp, at text scale 1) the one-column dialog needs.
+  static const double _oneColumnHeight = 520;
+
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    final surface = t.colorScheme.surface;
-    final cardCol = t.cardColor;
     final textColor = t.colorScheme.onSurface;
     final subtextColor = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
-    final primary = t.colorScheme.primary;
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
 
-    return Dialog(
-      backgroundColor: surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // ── Title ───────────────────────────────────────────────────
-            Text(
-              widget.title,
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                color: textColor,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Enter a 6-digit manager PIN to continue',
-              style: TextStyle(fontSize: 12, color: subtextColor),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
+    final heading = <Widget>[
+      // ── Title ─────────────────────────────────────────────────────────
+      Text(
+        widget.title,
+        style: context.extraBoldStyle(18).copyWith(color: textColor),
+        textAlign: TextAlign.center,
+      ),
+      SizedBox(height: context.getRSize(6)),
+      Text(
+        'Enter a 6-digit manager PIN to continue',
+        style: context.regularStyle(13).copyWith(color: subtextColor),
+        textAlign: TextAlign.center,
+      ),
+      SizedBox(height: context.getRSize(20)),
 
-            // ── Six dots ─────────────────────────────────────────────────
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(6, (i) {
-                final filled = i < _pin.length;
-                return AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  margin: const EdgeInsets.symmetric(horizontal: 8),
-                  width: 14,
-                  height: 14,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: filled ? primary : Colors.transparent,
-                    border: Border.all(
-                      color: filled ? primary : subtextColor,
-                      width: 2,
-                    ),
-                  ),
-                );
-              }),
-            ),
-            const SizedBox(height: 10),
+      // ── Six dots ──────────────────────────────────────────────────────
+      PinDots(filled: _pin.length),
+      SizedBox(height: context.getRSize(8)),
 
-            // ── Error message ────────────────────────────────────────────
-            SizedBox(
-              height: 18,
-              child: _errorMessage != null
-                  ? Text(
-                      _errorMessage!,
-                      style: TextStyle(
-                        color: t.colorScheme.error,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      textAlign: TextAlign.center,
-                    )
-                  : null,
-            ),
-            const SizedBox(height: 16),
-
-            // ── Keypad ───────────────────────────────────────────────────
-            _buildKeyRow(['1', '2', '3'], cardCol, textColor),
-            const SizedBox(height: 8),
-            _buildKeyRow(['4', '5', '6'], cardCol, textColor),
-            const SizedBox(height: 8),
-            _buildKeyRow(['7', '8', '9'], cardCol, textColor),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const SizedBox(width: 60, height: 52), // spacer
-                const SizedBox(width: 8),
-                _keyBtn('0', cardCol, textColor),
-                const SizedBox(width: 8),
-                _iconBtn(AppIcons.backspace, cardCol, textColor),
-              ],
-            ),
-
-            const SizedBox(height: 20),
-
-            // ── Cancel ───────────────────────────────────────────────────
-            if (_checking)
-              const SizedBox(
-                height: 24,
-                width: 24,
-                child: CircularProgressIndicator(strokeWidth: 2),
+      // ── Error message ─────────────────────────────────────────────────
+      SizedBox(
+        height: context.getRSize(20),
+        child: _errorMessage != null
+            ? Text(
+                _errorMessage!,
+                style: context.mediumStyle(12).copyWith(color: f.danger),
+                textAlign: TextAlign.center,
               )
-            else
-              AppButton(
-                text: 'Cancel',
-                variant: AppButtonVariant.ghost,
-                isFullWidth: false,
-                onPressed: () => Navigator.pop(context, null),
-              ),
-          ],
-        ),
+            : null,
       ),
-    );
-  }
+    ];
+    final keypad = PinKeypad(onDigit: _onDigit, onBackspace: _onBackspace);
+    // ── Cancel ──────────────────────────────────────────────────────────
+    final cancel = _checking
+        ? SizedBox(
+            height: context.getRSize(24),
+            width: context.getRSize(24),
+            child: const CircularProgressIndicator(strokeWidth: 2),
+          )
+        : AppButton(
+            text: 'Cancel',
+            variant: AppButtonVariant.ghost,
+            isFullWidth: false,
+            onPressed: () => Navigator.pop(context, null),
+          );
 
-  Widget _buildKeyRow(List<String> digits, Color card, Color text) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: digits.map((d) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: _keyBtn(d, card, text),
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _keyBtn(String digit, Color card, Color text) {
-    return Material(
-      color: card,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => _onDigit(digit),
-        child: SizedBox(
-          width: 60,
-          height: 52,
-          child: Center(
-            child: Text(
-              digit,
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w600,
-                color: text,
-              ),
+    // Same pop-up look as the other restyled dialogs: the theme's surface and
+    // radius, DM Sans titles. The space is measured: a short window (a phone
+    // sideways) puts the message left and the keypad right; the body scrolls
+    // either way, so nothing overflows at any size or text scale.
+    return Dialog(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final scale = MediaQuery.textScalerOf(context).scale(1.0);
+          final need = _oneColumnHeight * (scale > 1 ? scale : 1.0);
+          final twoColumn =
+              constraints.maxWidth >= 520 && constraints.maxHeight < need;
+          final pad = EdgeInsets.fromLTRB(
+            context.getRSize(24),
+            context.getRSize(24),
+            context.getRSize(24),
+            context.getRSize(16),
+          );
+          return ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: twoColumn ? 560 : 360),
+            child: SingleChildScrollView(
+              padding: pad,
+              child: twoColumn
+                  ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              ...heading,
+                              SizedBox(height: context.getRSize(8)),
+                              cancel,
+                            ],
+                          ),
+                        ),
+                        SizedBox(width: context.getRSize(16)),
+                        Expanded(child: Center(child: keypad)),
+                      ],
+                    )
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ...heading,
+                        SizedBox(height: context.getRSize(8)),
+                        keypad,
+                        SizedBox(height: context.getRSize(12)),
+                        cancel,
+                      ],
+                    ),
             ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _iconBtn(IconData icon, Color card, Color text) {
-    return Material(
-      color: card,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: _onBackspace,
-        child: SizedBox(
-          width: 60,
-          height: 52,
-          child: Center(child: Icon(icon, color: text, size: 22)),
-        ),
+          );
+        },
       ),
     );
   }
