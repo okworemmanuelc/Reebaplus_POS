@@ -1088,10 +1088,8 @@ class _CartScreenState extends ConsumerState<CartScreen>
     );
     final quoteItems = List<Map<String, dynamic>>.from(cartItems)
       ..sort((a, b) => b['qty'].compareTo(a['qty']));
-    final quote = _quote(
-      quoteItems,
-      isCrate: businessTracksCrates(ref.watch(currentBusinessProvider)),
-    );
+    final crates = businessTracksCrates(ref.watch(currentBusinessProvider));
+    final quote = _quote(quoteItems, isCrate: crates);
     final sub = quote.subtotal;
     final discountTotal = quote.discountTotal;
     final tot = quote.total;
@@ -1139,7 +1137,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
       // Request Stock tiles). The unit moved here from the front of the name.
       final detail = [
         item['subtitle'] as String?,
-        unitLabel(item['unit'] as String?),
+        unitLabel(item['unit'] as String?, crates: crates),
       ].where((s) => s != null && s.trim().isNotEmpty).join(' · ');
       final card = CartLine(
         key: cartLineKey(
@@ -1149,6 +1147,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
         name: productDisplayName(
           item['name'] as String,
           item['size'] as String?,
+          crates: crates,
         ),
         icon: visual.icon,
         tileTint: visual.tint,

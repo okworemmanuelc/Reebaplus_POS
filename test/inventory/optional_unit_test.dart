@@ -13,21 +13,34 @@ import 'package:drift/drift.dart' hide isNull;
 void main() {
   group('productDisplayName renders an absent unit as nothing (#108)', () {
     test('a null unit shows just the name', () {
-      expect(productDisplayName('Goldberg', null, unit: null), 'Goldberg');
+      expect(
+        productDisplayName('Goldberg', null, unit: null, crates: true),
+        'Goldberg',
+      );
     });
 
     test('a null unit still keeps the size abbreviation', () {
-      expect(productDisplayName('Goldberg', 'big', unit: null), 'Goldberg (B)');
+      expect(
+        productDisplayName('Goldberg', 'big', unit: null, crates: false),
+        'Goldberg (B)',
+      );
     });
 
     test('an empty-string unit is treated as absent', () {
-      expect(productDisplayName('Goldberg', null, unit: ''), 'Goldberg');
+      expect(
+        productDisplayName('Goldberg', null, unit: '', crates: true),
+        'Goldberg',
+      );
     });
 
     test('a present unit is still prepended (Bottle as its label, #487)', () {
       expect(
-        productDisplayName('Goldberg', null, unit: 'Bottle'),
+        productDisplayName('Goldberg', null, unit: 'Bottle', crates: true),
         'Bottle Crate Goldberg',
+      );
+      expect(
+        productDisplayName('Goldberg', null, unit: 'Bottle', crates: false),
+        'Bottle Goldberg',
       );
     });
   });

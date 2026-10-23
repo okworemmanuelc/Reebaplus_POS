@@ -211,20 +211,22 @@ class _ScanLinkProductSheetState extends ConsumerState<ScanLinkProductSheet> {
 }
 
 /// One tappable search result: the name (+ size) and its current barcode.
-class _ScanLinkRow extends StatelessWidget {
+class _ScanLinkRow extends ConsumerWidget {
   const _ScanLinkRow({required this.product, required this.onTap});
 
   final ProductData product;
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final t = Theme.of(context);
     final text = t.colorScheme.onSurface;
     final muted = t.textTheme.bodySmall?.color ?? text;
     // Same size + unit descriptor the POS grid tile shows under the name.
-    final size = '${product.size ?? ''} ${unitLabel(product.unit) ?? ''}'
-        .trim();
+    final crates = businessTracksCrates(ref.watch(currentBusinessProvider));
+    final size =
+        '${product.size ?? ''} ${unitLabel(product.unit, crates: crates) ?? ''}'
+            .trim();
     final barcode = product.barcode?.trim() ?? '';
     final radius = BorderRadius.circular(AppSpacing.borderRadiusL);
 

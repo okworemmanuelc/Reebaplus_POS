@@ -755,6 +755,8 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    // "Bottle Crate" only in a shop that counts empty crates (#487).
+    final crates = businessTracksCrates(ref.watch(currentBusinessProvider));
     final gutter = context.getRSize(20);
     final gap = context.getRSize(14);
     final section = context.getRSize(16);
@@ -996,14 +998,15 @@ class _UpdateProductSheetState extends ConsumerState<UpdateProductSheet> {
                         child: Text('No unit'),
                       ),
                       // Plain "Crate" only while it is this product's
-                      // unit (#487); a stored Bottle reads "Bottle Crate".
+                      // unit (#487); a stored Bottle reads "Bottle Crate"
+                      // in a shop that counts empty crates.
                       ...unitChoices(
                         _dynamicUnits,
                         keep: [_unit, widget.product.unit],
                       ).map(
                         (u) => DropdownMenuItem<String?>(
                           value: u,
-                          child: Text(unitLabel(u)!),
+                          child: Text(unitLabel(u, crates: crates)!),
                         ),
                       ),
                     ],

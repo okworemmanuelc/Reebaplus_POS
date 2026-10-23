@@ -517,8 +517,9 @@ text on a solid fixed pill (PRO).
 ## Layout patterns
 
 ### Product units on screen (#487)
-- A unit is never shown raw: every label passes through `unitLabel()` (`lib/core/utils/product_unit.dart`), so a stored `Bottle` reads **"Bottle Crate"** (dropdown items, tiles, rows, cart, receipts, `productDisplayName`). The saved value stays `Bottle`. A count after a number uses `unitCountNoun(unit, n)` ("12 crates", "1 pack", "3 units").
-- Unit pickers list `unitChoices(units, keep: [current, saved])`: plain **Crate** is not offered to a new product, only while it is the product's own unit.
+- A unit is never shown raw: every label passes through `unitLabel(unit, crates: …)` (`lib/core/utils/product_unit.dart`). **Only in a shop that counts empty crates** (`crates: businessTracksCrates(business)`: Bar / Beverage distributor AND `tracks_empty_crates`) does a stored `Bottle` read **"Bottle Crate"** (dropdown items, tiles, rows, cart, receipts, `productDisplayName`). Every other shop (a pharmacy's bottle of syrup, a supermarket's bottle of oil, a bar that switched crate counting off) sees plain **"Bottle"**. The saved value stays `Bottle` either way. A count after a number uses `unitCountNoun(unit, n, crates: …)`: "12 crates" in a crate shop, "12 bottles" elsewhere; "1 pack", "3 units" for both.
+- `crates` is a **required** named argument on `unitLabel`, `unitCountNoun` and `productDisplayName`, so no caller can forget which shop it draws for. Widgets pass `businessTracksCrates(ref.watch(currentBusinessProvider))` in build. Receipts take it as a required `tracksCrates` argument (`ReceiptWidget`, `ThermalReceiptService.buildReceipt`), filled by their screens the same way; a receipt in a modal sheet watches it through a `Consumer` so it never reads a not-yet-loaded business.
+- Unit pickers list `unitChoices(units, keep: [current, saved])`: plain **Crate** is not offered to a new product **in any shop** (it is a drinks idea no other trade needs), only while it is the product's own unit.
 
 ### `MainLayout` — the app frame (`lib/shared/widgets/main_layout.dart`, #352)
 
