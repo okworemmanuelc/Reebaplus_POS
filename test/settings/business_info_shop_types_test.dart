@@ -72,6 +72,28 @@ void main() {
       await disposeScreen(tester);
     });
 
+    testWidgets('loads a lowercase known type as that type, not Other', (
+      tester,
+    ) async {
+      await env.db.customStatement(
+        "UPDATE businesses SET type = 'pharmacy' WHERE id = '${env.businessId}'",
+      );
+      await pumpSettingsPage(
+        tester,
+        env: env,
+        screen: const BusinessInfoScreen(),
+        size: const Size(390, 844),
+      );
+
+      final dropdown = tester.widget<AppDropdown<String>>(
+        find.byType(AppDropdown<String>).first,
+      );
+      expect(dropdown.currentValue, 'Pharmacy');
+      expect(find.text('Specify business type'), findsNothing);
+
+      await disposeScreen(tester);
+    });
+
     testWidgets('selecting Other displays text box and saves custom type', (
       tester,
     ) async {

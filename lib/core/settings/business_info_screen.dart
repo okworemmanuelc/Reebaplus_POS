@@ -113,8 +113,11 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
         loadedType = 'Beverage distributor';
       }
       if (loadedType != null && loadedType.isNotEmpty) {
-        if (Industry.catalogue.any((i) => i.label == loadedType)) {
-          _type = loadedType;
+        // Resolve through industryOf so non-canonical casing ('pharmacy',
+        // 'beer distributor') still selects the real type, not "Other".
+        final industry = industryOf(loadedType);
+        if (industry != Industry.generic) {
+          _type = industry.label;
           _otherTypeController.clear();
         } else {
           _type = 'Other';
