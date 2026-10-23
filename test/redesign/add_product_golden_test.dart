@@ -1,10 +1,12 @@
-// Visual goldens for Add Product and the Update Product sheet (#392 PR 2).
+// Visual goldens for Add Product (#487 PR 2) and the Update Product sheet
+// (#392 PR 2).
 //
-// Add Product (Fast-Add, "More details" closed) at 390x844 (gesture nav,
-// bottom 24), 844x390 (status bar 24, 3-button nav on the right 48), 800x1280
-// and 1280x800; Fast-Add with "More details" open and the classic "Add Stock"
-// layout at 390x844 and 1280x800; the Update Product sheet at 390x844 and
-// 844x390. Light + dark. No relative dates or times anywhere. Regenerate with:
+// Add Product empty and filled in (a Bottle Crate product with cost, prices,
+// brand and category, so the profit rows and Track Empty Crates show) at
+// 390x844 (phone, gesture nav, bottom 24), 844x390 (status bar 24, 3-button
+// nav on the right 48: two columns), 800x1280 (two columns) and 1280x800 (two
+// columns + Preview), plus a filled 1024x700 (Preview in a short window). The Update Product sheet at 390x844 and 844x390. Light +
+// dark. No relative dates or times anywhere. Regenerate with:
 //
 //     flutter test --update-goldens test/redesign/add_product_golden_test.dart
 
@@ -70,7 +72,6 @@ void main() {
     ('800x1280', Size(800, 1280), FakeViewPadding(top: 24, bottom: 24)),
     ('1280x800', Size(1280, 800), FakeViewPadding(top: 24)),
   ];
-  final pair = [all.first, all.last];
   final phones = [all[0], all[1]];
 
   Future<void> pump(
@@ -105,6 +106,49 @@ void main() {
     );
   }
 
+  Future<void> type(WidgetTester tester, Key key, String text) async {
+    final box = find.descendant(
+      of: find.byKey(key),
+      matching: find.byType(TextFormField),
+    );
+    await tester.ensureVisible(box);
+    await tester.enterText(box, text);
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> pickIn(WidgetTester tester, Key field, String option) async {
+    await tester.ensureVisible(find.byKey(field));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(field));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(option).last);
+    await tester.pumpAndSettle();
+  }
+
+  /// The mockup's product: a Bottle Crate of 12, Beer, Nigerian Breweries.
+  Future<void> fillIn(WidgetTester tester) async {
+    await type(tester, AddProductKeys.name, 'Heineken 60cl');
+    await pickIn(tester, AddProductKeys.category, 'Beer');
+    await pickIn(tester, AddProductKeys.manufacturer, 'Nigerian Breweries');
+    await tester.ensureVisible(find.byKey(AddProductKeys.unitChip('Bottle')));
+    await tester.tap(find.byKey(AddProductKeys.unitChip('Bottle')));
+    await tester.pumpAndSettle();
+    await type(tester, AddProductKeys.unitsPerPack, '12');
+    await type(tester, AddProductKeys.cost, '13500');
+    await type(tester, AddProductKeys.retail, '15000');
+    await type(tester, AddProductKeys.wholesale, '14200');
+    await type(tester, AddProductKeys.quantity, '20');
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pumpAndSettle();
+    // Back to the top, as the mockups show it.
+    for (final s in tester.stateList<ScrollableState>(
+      find.byType(Scrollable),
+    )) {
+      s.position.jumpTo(0);
+    }
+    await tester.pumpAndSettle();
+  }
+
   Future<void> snap(WidgetTester tester, String name) async {
     expect(tester.takeException(), isNull);
     await expectLater(
@@ -130,10 +174,12 @@ void main() {
       });
     }
 
-    for (final (sizeName, size, insets) in pair) {
-      testWidgets('add product, more details, $sizeName $theme', (
-        tester,
-      ) async {
+    for (final (sizeName, size, insets) in [
+      ...all,
+      // A shorter wide window: the preview scrolls above the pinned buttons.
+      ('1024x700', const Size(1024, 700), const FakeViewPadding(top: 24)),
+    ]) {
+      testWidgets('add product filled in, $sizeName $theme', (tester) async {
         await pump(
           tester,
           screen: const AddProductScreen(),
@@ -141,34 +187,8 @@ void main() {
           insets: insets,
           brightness: brightness,
         );
-        await tester.ensureVisible(find.text('More details'));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('More details'));
-        await tester.pumpAndSettle();
-        // Bring the opened section (photo first) into view.
-        await tester.ensureVisible(find.text('Add photo'));
-        await tester.pumpAndSettle();
-        await snap(tester, 'add_product_more_${sizeName}_$theme');
-      });
-
-      testWidgets('add stock to an existing product, $sizeName $theme', (
-        tester,
-      ) async {
-        await pump(
-          tester,
-          screen: const AddProductScreen(),
-          size: size,
-          insets: insets,
-          brightness: brightness,
-        );
-        await tester.enterText(find.byType(TextField).first, 'Gul');
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Bottle Crate Gulder'));
-        await tester.pumpAndSettle();
-        FocusManager.instance.primaryFocus?.unfocus();
-        await tester.pumpAndSettle();
-        expect(find.text('Adding stock to existing product'), findsOneWidget);
-        await snap(tester, 'add_product_existing_${sizeName}_$theme');
+        await fillIn(tester);
+        await snap(tester, 'add_product_filled_${sizeName}_$theme');
       });
     }
 

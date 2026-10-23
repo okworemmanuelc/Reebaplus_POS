@@ -11,7 +11,6 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 
 import 'package:reebaplus_pos/core/utils/responsive.dart'; // RESPONSIVE: utility imported
 import 'package:reebaplus_pos/core/utils/number_format.dart';
-import 'package:reebaplus_pos/features/inventory/data/models/inventory_item.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
@@ -30,18 +29,17 @@ import 'package:reebaplus_pos/core/crates/manufacturer_crate_position.dart';
 import 'package:reebaplus_pos/features/inventory/screens/manufacturer_screen.dart';
 import 'package:reebaplus_pos/features/inventory/screens/supplier_detail_screen.dart';
 import 'package:reebaplus_pos/features/inventory/screens/stock_count_screen.dart';
-import 'package:reebaplus_pos/features/inventory/screens/product_detail_screen.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/inventory_history_tab.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/inventory_manufacturers_tab.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/update_product_sheet.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/manage_categories_sheet.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/product_details_route.dart';
 import 'package:reebaplus_pos/core/constants/category_filter.dart';
 import 'package:reebaplus_pos/core/utils/product_name.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
-import 'package:reebaplus_pos/shared/utils/product_icon_helper.dart';
 import 'package:reebaplus_pos/core/widgets/app_speed_dial_fab.dart';
 import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
 import 'package:reebaplus_pos/features/receiving/screens/receive_stock_screen.dart';
@@ -1223,10 +1221,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     final isLow = currentStock > 0 && currentStock <= product.lowStockThreshold;
     final isOut = currentStock == 0;
 
-    // The detail screen's hero still reads the product's own colour.
-    final accent = product.colorHex != null
-        ? Color(int.parse(product.colorHex!.replaceFirst('#', '0xFF')))
-        : Theme.of(context).colorScheme.primary;
     final expiry = product.expiryDate;
 
     return InventoryProductRow(
@@ -1269,39 +1263,17 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
               );
             }
           : null,
-      onTap: () {
-        final inventoryItem = InventoryItem(
-          id: product.id.toString(),
-          productName: product.name,
-          subtitle: product.subtitle ?? '',
-          icon: productIconFromCodePoint(product.iconCodePoint),
-          color: accent,
-          storeStock: {'w1': item.totalStock.toDouble()},
-          lowStockThreshold: product.lowStockThreshold.toDouble(),
-          retailerPrice: product.retailerPriceKobo / 100.0,
-          wholesalerPrice: product.wholesalerPriceKobo / 100.0,
-          buyingPrice: product.buyingPriceKobo / 100.0,
-          category: product.categoryId?.toString(),
-          manufacturer: _dbManufacturers
-              .where((m) => m.id == product.manufacturerId)
-              .map((m) => m.name)
-              .firstOrNull,
-          size: product.size,
-          unit: product.unit,
-        );
-        Navigator.push(
-          context,
-          slideDownRoute<void>(
-            ProductDetailScreen(
-              item: inventoryItem,
-              onUpdateStock: () => setState(() {}),
-              selectedStoreId: _selectedStoreId == 'all'
-                  ? null
-                  : _selectedStoreId,
-            ),
-          ),
-        );
-      },
+      onTap: () => openProductDetails(
+        context,
+        product,
+        manufacturerName: _dbManufacturers
+            .where((m) => m.id == product.manufacturerId)
+            .map((m) => m.name)
+            .firstOrNull,
+        totalStock: item.totalStock.toDouble(),
+        storeId: _selectedStoreId == 'all' ? null : _selectedStoreId,
+        onUpdateStock: () => setState(() {}),
+      ),
     );
   }
 

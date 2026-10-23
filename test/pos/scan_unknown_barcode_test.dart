@@ -142,6 +142,11 @@ void main() {
     matching: find.byType(TextFormField),
   );
 
+  Finder quantityField() => find.descendant(
+    of: find.byKey(AddProductKeys.quantity),
+    matching: find.byType(TextFormField),
+  );
+
   Future<void> tapButton(WidgetTester tester, String label) async {
     final button = find.widgetWithText(AppButton, label);
     await tester.ensureVisible(button);
@@ -173,10 +178,10 @@ void main() {
     expect(scanner.camera!.isRunning, isTrue);
 
     await tester.enterText(fieldFor('Product Name'), 'Malta Guinness');
-    await tester.enterText(fieldFor('Selling Price'), '500');
-    await tester.enterText(fieldFor('Quantity'), '12');
+    await tester.enterText(fieldFor('Retail Price'), '500');
+    await tester.enterText(quantityField(), '12');
     await tester.pumpAndSettle();
-    await tapButton(tester, 'Add Product');
+    await tapButton(tester, 'Save Product');
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
@@ -235,10 +240,10 @@ void main() {
     );
 
     await tester.enterText(fieldFor('Product Name'), 'Malta Guinness');
-    await tester.enterText(fieldFor('Selling Price'), '500');
-    await tester.enterText(fieldFor('Quantity'), '12');
+    await tester.enterText(fieldFor('Retail Price'), '500');
+    await tester.enterText(quantityField(), '12');
     await tester.pumpAndSettle();
-    await tapButton(tester, 'Add Product');
+    await tapButton(tester, 'Save Product');
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
