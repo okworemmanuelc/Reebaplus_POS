@@ -285,14 +285,38 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
 
   Future<String> insertCategory(CategoriesCompanion companion) async {
     final id = UuidV7.generate();
+    final business = await (select(db.businesses)
+      ..where((b) => b.id.equals(requireBusinessId()))).getSingle();
+    final mapping = companion.marketplaceCategory.present
+        ? companion.marketplaceCategory
+        : Value(starterMarketplaceCategory(
+            industryOf(business.type), companion.name.value));
     final row = companion.copyWith(
       id: Value(id),
+      marketplaceCategory: mapping,
       lastUpdatedAt: Value(DateTime.now()),
     );
     await into(categories).insert(row);
     await db.syncDao.enqueueUpsert('categories', row);
     return id;
   }
+
+  /// Mapping and its outbox row are atomic; null explicitly restores Other.
+  Future<void> mapCategory(String id, String? slug) => db.transaction(() async {
+    if (slug != null && !marketplaceCategories.any((c) => c.slug == slug)) {
+      throw ArgumentError.value(slug, 'slug', 'Unknown marketplace category');
+    }
+    final query = select(categories)..where((t) =>
+        t.id.equals(id) & whereBusiness(t) & t.isDeleted.not());
+    final row = await query.getSingleOrNull();
+    if (row == null) return;
+    final updated = row.copyWith(
+        marketplaceCategory: Value(slug), lastUpdatedAt: DateTime.now());
+    await (update(categories)..where((t) =>
+        t.id.equals(id) & whereBusiness(t))).write(updated.toCompanion(false));
+    await db.syncDao.enqueueUpsert('categories',
+        updated.toCompanion(false));
+  });
 
   /// True if a **non-deleted** category in this business already uses [name]
   /// (case-insensitive, trimmed), excluding [excludeId] (the category being

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:math' as math;
+import 'package:reebaplus_pos/core/data/marketplace_categories.dart';
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:rxdart/rxdart.dart';
@@ -22,7 +23,7 @@ import 'package:reebaplus_pos/core/crates/crate_ledger_movement_types.dart';
 import 'package:reebaplus_pos/core/crates/crate_shortage.dart';
 import 'package:reebaplus_pos/core/crates/crate_shortfall.dart';
 import 'package:reebaplus_pos/core/crates/manufacturer_crate_position.dart';
-import 'package:reebaplus_pos/core/data/business_types.dart';
+import 'package:reebaplus_pos/core/industry/industry.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/business_scoped_dao.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
