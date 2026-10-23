@@ -1174,6 +1174,15 @@ final productsWithStockProvider =
   whenAbsent: const [],
 );
 
+/// One product's quantity per store, keyed by store id — Product Details'
+/// Stock by Store card and hero total (#487). Business-scoped.
+final productStockByStoreProvider =
+    businessScopedStreamFamily<Map<String, int>, String>(
+  (ref, db, businessId, productId) =>
+      db.inventoryDao.watchStockByStoreForProduct(productId),
+  whenAbsent: const {},
+);
+
 // ── Categories ──────────────────────────────────────────────────────────────
 final allCategoriesProvider = businessScopedStream<List<CategoryData>>(
   (ref, db, businessId) => db.inventoryDao.watchAllCategories(),
