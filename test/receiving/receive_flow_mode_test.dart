@@ -82,8 +82,8 @@ void main() {
 
   tearDown(() => db.close());
 
-  testWidgets('AddProductScreen receiveMode = false is a Fast-Add form: '
-      'single-store hides Store, Supplier lives under More details', (
+  testWidgets('AddProductScreen receiveMode = false: single-store hides '
+      'Store, Supplier sits in the open More details card (#487)', (
     tester,
   ) async {
     final container = ProviderContainer(
@@ -112,23 +112,17 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // The fast section carries the three required fields (ADR 0006).
-    expect(find.text('Product Name *'), findsOneWidget);
-    expect(find.textContaining('Selling Price'), findsOneWidget);
-    expect(find.text('Quantity *'), findsOneWidget);
+    // The three required fields are all on screen (ADR 0006).
+    expect(find.text('Product Name'), findsOneWidget);
+    expect(find.text('Retail Price'), findsOneWidget);
+    expect(find.text('Opening Quantity'), findsOneWidget);
 
     // A single-store business is never asked which store to stock into.
-    expect(find.text('STORE *'), findsNothing);
+    expect(find.byKey(AddProductKeys.store), findsNothing);
 
-    // Supplier is collapsed under "More details" until the section is expanded.
-    expect(find.text('Supplier'), findsNothing);
+    // More details is an open card (no fold): Supplier is already there.
     expect(find.text('More details'), findsOneWidget);
-
-    await tester.ensureVisible(find.text('More details'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('More details'));
-    await tester.pumpAndSettle();
-    expect(find.text('Supplier'), findsOneWidget);
+    expect(find.byKey(AddProductKeys.supplier), findsOneWidget);
 
     container.dispose();
     await tester.pump(Duration.zero);
@@ -161,8 +155,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('SUPPLIER (optional)'), findsNothing);
-    expect(find.text('STORE *'), findsNothing);
+    // The same form; the Store box is hidden (the quantity goes onto the
+    // delivery list) and the delivery carries its own supplier.
+    expect(find.text('Opening Quantity'), findsOneWidget);
+    expect(find.byKey(AddProductKeys.store), findsNothing);
+    expect(find.byKey(AddProductKeys.supplier), findsNothing);
 
     container.dispose();
     await tester.pump(Duration.zero);
