@@ -99,8 +99,8 @@ Only the service role writes. It is not tenant data, is not mirrored in Drift,
 and is never in the sync registry or outbox. The shared AreaPicker reads the
 bundled Dart reference offline and returns a plain AreaSelection; callers own
 persistence. Later store/address/delivery migrations can validate against the
-cloud table. See `docs/data/nigerian-areas.md`; migration 0189 is prepared,
-not deployed. No architecture invariant changes.
+cloud table. See `docs/data/nigerian-areas.md`; migration 0189 is verified on the isolated
+`reebaplus-dev` project and not deployed to production. No invariant changes.
 
 ## Storage Model
 

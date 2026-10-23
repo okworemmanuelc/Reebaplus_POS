@@ -54,5 +54,22 @@ Whole-state selection uses a null LGA in the picker result, never a fake row.
 
 Tier-1 verifies counts/uniqueness and exact migration seed parity. Tier-2 reads
 all cloud rows with pagination and compares the complete set. Deploy the
-migration on a test backend before that check. No migration was deployed by
-this task. Recheck sequential migration numbering before merge/deployment.
+migration on a test backend before that check. Recheck sequential migration
+numbering before merge/production deployment.
+
+### Development verification (2026-10-23)
+
+Owner approved a fresh project: `reebaplus-dev` (`yngwzuinxhxhzdfagcbg`,
+eu-west-1). The public schema was empty before deployment. Applied only
+migration 0189; no business data copied and no production changes.
+
+- Actual paginated tier-2 comparison: **1 passed, 0 skipped, 0 failed**.
+- Database: 774 rows, 37 state/FCT keys, RLS enabled.
+- Role catalogue: anon/authenticated SELECT allowed; INSERT/UPDATE/DELETE
+  denied; service_role has read/write privileges.
+- Six rollback-wrapped SQL probes independently confirmed write denial for
+  anon and authenticated (three operations each).
+
+The app still uses its existing live project. Development currently contains
+only this reference, not a full app backend. Test credentials are kept in the
+private task scratch directory outside the repository. No secrets belong here.

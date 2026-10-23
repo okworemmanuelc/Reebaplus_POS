@@ -7,7 +7,7 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
-### Issue #471: Nigeria area reference + shared picker (2026-10-23, implemented locally)
+### Issue #471: Nigeria area reference + shared picker (2026-10-23, development database verified)
 - Owner selected #471 before #423 and authorised agent-designed picker UI after
   providing Browse/product-detail references. This authorisation covers #471;
   consumer issues remain held until separately authorised.
@@ -17,8 +17,8 @@ The human updates it when resolving open questions or making architectural decis
   count regression failed on the old Katsina list (32 vs 34).
 - Corrected missing entries, spurious names and clear typos; recognised historic
   aliases stay stable. Two data tests pass: per-state counts/uniqueness (774)
-  and exact migration-seed parity. Read-only tier-2 comparison compiles and skips
-  without TEST_SUPABASE_URL/TEST_SUPABASE_ANON_KEY; no database changes deployed.
+  and exact migration-seed parity. After owner approval, deployed 0189 to the
+  fresh development project and passed the previously skipped tier-2 comparison.
 - Prepared migration 0189 (0187 web and 0188 #422 reserved). POS parity issue:
   https://github.com/okworemmanuelc/reebaplus-web/issues/135.
 - Shared UI implemented with search, caller-controlled whole-state selection,
@@ -33,14 +33,26 @@ The human updates it when resolving open questions or making architectural decis
 - Re-fetched origin/main (unchanged); checked web master and its 0187 handoff;
   no current 0189 collision. Recheck numbering before deployment.
 - Local implementation commits: `300aa17d` (reference/cloud) and `bc352a08`
-  (picker/localisation/tests). No branch push or migration deployment performed.
-- Remaining release check: deploy 0189 to a test backend and run the read-only
-  tier-2 comparison. #471 must not be described as deployed/fully verified until
-  that passes. Store setup, Browse routing, shopper addresses and delivery-area
-  persistence are subsequent issues, not enabled by this shared component.
-- The repo has no ARB/localisation infrastructure despite its code standard.
-  This slice will add Flutter's SDK localisation support for the new picker only;
-  existing screens are outside scope. No #423/#425/#426 screen is wired yet.
+  (picker/localisation/tests). No branch push or production migration performed.
+- **Development database verification (owner approved creation):** created fresh
+  Supabase project `reebaplus-dev` (`yngwzuinxhxhzdfagcbg`, eu-west-1). Public
+  schema was empty before deployment; copied no business records. A separate
+  scratch CLI workspace is linked only to this project. Dry run listed only
+  0189; migration applied successfully and history contains only `0189`.
+- Real tier-2 test: **1 passed / 0 skipped / 0 failed**, using the development
+  URL and anon key. All 774 pairs match exactly; 37 state/FCT keys; RLS enabled.
+  Six rollback-wrapped SQL probes confirmed anon/authenticated cannot INSERT,
+  UPDATE or DELETE. Catalogue checks confirm both roles can SELECT and only
+  service_role has write grants among client/service roles.
+- The live business project `ewwyofbvfjyqqirrcaou` and the app's connection
+  settings are unchanged. Development currently has only the area reference,
+  not the full app schema. Credentials/logs stay outside this repository in the
+  private task scratch directory; no secrets committed.
+- Remaining: submit this branch for review; production rollout is separate.
+  Store setup, Browse routing, shopper addresses and delivery-area persistence
+  are subsequent issues, not enabled by this shared component.
+- Added Flutter SDK ARB/localisation support for the new picker only; existing
+  screens are outside scope. No #423/#425/#426 screen is wired yet.
 
 ### Fast-Add: a shared-list photo opens "More details" (2026-10-23)
 Branch `feat/fast-add-open-details-on-catalogue-photo`, worktree `../drinkPosApp-wt-moredetails`. Owner approved the #332 follow-up.
