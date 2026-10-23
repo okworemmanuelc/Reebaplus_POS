@@ -7,11 +7,11 @@ import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
-import 'package:reebaplus_pos/features/pos/services/barcode_scanner.dart';
-import 'package:reebaplus_pos/features/pos/services/scan_camera.dart';
-import 'package:reebaplus_pos/features/pos/services/scan_gate.dart';
-import 'package:reebaplus_pos/features/pos/widgets/sales_parts.dart';
-import 'package:reebaplus_pos/features/pos/widgets/scan_cart_count.dart';
+import 'package:reebaplus_pos/shared/scanner/barcode_scanner.dart';
+import 'package:reebaplus_pos/shared/scanner/scan_camera.dart';
+import 'package:reebaplus_pos/shared/scanner/scan_gate.dart';
+import 'package:reebaplus_pos/shared/widgets/sales_parts.dart';
+import 'package:reebaplus_pos/shared/scanner/scan_cart_count.dart';
 
 /// The full-screen scan session (#319). Stays open until the cashier closes it
 /// (✕ or system back) and lands back on the till with the cart intact.

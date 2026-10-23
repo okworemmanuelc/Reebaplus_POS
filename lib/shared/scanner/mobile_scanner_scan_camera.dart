@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
-import 'package:reebaplus_pos/features/pos/services/camera_permission.dart';
-import 'package:reebaplus_pos/features/pos/services/scan_camera.dart';
+import 'package:reebaplus_pos/shared/scanner/camera_permission.dart';
+import 'package:reebaplus_pos/shared/scanner/scan_camera.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 
 /// The production [ScanCamera], backed by the device camera via
@@ -30,12 +30,12 @@ class MobileScannerScanCamera implements ScanCamera {
     CameraPermission permission = const PermissionHandlerCameraPermission(),
   }) : _permission = permission,
        _controller =
-          controller ??
-          // DetectionSpeed.normal, not noDuplicates (#319): the scanner stays
-          // open, so the same product must scan again after the debounce —
-          // noDuplicates would swallow a repeat of the last code for good.
-          // [ScanGate] handles repeats.
-          MobileScannerController(detectionSpeed: DetectionSpeed.normal) {
+           controller ??
+           // DetectionSpeed.normal, not noDuplicates (#319): the scanner stays
+           // open, so the same product must scan again after the debounce —
+           // noDuplicates would swallow a repeat of the last code for good.
+           // [ScanGate] handles repeats.
+           MobileScannerController(detectionSpeed: DetectionSpeed.normal) {
     _controller.addListener(_syncTorch);
   }
 

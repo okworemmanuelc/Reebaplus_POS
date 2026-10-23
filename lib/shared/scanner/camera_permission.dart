@@ -2,7 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:reebaplus_pos/core/utils/notifications.dart';
-import 'package:reebaplus_pos/features/pos/widgets/camera_permission_sheet.dart';
+import 'package:reebaplus_pos/shared/scanner/camera_permission_sheet.dart';
 
 /// Whether the app may use the camera, as far as the barcode scanner cares.
 enum CameraAccess {
