@@ -7,9 +7,10 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
-### Issue #471: Nigeria area reference + shared picker (2026-10-23, in progress)
+### Issue #471: Nigeria area reference + shared picker (2026-10-23, implemented locally)
 - Owner selected #471 before #423 and authorised agent-designed picker UI after
-  providing Browse/product-detail references. Only this prerequisite is unparked.
+  providing Browse/product-detail references. This authorisation covers #471;
+  consumer issues remain held until separately authorised.
 - Branch `feat/471-nigeria-area-picker`, isolated workspace under the current
   chat's `work/reebaplus-471`, base `985e80be` (fresh origin/main).
 - Verified constitution First Schedule (FAO legal archive) and INEC counts;
@@ -24,7 +25,19 @@ The human updates it when resolving open questions or making architectural decis
   free-text foreign regions, cancellation and ARB-generated strings. Eleven
   widget checks and twelve portrait/landscape light/dark goldens pass;
   keyboard-open cases include 360×640, 390×844 and 844×390 at 1.3 text scale.
-  Flutter analysis is clean. Full suite and two-axis review pending.
+  Flutter analysis is clean. Full suite: **5250 passed / 294 skipped / 0 failed**
+  (6m50s), including the one unconfigured live area-reference comparison.
+- `/code-review` against starting commit `985e80be`: Standards **0 findings**;
+  Spec **0 findings** (independent reviewers). PostgreSQL parser accepts all
+  ten migration statements; this is syntax checking, not a live ACL/deploy test.
+- Re-fetched origin/main (unchanged); checked web master and its 0187 handoff;
+  no current 0189 collision. Recheck numbering before deployment.
+- Local implementation commits: `300aa17d` (reference/cloud) and `bc352a08`
+  (picker/localisation/tests). No branch push or migration deployment performed.
+- Remaining release check: deploy 0189 to a test backend and run the read-only
+  tier-2 comparison. #471 must not be described as deployed/fully verified until
+  that passes. Store setup, Browse routing, shopper addresses and delivery-area
+  persistence are subsequent issues, not enabled by this shared component.
 - The repo has no ARB/localisation infrastructure despite its code standard.
   This slice will add Flutter's SDK localisation support for the new picker only;
   existing screens are outside scope. No #423/#425/#426 screen is wired yet.
