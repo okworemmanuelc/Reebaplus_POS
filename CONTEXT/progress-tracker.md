@@ -7,6 +7,10 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Fast-Add: a shared-list photo opens "More details" (2026-10-23)
+Branch `feat/fast-add-open-details-on-catalogue-photo`, worktree `../drinkPosApp-wt-moredetails`. Owner approved the #332 follow-up.
+- `_applyCatalogueSuggestion` (add_product_screen.dart) sets `_showMoreDetails = true` when it fills the photo, because the photo box lives in the collapsed "More details" section and would otherwise be saved unseen. Name/unit-only fills leave it closed. Tests: `test/inventory/add_product_catalogue_prefill_test.dart` (+2).
+
 ### Issue #455: Migrate raw permission checks to NamedGate & add static ban test (2026-10-20)
 Branch `feat/455-gate-permissions`, worktree `../drinkPosApp-wt-455`. PR #455.
 - Migrated all remaining raw permission checks (`currentUserPermissionsProvider.contains(...)`, `perms.contains(...)`) across `lib/` to `Gates.*` and `gateContextProvider.isReady`.

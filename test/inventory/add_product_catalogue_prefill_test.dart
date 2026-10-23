@@ -322,6 +322,31 @@ void main() {
       await unmount(tester);
     });
 
+    testWidgets('a suggested photo opens "More details" so it can be seen', (
+      tester,
+    ) async {
+      catalogue.answer = withPhoto(fullSuggestion);
+      await pumpScreen(tester, prefilledBarcode: _gtin);
+
+      // No tap on the header: the photo box is already showing.
+      expect(fieldFor('Barcode'), findsOneWidget);
+      expect(pendingPhoto(tester), isNotNull);
+
+      await unmount(tester);
+    });
+
+    testWidgets('without a suggested photo "More details" stays closed', (
+      tester,
+    ) async {
+      catalogue.answer = fullSuggestion;
+      await pumpScreen(tester, prefilledBarcode: _gtin);
+
+      expect(textOf(tester, 'Product Name'), 'Peak Milk 400g');
+      expect(fieldFor('Barcode'), findsNothing);
+
+      await unmount(tester);
+    });
+
     testWidgets('a photo is only fetched while none is held', (tester) async {
       catalogue.answer = withPhoto(fullSuggestion);
       await pumpScreen(tester, prefilledBarcode: _gtin);
