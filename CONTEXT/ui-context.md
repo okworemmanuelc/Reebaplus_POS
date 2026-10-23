@@ -390,7 +390,7 @@ The app uses the "flat with a soft fade" design standard (PRD #346; issue #351),
    - Border: `Border.all(color: theme.dividerColor, width: 1)`;
    - Shadow: `BoxShadow(color: AppSchemeColors.cardShadow, blurRadius: 12, offset: Offset(0, 2))`;
    - Radius: `AppSpacing.borderRadiusXL` (20px) default.
-4. **No Blur Anywhere**: `BackdropFilter` and `ImageFilter.blur` are banned across `lib/` (enforced by `no_backdrop_blur_ban_test.dart`). The sole allowed exception is `lib/features/auth/widgets/auth_background.dart` on sign-in screens pending the Wave 2 Auth redesign.
+4. **No Blur Anywhere**: `BackdropFilter` and `ImageFilter.blur` are banned across `lib/` with zero exceptions (enforced by `no_backdrop_blur_ban_test.dart`). `AuthBackground` was retired and replaced by `BrandedAuthBackground` on `Scaffold`.
 5. **Theme-Level Sheets and Dialogs**: Modal sheets and dialogs are styled centrally in `ThemeData`:
    - `bottomSheetTheme`: `backgroundColor = surface`, `surfaceTintColor = transparent`, `modalBarrierColor = scrim` (black @ 0.35 light / 0.55 dark), `shape = RoundedRectangleBorder(top: 24px)`, `dragHandleColor = dividerColor`, `dragHandleSize = 36×4`. (`showDragHandle` is false; existing hand-drawn handles remain until Wave 2).
    - `dialogTheme`: `backgroundColor = surface`, `surfaceTintColor = transparent`, `barrierColor = scrim`, `shape = RoundedRectangleBorder(radius: 20px)`.

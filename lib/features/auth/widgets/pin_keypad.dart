@@ -42,7 +42,7 @@ class PinDots extends StatelessWidget {
   }
 }
 
-/// A single 64×64 glass key. Public so callers can build a matching key for
+/// A single 64×64 flat card key. Public so callers can build a matching key for
 /// the keypad's bottom-left slot (e.g. Login's biometric button).
 class PinKey extends StatelessWidget {
   final String? label;
@@ -55,7 +55,7 @@ class PinKey extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: AppDecorations.glassCard(context, radius: 16),
+      decoration: AppDecorations.card(context, radius: 16),
       child: Material(
         color: Colors.transparent,
         child: InkWell(

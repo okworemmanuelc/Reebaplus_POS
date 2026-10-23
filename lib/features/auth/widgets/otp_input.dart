@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// Six styled OTP boxes driven by a single hidden TextField.
+/// Six flat OTP boxes (surface fill, hairline border, accent when active)
+/// driven by a single hidden TextField.
 class OtpBoxRow extends StatefulWidget {
   final TextEditingController controller;
   final bool hasError;
@@ -86,7 +87,8 @@ class _OtpBoxRowState extends State<OtpBoxRow> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final errorColor = Theme.of(context).colorScheme.error;
+    final theme = Theme.of(context);
+    final errorColor = theme.colorScheme.error;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -139,16 +141,16 @@ class _OtpBoxRowState extends State<OtpBoxRow> with WidgetsBindingObserver {
                         width: boxSize,
                         height: boxHeight,
                         decoration: BoxDecoration(
-                          color: filled
-                              ? widget.textColor.withValues(alpha: 0.18)
-                              : widget.textColor.withValues(alpha: 0.08),
+                          color: theme.colorScheme.surface,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: widget.hasError
                                 ? errorColor
                                 : isActive
-                                ? widget.textColor
-                                : widget.textColor.withValues(alpha: 0.3),
+                                ? theme.colorScheme.primary
+                                : filled
+                                ? widget.textColor.withValues(alpha: 0.3)
+                                : theme.dividerColor,
                             width: isActive ? 2 : 1,
                           ),
                         ),

@@ -3,6 +3,8 @@ import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
 
+import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
+
 /// Minimal dark-themed placeholder for routes not yet built (master plan §4
 /// uses placeholder routes for Terms/Privacy; the real invite-code entry is
 /// step 8). Reused for Join with invite code, Terms of Service, Privacy Policy.
@@ -18,11 +20,18 @@ class ComingSoonScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: theme.colorScheme.surface,
         elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(color: theme.dividerColor, height: 1),
+        ),
         iconTheme: IconThemeData(color: authTextPrimary(context)),
         title: Text(
           title,
@@ -33,28 +42,28 @@ class ComingSoonScreen extends StatelessWidget {
           ),
         ),
       ),
-      body: AuthCenteredScroll(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-        children: [
-          Icon(
-            AppIcons.waiting,
-            size: 56,
-            color: Theme.of(
-              context,
-            ).colorScheme.primary.withValues(alpha: 0.8),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 15,
-              height: 1.5,
-              color: authTextPrimary(context).withValues(alpha: 0.7),
+      body: BrandedAuthBackground(
+        child: AuthCenteredScroll(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+          children: [
+            Icon(
+              AppIcons.waiting,
+              size: 56,
+              color: theme.colorScheme.primary.withValues(alpha: 0.8),
             ),
-          ),
-        ],
+            const SizedBox(height: 20),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 15,
+                height: 1.5,
+                color: authTextPrimary(context).withValues(alpha: 0.7),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
