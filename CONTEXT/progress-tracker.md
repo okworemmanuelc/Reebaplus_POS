@@ -7,6 +7,31 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #422: Shopper groundwork prepared (2026-10-23)
+Branch `feat/422-shopper-groundwork`, isolated worktree `../drinkPosApp-wt-422`,
+base `985e80be` (latest origin/main when started). Owner authorized #422 only;
+other #421 slices remain held.
+- Proposed ADRs 0030/0031: identity versus membership, online-first storefront,
+  eligibility and release gates. Glossary adds Shopper, Online Order, Send to
+  till, Pay on delivery, Browse, Sponsored and Listing. Invariants unchanged
+  pending owner wording sign-off.
+- Read-only live catalogue audit: 69 business_id tables; deployed through 0186.
+  RLS authority is the writable profiles pointer, not an independent membership
+  check. Prepared 0188 to constrain direct profile binding, revoke five
+  internal definer helpers from clients, and conditionally restrict the web
+  baseline's unused email-ownership probe; web handoff already occupies 0187.
+  No deployment and no live fixture writes.
+- Added repeatable catalogue audit and opt-in Tier-2 isolation tests (real
+  throwaway login, schema-discovered tables/RPCs, pointer attacks, internal
+  helper denial and direct write denial). See docs/security/0422-shopper-isolation.md.
+- Verification: full Flutter suite 5225 passed / 299 skipped / 0 failures;
+  flutter analyze clean. The six new Tier-2 tests compile and skip without
+  dedicated credentials; this is not a passing live security audit. SQL parsed
+  with pglast; policy semantics still require the dedicated migrated backend.
+- Open: owner invariant approval; deletion-tombstone read contract versus literal
+  zero-tenant-row criterion; separate #467/#468;
+  live execution on a dedicated migrated test project. Do not close #422 yet.
+
 ### Fast-Add: a shared-list photo opens "More details" (2026-10-23)
 Branch `feat/fast-add-open-details-on-catalogue-photo`, worktree `../drinkPosApp-wt-moredetails`. Owner approved the #332 follow-up.
 - `_applyCatalogueSuggestion` (add_product_screen.dart) sets `_showMoreDetails = true` when it fills the photo, because the photo box lives in the collapsed "More details" section and would otherwise be saved unseen. Name/unit-only fills leave it closed. Tests: `test/inventory/add_product_catalogue_prefill_test.dart` (+2).
