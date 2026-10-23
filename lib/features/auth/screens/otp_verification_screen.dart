@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -238,9 +240,10 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
           email: widget.email,
           account: account,
         ),
-        NoAccountFoundRoute() => widget.createBusinessIntent
-            ? CeoSignUpScreen(verifiedEmail: widget.email)
-            : NoAccountFoundScreen(email: widget.email),
+        NoAccountFoundRoute() =>
+          widget.createBusinessIntent
+              ? CeoSignUpScreen(verifiedEmail: widget.email)
+              : NoAccountFoundScreen(email: widget.email),
         LoginRoute(:final user) => LoginScreen(presetUser: user),
         CreatePinRoute(:final user) => CreatePinScreen(user: user),
         // #285: both leave the phone exactly as it was found. Drop back to the
@@ -339,14 +342,22 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
                 ),
               ),
               AuthCenteredScroll(
+                // Top padding clears the pinned back button (48dp) so a short
+                // viewport never runs the title into it.
+                padding: EdgeInsets.fromLTRB(
+                  28,
+                  kMinInteractiveDimension,
+                  28,
+                  MediaQuery.of(context).viewInsets.bottom + 24,
+                ),
                 children: [
                   Text('Check your email', style: authTitleStyle(context)),
-                  const SizedBox(height: 8),
+                  SizedBox(height: context.getRSize(8)),
                   Text(
                     'Enter the 6-digit code sent to\n${_maskEmail(widget.email)}',
                     style: authSubtitleStyle(context),
                   ),
-                  const SizedBox(height: 28),
+                  SizedBox(height: context.getRSize(28)),
 
                   // OTP input — single invisible field driving 6 styled boxes
                   ShakeWidget(
@@ -360,20 +371,19 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
                       textColor: textColor,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: context.getRSize(12)),
 
                   Center(
                     child: Text(
                       'Code expires in 5 minutes',
-                      style: TextStyle(
-                        color: textColor.withValues(alpha: 0.5),
-                        fontSize: 13,
-                      ),
+                      style: context
+                          .regularStyle(13)
+                          .copyWith(color: authTextMuted(context, 0.5)),
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: context.getRSize(8)),
                   Center(child: AuthErrorText(_errorMessage)),
-                  const SizedBox(height: 8),
+                  SizedBox(height: context.getRSize(8)),
 
                   if (_verified)
                     const AppButton(
@@ -387,19 +397,24 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
                       isLoading: _loading,
                       onPressed: _canSubmit ? _submit : null,
                     ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: context.getRSize(16)),
 
                   // Resend button with countdown
                   Center(
                     child: _resendCountdown > 0
                         ? Text(
                             'Resend code in 0:${_resendCountdown.toString().padLeft(2, '0')}',
-                            style: TextStyle(
-                              color: textColor.withValues(alpha: 0.5),
-                              fontSize: 13,
-                            ),
+                            style: context
+                                .regularStyle(13)
+                                .copyWith(color: authTextMuted(context, 0.5)),
                           )
                         : TextButton(
+                            style: TextButton.styleFrom(
+                              minimumSize: const Size(
+                                kMinInteractiveDimension,
+                                kMinInteractiveDimension,
+                              ),
+                            ),
                             onPressed: (_loading || _isLockedOut || _verified)
                                 ? null
                                 : _resend,
@@ -415,29 +430,27 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
               if (_resolving)
                 Positioned.fill(
                   child: Container(
-                    color: Theme.of(context)
-                        .scaffoldBackgroundColor
-                        .withValues(alpha: 0.7),
+                    color: Theme.of(
+                      context,
+                    ).scaffoldBackgroundColor.withValues(alpha: 0.7),
                     child: Center(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           SizedBox(
-                            width: 40,
-                            height: 40,
+                            width: context.getRSize(40),
+                            height: context.getRSize(40),
                             child: CircularProgressIndicator(
                               strokeWidth: 3,
                               color: Theme.of(context).colorScheme.primary,
                             ),
                           ),
-                          const SizedBox(height: 16),
+                          SizedBox(height: context.getRSize(16)),
                           Text(
                             'Setting up your account…',
-                            style: TextStyle(
-                              color: textColor,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                            ),
+                            style: context
+                                .semiBoldStyle(15)
+                                .copyWith(color: textColor),
                           ),
                         ],
                       ),

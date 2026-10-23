@@ -5,12 +5,14 @@ import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/features/auth/screens/create_pin_screen.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
 import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
-import 'package:reebaplus_pos/shared/utils/role_display.dart';
 
 /// Shown after OTP verification on a fresh device when the email already has
 /// a Supabase account. Lists the linked business + role so the user can
@@ -92,10 +94,16 @@ class _ExistingAccountScreenState extends ConsumerState<ExistingAccountScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Sign out?'),
-        content: const Text(
+        title: Text(
+          'Sign out?',
+          style: ctx.extraBoldStyle(18).copyWith(color: authTextPrimary(ctx)),
+        ),
+        content: Text(
           'Each email is linked to one business. '
           'To sign in with a different account, you\'ll be signed out.',
+          style: ctx
+              .regularStyle(14)
+              .copyWith(color: authTextPrimary(ctx), height: 1.4),
         ),
         actions: [
           TextButton(
@@ -137,40 +145,51 @@ class _ExistingAccountScreenState extends ConsumerState<ExistingAccountScreen> {
                 ),
               ),
               AuthCenteredScroll(
+                // Top padding clears the pinned back button (48dp) so a short
+                // viewport never runs the title into it.
+                padding: EdgeInsets.fromLTRB(
+                  28,
+                  kMinInteractiveDimension,
+                  28,
+                  MediaQuery.of(context).viewInsets.bottom + 24,
+                ),
                 children: [
                   Text(
                     'Welcome back',
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w800,
-                      color: textColor,
-                    ),
+                    style: context
+                        .extraBoldStyle(28)
+                        .copyWith(color: textColor),
                   ),
-                  const SizedBox(height: 8),
+                  SizedBox(height: context.getRSize(8)),
                   Text(
                     'We found an existing account for ${_maskEmail(widget.email)}. Tap below to continue.',
-                    style: TextStyle(
-                      fontSize: 15,
-                      color: textColor.withValues(alpha: 0.65),
-                      height: 1.4,
-                    ),
+                    style: context
+                        .regularStyle(15)
+                        .copyWith(color: authTextMuted(context), height: 1.4),
                   ),
-                  const SizedBox(height: 36),
+                  SizedBox(height: context.getRSize(32)),
 
                   _buildBusinessCard(context, account: widget.account),
 
-                  const SizedBox(height: 28),
+                  SizedBox(height: context.getRSize(24)),
 
                   Center(
                     child: TextButton(
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(
+                          kMinInteractiveDimension,
+                          kMinInteractiveDimension,
+                        ),
+                      ),
                       onPressed: _loading ? null : _onUseDifferentEmail,
                       child: Text(
                         'Use a different email instead',
-                        style: TextStyle(
-                          color: textColor.withValues(alpha: 0.75),
-                          fontSize: 14,
-                          decoration: TextDecoration.underline,
-                        ),
+                        style: context
+                            .semiBoldStyle(14)
+                            .copyWith(
+                              color: authTextMuted(context, 0.75),
+                              decoration: TextDecoration.underline,
+                            ),
                       ),
                     ),
                   ),
@@ -188,90 +207,70 @@ class _ExistingAccountScreenState extends ConsumerState<ExistingAccountScreen> {
     required SupabaseAccountInfo account,
   }) {
     final textColor = authTextPrimary(context);
-    final primary = Theme.of(context).colorScheme.primary;
+    final radius = BorderRadius.circular(context.getRSize(16));
 
     return Container(
-      decoration: AppDecorations.glassCard(context, radius: 20),
+      decoration: AppDecorations.card(context, radius: context.getRSize(16)),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: _loading ? null : _onContinue,
-          borderRadius: BorderRadius.circular(20),
-          highlightColor: textColor.withValues(alpha: 0.05),
-          splashColor: textColor.withValues(alpha: 0.1),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: primary.withValues(alpha: 0.15),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(AppIcons.business, color: primary, size: 26),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        account.businessName,
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                          color: textColor,
+          borderRadius: radius,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              minHeight: kMinInteractiveDimension,
+            ),
+            child: Padding(
+              padding: EdgeInsets.all(context.getRSize(16)),
+              child: Row(
+                children: [
+                  const IconTile(icon: AppIcons.business),
+                  SizedBox(width: context.getRSize(14)),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          account.businessName,
+                          style: context
+                              .boldStyle(17)
+                              .copyWith(color: textColor),
                         ),
-                      ),
-                      const SizedBox(height: 6),
-                      Builder(
-                        builder: (context) {
-                          final tagColor = roleTagColor(
-                            widget.account.roleSlug,
-                          );
-                          return Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: tagColor.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Text(
-                              widget.account.roleName ?? 'Member',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: tagColor,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                _loading
-                    ? SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: textColor.withValues(alpha: 0.5),
+                        SizedBox(height: context.getRSize(6)),
+                        TagPill(
+                          label: widget.account.roleName ?? 'Member',
+                          tone: _roleTone(widget.account.roleSlug),
                         ),
-                      )
-                    : Icon(
-                        AppIcons.chevronRight,
-                        color: textColor.withValues(alpha: 0.3),
-                      ),
-              ],
+                      ],
+                    ),
+                  ),
+                  SizedBox(width: context.getRSize(8)),
+                  _loading
+                      ? SizedBox(
+                          width: context.getRSize(20),
+                          height: context.getRSize(20),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: authTextMuted(context, 0.5),
+                          ),
+                        )
+                      : Icon(
+                          AppIcons.chevronRight,
+                          color: authTextMuted(context, 0.4),
+                        ),
+                ],
+              ),
             ),
           ),
         ),
       ),
     );
   }
+
+  /// Role -> fixed tag tone (replaces the old per-role raw colours).
+  TagPillTone _roleTone(String? slug) => switch (slug) {
+    'ceo' || 'manager' => TagPillTone.info,
+    'cashier' => TagPillTone.green,
+    _ => TagPillTone.neutral,
+  };
 }
