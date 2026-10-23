@@ -1,7 +1,7 @@
 # Agent Instructions & Operating Rules
 
 > **CRITICAL MANDATORY DIRECTIVE:**
-> Every AI agent working on this repository MUST ALWAYS read the context files and `CLAUDE.md` in order BEFORE writing code, making architectural decisions, starting any work, or replying to the user in every session and turn.
+> Every AI agent working on this repository MUST read the context files and `CLAUDE.md` in order at the START of every session, BEFORE writing code, making architectural decisions or starting work. After that, re-read only the sections a task touches (see **Token-Saving Rules** in `CONTEXT/ai-workflow-rules.md`, which every agent and platform must follow).
 
 ## Context Files Prerequisite (MANDATORY)
 
@@ -16,7 +16,8 @@ Before implementing, making any architectural decision, starting any work, or re
 7. `CONTEXT/progress-tracker.md` (or `context/progress-tracker.md`) — current phase, completed work, open questions, and next steps
 
 ### Rules & Workflow Invariants
-- **Always read the context files first**: Read `CLAUDE.md` and all `CONTEXT/*.md` files before every action, reply, or implementation step.
+- **Always read the context files first**: Read `CLAUDE.md` and all `CONTEXT/*.md` files at the start of each session; afterwards re-read only what the task touches.
+- **Follow the Token-Saving Rules** in `CONTEXT/ai-workflow-rules.md` (cheapest capable model, one full test run per PR, short reports, few helpers, merge finished PRs promptly).
 - Update `CONTEXT/progress-tracker.md` after each meaningful implementation change.
 - If implementation changes the architecture, scope, or standards documented in the context files, update the relevant file before continuing.
 - No AI attribution in commits or PRs (no `Co-Authored-By` trailers).
