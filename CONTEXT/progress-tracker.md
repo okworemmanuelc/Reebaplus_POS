@@ -7,6 +7,18 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### #472: shared online category reference (2026-10-23, in progress)
+
+Branch feat/472-marketplace-categories, isolated workspace reebaplus-472.
+Migration0190 creates service-written marketplace_categories and nullable
+categories.marketplace_category FK. Schema84 mirrors nullable mapping locally.
+Bundled catalogue derives names from Lexicon starter categories, with distinct
+phone/fashion Accessories and Other fallback; custom names stay unmapped.
+Category mapping uses an atomic full-row outbox write; selecting Other emits
+explicit null. Manage Categories uses existing theme/dropdown tokens and gates.
+Snapshot to_jsonb(t) already includes all categories columns. No production
+changes. Tests and review in progress; details docs/data/marketplace-categories.md.
+
 ### Fast-Add: a shared-list photo opens "More details" (2026-10-23)
 Branch `feat/fast-add-open-details-on-catalogue-photo`, worktree `../drinkPosApp-wt-moredetails`. Owner approved the #332 follow-up.
 - `_applyCatalogueSuggestion` (add_product_screen.dart) sets `_showMoreDetails = true` when it fills the photo, because the photo box lives in the collapsed "More details" section and would otherwise be saved unseen. Name/unit-only fills leave it closed. Tests: `test/inventory/add_product_catalogue_prefill_test.dart` (+2).
