@@ -485,6 +485,10 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     final retailKobo =
         p?.retailerPriceKobo ??
         ((widget.item.retailerPrice ?? 0) * 100).round();
+    final visual = categoryVisual(
+      categoryName,
+      Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light,
+    );
     return ProductHeroCard(
       name: _name,
       kindLine: productKindLine(
@@ -501,8 +505,9 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
           : '$total ${unitCountNoun(_unit, total)} in stock',
       stockLevel: level,
       imagePath: _imagePath,
-      fallbackIcon: widget.item.icon,
-      fallbackColor: widget.item.color,
+      // The same category picture as the POS and Receive Stock tiles.
+      fallbackIcon: visual.icon,
+      fallbackColor: visual.iconColor,
       expiry: expiry == null ? null : expiryPillFor(expiry, _now),
       archived: _archived,
       onChangePhoto: _canEdit ? _pickImage : null,

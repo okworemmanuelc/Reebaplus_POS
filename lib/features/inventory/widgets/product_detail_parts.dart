@@ -327,6 +327,8 @@ class ProductDetailTopBar extends StatelessWidget
             ),
           ),
           for (final a in actions) ...[SizedBox(width: context.getRSize(8)), a],
+          // Match the back button's inset on the right.
+          if (actions.isNotEmpty) SizedBox(width: context.getRSize(8)),
         ],
       ),
     );
