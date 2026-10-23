@@ -16,7 +16,9 @@ import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
+import 'package:reebaplus_pos/core/services/catalogue_lookup.dart';
 import 'package:reebaplus_pos/core/utils/factory_barcode.dart';
+import 'package:reebaplus_pos/shared/scanner/scanner_providers.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/product_name.dart';
@@ -93,6 +95,9 @@ enum _FormLayout {
 ///
 /// In [receiveMode] the Store box is hidden and the opening quantity goes onto
 /// the Receive Stock delivery list instead of into a store.
+/// The small note under the barcode box about the shared-list check (#465).
+enum _BarcodeNote { offline, newBarcode }
+
 class AddProductScreen extends ConsumerStatefulWidget {
   final void Function(ProductData)? onProductAdded;
   final bool receiveMode;
@@ -197,6 +202,12 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
 
   bool get _isEdit => widget.editProduct != null;
 
+  /// The shop's own products that carry the barcode in the box (#465), the
+  /// person's "Create a new product anyway", and the shared-list note.
+  List<ProductData> _barcodeMatches = const [];
+  bool _matchesDismissed = false;
+  _BarcodeNote? _barcodeNote;
+
   /// Debounces catalogue lookups while the barcode box is being typed in.
   Timer? _catalogueDebounce;
   static const _catalogueDebounceDelay = Duration(milliseconds: 500);
@@ -238,7 +249,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     if (_isEdit) _seedFromProduct(widget.editProduct!);
     _loadData();
     // #332: a POS scan of an unknown code looks it up in the shared catalogue.
-    if (prefillBarcode.isNotEmpty) _lookUpCatalogue(prefillBarcode);
+    if (prefillBarcode.isNotEmpty) {
+      _onBarcodeChanged(prefillBarcode, immediate: true);
+    }
   }
 
   /// Edit mode: fills every box from [p]. Money boxes show a blank for a zero
@@ -373,42 +386,77 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     super.dispose();
   }
 
-  /// Soft barcode-collision check (#113): looks up the typed barcode and, if
-  /// another product already uses it, records that product's name so the field
-  /// can warn. Never blocks — barcodes are only softly unique (no DB UNIQUE, to
-  /// avoid jamming the offline outbox).
-  Future<void> _onBarcodeChanged(String value) async {
-    final trimmed = value.trim();
-    // Edit mode never prefills from the shared barcode list.
-    if (!_isEdit) _scheduleCatalogueLookup(trimmed);
-    if (trimmed.isEmpty) {
-      if (_barcodeCollisionName != null) {
-        setState(() => _barcodeCollisionName = null);
+  /// Checks the barcode in the box (#465): the shop's own products first (works
+  /// offline), then, for a factory barcode, the shared list. Never blocks a
+  /// save. Edit mode keeps only the soft "already used" warning (#113).
+  Future<void> _onBarcodeChanged(String value, {bool immediate = false}) async {
+    final code = value.trim();
+    _catalogueDebounce?.cancel();
+    if (code.isEmpty) {
+      if (_barcodeCollisionName != null ||
+          _barcodeMatches.isNotEmpty ||
+          _barcodeNote != null) {
+        setState(() {
+          _barcodeCollisionName = null;
+          _barcodeMatches = const [];
+          _barcodeNote = null;
+        });
       }
       return;
     }
-    final db = ref.read(databaseProvider);
-    final match = await db.catalogDao.findProductByBarcode(trimmed);
-    if (!mounted) return;
-    // Edit mode: the product's own barcode is not a collision.
-    final collision = match?.id == widget.editProduct?.id ? null : match?.name;
-    if (collision != _barcodeCollisionName) {
-      setState(() => _barcodeCollisionName = collision);
+    final matches = await ref
+        .read(databaseProvider)
+        .catalogDao
+        .findProductsByBarcode(code);
+    if (!mounted || _barcodeCtrl.text.trim() != code) return;
+    if (_isEdit) {
+      // The product's own barcode is not a collision.
+      final other = matches
+          .where((p) => p.id != widget.editProduct!.id)
+          .firstOrNull;
+      if (other?.name != _barcodeCollisionName) {
+        setState(() => _barcodeCollisionName = other?.name);
+      }
+      return;
+    }
+    setState(() {
+      _barcodeMatches = matches;
+      _matchesDismissed = false;
+      _barcodeNote = null;
+    });
+    if (matches.isNotEmpty) return;
+    if (FactoryBarcode.tryParse(code) == null) {
+      // A shop-made code never reaches the shared list.
+      setState(() => _barcodeNote = _BarcodeNote.newBarcode);
+    } else if (immediate) {
+      await _lookUpCatalogue(code);
+    } else {
+      _catalogueDebounce = Timer(
+        _catalogueDebounceDelay,
+        () => _lookUpCatalogue(code),
+      );
     }
   }
 
-  // ── Shared barcode catalogue (ADR 0029 §8, #332) ─────────────────────────
-
-  /// Looks a typed or scanned [code] up after a short pause. A code that is
-  /// not a factory barcode never reaches the service.
-  void _scheduleCatalogueLookup(String code) {
-    _catalogueDebounce?.cancel();
-    if (FactoryBarcode.tryParse(code) == null) return;
-    _catalogueDebounce = Timer(
-      _catalogueDebounceDelay,
-      () => _lookUpCatalogue(code),
-    );
+  /// The camera button (#465). A new product checks the code like a typed one,
+  /// at once; edit mode only drops it into the box. The camera closes after
+  /// the first read here (POS keeps scanning).
+  Future<void> _scanBarcode() async {
+    await ref
+        .read(barcodeScannerProvider)
+        .scanSession(
+          context,
+          onCode: (scannerContext, code) async {
+            final trimmed = code.trim();
+            if (trimmed.isEmpty) return;
+            _barcodeCtrl.text = trimmed;
+            Navigator.of(scannerContext).pop();
+            if (!_isEdit) await _onBarcodeChanged(trimmed, immediate: true);
+          },
+        );
   }
+
+  // ── Shared barcode catalogue (ADR 0029 §8, #332) ─────────────────────────
 
   /// Asks the shared catalogue about [code] and fills only the boxes that are
   /// still empty when the answer comes. The answer is dropped when the barcode
@@ -419,13 +467,21 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     final service = ref.read(barcodeCatalogueServiceProvider);
     // Only download the photo while none is held (saves phone data);
     // _applyCatalogueSuggestion re-checks before using the bytes.
-    final suggestion = await service.lookup(
+    final outcome = await service.lookupOutcome(
       code,
       includePhoto: _pendingImageBytes == null,
     );
-    if (suggestion == null || !mounted) return;
-    if (_barcodeCtrl.text.trim() != code) return;
-    _applyCatalogueSuggestion(suggestion);
+    if (!mounted || _barcodeCtrl.text.trim() != code) return;
+    switch (outcome) {
+      case CatalogueFound(:final suggestion) when !suggestion.isEmpty:
+        _applyCatalogueSuggestion(suggestion);
+      case CatalogueUnreachable():
+        setState(() => _barcodeNote = _BarcodeNote.offline);
+      case CatalogueLookupFailed():
+        break;
+      case CatalogueFound() || CatalogueNothingShared():
+        setState(() => _barcodeNote = _BarcodeNote.newBarcode);
+    }
   }
 
   void _applyCatalogueSuggestion(BarcodeSuggestion suggestion) {
@@ -1219,6 +1275,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       _isUnitFromCatalogue = false;
       _isPhotoFromCatalogue = false;
       _barcodeCollisionName = null;
+      _barcodeMatches = const [];
+      _matchesDismissed = false;
+      _barcodeNote = null;
       _productSuggestions = [];
     });
     await _loadData();
@@ -1538,25 +1597,48 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         if (_isPhotoFromCatalogue) const CatalogueFilledNote(),
         if (_productSuggestions.isNotEmpty) _nameMatches(),
         SizedBox(height: gap),
-        // TODO(#465): the square primary scan button sits beside this box
-        // (#487 PR 6).
-        AppInput(
-          key: AddProductKeys.barcode,
-          controller: _barcodeCtrl,
-          labelText: 'Barcode',
-          hintText: 'Scan or type the barcode',
-          prefixIcon: AppIcon(
-            AppIcons.barcode,
-            size: context.getRSize(20),
-            color: Theme.of(context).textTheme.bodySmall?.color,
-          ),
-          onChanged: _onBarcodeChanged,
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(
+              child: AppInput(
+                key: AddProductKeys.barcode,
+                controller: _barcodeCtrl,
+                labelText: 'Barcode',
+                hintText: 'Scan or type the barcode',
+                prefixIcon: AppIcon(
+                  AppIcons.barcode,
+                  size: context.getRSize(20),
+                  color: Theme.of(context).textTheme.bodySmall?.color,
+                ),
+                onChanged: _onBarcodeChanged,
+              ),
+            ),
+            SizedBox(width: gap),
+            ProductScanButton(onTap: _scanBarcode),
+          ],
         ),
         if (_barcodeCollisionName != null)
           InventoryFieldHelper(
             'Already used by "$_barcodeCollisionName". You can still save.',
             icon: AppIcons.warning,
             color: f.danger,
+          ),
+        if (_barcodeMatches.isNotEmpty && !_matchesDismissed && !_isEdit)
+          ProductBarcodeMatchesCard(
+            names: [for (final p in _barcodeMatches) p.name],
+            onOpen: (i) => _openExistingProduct(_barcodeMatches[i]),
+            onCreateAnyway: () => setState(() => _matchesDismissed = true),
+          ),
+        if (_barcodeNote == _BarcodeNote.offline)
+          const InventoryFieldHelper(
+            "Couldn't check the shared list — no internet",
+            icon: AppIcons.warning,
+          ),
+        if (_barcodeNote == _BarcodeNote.newBarcode)
+          const InventoryFieldHelper(
+            'New barcode — fill in the details',
+            icon: AppIcons.infoCircle,
           ),
         SizedBox(height: gap),
         ProductFieldLabel(_lexicon.category),

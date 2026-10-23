@@ -10,6 +10,7 @@ import 'dart:typed_data';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
@@ -26,6 +27,9 @@ import 'package:reebaplus_pos/core/services/catalogue_lookup.dart';
 import 'package:reebaplus_pos/core/services/catalogue_report.dart';
 import 'package:reebaplus_pos/core/services/product_image_service.dart';
 import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
+import 'package:reebaplus_pos/shared/scanner/barcode_scan_page.dart';
+import 'package:reebaplus_pos/shared/scanner/scanner_providers.dart';
+import '../helpers/fake_barcode_scanner.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/catalogue_filled_note.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/product_form_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
@@ -43,6 +47,9 @@ class _FakeCatalogue implements BarcodeCatalogueService {
   /// The includePhoto flag of each call, in order.
   final photoAsked = <bool>[];
   BarcodeSuggestion? answer;
+
+  /// True answers every lookup as "no internet" (#465).
+  bool offline = false;
   Completer<BarcodeSuggestion?>? pending;
 
   @override
@@ -60,7 +67,11 @@ class _FakeCatalogue implements BarcodeCatalogueService {
   Future<CatalogueLookup> lookupOutcome(
     String code, {
     bool includePhoto = true,
-  }) => throw UnimplementedError();
+  }) async {
+    if (offline) return const CatalogueUnreachable();
+    final s = await lookup(code, includePhoto: includePhoto);
+    return s == null ? const CatalogueNothingShared() : CatalogueFound(s);
+  }
 
   @override
   Future<CatalogueReportResult> report({
@@ -168,12 +179,14 @@ void main() {
 
   Future<ProviderContainer> pumpWidgetUnder(
     WidgetTester tester,
-    Widget home,
-  ) async {
+    Widget home, {
+    FakeBarcodeScanner? scanner,
+  }) async {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
         barcodeCatalogueServiceProvider.overrideWithValue(catalogue),
+        if (scanner != null) barcodeScannerProvider.overrideWithValue(scanner),
         productImageServiceProvider.overrideWithValue(images),
         currentUserPermissionsProvider.overrideWithValue({
           'products.edit_buying_price',
@@ -202,12 +215,16 @@ void main() {
     WidgetTester tester, {
     String? prefilledBarcode,
     bool receiveMode = false,
+    FakeBarcodeScanner? scanner,
+    ProductData? editProduct,
   }) => pumpWidgetUnder(
     tester,
     AddProductScreen(
       prefilledBarcode: prefilledBarcode,
       receiveMode: receiveMode,
+      editProduct: editProduct,
     ),
+    scanner: scanner,
   );
 
   Finder fieldFor(String labelPart) => find.descendant(
@@ -659,6 +676,158 @@ void main() {
       expect(selectedUnit(tester), 'Crate');
       expect(chipUnits(tester), contains('Crate'));
 
+      await unmount(tester);
+    });
+  });
+
+  // #465 / #487 PR 6: the scan button and the own-products check.
+  group('scan a barcode on Add Product', () {
+    setUp(seed);
+
+    Future<void> addOwn(String id, String name, String barcode) => db
+        .into(db.products)
+        .insert(
+          ProductsCompanion.insert(
+            id: Value(id),
+            businessId: businessId,
+            name: name,
+            barcode: Value(barcode),
+          ),
+        );
+
+    Future<void> scan(
+      WidgetTester tester,
+      FakeBarcodeScanner scanner,
+      String code,
+    ) async {
+      final button = find.byTooltip('Scan barcode');
+      await tester.ensureVisible(button);
+      await tester.pump();
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+      scanner.camera!.read(code);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('own product: "You already have", Open it, and the shared '
+        'list is not asked; the camera closes after the first read', (
+      tester,
+    ) async {
+      await addOwn('p-own', 'Own Cola', '9988');
+      final scanner = FakeBarcodeScanner();
+      await pumpScreen(tester, scanner: scanner);
+      await scan(tester, scanner, '9988');
+
+      expect(scanner.sessionCount, 1);
+      expect(find.byType(BarcodeScanPage), findsNothing);
+      expect(scanner.camera!.isDisposed, isTrue);
+      expect(textOf(tester, 'Barcode'), '9988');
+      expect(find.text('You already have Own Cola'), findsOneWidget);
+      expect(find.text('Create a new product anyway'), findsOneWidget);
+      expect(catalogue.calls, isEmpty);
+
+      await unmount(tester);
+    });
+
+    testWidgets('Create a new product anyway dismisses the card', (
+      tester,
+    ) async {
+      await addOwn('p-own', 'Own Cola', '9988');
+      final scanner = FakeBarcodeScanner();
+      await pumpScreen(tester, scanner: scanner);
+      await scan(tester, scanner, '9988');
+      await tester.tap(find.text('Create a new product anyway'));
+      await tester.pumpAndSettle();
+      expect(find.text('You already have Own Cola'), findsNothing);
+      await unmount(tester);
+    });
+
+    testWidgets('several matches are listed', (tester) async {
+      await addOwn('p-a', 'Cola One', '7766');
+      await addOwn('p-b', 'Cola Two', '7766');
+      final scanner = FakeBarcodeScanner();
+      await pumpScreen(tester, scanner: scanner);
+      await scan(tester, scanner, '7766');
+      expect(
+        find.text('You already have 2 products with this barcode'),
+        findsOneWidget,
+      );
+      expect(find.text('Cola One'), findsOneWidget);
+      expect(find.text('Cola Two'), findsOneWidget);
+      expect(find.text('Open it'), findsNWidgets(2));
+      await unmount(tester);
+    });
+
+    testWidgets('a shared-list hit fills only the empty boxes', (tester) async {
+      catalogue.answer = fullSuggestion;
+      final scanner = FakeBarcodeScanner();
+      await pumpScreen(tester, scanner: scanner);
+      await tester.enterText(fieldFor('Product Name'), 'Mine');
+      await tester.pump();
+      await scan(tester, scanner, _gtin);
+      expect(catalogue.calls, [_gtin]);
+      expect(textOf(tester, 'Product Name'), 'Mine');
+      expect(selectedUnit(tester), 'Tin');
+      expect(notes(), findsOneWidget); // the unit only
+      await unmount(tester);
+    });
+
+    testWidgets('a shop-made code never calls the shared list', (tester) async {
+      final scanner = FakeBarcodeScanner();
+      await pumpScreen(tester, scanner: scanner);
+      await scan(tester, scanner, '12345');
+      expect(catalogue.calls, isEmpty);
+      expect(find.text('New barcode — fill in the details'), findsOneWidget);
+      await unmount(tester);
+    });
+
+    testWidgets('offline: the own check still runs, the shared list is '
+        'skipped with a note, and saving is not blocked', (tester) async {
+      catalogue.offline = true;
+      await addOwn('p-own', 'Own Cola', '9988');
+      final scanner = FakeBarcodeScanner();
+      await pumpScreen(tester, scanner: scanner);
+      await scan(tester, scanner, '9988');
+      expect(find.text('You already have Own Cola'), findsOneWidget);
+      expect(find.textContaining('no internet'), findsNothing);
+
+      await tester.enterText(fieldFor('Barcode'), _gtin);
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      expect(
+        find.text("Couldn't check the shared list — no internet"),
+        findsOneWidget,
+      );
+      expect(
+        tester.widget<AppButton>(find.byType(AppButton).last).onPressed,
+        isNotNull,
+      );
+      await unmount(tester);
+    });
+
+    testWidgets('edit mode: the scan only drops the code into the box', (
+      tester,
+    ) async {
+      await addOwn('p-own', 'Own Cola', '9988');
+      await addOwn('p-other', 'Other', '5544');
+      final product = (await db.catalogDao.findById('p-own'))!;
+      final scanner = FakeBarcodeScanner();
+      await pumpScreen(tester, scanner: scanner, editProduct: product);
+      await scan(tester, scanner, _gtin);
+      expect(textOf(tester, 'Barcode'), _gtin);
+      expect(find.byType(ProductBarcodeMatchesCard), findsNothing);
+      expect(catalogue.calls, isEmpty);
+      await unmount(tester);
+    });
+
+    testWidgets('keyboard up: the barcode box stays reachable', (tester) async {
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      addTearDown(tester.view.resetViewInsets);
+      await pumpScreen(tester);
+      await tester.ensureVisible(fieldFor('Barcode'));
+      await tester.enterText(fieldFor('Barcode'), '555');
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
       await unmount(tester);
     });
   });
