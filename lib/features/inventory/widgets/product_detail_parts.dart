@@ -3,7 +3,11 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
@@ -188,4 +192,145 @@ class DetailDivider extends StatelessWidget {
     indent: context.getRSize(14),
     endIndent: context.getRSize(14),
   );
+}
+
+// ── Product Details top bar (#487 PR 3) ─────────────────────────────────────
+
+/// A 48dp tonal rounded square holding one icon (the back button and the ⋮
+/// button of the Product Details bar).
+class DetailBarSquare extends StatelessWidget {
+  const DetailBarSquare({
+    super.key,
+    required this.icon,
+    this.tooltip,
+    this.onTap,
+  });
+
+  final IconData icon;
+
+  /// Null when a menu button around the square already carries the tooltip.
+  final String? tooltip;
+
+  /// Null when the square is only the face of a menu button, which handles the
+  /// tap itself.
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
+    final face = Container(
+      width: context.getRSize(44),
+      height: context.getRSize(44),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: f.neutralTile,
+        borderRadius: BorderRadius.circular(AppSpacing.borderRadiusL),
+      ),
+      child: AppIcon(
+        icon,
+        size: context.getRSize(22),
+        color: t.colorScheme.onSurface,
+      ),
+    );
+    final square = InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppSpacing.borderRadiusL),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(
+          minWidth: kMinInteractiveDimension,
+          minHeight: kMinInteractiveDimension,
+        ),
+        child: Center(child: face),
+      ),
+    );
+    return tooltip == null ? square : Tooltip(message: tooltip!, child: square);
+  }
+}
+
+/// The solid Product Details bar: a tonal back button, "Product Details" with
+/// the primary subtitle "Inventory", then [actions]. The same surface, hairline
+/// and soft shadow as the other Inventory bars (`InventoryTopBar`).
+class ProductDetailTopBar extends StatelessWidget
+    implements PreferredSizeWidget {
+  const ProductDetailTopBar({
+    super.key,
+    required this.height,
+    required this.onBack,
+    this.actions = const [],
+  });
+
+  final double height;
+  final VoidCallback onBack;
+  final List<Widget> actions;
+
+  @override
+  Size get preferredSize => Size.fromHeight(height);
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final topBarShadow =
+        t.extension<AppSchemeColors>()?.topBarShadow ?? Colors.transparent;
+    return AppBar(
+      automaticallyImplyLeading: false,
+      toolbarHeight: height,
+      titleSpacing: context.getRSize(8),
+      centerTitle: false,
+      backgroundColor: t.colorScheme.surface,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      surfaceTintColor: Colors.transparent,
+      flexibleSpace: Container(
+        decoration: BoxDecoration(
+          color: t.colorScheme.surface,
+          border: Border(bottom: BorderSide(color: t.dividerColor, width: 1)),
+          boxShadow: [
+            BoxShadow(
+              color: topBarShadow,
+              blurRadius: 4,
+              offset: const Offset(0, 1),
+            ),
+          ],
+        ),
+      ),
+      title: Row(
+        children: [
+          DetailBarSquare(
+            icon: AppIcons.arrowBack,
+            tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+            onTap: onBack,
+          ),
+          SizedBox(width: context.getRSize(8)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Product Details',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.screenTitleStyle.copyWith(
+                    color: t.colorScheme.onSurface,
+                  ),
+                ),
+                Text(
+                  'Inventory',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context
+                      .semiBoldStyle(13)
+                      .copyWith(color: t.colorScheme.primary),
+                ),
+              ],
+            ),
+          ),
+          for (final a in actions) ...[SizedBox(width: context.getRSize(8)), a],
+          // Match the back button's inset on the right.
+          if (actions.isNotEmpty) SizedBox(width: context.getRSize(8)),
+        ],
+      ),
+    );
+  }
 }

@@ -35,7 +35,7 @@ class CatalogueReportLink extends StatelessWidget {
             minimumSize: const Size(0, kMinInteractiveDimension),
             tapTargetSize: MaterialTapTargetSize.padded,
           ),
-          onPressed: () => _open(context, code),
+          onPressed: () => open(context, code),
           icon: AppIcon(
             AppIcons.flag,
             size: context.getRSize(14),
@@ -56,7 +56,9 @@ class CatalogueReportLink extends StatelessWidget {
     );
   }
 
-  Future<void> _open(BuildContext context, String code) async {
+  /// Opens the report sheet for [code] and thanks the person once it is sent.
+  /// Also the Product Details menu's "Report a problem" item.
+  static Future<void> open(BuildContext context, String code) async {
     final sent = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,

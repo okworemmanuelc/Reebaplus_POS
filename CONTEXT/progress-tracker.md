@@ -7,6 +7,14 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### #487 PR 3: Product Details restyle (2026-10-23)
+Branch `feat/487-product-details` (base `feat/487-product-data`), worktree `../drinkPosApp-wt-487-3`.
+- `product_detail_screen.dart` rebuilt: the dormant inline edit mode (`_editMode`, text controllers, `_saveChanges`, `_trailingBox` and friends, the `ignore_for_file`) is gone. Kept: `_UpdateStockSheet` (now titled "Adjust Stock", opened from the top bar), `_pickImage` (gated on `Gates.editProductPrice`), `_confirmDelete`, the data loads. The old Stock & Info rows (supplier, size, unit, track empties, crate value, empties count) are no longer shown here; Edit Product (PR 4) is where they live.
+- Cards: hero, Description (pencil pop-up), Prices & Profit, Stock by Store, Sales Target (CEO pencil pop-up), plain Sales Summary + Last Delivery (PR 5 replaces them), Manage Product (Archive with confirm / Unarchive, Delete). Layout is measured: 1 column under 600, 2 from 600, 3 from 1000, content capped at 1400.
+- New: `widgets/product_detail_cards.dart`, `widgets/product_detail_figures.dart` (pure rules: kind line, profit %, `SalesTargetFigures`, expiry pill), `ProductDetailTopBar` + `DetailBarSquare` in `product_detail_parts.dart`, `InventoryDao.watchStockByStoreForProduct` + `productStockByStoreProvider`, `AppIcons.unarchive` / `tune`, `CatalogueReportLink.open` (static; now the menu's "Report a problem" item).
+- "Edit Product" calls `_openEditProduct()`, which still opens `UpdateProductSheet`; PR 4 rewires that one method.
+- Tests: `test/inventory/product_detail_redesign_test.dart`, `product_detail_figures_test.dart`, `test/redesign/product_detail_golden_test.dart` (+ `test/helpers/product_detail_seed.dart`).
+
 ### #487 PR 1: product data groundwork (2026-10-23)
 Branch `feat/487-product-data`, worktree `../drinkPosApp-wt-487-1`. No screen redesign.
 - **Bottle Crate label**: `lib/core/utils/product_unit.dart` — `unitLabel` (stored `Bottle` → "Bottle Crate"), `unitCountNoun` ("crates", "packs", "units"), `unitChoices` / `isUnitHiddenForNewProducts` (plain Crate hidden for new products, kept while it is a product's own unit). Used by `productDisplayName`, the three unit dropdowns (Add Product, Update Product sheet, Product Details), inventory rows, POS tile, cart detail, scan sheets, receive grid/cart, request-stock grid, store details, catalogue report sheet. Saved values, `== 'bottle'` checks, `kProductUnits`, the CHECK and Lexicon untouched. A catalogue suggestion of "Crate" is no longer filled in.
