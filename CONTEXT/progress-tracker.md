@@ -24,6 +24,9 @@ Branch `feat/487-product-data`, worktree `../drinkPosApp-wt-487-1`. No screen re
 - Mockups copied to `docs/redesign/mockups/`. 44 goldens regenerated (Bottle → Bottle Crate text only).
 - Tests: `test/utils/product_unit_test.dart`, `test/inventory/product_archive_test.dart`, `test/inventory/inventory_archived_filter_test.dart`, `test/sync/product_units_per_pack_sync_test.dart`, v83→v84 group in `migration_upgrade_test.dart`, Crate-hiding cases in `add_product_catalogue_prefill_test.dart`, archived case in `receive_stock_redesign_test.dart`.
 
+### Camera scanner moved to shared code (#487 PR 0, 2026-10-23)
+Part of #487 / #465 (step 4). Branch `feat/487-scanner-seam`. `git mv` of the scanner seam from `lib/features/pos/` to `lib/shared/scanner/` (barcode_scanner, mobile_scanner_*, scan_camera, camera_permission(+sheet), scan_gate, barcode_scan_page, scan_cart_count, and the two providers as `scanner_providers.dart`); `sales_parts.dart` moved to `lib/shared/widgets/` because the scan page uses it. Imports only; no behaviour change. POS keeps the resolver, the scan button and the sheets.
+
 ### Fast-Add: a shared-list photo opens "More details" (2026-10-23)
 Branch `feat/fast-add-open-details-on-catalogue-photo`, worktree `../drinkPosApp-wt-moredetails`. Owner approved the #332 follow-up.
 - `_applyCatalogueSuggestion` (add_product_screen.dart) sets `_showMoreDetails = true` when it fills the photo, because the photo box lives in the collapsed "More details" section and would otherwise be saved unseen. Name/unit-only fills leave it closed. Tests: `test/inventory/add_product_catalogue_prefill_test.dart` (+2).

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import 'package:reebaplus_pos/features/pos/services/barcode_scanner.dart';
-import 'package:reebaplus_pos/features/pos/services/camera_permission.dart';
-import 'package:reebaplus_pos/features/pos/services/mobile_scanner_scan_camera.dart';
-import 'package:reebaplus_pos/features/pos/widgets/barcode_scan_page.dart';
+import 'package:reebaplus_pos/shared/scanner/barcode_scanner.dart';
+import 'package:reebaplus_pos/shared/scanner/camera_permission.dart';
+import 'package:reebaplus_pos/shared/scanner/mobile_scanner_scan_camera.dart';
+import 'package:reebaplus_pos/shared/scanner/barcode_scan_page.dart';
 
 /// The production [BarcodeScanner] (#118). Pushes the full-screen
 /// [BarcodeScanPage] over the device camera and keeps it open until the

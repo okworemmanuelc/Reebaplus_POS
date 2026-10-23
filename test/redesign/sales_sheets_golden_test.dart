@@ -14,7 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
-import 'package:reebaplus_pos/features/pos/widgets/barcode_scan_page.dart';
+import 'package:reebaplus_pos/shared/scanner/barcode_scan_page.dart';
 
 import '../helpers/fake_barcode_scanner.dart';
 import '../helpers/screen_harness.dart';

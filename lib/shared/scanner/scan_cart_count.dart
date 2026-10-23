@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/utils/responsive.dart';
-import 'package:reebaplus_pos/features/pos/providers/pos_providers.dart';
+import 'package:reebaplus_pos/shared/scanner/scanner_providers.dart';
 
 /// The scanner's running "‹N› items in cart" pill (#319), live from the cart:
 /// units (sum of line quantities), not lines and not money.

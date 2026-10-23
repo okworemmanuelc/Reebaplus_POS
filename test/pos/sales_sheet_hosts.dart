@@ -10,7 +10,7 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/features/pos/services/barcode_scan_resolver.dart';
-import 'package:reebaplus_pos/features/pos/widgets/camera_permission_sheet.dart';
+import 'package:reebaplus_pos/shared/scanner/camera_permission_sheet.dart';
 import 'package:reebaplus_pos/features/pos/widgets/edit_item_modal.dart';
 import 'package:reebaplus_pos/features/pos/widgets/quick_sale_modal.dart';
 import 'package:reebaplus_pos/features/pos/widgets/scan_link_product_sheet.dart';
