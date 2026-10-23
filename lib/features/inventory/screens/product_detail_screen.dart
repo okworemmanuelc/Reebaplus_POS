@@ -12,6 +12,8 @@ import 'package:reebaplus_pos/features/inventory/widgets/inventory_parts.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/product_detail_cards.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/product_detail_figures.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/product_detail_parts.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/product_sales_history_cards.dart';
+import 'package:reebaplus_pos/features/inventory/screens/product_stock_history_screen.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/update_product_sheet.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 import 'package:reebaplus_pos/core/result.dart';
@@ -72,9 +74,7 @@ enum _MenuAction { adjustStock, editProduct, report }
 class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   ProductData? _productData; // full DB row, kept live by the stream below
 
-  ProductSalesSummary? _salesSummary;
-  LastShipmentInfo? _lastDelivery;
-  bool _deliveryLoaded = false;
+  List<ProductDaySales>? _salesDays;
   bool _contentReady = false; // deferred load flag
   String? _imagePath;
 
@@ -141,34 +141,24 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       });
     }
 
-    // Load sales summary from completed orders
-    final summary = await ref
-        .read(orderServiceProvider)
-        .getSalesSummaryForProduct(productId);
-    if (mounted) setState(() => _salesSummary = summary);
-
-    // Load last shipment from shipments
-    final delivery = await db.shipmentsDao.getLastShipmentForProduct(productId);
+    // Load the per-day sales for the Sales card (recognized sales only).
+    final days = await db.ordersDao.getProductSalesByDay(productId, now: _now);
     if (mounted) {
       setState(() {
-        _lastDelivery = delivery;
-        _deliveryLoaded = true;
+        _salesDays = days;
         _contentReady = true;
       });
     }
   }
 
-  /// Re-read the derived blocks (Sales Summary + Last Delivery) after a stock
-  /// change syncs in, so they stay live alongside the product fields.
+  /// Re-read the Sales card's days after a stock change or a sale syncs in, so
+  /// it stays live alongside the product fields.
   Future<void> _reloadDerived() async {
-    final db = ref.read(databaseProvider);
-    final id = widget.item.id;
-    final summary = await ref
-        .read(orderServiceProvider)
-        .getSalesSummaryForProduct(id);
-    if (mounted) setState(() => _salesSummary = summary);
-    final delivery = await db.shipmentsDao.getLastShipmentForProduct(id);
-    if (mounted) setState(() => _lastDelivery = delivery);
+    final days = await ref
+        .read(databaseProvider)
+        .ordersDao
+        .getProductSalesByDay(widget.item.id, now: _now);
+    if (mounted) setState(() => _salesDays = days);
   }
 
   // ── Theme helpers ─────────────────────────────────────────────────────────
@@ -213,7 +203,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     );
 
     // A stock change for this product (an Adjust Stock, a sale, a sync) means
-    // the Sales Summary + Last Delivery may have moved too.
+    // the Sales card may have moved too.
     ref.listen(productStockByStoreProvider(widget.item.id), (prev, next) {
       if (prev?.valueOrNull == null || next.valueOrNull == null) return;
       _reloadDerived();
@@ -413,8 +403,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       crates: _crates,
     );
     final target = _buildTarget(context);
-    final salesSummary = _buildSalesSummary(context);
-    final delivery = _buildDeliveryCard(context);
+    final salesCard = _buildSalesCard(context);
+    final history = _buildStockHistoryCard(context);
     final manage = _buildManage(context, columns >= 2);
 
     List<Widget> column(List<Widget?> cards) => [
@@ -443,11 +433,11 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       3 => cols([
         [hero, description, manage],
         [prices, stock, target],
-        [salesSummary, delivery],
+        [salesCard, history],
       ]),
       2 => cols([
         [hero, description, prices, manage],
-        [stock, target, salesSummary, delivery],
+        [stock, target, salesCard, history],
       ]),
       _ => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -457,8 +447,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
           prices,
           stock,
           target,
-          salesSummary,
-          delivery,
+          salesCard,
+          history,
           manage,
         ]),
       ),
@@ -540,10 +530,18 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     );
   }
 
+  /// Units sold so far this (business-local) month, from the Sales card's days.
+  int get _monthUnits {
+    final days = _salesDays;
+    if (days == null || days.isEmpty) return 0;
+    final m = days.last.date.month;
+    return days.where((d) => d.date.month == m).fold(0, (a, d) => a + d.units);
+  }
+
   Widget _buildTarget(BuildContext context) {
     return ProductSalesTargetCard(
       figures: SalesTargetFigures(
-        sold: _salesSummary?.monthUnits ?? 0,
+        sold: _monthUnits,
         target: _productData?.monthlyTargetUnits ?? 0,
         now: _now,
       ),
@@ -567,208 +565,40 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     );
   }
 
-  // ── Sales Summary + Last Delivery: plain cards until PR 5 replaces them with
-  // the Sales chart and Stock History ──────────────────────────────────────────
+  // ── Sales + Stock History (#487 PR 5) ───────────────────────────────────
 
-  Widget _plainCard(
-    BuildContext context, {
-    required IconData icon,
-    required String title,
-    required List<Widget> children,
-  }) {
-    return DetailPanel(
-      padding: EdgeInsets.symmetric(vertical: context.getRSize(16)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: context.getRSize(16)),
-            child: DetailPanelHeader(icon: icon, title: title),
+  Widget _buildSalesCard(BuildContext context) => ProductSalesCard(
+    days: _salesDays,
+    unit: _unit,
+    crates: _crates,
+    showProfit: _canEditBuying,
+  );
+
+  Widget _buildStockHistoryCard(BuildContext context) {
+    final page = ref.watch(
+      paginatedStockHistoryProvider((
+        storeId: null,
+        period: 'All',
+        productId: widget.item.id,
+      )),
+    );
+    return ProductStockHistoryCard(
+      rows: page.transactions,
+      loading: page.isLoading,
+      unit: _unit,
+      crates: _crates,
+      now: _now,
+      onViewAll: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => ProductStockHistoryScreen(
+            productId: widget.item.id,
+            unit: _unit,
+            crates: _crates,
+            clock: widget.clock,
           ),
-          SizedBox(height: context.getRSize(6)),
-          ...children,
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSalesSummary(BuildContext context) {
-    final s = _salesSummary;
-    String units(int n) => '$n ${unitCountNoun(_unit, n, crates: _crates)}';
-    return _plainCard(
-      context,
-      icon: AppIcons.analytics,
-      title: 'Sales Summary',
-      children: [
-        _statRow(
-          context,
-          'Today',
-          s != null ? units(s.todayUnits) : '—',
-          s != null ? formatCurrency(s.todayRevenueKobo / 100) : '—',
-        ),
-        const DetailDivider(),
-        _statRow(
-          context,
-          'This Week',
-          s != null ? units(s.weekUnits) : '—',
-          s != null ? formatCurrency(s.weekRevenueKobo / 100) : '—',
-        ),
-        const DetailDivider(),
-        _statRow(
-          context,
-          'This Month',
-          s != null ? units(s.monthUnits) : '—',
-          s != null ? formatCurrency(s.monthRevenueKobo / 100) : '—',
-        ),
-      ],
-    );
-  }
-
-  Widget _statRow(
-    BuildContext context,
-    String period,
-    String qty,
-    String revenue,
-  ) {
-    final t = Theme.of(context);
-    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
-    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: kMinInteractiveDimension),
-      child: Padding(
-        padding: EdgeInsets.symmetric(
-          horizontal: context.getRSize(16),
-          vertical: context.getRSize(12),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              flex: 3,
-              child: Text(
-                period,
-                style: context.semiBoldStyle(13).copyWith(color: muted),
-              ),
-            ),
-            Expanded(
-              flex: 2,
-              child: Text(
-                qty,
-                textAlign: TextAlign.center,
-                style: context
-                    .boldStyle(13)
-                    .copyWith(color: t.colorScheme.onSurface),
-              ),
-            ),
-            Expanded(
-              flex: 3,
-              child: Text(
-                revenue,
-                textAlign: TextAlign.end,
-                style: context.boldStyle(13).copyWith(color: f.green),
-              ),
-            ),
-          ],
         ),
       ),
     );
-  }
-
-  // ── Last Delivery Card — reads from Shipments table ───────────────────────
-  Widget _buildDeliveryCard(BuildContext context) {
-    final t = Theme.of(context);
-    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
-    Widget note(Widget child) => Padding(
-      padding: EdgeInsets.all(context.getRSize(24)),
-      child: Center(child: child),
-    );
-    if (!_deliveryLoaded) {
-      return _plainCard(
-        context,
-        icon: AppIcons.vanDelivery,
-        title: 'Last Delivery',
-        children: [
-          note(
-            SizedBox(
-              width: context.getRSize(20),
-              height: context.getRSize(20),
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: t.colorScheme.primary,
-              ),
-            ),
-          ),
-        ],
-      );
-    }
-    final d = _lastDelivery;
-    if (d == null) {
-      return _plainCard(
-        context,
-        icon: AppIcons.vanDelivery,
-        title: 'Last Delivery',
-        children: [
-          note(
-            Text(
-              'No deliveries recorded yet',
-              style: context.regularStyle(13).copyWith(color: muted),
-            ),
-          ),
-        ],
-      );
-    }
-    return _plainCard(
-      context,
-      icon: AppIcons.vanDelivery,
-      title: 'Last Delivery',
-      children: [
-        DetailInfoRow(
-          icon: AppIcons.calendar,
-          tone: IconTileTone.info,
-          label: 'Date',
-          value: _fmtDate(d.date),
-        ),
-        const DetailDivider(),
-        DetailInfoRow(
-          icon: AppIcons.vanDelivery,
-          tone: IconTileTone.info,
-          label: 'Quantity Received',
-          value:
-              '${d.quantity} ${unitCountNoun(_unit, d.quantity, crates: _crates)}',
-        ),
-        const DetailDivider(),
-        DetailInfoRow(
-          icon: AppIcons.price,
-          tone: IconTileTone.warning,
-          label: 'Price Per Unit',
-          value: formatCurrency(d.unitPriceKobo / 100),
-        ),
-        const DetailDivider(),
-        DetailInfoRow(
-          icon: AppIcons.receipt,
-          tone: IconTileTone.green,
-          label: 'Total Delivery Cost',
-          value: formatCurrency(d.totalKobo / 100),
-        ),
-      ],
-    );
-  }
-
-  String _fmtDate(DateTime dt) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return '${dt.day} ${months[dt.month - 1]} ${dt.year}';
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

@@ -15,6 +15,8 @@ import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/permissions/gate.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/features/inventory/screens/product_detail_screen.dart';
+import 'package:reebaplus_pos/features/inventory/screens/product_stock_history_screen.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/product_sales_history_cards.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/product_detail_cards.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/update_product_sheet.dart';
 
@@ -157,8 +159,8 @@ void main() {
         'Prices & Profit',
         'Stock by Store',
         'Sales Target',
-        'Sales Summary',
-        'Last Delivery',
+        'Sales',
+        'Stock History',
         'Manage Product',
       ];
       var lastY = -1.0;
@@ -242,7 +244,7 @@ void main() {
       expect(find.text('Alert at 5 bottles'), findsOneWidget);
       expect(find.text('of 200 bottles sold'), findsOneWidget);
       expect(find.textContaining('bottles to go'), findsOneWidget);
-      expect(find.textContaining('0 bottles'), findsWidgets); // Sales Summary
+      expect(find.textContaining('0 bottles sold'), findsOneWidget); // Sales
       expect(
         find.textContaining(RegExp('crate', caseSensitive: false)),
         findsNothing,
@@ -788,10 +790,10 @@ void main() {
         expect(panelOf(tester, t).left, closeTo(left, 1), reason: t);
       }
       await showAllCards(tester);
-      // Manage Product is the last card, under the placeholders.
+      // Manage Product is the last card, under the two new cards.
       expect(
         panelOf(tester, 'Manage Product').top,
-        greaterThan(panelOf(tester, 'Last Delivery').top),
+        greaterThan(panelOf(tester, 'Stock History').top),
       );
       await disposeScreen(tester);
     });
@@ -801,12 +803,12 @@ void main() {
       final desc = panelOf(tester, 'Description');
       final stock = panelOf(tester, 'Stock by Store');
       // Column 1: Hero, Description, Prices, Manage. Column 2: Stock, Target,
-      // then the two placeholders.
+      // then Sales and Stock History.
       expect(panelOf(tester, 'Prices & Profit').left, closeTo(desc.left, 1));
       expect(panelOf(tester, 'Manage Product').left, closeTo(desc.left, 1));
       expect(stock.left, greaterThan(desc.right));
       expect(panelOf(tester, 'Sales Target').left, closeTo(stock.left, 1));
-      expect(panelOf(tester, 'Sales Summary').left, closeTo(stock.left, 1));
+      expect(panelOf(tester, 'Sales').left, closeTo(stock.left, 1));
       await disposeScreen(tester);
     });
 
@@ -818,15 +820,15 @@ void main() {
       );
       final desc = panelOf(tester, 'Description');
       final prices = panelOf(tester, 'Prices & Profit');
-      final summary = panelOf(tester, 'Sales Summary');
+      final summary = panelOf(tester, 'Sales');
       // Column 1: Hero, Description, Manage. Column 2: Prices, Stock, Target.
-      // Column 3: the two placeholders.
+      // Column 3: Sales and Stock History.
       expect(panelOf(tester, 'Manage Product').left, closeTo(desc.left, 1));
       expect(prices.left, greaterThan(desc.right));
       expect(panelOf(tester, 'Stock by Store').left, closeTo(prices.left, 1));
       expect(panelOf(tester, 'Sales Target').left, closeTo(prices.left, 1));
       expect(summary.left, greaterThan(prices.right));
-      expect(panelOf(tester, 'Last Delivery').left, closeTo(summary.left, 1));
+      expect(panelOf(tester, 'Stock History').left, closeTo(summary.left, 1));
       await disposeScreen(tester);
     });
 
@@ -837,7 +839,7 @@ void main() {
         insets: const FakeViewPadding(top: 24),
       );
       final first = panelOf(tester, 'Description').left;
-      final last = panelOf(tester, 'Sales Summary').right;
+      final last = panelOf(tester, 'Sales').right;
       expect(last - first, closeTo(1400, 40));
       await disposeScreen(tester);
     });
@@ -877,5 +879,204 @@ void main() {
         await disposeScreen(tester);
       });
     }
+  });
+
+  group('Sales and Stock History cards (PR 5)', () {
+    Future<void> sellToday(int qty, {int cost = 0}) async {
+      final productId = sample.productIds['Gulder']!;
+      final orderId = UuidV7.generate();
+      await env.db
+          .into(env.db.orders)
+          .insert(
+            OrdersCompanion.insert(
+              id: Value(orderId),
+              businessId: env.businessId,
+              orderNumber: 'ORD-$orderId',
+              totalAmountKobo: qty * 1500000,
+              netAmountKobo: qty * 1500000,
+              paymentType: 'cash',
+              status: 'pending',
+              storeId: Value(env.storeId),
+              createdAt: Value(DateTime.now()),
+            ),
+          );
+      await env.db
+          .into(env.db.orderItems)
+          .insert(
+            OrderItemsCompanion.insert(
+              id: Value(UuidV7.generate()),
+              businessId: env.businessId,
+              orderId: orderId,
+              productId: Value(productId),
+              storeId: env.storeId,
+              quantity: qty,
+              unitPriceKobo: 1500000,
+              totalKobo: qty * 1500000,
+              buyingPriceKobo: Value(cost),
+            ),
+          );
+    }
+
+    Future<void> move(
+      String type,
+      int delta,
+      int minutesAgo, {
+      String? reason,
+    }) async {
+      final at = DateTime.now().subtract(Duration(minutes: minutesAgo));
+      final String adjId;
+      {
+        adjId = UuidV7.generate();
+        await env.db
+            .into(env.db.stockAdjustments)
+            .insert(
+              StockAdjustmentsCompanion.insert(
+                id: Value(adjId),
+                businessId: env.businessId,
+                productId: sample.productIds['Gulder']!,
+                storeId: env.storeId,
+                quantityDiff: delta,
+                reason: reason ?? 'Sample',
+                performedBy: Value(sample.staffId),
+                createdAt: Value(at),
+                lastUpdatedAt: Value(at),
+              ),
+            );
+      }
+      await env.db
+          .into(env.db.stockTransactions)
+          .insert(
+            StockTransactionsCompanion.insert(
+              id: Value(UuidV7.generate()),
+              businessId: env.businessId,
+              productId: sample.productIds['Gulder']!,
+              locationId: env.storeId,
+              quantityDelta: delta,
+              movementType: type,
+              adjustmentId: Value(adjId),
+              performedBy: Value(sample.staffId),
+              createdAt: Value(at),
+              lastUpdatedAt: Value(at),
+            ),
+          );
+    }
+
+    /// The ledger is append-only, so the sample's own movement is voided (the
+    /// history leaves voided rows out).
+    Future<void> clearHistory() => env.db
+        .update(env.db.stockTransactions)
+        .write(StockTransactionsCompanion(voidedAt: Value(DateTime.now())));
+
+    testWidgets('Week | Month switch changes the period', (tester) async {
+      await sellToday(5, cost: 1000000);
+      await pump(tester);
+      await showAllCards(tester);
+      expect(find.text('Last 7 days'), findsOneWidget);
+      expect(find.text('5'), findsWidgets);
+      expect(find.text('crates sold'), findsOneWidget);
+      expect(find.text('Today'), findsOneWidget);
+      await tester.drag(
+        find.byType(SingleChildScrollView).first,
+        const Offset(0, 500),
+      );
+      await tester.pump();
+      await tester.tap(find.text('Month'));
+      await tester.pump();
+      expect(find.text('This month'), findsOneWidget);
+      expect(find.text('Last 7 days'), findsNothing);
+      expect(find.text('Today'), findsOneWidget);
+      await tester.tap(find.text('Week'));
+      await tester.pump();
+      expect(find.text('Last 7 days'), findsOneWidget);
+      await disposeScreen(tester);
+    });
+
+    testWidgets('Revenue and Profit show with the permission', (tester) async {
+      await sellToday(2, cost: 1000000);
+      await pump(tester);
+      expect(find.text('Revenue'), findsOneWidget);
+      expect(find.text('Profit'), findsOneWidget);
+      expect(find.textContaining('no cost yet'), findsNothing);
+      await disposeScreen(tester);
+    });
+
+    testWidgets('an uncosted sale adds the small note', (tester) async {
+      await sellToday(2, cost: 0);
+      await pump(tester);
+      expect(find.textContaining('no cost yet'), findsOneWidget);
+      await disposeScreen(tester);
+    });
+
+    testWidgets('Profit is hidden without editBuyingPrice', (tester) async {
+      await sellToday(2, cost: 0);
+      await pump(
+        tester,
+        grants: kInventorySampleGrants,
+        roleSlug: 'manager',
+        roleRank: GateTier.manager,
+      );
+      expect(find.text('Revenue'), findsOneWidget);
+      expect(find.text('Profit'), findsNothing);
+      expect(find.textContaining('no cost yet'), findsNothing);
+      await disposeScreen(tester);
+    });
+
+    testWidgets('Stock History shows the last 5 movements, typed', (
+      tester,
+    ) async {
+      await clearHistory();
+      await move('sale', -2, 10);
+      await move('purchase_received', 30, 20);
+      await move('adjustment', -1, 30, reason: 'Damaged');
+      await move('transfer_out', -10, 40);
+      await move('sale', -5, 50);
+      await move('sale', -9, 60); // the sixth is not on the card
+      await pump(tester);
+      await showAllCards(tester);
+      expect(find.byType(StockMovementRow), findsNWidgets(5));
+      expect(find.text('Sale'), findsNWidgets(2));
+      expect(find.text('Stock Received'), findsOneWidget);
+      expect(find.text('Adjustment: Damaged'), findsOneWidget);
+      expect(find.text('Transfer'), findsOneWidget);
+      expect(find.text('-2'), findsOneWidget);
+      expect(find.text('+30'), findsOneWidget);
+      expect(find.text('-9'), findsNothing);
+      expect(find.text('crates'), findsWidgets);
+      expect(find.textContaining('Today, '), findsWidgets);
+      await disposeScreen(tester);
+    });
+
+    testWidgets('View All opens this product\'s whole history', (tester) async {
+      await clearHistory();
+      for (var i = 0; i < 7; i++) {
+        await move('sale', -(i + 1), 10 + i);
+      }
+      await pump(tester);
+      await showAllCards(tester);
+      await tester.drag(
+        find.byType(SingleChildScrollView).first,
+        const Offset(0, 300),
+      );
+      await tester.pump();
+      await tester.tap(find.text('View All'));
+      await deliver(tester);
+      expect(find.byType(ProductStockHistoryScreen), findsOneWidget);
+      expect(find.text('Stock History'), findsOneWidget);
+      expect(find.byType(StockMovementRow), findsNWidgets(7));
+      await tester.tap(find.byTooltip('Back'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ProductStockHistoryScreen), findsNothing);
+      await disposeScreen(tester);
+    });
+
+    testWidgets('empty states: no sales and no movements', (tester) async {
+      await clearHistory();
+      await pump(tester);
+      await showAllCards(tester);
+      expect(find.text('0'), findsWidgets);
+      expect(find.text('crates sold'), findsOneWidget);
+      expect(find.text('No stock movements yet'), findsOneWidget);
+      await disposeScreen(tester);
+    });
   });
 }

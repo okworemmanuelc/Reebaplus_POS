@@ -2161,7 +2161,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           orderItems.productId.equals(productId) &
               // Revenue is recognized at checkout ('pending'), not at the
               // ceremonial Confirm ('completed'). Count any non-reversed sale.
-              orders.status.isIn(const ['pending', 'completed']) &
+              orders.status.isIn(orderRevenueStatuses) &
               whereBusiness(orders),
         );
 
@@ -2198,6 +2198,77 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       monthUnits: monthUnits,
       monthRevenueKobo: monthRevKobo,
     );
+  }
+
+  /// One row per local calendar day (business timezone) from the earlier of
+  /// "6 days ago" and "the 1st of this month" up to today, zeros included, for
+  /// the Sales card on Product Details (#487 PR 5). Only recognized sales
+  /// ([orderRevenueStatuses]) count. Revenue = line totals; profit = line total
+  /// minus the per-line cost snapshot (`buying_price_kobo` x qty). An uncosted
+  /// line (cost 0) adds no profit and flags its day [ProductDaySales.hasUncosted].
+  Future<List<ProductDaySales>> getProductSalesByDay(
+    String productId, {
+    DateTime? now,
+  }) async {
+    final business = await (select(
+      businesses,
+    )..where((b) => whereBusiness(b))).getSingleOrNull();
+    final tzName = business?.timezone ?? 'UTC';
+    tz.Location location;
+    try {
+      location = tz.getLocation(tzName);
+    } on tz.LocationNotFoundException {
+      location = tz.UTC;
+    }
+    final today = now == null
+        ? tz.TZDateTime.now(location)
+        : tz.TZDateTime.from(now, location);
+    final first = [
+      DateTime(today.year, today.month, 1),
+      DateTime(today.year, today.month, today.day - 6),
+    ].reduce((a, b) => a.isBefore(b) ? a : b);
+
+    final days = <DateTime, _DayAcc>{};
+    for (
+      var d = first;
+      !d.isAfter(DateTime(today.year, today.month, today.day));
+      d = DateTime(d.year, d.month, d.day + 1)
+    ) {
+      days[d] = _DayAcc();
+    }
+
+    final rows =
+        await (select(orderItems).join([
+              innerJoin(orders, orders.id.equalsExp(orderItems.orderId)),
+            ])..where(
+              orderItems.productId.equals(productId) &
+                  orders.status.isIn(orderRevenueStatuses) &
+                  whereBusiness(orders),
+            ))
+            .get();
+    for (final row in rows) {
+      final item = row.readTable(orderItems);
+      final at = tz.TZDateTime.from(row.readTable(orders).createdAt, location);
+      final acc = days[DateTime(at.year, at.month, at.day)];
+      if (acc == null) continue; // outside the window
+      acc.units += item.quantity;
+      acc.revenue += item.totalKobo;
+      if (item.buyingPriceKobo > 0) {
+        acc.profit += item.totalKobo - item.buyingPriceKobo * item.quantity;
+      } else {
+        acc.uncosted = true;
+      }
+    }
+    return [
+      for (final e in days.entries)
+        ProductDaySales(
+          date: e.key,
+          units: e.value.units,
+          revenueKobo: e.value.revenue,
+          profitKobo: e.value.profit,
+          hasUncosted: e.value.uncosted,
+        ),
+    ];
   }
 
   // ── Cart staleness ─────────────────────────────────────────────────────────
@@ -2322,6 +2393,27 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           ..limit(1))
         .getSingleOrNull();
   }
+}
+
+class _DayAcc {
+  int units = 0, revenue = 0, profit = 0;
+  bool uncosted = false;
+}
+
+/// One local day of a product's sales (see [OrdersDao.getProductSalesByDay]).
+class ProductDaySales {
+  final DateTime date; // local calendar day, y/m/d only
+  final int units;
+  final int revenueKobo;
+  final int profitKobo;
+  final bool hasUncosted;
+  const ProductDaySales({
+    required this.date,
+    required this.units,
+    required this.revenueKobo,
+    required this.profitKobo,
+    required this.hasUncosted,
+  });
 }
 
 class ProductSalesSummary {

@@ -258,8 +258,10 @@ class ProductDetailTopBar extends StatelessWidget
     required this.height,
     required this.onBack,
     this.actions = const [],
+    this.title = 'Product Details',
   });
 
+  final String title;
   final double height;
   final VoidCallback onBack;
   final List<Widget> actions;
@@ -308,7 +310,7 @@ class ProductDetailTopBar extends StatelessWidget
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Product Details',
+                  title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: context.screenTitleStyle.copyWith(

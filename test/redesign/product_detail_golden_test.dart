@@ -1,20 +1,23 @@
 // Visual goldens for Product Details (#487 PR 3): the hero, Description,
-// Prices & Profit, Stock by Store, Sales Target, the two plain cards and
+// Prices & Profit, Stock by Store, Sales Target, Sales, Stock History and
 // Manage Product, in one, two and three columns. Screens at 390x2200 (gesture
 // nav, bottom 24), 844x390 (status bar 24, 3-button nav on the right 48),
 // 800x1500 (two columns) and 1280x1000 (three columns); light + dark. Also an
 // archived product and a cashier's view-only look. The clock is pinned (22
-// Oct 2026), and the sample has no orders or shipments, so nothing depends on
-// the real date. Regenerate with:
+// Oct 2026) and the Sales and Stock History rows are seeded on fixed dates, so
+// nothing depends on the real date. Regenerate with:
 //
 //     flutter test --update-goldens test/redesign/product_detail_golden_test.dart
 
 import 'dart:io';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/permissions/gate.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/features/inventory/screens/product_detail_screen.dart';
@@ -22,6 +25,100 @@ import 'package:reebaplus_pos/features/inventory/screens/product_detail_screen.d
 import '../helpers/inventory_seed.dart';
 import '../helpers/product_detail_seed.dart';
 import '../helpers/screen_harness.dart';
+
+/// Fixed-date sales and stock movements for Gulder (the sample's own movement
+/// carries the real date, so it is voided; the ledger is append-only).
+Future<void> _seedSalesAndHistory(
+  ScreenTestEnvironment env,
+  InventorySample sample,
+) async {
+  final db = env.db;
+  final productId = sample.productIds['Gulder']!;
+  await db
+      .update(db.stockTransactions)
+      .write(StockTransactionsCompanion(voidedAt: Value(DateTime(2026, 1, 1))));
+  for (final (daysAgo, qty, cost) in const [
+    (0, 4, 1350000),
+    (1, 9, 1350000),
+    (2, 6, 0),
+    (4, 11, 1350000),
+    (5, 3, 1350000),
+    (9, 7, 1350000),
+  ]) {
+    final at = DateTime(2026, 10, 22 - daysAgo, 11);
+    final orderId = UuidV7.generate();
+    await db
+        .into(db.orders)
+        .insert(
+          OrdersCompanion.insert(
+            id: Value(orderId),
+            businessId: env.businessId,
+            orderNumber: 'ORD-$orderId',
+            totalAmountKobo: qty * 1500000,
+            netAmountKobo: qty * 1500000,
+            paymentType: 'cash',
+            status: 'pending',
+            storeId: Value(env.storeId),
+            createdAt: Value(at),
+          ),
+        );
+    await db
+        .into(db.orderItems)
+        .insert(
+          OrderItemsCompanion.insert(
+            id: Value(UuidV7.generate()),
+            businessId: env.businessId,
+            orderId: orderId,
+            productId: Value(productId),
+            storeId: env.storeId,
+            quantity: qty,
+            unitPriceKobo: 1500000,
+            totalKobo: qty * 1500000,
+            buyingPriceKobo: Value(cost),
+          ),
+        );
+  }
+  for (final (type, delta, at, reason) in [
+    ('sale', -2, DateTime(2026, 10, 22, 10, 30), 'Sale'),
+    ('purchase_received', 30, DateTime(2026, 10, 21, 9, 5), 'Delivery'),
+    ('adjustment', -1, DateTime(2026, 10, 20, 18, 40), 'Damaged'),
+    ('transfer_out', -10, DateTime(2026, 10, 19, 14, 0), 'Transfer'),
+    ('sale', -5, DateTime(2026, 10, 19, 13, 22), 'Sale'),
+  ]) {
+    final adjId = UuidV7.generate();
+    await db
+        .into(db.stockAdjustments)
+        .insert(
+          StockAdjustmentsCompanion.insert(
+            id: Value(adjId),
+            businessId: env.businessId,
+            productId: productId,
+            storeId: env.storeId,
+            quantityDiff: delta,
+            reason: reason,
+            performedBy: Value(sample.staffId),
+            createdAt: Value(at),
+            lastUpdatedAt: Value(at),
+          ),
+        );
+    await db
+        .into(db.stockTransactions)
+        .insert(
+          StockTransactionsCompanion.insert(
+            id: Value(UuidV7.generate()),
+            businessId: env.businessId,
+            productId: productId,
+            locationId: env.storeId,
+            quantityDelta: delta,
+            movementType: type,
+            adjustmentId: Value(adjId),
+            performedBy: Value(sample.staffId),
+            createdAt: Value(at),
+            lastUpdatedAt: Value(at),
+          ),
+        );
+  }
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -51,6 +148,7 @@ void main() {
       businessType: 'Beverage distributor',
     );
     sample = await seedInventorySample(env);
+    await _seedSalesAndHistory(env, sample);
   });
 
   tearDown(() => env.dispose());
