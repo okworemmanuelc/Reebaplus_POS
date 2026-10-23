@@ -3,14 +3,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
-import 'package:reebaplus_pos/core/theme/colors.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/dashboard/get_started_checklist.dart';
 import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
 import 'package:reebaplus_pos/features/staff/screens/invite_staff_screen.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_card.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/icon_tile.dart';
 import 'package:reebaplus_pos/shared/widgets/spotlight_target.dart';
 
 /// The "Get started" checklist card — Home tab only, CEO only (issue #31,
@@ -31,7 +33,6 @@ class GetStartedCard extends ConsumerWidget {
     final total = state.steps.length;
     final theme = Theme.of(context);
     final subtext = theme.textTheme.bodySmall?.color ?? theme.iconTheme.color!;
-    final primary = context.primaryColor;
 
     final canDismiss = state.steps
         .firstWhere((s) => s.id == GetStartedStepId.createStore)
@@ -49,26 +50,7 @@ class GetStartedCard extends ConsumerWidget {
             children: [
               Row(
                 children: [
-                  Container(
-                    width: context.getRSize(40),
-                    height: context.getRSize(40),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          primary.withValues(alpha: 0.15),
-                          primary.withValues(alpha: 0.05),
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      AppIcons.rocket,
-                      color: primary,
-                      size: context.getRSize(18),
-                    ),
-                  ),
+                  const IconTile(icon: AppIcons.rocket, size: 44),
                   SizedBox(width: context.spacingM),
                   Expanded(
                     child: Column(
@@ -76,18 +58,16 @@ class GetStartedCard extends ConsumerWidget {
                       children: [
                         Text(
                           'Get started',
-                          style: context.bodyLarge.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.onSurface,
-                          ),
+                          style: context
+                              .boldStyle(16)
+                              .copyWith(color: theme.colorScheme.onSurface),
                         ),
                         SizedBox(height: context.getRSize(2)),
                         Text(
                           '$doneCount of $total done',
-                          style: TextStyle(
-                            fontSize: context.getRFontSize(12),
-                            color: subtext,
-                          ),
+                          style: context
+                              .regularStyle(12)
+                              .copyWith(color: subtext),
                         ),
                       ],
                     ),
@@ -129,13 +109,14 @@ class GetStartedCard extends ConsumerWidget {
     final meta = _metaFor(step.id, ref.watch(industryLexiconProvider).item);
     final theme = Theme.of(context);
     final subtext = theme.textTheme.bodySmall?.color ?? theme.iconTheme.color!;
+    final f = theme.extension<AppFixedColors>() ?? AppFixedColors.light;
     final title = step.optional ? '${meta.title} (optional)' : meta.title;
 
     final IconData iconData;
     final Color iconColor;
     if (step.done) {
       iconData = AppIcons.checkCircle;
-      iconColor = success;
+      iconColor = f.green;
     } else if (step.locked) {
       iconData = AppIcons.lock;
       iconColor = subtext.withValues(alpha: 0.35);
@@ -144,48 +125,54 @@ class GetStartedCard extends ConsumerWidget {
       iconColor = subtext.withValues(alpha: 0.5);
     }
 
-    final row = Padding(
-      padding: EdgeInsets.symmetric(vertical: context.getRSize(8)),
-      child: Row(
-        children: [
-          Icon(iconData, color: iconColor, size: context.getRSize(20)),
-          SizedBox(width: context.spacingM),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(14),
-                    fontWeight: FontWeight.w600,
-                    color: step.locked
-                        ? subtext.withValues(alpha: 0.6)
-                        : theme.colorScheme.onSurface,
-                    decoration: step.done ? TextDecoration.lineThrough : null,
-                    decorationColor: subtext,
+    final row = ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: kMinInteractiveDimension),
+      child: Padding(
+        padding: EdgeInsets.symmetric(vertical: context.getRSize(8)),
+        child: Row(
+          children: [
+            Icon(iconData, color: iconColor, size: context.getRSize(20)),
+            SizedBox(width: context.spacingM),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: context
+                        .semiBoldStyle(14)
+                        .copyWith(
+                          color: step.locked
+                              ? subtext.withValues(alpha: 0.6)
+                              : theme.colorScheme.onSurface,
+                          decoration: step.done
+                              ? TextDecoration.lineThrough
+                              : null,
+                          decorationColor: subtext,
+                        ),
                   ),
-                ),
-                SizedBox(height: context.getRSize(2)),
-                Text(
-                  meta.subtitle,
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(12),
-                    color: step.locked
-                        ? subtext.withValues(alpha: 0.45)
-                        : subtext.withValues(alpha: 0.8),
+                  SizedBox(height: context.getRSize(2)),
+                  Text(
+                    meta.subtitle,
+                    style: context
+                        .regularStyle(12)
+                        .copyWith(
+                          color: step.locked
+                              ? subtext.withValues(alpha: 0.45)
+                              : subtext.withValues(alpha: 0.8),
+                        ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          if (!step.done && !step.locked)
-            Icon(
-              AppIcons.chevronRight,
-              color: subtext,
-              size: context.getRSize(14),
-            ),
-        ],
+            if (!step.done && !step.locked)
+              Icon(
+                AppIcons.chevronRight,
+                color: subtext,
+                size: context.getRSize(14),
+              ),
+          ],
+        ),
       ),
     );
 
