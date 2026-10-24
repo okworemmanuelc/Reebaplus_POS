@@ -25,6 +25,7 @@ const _categoryOrder = [
   'Stores',
   'Sales',
   'Products',
+  'Online store',
   'Stock',
   'Expenses',
   'Reports',

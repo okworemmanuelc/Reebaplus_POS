@@ -116,6 +116,20 @@ only for the phone/fashion industries. Other parent or unmatched names stay null
 
 Four storage locations, with a strict rule for what lives where. Business data goes to Drift (and syncs); secrets and pointers go to secure storage (and never sync); sync engine state goes to Drift (and never syncs); operator audit records go to Supabase only (and never reach the client). Nothing durable lives only in memory.
 
+**Online listing (#424).** Cloud0195 and Drift88 add
+`products.show_online` defaulting true independently of archive state. Local
+upgrades retain units85, shop pricing86 and category mapping87; older product rebuilds supply
+the new default when the column is absent. Listing permission is seeded as
+`products.manage_listing` under Online store and enforced by `Gates.manageListing`,
+independently of price editing. The Product Details Manage Product card renders
+the switch only with that grant and rechecks it at tap time. The core listing
+service rechecks the effective context before a tenant-scoped transaction writes
+the flag and a complete outbox row (including cleared/null fields). Stock,
+prices and archive state are unchanged. Product restore uses
+the shared helper's default for older rows missing showOnline, preserving an
+explicit false. Storefront reads (#425) must require show_online AND is_available
+AND NOT is_deleted; the listing preference cannot unarchive a product.
+
 | What | Where | Why | Synced to cloud? |
 |---|---|---|---|
 | Products, categories, stock levels, expiry dates | Drift (SQLite) | Read on every POS interaction; must work fully offline. **`products.unit`** is stored raw (`Bottle`, `Crate`, … — `kProductUnits` + the CHECK); a stored `Bottle` is only *shown* as "Bottle Crate", and only in a shop where `businessTracksCrates` is true (`unitLabel(…, crates:)`, #487; every other shop shows "Bottle"), and every crate rule still keys on `unit == 'bottle'`. Plain `Crate` stays valid for existing rows but is not offered to new products. **`products.units_per_pack`** (nullable int > 0, Drift v84 / cloud 0187, #487) is "how many in one" (12 bottles in one crate) — **display only**, it never feeds stock, prices, crate counts or money. **`products.is_available = false` means archived** (#487): off sale (POS grid, scanner), hidden from the Inventory list and figure cards (an Archived card lists them) and from the Receive Stock grid; stock count, reports and history still include it. The one writer is `CatalogDao.setProductArchived`. | Yes |
@@ -267,7 +281,7 @@ Realtime is a **signal that triggers a pull, never the transport for the data it
    - **Authorize** (`0148_realtime_broadcast_authorization.sql`): a single `SELECT` RLS policy on `realtime.messages` scopes topic `store_<business_id>` to the caller's own businesses (`current_user_business_ids()`), so a client can only ever subscribe to its own tenant's topic — no cross-tenant signal leak (invariant #5's spirit). There is **no** `INSERT` (send) policy: clients only receive; the trigger emits as a definer and cannot be spoofed by a client.
    - **Subscribe** (client): `CloudTransport.startBroadcast(businessId, {onSignal})` opens one **private** channel on `store_<businessId>` (`realtime.setAuth` before subscribe, as with `postgres_changes`), on the **same lifecycle as realtime** (sign-in / resume / connectivity handoff / logout). Any signal → a **debounced `catchUpPull(reason: 'broadcast')`** (shares the 20 s catch-up debounce, so a burst from one multi-row write collapses to one pull).
 
-**Invariants this preserves.** A Broadcast signal **MUST NOT write Drift** — its only effect is to schedule a pull (the signal callback is handed no row data by construction). Broadcast is **ephemeral (no replay)**: a device that misses a signal (asleep/offline/backgrounded) converges on the next **periodic / reconnect pull**, which is why the periodic pull is retained as the safety net (Workstream C). Adding a new synced tenant table auto-inherits the trigger (the attach loop is DB-driven), so "add a synced table = one registry entry" still holds.
+**Invariants this preserves.** A Broadcast signal **MUST NOT write Drift** — its only effect is to schedule a pull (the signal callback is handed no row data by construction). Broadcast is **ephemeral (no replay)**: a device that misses a signal (asleep/offline/backgrounded) converges on the next **periodic / reconnect pull**, which is why the periodic pull is retained as the safety net (Workstream C). A new tenant table does **not** auto-inherit the trigger: 0147's attach loop ran once, over the tables that existed then (#470 found nine later tables without it; `0198_broadcast_trigger_gap.sql` backfilled them). Every migration that creates a business-scoped table must attach `zz_broadcast_sync_signal` itself (AFTER INSERT OR UPDATE OR DELETE, FOR EACH ROW) — or re-run 0198, which is idempotent. The tier-2 guard `test/integration/rpcs/broadcast_trigger_coverage_test.dart` calls the service-role helper `broadcast_trigger_missing_tables()` (0198) and fails if any `kSyncedTenantTables` table, or any `public` table with `business_id`, lacks the trigger.
 
 ### Sync progress and UI feedback (Fix 4)
 
@@ -328,6 +342,13 @@ build red if a sync-fingerprinted table has no entry, and a golden-equivalence
 test pins the derived accessors against their frozen historical values. This
 retires the recurring "forgot to register the table in one of the switches →
 peer devices silently drop its rows" bug-class.
+
+**New synced tenant table checklist (cloud side).** The registry entry is the
+only *client* step, but the cloud migration that creates the table must also
+attach the live-sync trigger `zz_broadcast_sync_signal` (see "Live signal" above;
+0147 does not cover tables created after it). `0198`'s helper
+`broadcast_trigger_missing_tables()` and the tier-2 test
+`test/integration/rpcs/broadcast_trigger_coverage_test.dart` enforce it (#470).
 
 Restore strategies are built from helpers (`Restore.plain` / `.naturalKey` /
 `.dedup` / `.ledger`, with a hand-written closure for the genuinely bespoke

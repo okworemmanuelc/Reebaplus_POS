@@ -10627,6 +10627,21 @@ class $ProductsTable extends Products
     ),
     defaultValue: const Constant(true),
   );
+  static const VerificationMeta _showOnlineMeta = const VerificationMeta(
+    'showOnline',
+  );
+  @override
+  late final GeneratedColumn<bool> showOnline = GeneratedColumn<bool>(
+    'show_online',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("show_online" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
   static const VerificationMeta _isDeletedMeta = const VerificationMeta(
     'isDeleted',
   );
@@ -10853,6 +10868,7 @@ class $ProductsTable extends Products
     iconCodePoint,
     colorHex,
     isAvailable,
+    showOnline,
     isDeleted,
     lowStockThreshold,
     avgDailySales,
@@ -11005,6 +11021,12 @@ class $ProductsTable extends Products
           data['is_available']!,
           _isAvailableMeta,
         ),
+      );
+    }
+    if (data.containsKey('show_online')) {
+      context.handle(
+        _showOnlineMeta,
+        showOnline.isAcceptableOrUnknown(data['show_online']!, _showOnlineMeta),
       );
     }
     if (data.containsKey('is_deleted')) {
@@ -11216,6 +11238,10 @@ class $ProductsTable extends Products
         DriftSqlType.bool,
         data['${effectivePrefix}is_available'],
       )!,
+      showOnline: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}show_online'],
+      )!,
       isDeleted: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_deleted'],
@@ -11311,6 +11337,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
   final int? iconCodePoint;
   final String? colorHex;
   final bool isAvailable;
+  final bool showOnline;
   final bool isDeleted;
   final int lowStockThreshold;
   final double avgDailySales;
@@ -11346,6 +11373,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     this.iconCodePoint,
     this.colorHex,
     required this.isAvailable,
+    required this.showOnline,
     required this.isDeleted,
     required this.lowStockThreshold,
     required this.avgDailySales,
@@ -11404,6 +11432,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       map['color_hex'] = Variable<String>(colorHex);
     }
     map['is_available'] = Variable<bool>(isAvailable);
+    map['show_online'] = Variable<bool>(showOnline);
     map['is_deleted'] = Variable<bool>(isDeleted);
     map['low_stock_threshold'] = Variable<int>(lowStockThreshold);
     map['avg_daily_sales'] = Variable<double>(avgDailySales);
@@ -11467,6 +11496,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
           ? const Value.absent()
           : Value(colorHex),
       isAvailable: Value(isAvailable),
+      showOnline: Value(showOnline),
       isDeleted: Value(isDeleted),
       lowStockThreshold: Value(lowStockThreshold),
       avgDailySales: Value(avgDailySales),
@@ -11522,6 +11552,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       iconCodePoint: serializer.fromJson<int?>(json['iconCodePoint']),
       colorHex: serializer.fromJson<String?>(json['colorHex']),
       isAvailable: serializer.fromJson<bool>(json['isAvailable']),
+      showOnline: serializer.fromJson<bool>(json['showOnline']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
       lowStockThreshold: serializer.fromJson<int>(json['lowStockThreshold']),
       avgDailySales: serializer.fromJson<double>(json['avgDailySales']),
@@ -11566,6 +11597,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       'iconCodePoint': serializer.toJson<int?>(iconCodePoint),
       'colorHex': serializer.toJson<String?>(colorHex),
       'isAvailable': serializer.toJson<bool>(isAvailable),
+      'showOnline': serializer.toJson<bool>(showOnline),
       'isDeleted': serializer.toJson<bool>(isDeleted),
       'lowStockThreshold': serializer.toJson<int>(lowStockThreshold),
       'avgDailySales': serializer.toJson<double>(avgDailySales),
@@ -11604,6 +11636,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     Value<int?> iconCodePoint = const Value.absent(),
     Value<String?> colorHex = const Value.absent(),
     bool? isAvailable,
+    bool? showOnline,
     bool? isDeleted,
     int? lowStockThreshold,
     double? avgDailySales,
@@ -11645,6 +11678,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
         : this.iconCodePoint,
     colorHex: colorHex.present ? colorHex.value : this.colorHex,
     isAvailable: isAvailable ?? this.isAvailable,
+    showOnline: showOnline ?? this.showOnline,
     isDeleted: isDeleted ?? this.isDeleted,
     lowStockThreshold: lowStockThreshold ?? this.lowStockThreshold,
     avgDailySales: avgDailySales ?? this.avgDailySales,
@@ -11702,6 +11736,9 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       isAvailable: data.isAvailable.present
           ? data.isAvailable.value
           : this.isAvailable,
+      showOnline: data.showOnline.present
+          ? data.showOnline.value
+          : this.showOnline,
       isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
       lowStockThreshold: data.lowStockThreshold.present
           ? data.lowStockThreshold.value
@@ -11764,6 +11801,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
           ..write('iconCodePoint: $iconCodePoint, ')
           ..write('colorHex: $colorHex, ')
           ..write('isAvailable: $isAvailable, ')
+          ..write('showOnline: $showOnline, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('lowStockThreshold: $lowStockThreshold, ')
           ..write('avgDailySales: $avgDailySales, ')
@@ -11804,6 +11842,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     iconCodePoint,
     colorHex,
     isAvailable,
+    showOnline,
     isDeleted,
     lowStockThreshold,
     avgDailySales,
@@ -11843,6 +11882,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
           other.iconCodePoint == this.iconCodePoint &&
           other.colorHex == this.colorHex &&
           other.isAvailable == this.isAvailable &&
+          other.showOnline == this.showOnline &&
           other.isDeleted == this.isDeleted &&
           other.lowStockThreshold == this.lowStockThreshold &&
           other.avgDailySales == this.avgDailySales &&
@@ -11880,6 +11920,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
   final Value<int?> iconCodePoint;
   final Value<String?> colorHex;
   final Value<bool> isAvailable;
+  final Value<bool> showOnline;
   final Value<bool> isDeleted;
   final Value<int> lowStockThreshold;
   final Value<double> avgDailySales;
@@ -11916,6 +11957,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     this.iconCodePoint = const Value.absent(),
     this.colorHex = const Value.absent(),
     this.isAvailable = const Value.absent(),
+    this.showOnline = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.lowStockThreshold = const Value.absent(),
     this.avgDailySales = const Value.absent(),
@@ -11953,6 +11995,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     this.iconCodePoint = const Value.absent(),
     this.colorHex = const Value.absent(),
     this.isAvailable = const Value.absent(),
+    this.showOnline = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.lowStockThreshold = const Value.absent(),
     this.avgDailySales = const Value.absent(),
@@ -11991,6 +12034,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     Expression<int>? iconCodePoint,
     Expression<String>? colorHex,
     Expression<bool>? isAvailable,
+    Expression<bool>? showOnline,
     Expression<bool>? isDeleted,
     Expression<int>? lowStockThreshold,
     Expression<double>? avgDailySales,
@@ -12029,6 +12073,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
       if (iconCodePoint != null) 'icon_code_point': iconCodePoint,
       if (colorHex != null) 'color_hex': colorHex,
       if (isAvailable != null) 'is_available': isAvailable,
+      if (showOnline != null) 'show_online': showOnline,
       if (isDeleted != null) 'is_deleted': isDeleted,
       if (lowStockThreshold != null) 'low_stock_threshold': lowStockThreshold,
       if (avgDailySales != null) 'avg_daily_sales': avgDailySales,
@@ -12071,6 +12116,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     Value<int?>? iconCodePoint,
     Value<String?>? colorHex,
     Value<bool>? isAvailable,
+    Value<bool>? showOnline,
     Value<bool>? isDeleted,
     Value<int>? lowStockThreshold,
     Value<double>? avgDailySales,
@@ -12108,6 +12154,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
       iconCodePoint: iconCodePoint ?? this.iconCodePoint,
       colorHex: colorHex ?? this.colorHex,
       isAvailable: isAvailable ?? this.isAvailable,
+      showOnline: showOnline ?? this.showOnline,
       isDeleted: isDeleted ?? this.isDeleted,
       lowStockThreshold: lowStockThreshold ?? this.lowStockThreshold,
       avgDailySales: avgDailySales ?? this.avgDailySales,
@@ -12182,6 +12229,9 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     }
     if (isAvailable.present) {
       map['is_available'] = Variable<bool>(isAvailable.value);
+    }
+    if (showOnline.present) {
+      map['show_online'] = Variable<bool>(showOnline.value);
     }
     if (isDeleted.present) {
       map['is_deleted'] = Variable<bool>(isDeleted.value);
@@ -12262,6 +12312,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
           ..write('iconCodePoint: $iconCodePoint, ')
           ..write('colorHex: $colorHex, ')
           ..write('isAvailable: $isAvailable, ')
+          ..write('showOnline: $showOnline, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('lowStockThreshold: $lowStockThreshold, ')
           ..write('avgDailySales: $avgDailySales, ')
@@ -70566,6 +70617,7 @@ typedef $$ProductsTableCreateCompanionBuilder =
       Value<int?> iconCodePoint,
       Value<String?> colorHex,
       Value<bool> isAvailable,
+      Value<bool> showOnline,
       Value<bool> isDeleted,
       Value<int> lowStockThreshold,
       Value<double> avgDailySales,
@@ -70604,6 +70656,7 @@ typedef $$ProductsTableUpdateCompanionBuilder =
       Value<int?> iconCodePoint,
       Value<String?> colorHex,
       Value<bool> isAvailable,
+      Value<bool> showOnline,
       Value<bool> isDeleted,
       Value<int> lowStockThreshold,
       Value<double> avgDailySales,
@@ -71023,6 +71076,11 @@ class $$ProductsTableFilterComposer
 
   ColumnFilters<bool> get isAvailable => $composableBuilder(
     column: $table.isAvailable,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get showOnline => $composableBuilder(
+    column: $table.showOnline,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -71572,6 +71630,11 @@ class $$ProductsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get showOnline => $composableBuilder(
+    column: $table.showOnline,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isDeleted => $composableBuilder(
     column: $table.isDeleted,
     builder: (column) => ColumnOrderings(column),
@@ -71825,6 +71888,11 @@ class $$ProductsTableAnnotationComposer
 
   GeneratedColumn<bool> get isAvailable => $composableBuilder(
     column: $table.isAvailable,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get showOnline => $composableBuilder(
+    column: $table.showOnline,
     builder: (column) => column,
   );
 
@@ -72357,6 +72425,7 @@ class $$ProductsTableTableManager
                 Value<int?> iconCodePoint = const Value.absent(),
                 Value<String?> colorHex = const Value.absent(),
                 Value<bool> isAvailable = const Value.absent(),
+                Value<bool> showOnline = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<int> lowStockThreshold = const Value.absent(),
                 Value<double> avgDailySales = const Value.absent(),
@@ -72393,6 +72462,7 @@ class $$ProductsTableTableManager
                 iconCodePoint: iconCodePoint,
                 colorHex: colorHex,
                 isAvailable: isAvailable,
+                showOnline: showOnline,
                 isDeleted: isDeleted,
                 lowStockThreshold: lowStockThreshold,
                 avgDailySales: avgDailySales,
@@ -72431,6 +72501,7 @@ class $$ProductsTableTableManager
                 Value<int?> iconCodePoint = const Value.absent(),
                 Value<String?> colorHex = const Value.absent(),
                 Value<bool> isAvailable = const Value.absent(),
+                Value<bool> showOnline = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<int> lowStockThreshold = const Value.absent(),
                 Value<double> avgDailySales = const Value.absent(),
@@ -72467,6 +72538,7 @@ class $$ProductsTableTableManager
                 iconCodePoint: iconCodePoint,
                 colorHex: colorHex,
                 isAvailable: isAvailable,
+                showOnline: showOnline,
                 isDeleted: isDeleted,
                 lowStockThreshold: lowStockThreshold,
                 avgDailySales: avgDailySales,
