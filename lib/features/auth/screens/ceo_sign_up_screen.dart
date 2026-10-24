@@ -13,6 +13,7 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/core/utils/name_case.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/industry/industry.dart';
 import 'package:reebaplus_pos/features/auth/onboarding/onboarding_draft.dart';
@@ -286,7 +287,8 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
   // ── Step 1: business name ────────────────────────────────────────────────
 
   void _submitBusinessName() {
-    final name = _businessNameCtrl.text.trim();
+    final name = toNameCase(_businessNameCtrl.text);
+    _businessNameCtrl.text = name;
     if (name.length < 2) {
       setState(() => _businessNameError = 'Enter at least 2 characters.');
       return;
@@ -308,7 +310,10 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
   // ── Step 2: business type ────────────────────────────────────────────────
 
   void _submitBusinessType() {
-    final rawType = _isOther ? _otherTypeCtrl.text.trim() : _businessType;
+    final rawType = _isOther ? toNameCase(_otherTypeCtrl.text) : _businessType;
+    if (_isOther && rawType != null) {
+      _otherTypeCtrl.text = rawType;
+    }
     if (rawType == null || rawType.isEmpty) return;
     // 'Beverage distributor' is the display label; DB canonical is 'Beer distributor'
     // (existing rows use that string — preserves crate gating without a migration).
@@ -320,6 +325,8 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
       // Only write the flag for crate-eligible types; non-crate types always
       // get true (the default) since the flag is meaningless for them.
       d.tracksEmptyCrates = isCrateBusiness(dbType) ? _tracksEmptyCrates : true;
+      // #493: suggest "We sell at one price" for a Restaurant only.
+      d.sellsOnePrice = suggestsOnePriceAtSignUp(dbType);
     });
     _goTo(2);
   }
@@ -358,7 +365,8 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
   // ── Step 4: full name ────────────────────────────────────────────────────
 
   void _submitFullName() {
-    final name = _fullNameCtrl.text.trim();
+    final name = toNameCase(_fullNameCtrl.text);
+    _fullNameCtrl.text = name;
     if (name.length < 2) {
       setState(() => _fullNameError = 'Enter at least 2 characters.');
       return;

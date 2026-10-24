@@ -31,6 +31,7 @@ import 'package:reebaplus_pos/features/inventory/widgets/catalogue_report_link.d
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
+import 'package:reebaplus_pos/core/services/product_listing_service.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
@@ -76,6 +77,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
 
   List<ProductDaySales>? _salesDays;
   bool _contentReady = false; // deferred load flag
+  bool _savingListing = false;
   String? _imagePath;
 
   // ── Role gating (master plan §16.6 / §16.7) ────────────────────────────────
@@ -521,12 +523,16 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         p?.wholesalerPriceKobo ??
         ((widget.item.wholesalerPrice ?? 0) * 100).round();
     final canSeeCost = _canEditBuying;
+    final hasWholesale = !businessSellsOnePrice(
+      ref.watch(currentBusinessProvider),
+    );
     return ProductPricesCard(
       perNoun: unitCountNoun(_unit, 1, crates: _crates),
       retailKobo: retailKobo,
       wholesaleKobo: wholesaleKobo,
       costKobo: canSeeCost ? costKobo : null,
       showProfit: canSeeCost && costKobo > 0,
+      showWholesale: hasWholesale,
     );
   }
 
@@ -554,7 +560,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   Widget? _buildManage(BuildContext context, bool sideBySide) {
     final canArchive = _canEdit;
     final canDelete = _canDelete;
-    if (!canArchive && !canDelete) return null;
+    final canList = Gates.manageListing.allowsNow(ref);
+    if (!canArchive && !canDelete && !canList) return null;
     return ProductManageCard(
       archived: _archived,
       sideBySide: sideBySide,
@@ -562,7 +569,32 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
           ? (_archived ? _unarchive : _confirmArchive)
           : null,
       onDelete: canDelete ? () => _confirmDelete(context) : null,
+      showOnline: _productData?.showOnline ?? true,
+      listingBusy: _savingListing,
+      onShowOnlineChanged: canList ? _setShowOnline : null,
     );
+  }
+
+  Future<void> _setShowOnline(bool showOnline) async {
+    // The callback may survive a frame after a grant is revoked.
+    if (!Gates.manageListing.allowsNow(ref)) {
+      showGateDenied(context, Gates.manageListing);
+      return;
+    }
+    if (_savingListing) return;
+    final service = ProductListingService(ref.read(databaseProvider).catalogDao);
+    final gateContext = ref.read(gateContextProvider);
+    setState(() => _savingListing = true);
+    final result = await service.setShowOnline(
+      productId: widget.item.id, showOnline: showOnline, gateContext: gateContext);
+    if (!mounted) return;
+    setState(() {
+      _savingListing = false;
+      if (result.isOk) _productData = _productData?.copyWith(showOnline: showOnline);
+    });
+    if (result case Err(:final error)) {
+      AppNotification.showError(context, error.message);
+    }
   }
 
   // ── Sales + Stock History (#487 PR 5) ───────────────────────────────────

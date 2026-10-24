@@ -484,6 +484,7 @@ class ProductPricesCard extends StatelessWidget {
     required this.wholesaleKobo,
     this.costKobo,
     this.showProfit = false,
+    this.showWholesale = true,
   });
 
   final String perNoun;
@@ -495,6 +496,9 @@ class ProductPricesCard extends StatelessWidget {
 
   /// True only with the buying-price permission AND a cost above 0.
   final bool showProfit;
+
+  /// False in one-price shops (#493), hiding wholesale price tile and profit row.
+  final bool showWholesale;
 
   @override
   Widget build(BuildContext context) {
@@ -520,28 +524,35 @@ class ProductPricesCard extends StatelessWidget {
                   gap,
                 ],
                 Expanded(
-                  child: _PriceTile(label: 'Retail', kobo: retailKobo),
+                  child: _PriceTile(
+                    label: showWholesale ? 'Retail' : 'Price',
+                    kobo: retailKobo,
+                  ),
                 ),
-                gap,
-                Expanded(
-                  child: _PriceTile(label: 'Wholesale', kobo: wholesaleKobo),
-                ),
+                if (showWholesale) ...[
+                  gap,
+                  Expanded(
+                    child: _PriceTile(label: 'Wholesale', kobo: wholesaleKobo),
+                  ),
+                ],
               ],
             ),
           ),
           if (showProfit && costKobo != null) ...[
             SizedBox(height: context.getRSize(8)),
             _ProfitRow(
-              label: 'Retail profit',
+              label: showWholesale ? 'Retail profit' : 'Profit',
               profitKobo: retailKobo - costKobo!,
               percent: profitPercentOfPrice(retailKobo, costKobo!),
             ),
-            Divider(height: 1, color: Theme.of(context).dividerColor),
-            _ProfitRow(
-              label: 'Wholesale profit',
-              profitKobo: wholesaleKobo - costKobo!,
-              percent: profitPercentOfPrice(wholesaleKobo, costKobo!),
-            ),
+            if (showWholesale) ...[
+              Divider(height: 1, color: Theme.of(context).dividerColor),
+              _ProfitRow(
+                label: 'Wholesale profit',
+                profitKobo: wholesaleKobo - costKobo!,
+                percent: profitPercentOfPrice(wholesaleKobo, costKobo!),
+              ),
+            ],
           ],
         ],
       ),
@@ -901,6 +912,9 @@ class ProductManageCard extends StatelessWidget {
     required this.sideBySide,
     this.onArchiveToggle,
     this.onDelete,
+    this.showOnline = true,
+    this.listingBusy = false,
+    this.onShowOnlineChanged,
   });
 
   final bool archived;
@@ -913,6 +927,11 @@ class ProductManageCard extends StatelessWidget {
 
   /// Null hides the Delete button.
   final VoidCallback? onDelete;
+
+  final bool showOnline;
+  final bool listingBusy;
+  /// Null hides the listing control when its independent grant is absent.
+  final ValueChanged<bool>? onShowOnlineChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -971,12 +990,34 @@ class ProductManageCard extends StatelessWidget {
                 .copyWith(color: t.colorScheme.onSurface),
           ),
           SizedBox(height: context.getRSize(12)),
-          buttons,
-          SizedBox(height: context.getRSize(10)),
-          Text(
-            'Archiving hides it from sale. Its sales history is kept.',
-            style: context.regularStyle(13).copyWith(color: _muted(context)),
-          ),
+          if (onShowOnlineChanged != null) ...[
+            Material(
+              type: MaterialType.transparency,
+              child: SwitchListTile(
+                key: const ValueKey('product-show-online'),
+                value: showOnline,
+                onChanged: listingBusy ? null : onShowOnlineChanged,
+                contentPadding: EdgeInsets.zero,
+                activeThumbColor: t.colorScheme.primary,
+                activeTrackColor: t.colorScheme.primary.withValues(alpha: 0.35),
+                title: Text('Show online', style: context.boldStyle(15)),
+                subtitle: Text(
+                  archived ? 'Archived products stay hidden online.'
+                    : 'Let shoppers see this product in your online store.',
+                  style: context.regularStyle(13).copyWith(color: _muted(context)),
+                ),
+              ),
+            ),
+            SizedBox(height: gap),
+          ],
+          if (archive != null || delete != null) buttons,
+          if (archive != null) ...[
+            SizedBox(height: context.getRSize(10)),
+            Text(
+              'Archiving hides it from sale. Its sales history is kept.',
+              style: context.regularStyle(13).copyWith(color: _muted(context)),
+            ),
+          ],
         ],
       ),
     );

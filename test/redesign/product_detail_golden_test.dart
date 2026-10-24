@@ -167,6 +167,7 @@ void main() {
     ...kInventorySampleGrants,
     'products.edit_buying_price',
     'products.delete',
+    'products.manage_listing',
   };
 
   Future<void> shoot(

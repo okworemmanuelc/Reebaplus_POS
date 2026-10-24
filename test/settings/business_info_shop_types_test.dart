@@ -146,6 +146,63 @@ void main() {
       await disposeScreen(tester);
     });
 
+    testWidgets('saving applies toNameCase to business name and other type', (
+      tester,
+    ) async {
+      await pumpSettingsPage(
+        tester,
+        env: env,
+        screen: const BusinessInfoScreen(),
+        size: const Size(390, 844),
+      );
+
+      // Change business name to mixed case
+      final nameField = find.descendant(
+        of: find.widgetWithText(AppInput, 'Business name'),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(nameField, '  star   retail   outlet  ');
+
+      // Select Other and enter mixed case
+      final dropdown = tester.widget<AppDropdown<String>>(
+        find.byType(AppDropdown<String>).first,
+      );
+      dropdown.onChanged('Other');
+      await tester.pumpAndSettle();
+
+      final otherField = find.descendant(
+        of: find.widgetWithText(AppInput, 'Specify business type'),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(otherField, 'fashion & beauty');
+
+      final save = find.text('Save changes');
+      await tester.scrollUntilVisible(
+        save,
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.ensureVisible(save);
+      await tester.pumpAndSettle();
+      await tester.tap(save);
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 200)),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+
+      final rows = await env.db
+          .customSelect(
+            'SELECT name, type FROM businesses WHERE id = ?',
+            variables: [Variable.withString(env.businessId)],
+          )
+          .get();
+      expect(rows.single.read<String>('name'), 'Star Retail Outlet');
+      expect(rows.single.read<String>('type'), 'Fashion & Beauty');
+
+      await tester.pumpAndSettle(const Duration(seconds: 5));
+      await disposeScreen(tester);
+    });
+
     testWidgets('shows crate switch for Bar but not for Pharmacy or Other', (
       tester,
     ) async {

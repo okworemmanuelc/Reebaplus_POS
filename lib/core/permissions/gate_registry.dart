@@ -67,6 +67,14 @@ abstract final class Gates {
     rule: Gate.key('products.edit_price'),
   );
 
+  /// Online listing visibility/content (#424, #473–#475). Independent of price
+  /// editing; defaults are granted by cloud migration0195, never by role here.
+  static const NamedGate manageListing = NamedGate(
+    name: 'manageListing',
+    action: 'Manage online listings',
+    rule: Gate.key('products.manage_listing'),
+  );
+
   /// Add a manufacturer from Inventory → Manufacturers (#292; moved off the
   /// Empty Crates tab by #389). CEO or Manager holding
   /// `products.edit_price` — the tier keeps a custom grant of the key to a
@@ -730,6 +738,7 @@ abstract final class Gates {
     receiveStock,
     addProduct,
     editProductPrice,
+    manageListing,
     addManufacturer,
     countCrates,
     editBuyingPrice,

@@ -274,6 +274,9 @@ class NotificationCard extends ConsumerWidget {
     final Color iconColor = notification.type == 'console_broadcast'
         ? severityColor(context, notification.severity)
         : _getColorForType(context, notification.type);
+    final tracksCrates = businessTracksCrates(
+      ref.watch(currentBusinessProvider),
+    );
 
     return GestureDetector(
       onTap: notification.type == 'product_update'
@@ -281,7 +284,12 @@ class NotificationCard extends ConsumerWidget {
           : notification.type == 'crate_short_return'
           ? () => _openCrateReturnApproval(context, notification, ref)
           : notification.type == 'sale_rejected'
-          ? () => _openSaleRejectedReview(context, notification, ref)
+          ? () => _openSaleRejectedReview(
+              context,
+              notification,
+              ref,
+              tracksCrates: tracksCrates,
+            )
           : null,
       child: Container(
         padding: EdgeInsets.all(context.getRSize(16)),
@@ -363,6 +371,7 @@ class NotificationCard extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         title: Row(
           children: [
             Icon(
@@ -545,11 +554,14 @@ class NotificationCard extends ConsumerWidget {
   void _openSaleRejectedReview(
     BuildContext context,
     NotificationModel notification,
-    WidgetRef ref,
-  ) {
+    WidgetRef ref, {
+    bool? tracksCrates,
+  }) {
     final orderId = notification.linkedRecordId;
     if (orderId == null || orderId.isEmpty) return;
     final notifId = notification.id;
+    final effectiveTracksCrates =
+        tracksCrates ?? businessTracksCrates(ref.read(currentBusinessProvider));
 
     showDialog(
       context: context,
@@ -566,9 +578,12 @@ class NotificationCard extends ConsumerWidget {
           ],
         ),
         content: Text(
-          '${notification.message}\n\nCancelling removes it from this device — '
-          'the stock and any customer empties balance go back to what they were '
-          'before the sale.',
+          effectiveTracksCrates
+              ? '${notification.message}\n\nCancelling removes it from this device — '
+                    'the stock and any customer empties balance go back to what they were '
+                    'before the sale.'
+              : '${notification.message}\n\nCancelling removes it from this device — '
+                    'the stock goes back to what it was before the sale.',
           style: const TextStyle(fontSize: 14),
         ),
         actions: [

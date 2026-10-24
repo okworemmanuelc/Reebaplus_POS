@@ -271,6 +271,9 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
     final pendingCount = ref.watch(pendingQueueCountProvider).valueOrNull ?? 0;
     final failedCount = ref.watch(failedQueueCountProvider).valueOrNull ?? 0;
     final orphanCount = ref.watch(orphanQueueCountProvider).valueOrNull ?? 0;
+    final tracksCrates = businessTracksCrates(
+      ref.watch(currentBusinessProvider),
+    );
     final claims = SupabaseSyncService.inspectJwtClaims();
     final businessId = ref.read(authProvider).currentUser?.businessId;
 
@@ -392,7 +395,12 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
                       }
                       return Column(
                         children: [
-                          for (final item in items) _orphanItemTile(t, item),
+                          for (final item in items)
+                            _orphanItemTile(
+                              t,
+                              item,
+                              tracksCrates: tracksCrates,
+                            ),
                         ],
                       );
                     },
@@ -619,7 +627,11 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
     ),
   ];
 
-  Widget _orphanItemTile(ThemeData t, SyncQueueOrphanData item) {
+  Widget _orphanItemTile(
+    ThemeData t,
+    SyncQueueOrphanData item, {
+    required bool tracksCrates,
+  }) {
     // A rejected `pos_record_sale_v2` sale (an oversell the cloud rolled back)
     // gets a one-tap recovery: run the same full local reversal as the
     // `sale_rejected` notification, then clear this orphan (#150).
@@ -638,7 +650,11 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
           SyncAction(
             text: 'Cancel this sale',
             variant: AppButtonVariant.outline,
-            onPressed: () => _confirmCancelRejectedSale(item, rejectedOrderId),
+            onPressed: () => _confirmCancelRejectedSale(
+              item,
+              rejectedOrderId,
+              tracksCrates: tracksCrates,
+            ),
           ),
         SyncAction(
           key: SyncKeys.retryItem(item.id),
@@ -734,8 +750,9 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
   /// is discarded (it reads the payload), so it is never discard-then-recover.
   Future<void> _confirmCancelRejectedSale(
     SyncQueueOrphanData item,
-    String orderId,
-  ) async {
+    String orderId, {
+    bool? tracksCrates,
+  }) async {
     final t = Theme.of(context);
     final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
     // Resolve everything off `ref` before any await — the element can unmount
@@ -752,6 +769,9 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
       return;
     }
 
+    final effectiveTracksCrates =
+        tracksCrates ?? businessTracksCrates(ref.read(currentBusinessProvider));
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -763,10 +783,14 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
               .copyWith(color: t.colorScheme.onSurface),
         ),
         content: Text(
-          'The server turned this sale down — the item was likely sold on '
-          'another till. Cancelling removes the sale from this device: the '
-          'stock and any customer empties balance go back to what they were '
-          'before it, and this entry is cleared.',
+          effectiveTracksCrates
+              ? 'The server turned this sale down — the item was likely sold on '
+                    'another till. Cancelling removes the sale from this device: the '
+                    'stock and any customer empties balance go back to what they were '
+                    'before it, and this entry is cleared.'
+              : 'The server turned this sale down — the item was likely sold on '
+                    'another till. Cancelling removes the sale from this device: the '
+                    'stock goes back to what it was before it, and this entry is cleared.',
           style: ctx
               .regularStyle(14)
               .copyWith(color: t.colorScheme.onSurface, height: 1.4),

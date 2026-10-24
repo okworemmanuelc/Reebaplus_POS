@@ -62,10 +62,10 @@ void main() {
       );
     });
 
-    test('permissions table seeded with 42 default rows on fresh install',
+    test('permissions table seeded with 43 default rows on fresh install',
         () async {
       final perms = await db.permissionsDao.getAll();
-      expect(perms.length, equals(42));
+      expect(perms.length, equals(43));
 
       // Spot-check a few keys + categories.
       final keys = perms.map((p) => p.key).toSet();
@@ -82,13 +82,16 @@ void main() {
       expect(keys.contains('van.sell'), isTrue); // #140 van sales
       expect(keys.contains('stores.dispatch_transfer'), isTrue); // §16.8.2
       expect(keys.contains('staff.assign_stores'), isTrue); // §9.5
+      expect(keys.contains('products.manage_listing'), isTrue); // #424
+      expect(perms.singleWhere((p) => p.key == 'products.manage_listing').category,
+          'Online store');
 
       // Categories from master plan §10.2 grouping.
       final categories =
           perms.map((p) => p.category).toSet().toList()..sort();
       expect(
         categories,
-        equals(['Customers', 'Expenses', 'Products', 'Reports',
+        equals(['Customers', 'Expenses', 'Online store', 'Products', 'Reports',
                 'Sales', 'Staff', 'Stock', 'Stores', 'Suppliers', 'System',
                 'Van Sales']), // #140
       );

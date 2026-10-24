@@ -497,6 +497,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
   ) {
     final canSeeMoney = Gates.seeOrderMoney.allows(ref);
     final canSeeExtendedRanges = Gates.seeExtendedDateRanges.allows(ref);
+    final tracksCrates = businessTracksCrates(
+      ref.watch(currentBusinessProvider),
+    );
     final key = (
       status: 'completed',
       storeId: activeStoreId,
@@ -538,11 +541,12 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
               value: formatCurrency(stats.amountPaidKobo / 100.0),
               color: _fixed.green,
             ),
-            _StatItem(
-              label: 'Crate Deposits',
-              value: formatCurrency(stats.crateDepositPaidKobo / 100.0),
-              color: subtextCol,
-            ),
+            if (tracksCrates)
+              _StatItem(
+                label: 'Crate Deposits',
+                value: formatCurrency(stats.crateDepositPaidKobo / 100.0),
+                color: subtextCol,
+              ),
           ],
         ];
 

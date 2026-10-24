@@ -182,5 +182,20 @@ void main() {
       ]);
       expect((await row(id)).isAvailable, isFalse);
     });
+
+    test('#424 listing restore defaults only absent values and keeps opt-outs', () async {
+      final legacyId = UuidV7.generate();
+      final visibleId = UuidV7.generate();
+      final hiddenId = UuidV7.generate();
+      await sync.restoreTableDataForTesting('products', [
+        cloudRow(legacyId),
+        {...cloudRow(visibleId), 'show_online': true},
+        {...cloudRow(hiddenId), 'show_online': false, 'is_available': false},
+      ]);
+      expect((await row(legacyId)).showOnline, isTrue);
+      expect((await row(visibleId)).showOnline, isTrue);
+      expect((await row(hiddenId)).showOnline, isFalse);
+      expect((await row(hiddenId)).isAvailable, isFalse);
+    });
   });
 }

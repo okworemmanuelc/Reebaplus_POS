@@ -1904,6 +1904,33 @@ class AuthService extends ValueNotifier<UserData?> {
       rethrow;
     }
 
+    // 1b. "We sell at one price" (#493). Not a complete_onboarding param (a
+    //     new param would mean rewriting the RPC and dropping the old
+    //     signature): a follow-up update of the business row the RPC just
+    //     wrote, sent only when the sign-up suggested ON (a Restaurant).
+    //     Best-effort: if it fails (offline, or 0197 not deployed yet) the shop
+    //     simply starts OFF — the existing behaviour — and the local mirror
+    //     below records OFF too, so device and cloud agree. The owner can turn
+    //     it on in Business Info.
+    var sellsOnePrice = false;
+    if (draft.sellsOnePrice) {
+      try {
+        await _supabase
+            .from('businesses')
+            .update({
+              'sells_one_price': true,
+              'last_updated_at': DateTime.now().toUtc().toIso8601String(),
+            })
+            .eq('id', draft.businessId);
+        sellsOnePrice = true;
+      } catch (e) {
+        debugPrint(
+          '[AuthService] completeOnboarding: sells_one_price update failed '
+          '(shop starts OFF): $e',
+        );
+      }
+    }
+
     final now = DateTime.now();
 
     // 2. Best-effort local mirror in one Drift transaction. Direct table
@@ -1931,6 +1958,7 @@ class AuthService extends ValueNotifier<UserData?> {
                 email: Value(draft.businessEmail),
                 onboardingComplete: const Value(true),
                 tracksEmptyCrates: Value(draft.tracksEmptyCrates),
+                sellsOnePrice: Value(sellsOnePrice),
                 ownerId: Value(_supabase.auth.currentUser!.id),
                 lastUpdatedAt: Value(now),
               ),
