@@ -1,6 +1,6 @@
 -- #422: close membership-less access through writable profile pointers and
--- internal SECURITY DEFINER helpers. 0187 is reserved by the web checkout
--- handoff (reebaplus-web/docs/pos-handoff/0187_*); do not reuse that number.
+-- internal SECURITY DEFINER helpers. Numbers 0188/0192/0193 are reserved for
+-- #422; they deploy out of order after 0194-0197 (supabase db push --include-all).
 -- No signature, table shape, status or money rule changes. Not deployed here.
 -- #467 (Storage listing) and #468 (anon grants) remain separate prerequisites.
 BEGIN;

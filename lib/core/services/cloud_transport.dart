@@ -91,6 +91,8 @@ abstract interface class CloudTransport {
 
   /// True iff a `deleted_businesses` tombstone exists for [businessId] — the
   /// false-positive-proof "did the owner delete this business?" check (§10.3).
+  /// Answered by the boolean-only `business_deletion_status` RPC (0192, #422);
+  /// the tombstone table itself is not client-readable once 0193 lands.
   Future<bool> businessDeletedTombstoneExists(String businessId);
 
   // ── REALTIME ───────────────────────────────────────────────────────────────
