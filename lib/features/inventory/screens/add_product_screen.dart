@@ -212,7 +212,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   Timer? _catalogueDebounce;
   static const _catalogueDebounceDelay = Duration(milliseconds: 500);
 
-  List<String> _dynamicUnits = kProductUnits;
+  List<String> _dynamicUnits = kGenericUnits;
 
   /// The active industry's words + presets (#80). Read (not watched) in helpers
   /// called during build; the form is opened for one business so it is stable.
@@ -773,6 +773,10 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   bool get _isCrateBusiness =>
       businessTracksCrates(ref.read(currentBusinessProvider));
 
+  /// The Wholesale box shows unless the shop sells at one price (#493).
+  bool get _hasWholesale =>
+      !businessSellsOnePrice(ref.read(currentBusinessProvider));
+
   /// The Track Empty Crates card shows for a crate business AND unit Bottle.
   bool get _showsCrateCard =>
       _unit?.toLowerCase() == 'bottle' && _isCrateBusiness;
@@ -858,6 +862,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         storeIds: _stores.map((s) => s.id).toList(),
         // Edit mode has no store either.
         routesToReceiveCart: widget.receiveMode || _isEdit,
+        sellsOnePrice: !_hasWholesale,
+        // Edit keeps the saved wholesale price in a one-price shop (#493).
+        existingWholesalerPriceKobo: widget.editProduct?.wholesalerPriceKobo,
       ),
     );
 
@@ -1352,7 +1359,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     return [
       for (final (title, price) in [
         ('Retail profit', retail),
-        ('Wholesale profit', wholesale),
+        if (_hasWholesale) ('Wholesale profit', wholesale),
       ])
         if (productProfit(priceKobo: price, costKobo: cost) case final p?)
           ProductProfitLine(
@@ -1783,15 +1790,17 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
                 ),
               ),
             ),
-            SizedBox(width: context.getRSize(12)),
-            Expanded(
-              child: _moneyInput(
-                key: AddProductKeys.wholesale,
-                controller: _wholesalePriceCtrl,
-                label: 'Wholesale Price',
-                hint: 'Same as retail',
+            if (_hasWholesale) ...[
+              SizedBox(width: context.getRSize(12)),
+              Expanded(
+                child: _moneyInput(
+                  key: AddProductKeys.wholesale,
+                  controller: _wholesalePriceCtrl,
+                  label: 'Wholesale Price',
+                  hint: 'Same as retail',
+                ),
               ),
-            ),
+            ],
           ],
         ),
         if (lines.isNotEmpty) ...[

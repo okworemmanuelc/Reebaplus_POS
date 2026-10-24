@@ -81,6 +81,7 @@ ProductData _product() => ProductData(
   retailerPriceKobo: _price,
   wholesalerPriceKobo: _price,
   isAvailable: true,
+  showOnline: true,
   isDeleted: false,
   lowStockThreshold: 0,
   avgDailySales: 0,

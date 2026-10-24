@@ -93,7 +93,31 @@ All ordinary business writes still go to Drift first and drain through the
 
 ## Storage Model
 
+**Online category reference (#472).** Public, service-written
+`marketplace_categories` is bundled as `core/data/marketplace_categories.dart`,
+with exact SQL-seed parity tests. It is not a tenant table or an outbox target.
+The optional `categories.marketplace_category` slug is ordinary tenant data:
+Drift schema87, full-row outbox and category snapshot restore carry it.
+No mapping means Other in Browse; selling at the till is unaffected.
+New category pre-mapping uses exact public child names (trimmed/case-insensitive),
+not Lexicon starter suggestions. General maps to Other; Accessories is resolved
+only for the phone/fashion industries. Other parent or unmatched names stay null.
+
 Four storage locations, with a strict rule for what lives where. Business data goes to Drift (and syncs); secrets and pointers go to secure storage (and never sync); sync engine state goes to Drift (and never syncs); operator audit records go to Supabase only (and never reach the client). Nothing durable lives only in memory.
+
+**Online listing (#424).** Cloud0195 and Drift88 add
+`products.show_online` defaulting true independently of archive state. Local
+upgrades retain units85, shop pricing86 and category mapping87; older product rebuilds supply
+the new default when the column is absent. Listing permission is seeded as
+`products.manage_listing` under Online store and enforced by `Gates.manageListing`,
+independently of price editing. The Product Details Manage Product card renders
+the switch only with that grant and rechecks it at tap time. The core listing
+service rechecks the effective context before a tenant-scoped transaction writes
+the flag and a complete outbox row (including cleared/null fields). Stock,
+prices and archive state are unchanged. Product restore uses
+the shared helper's default for older rows missing showOnline, preserving an
+explicit false. Storefront reads (#425) must require show_online AND is_available
+AND NOT is_deleted; the listing preference cannot unarchive a product.
 
 | What | Where | Why | Synced to cloud? |
 |---|---|---|---|

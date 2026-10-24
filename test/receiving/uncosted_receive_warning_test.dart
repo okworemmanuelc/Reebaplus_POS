@@ -94,6 +94,7 @@ void main() {
       safetyStockQty: 0,
       monthlyTargetUnits: 0,
       isAvailable: true,
+      showOnline: true,
       isDeleted: false,
       version: 1,
       createdAt: DateTime.now(),

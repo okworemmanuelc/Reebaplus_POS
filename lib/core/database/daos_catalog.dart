@@ -289,14 +289,38 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
 
   Future<String> insertCategory(CategoriesCompanion companion) async {
     final id = UuidV7.generate();
+    final business = await (select(db.businesses)
+      ..where((b) => b.id.equals(requireBusinessId()))).getSingle();
+    final mapping = companion.marketplaceCategory.present
+        ? companion.marketplaceCategory
+        : Value(starterMarketplaceCategory(
+            industry: industryOf(business.type), name: companion.name.value));
     final row = companion.copyWith(
       id: Value(id),
+      marketplaceCategory: mapping,
       lastUpdatedAt: Value(DateTime.now()),
     );
     await into(categories).insert(row);
     await db.syncDao.enqueueUpsert('categories', row);
     return id;
   }
+
+  /// Mapping and its outbox row are atomic; null explicitly restores Other.
+  Future<void> mapCategory(String id, String? slug) => db.transaction(() async {
+    if (slug != null && !marketplaceCategories.any((c) => c.slug == slug)) {
+      throw ArgumentError.value(slug, 'slug', 'Unknown marketplace category');
+    }
+    final query = select(categories)..where((t) =>
+        t.id.equals(id) & whereBusiness(t) & t.isDeleted.not());
+    final row = await query.getSingleOrNull();
+    if (row == null) return;
+    final updated = row.copyWith(
+        marketplaceCategory: Value(slug), lastUpdatedAt: DateTime.now());
+    await (update(categories)..where((t) =>
+        t.id.equals(id) & whereBusiness(t))).write(updated.toCompanion(false));
+    await db.syncDao.enqueueUpsert('categories',
+        updated.toCompanion(false));
+  });
 
   /// True if a **non-deleted** category in this business already uses [name]
   /// (case-insensitive, trimmed), excluding [excludeId] (the category being
@@ -838,6 +862,27 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
       await _enqueueFullProduct(productId);
     });
   }
+
+  /// Listing preference is independent of archive state and stock (#424).
+  /// One atomic tenant-scoped write plus full-row outbox entry keeps pending
+  /// details edits intact and carries explicit false through the normal sync.
+  Future<bool> setProductShowOnline({
+    required String productId,
+    required bool showOnline,
+  }) => transaction(() async {
+    final changed = await (update(products)..where((t) =>
+      t.id.equals(productId) & whereBusiness(t) & t.isDeleted.not()))
+      .write(ProductsCompanion(
+        showOnline: Value(showOnline),
+        lastUpdatedAt: Value(DateTime.now()),
+      ));
+    if (changed == 0) return false;
+    final row = await (select(products)..where((t) =>
+      t.id.equals(productId) & whereBusiness(t))).getSingle();
+    // Include nulls: a pending details edit may have cleared a category/photo.
+    await db.syncDao.enqueueUpsert('products', row.toCompanion(false));
+    return true;
+  });
 
   Future<void> updateProductPrices(
     String productId, {
