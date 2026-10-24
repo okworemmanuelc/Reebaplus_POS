@@ -11,12 +11,12 @@ source file and console_access.sql; remaining occurrences are definitions/grants
 and documentation, not calls. A read-only production pg_proc.prosrc and
 pg_policies search found zero dependent function bodies or policies.
 
-Remaining anonymous entry points, each intentionally retained:
+Remaining anonymous functions, left unchanged by this migration:
 
 | Function | Reason |
 | --- | --- |
-| accept_invite_preview(text) | Existing bearer-token preview contract before OTP |
-| accept_invite_preview_by_code(text) | Existing code preview contract before OTP |
+| accept_invite_preview(text) | Broken legacy function; cleanup tracked in #506 |
+| accept_invite_preview_by_code(text) | Broken legacy function; cleanup tracked in #506 |
 | lookup_invite_code(text) | Mobile staff signup validates a code before OTP |
 | console_get_trial_days() | Scalar trial-duration bootstrap setting |
 
@@ -25,6 +25,10 @@ to `public.invites` and `public.warehouses`, both absent in the live catalogue a
 the committed development snapshot. A baseline call returns42P01. Their ACLs are
 preserved, but their functionality is not claimed tested or repaired by0194.
 Current mobile signup uses lookup_invite_code and redeem_invite_code instead.
+Owner review moved the cleanup follow-up forward:
+[POS bug #506](https://github.com/okworemmanuelc/Reebaplus_POS/issues/506) tracks
+confirming there are no callers and then dropping both exact legacy signatures.
+Only migration0194's comments changed for that follow-up; its body is unchanged.
 
 ## Console rollout dependency
 

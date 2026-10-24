@@ -8,6 +8,13 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 ### Signed-out RPC surface (#468, 2026-10-23)
+- Owner review (2026-10-24): filed legacy invite-preview bug #506 and clarified
+  the two migration header entries as broken legacy functions left unchanged.
+  Migration body unchanged; no database application required for this correction.
+- Web review fixes: non-admin rejection signs out locally; account-related OTP
+  responses share one neutral code screen. Nine login regressions and all613web
+  tests pass, with build and changed-file ESLint green. Deployment checks now
+  include preserved phone sessions and identical unregistered-email feedback.
 - Prepared0194: revoke five accidental anon RPC grants, retain four documented
   pre-auth contracts, and explicitly preserve authenticated flows. No signature
   changes. Read-only audit, six dedicated-dev HTTP tests and a rollback SQL
