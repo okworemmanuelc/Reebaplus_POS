@@ -7,14 +7,26 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
-### Issue #424: Show online and listing permission (2026-10-24, in progress)
+### Issue #424: Show online and listing permission (2026-10-24, ready for review)
 Current continuation:main1f3e3643 (#501 merged) integrated. Unit85, shop
 pricing86 and category87 remain intact; listing moves to88. Real87→88 and
 84→88 fixtures preserve defaults, archive state, units, shop pricing and category
 links. Drift regenerated, analyzer clean and77focused migration/restore tests
-pass. Next:finish the listing switch and
-named permission before the single final full-suite run. Cloud0195 unchanged;
+pass. Listing switch and named permission are complete. Cloud0195 unchanged;
 deployment needs `--include-all` because0196/0197 are already on main.
+- Listing consumer added: independent `Gates.manageListing`, visible Online store
+  permission group, existing Manage Product card switch and fire-time check.
+  Core service returns typed errors; transactional DAO scopes by tenant and
+  excludes tombstones, preserves sale/archive state and queues explicit nulls.
+  Service/DAO tests cover denied/foreign/deleted writes, full payloads and
+  second-device off/on restore; widget tests cover stale grants/live updates.
+  Validation:173focused feature/permission/archive tests,77migration/restore
+  tests,42previous-failure-path checks and34golden cases pass. Analyzer clean.
+  Product phone/wide and permission visuals inspected; baselines updated only
+  for the listing control/permission addition. Final full suite ran once at
+  concurrency2:5459passed /298skipped /0failures (12m10s). PR511 targets main
+  for owner review; do not merge as part of this task. Web parity139 updated to
+  schema88 and the out-of-order0195 deployment note. No production deployment.
 The following notes record the earlier blocked draft and its prior test results.
 Branch `feat/424-show-online`, stacked on #472 (`d2e174ef`). Units stay85,
 category mapping86, listing87. Must land after #472; no version87 client may ship

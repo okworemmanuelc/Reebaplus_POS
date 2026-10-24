@@ -105,15 +105,19 @@ only for the phone/fashion industries. Other parent or unmatched names stay null
 
 Four storage locations, with a strict rule for what lives where. Business data goes to Drift (and syncs); secrets and pointers go to secure storage (and never sync); sync engine state goes to Drift (and never syncs); operator audit records go to Supabase only (and never reach the client). Nothing durable lives only in memory.
 
-**Online listing groundwork (#424, incomplete).** Cloud0195 and Drift88 add
+**Online listing (#424).** Cloud0195 and Drift88 add
 `products.show_online` defaulting true independently of archive state. Local
 upgrades retain units85, shop pricing86 and category mapping87; older product rebuilds supply
 the new default when the column is absent. Listing permission is seeded as
-`products.manage_listing` under Online store, hidden from editors until its
-consumer ships (the existing inert-permission convention). Product restore uses
+`products.manage_listing` under Online store and enforced by `Gates.manageListing`,
+independently of price editing. The Product Details Manage Product card renders
+the switch only with that grant and rechecks it at tap time. The core listing
+service rechecks the effective context before a tenant-scoped transaction writes
+the flag and a complete outbox row (including cleared/null fields). Stock,
+prices and archive state are unchanged. Product restore uses
 the shared helper's default for older rows missing showOnline, preserving an
-explicit false. The UI gate and dedicated listing write path are subsequent
-increments; this schema draft does not expose a listing switch.
+explicit false. Storefront reads (#425) must require show_online AND is_available
+AND NOT is_deleted; the listing preference cannot unarchive a product.
 
 | What | Where | Why | Synced to cloud? |
 |---|---|---|---|

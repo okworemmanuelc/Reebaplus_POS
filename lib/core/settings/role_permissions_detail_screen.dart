@@ -40,8 +40,6 @@ const kHiddenPermissionKeys = {
   'sales.discount.give',
   'shipments.manage',
   'settings.delete_business',
-  // #424 schema draft: unhide when the listing gate and switch ship.
-  'products.manage_listing',
 };
 
 /// True when [key] is kept off every permission editor: a [kHiddenPermissionKeys]
@@ -56,6 +54,7 @@ bool isPermissionKeyHidden(String key) =>
 const _categoryOrder = [
   'Sales',
   'Products',
+  'Online store',
   'Stock',
   'Expenses',
   'Reports',
