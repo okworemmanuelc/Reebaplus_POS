@@ -7,6 +7,32 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### #507 PR 1: Name case helper and save-time casing in sign-up, profile, business info, stores (2026-10-24)
+Branch `feat/507-name-case`, worktree `../drinkPosApp-wt-507-1`.
+- **Helper:** Created `lib/core/utils/name_case.dart` with `toNameCase(String input)`.
+  - Trims, squashes repeated spaces into one.
+  - In each word, first letter is capitalized, rest lowercase ("sTAR" → "Star").
+  - Capitalizes after hyphens ("coca-cola" → "Coca-Cola") and opening brackets ("(big)" → "(Big)").
+  - Preserves lowercase after apostrophes ("mama's" → "Mama's", "MAMA'S" → "Mama's").
+  - Preserves words containing digits as typed ("50cl", "1.5L", "7UP", "A14").
+  - Empty input gives empty output (""). Never null. Idempotent.
+- **Save-time casing & TextCapitalization:**
+  - CEO sign-up: business name, full name, and typed "Other" business type run through `toNameCase`.
+  - Staff sign-up: staff name runs through `toNameCase`.
+  - Edit profile sheet: name runs through `toNameCase`.
+  - Business Info: business name and typed "Other" business type run through `toNameCase`.
+  - Stores settings & Stores screen: store/van creation and update run through `toNameCase`. Store name input has `textCapitalization: TextCapitalization.words`.
+- **Tests:** `test/utils/name_case_test.dart` (8 test groups), plus save-time tests in `test/settings/stores_settings_screen_test.dart` and `test/settings/business_info_shop_types_test.dart`.
+
+### #492 G1: Sign-up and Business Info offer every shop type plus "Other" (2026-10-23)
+Branch `feat/492-g1-shop-types`, worktree `../drinkPosApp-wt-492-g1`.
+- **Registry:** All nine industries in `Industry.catalogue` have `selectable = true`; `selectableCatalogue` exposes all nine.
+- **CEO sign-up:** Shows all nine industry cards plus "Other" (10th card). When "Other" is selected, an input field asks to specify the business type. Continue button is enabled only after typing a non-empty name. Saves typed type directly in `businesses.type`.
+- **Settings → Business Info:** Dropdown lists all nine catalogue types plus "Other". Custom types load as "Other" with text pre-filled. When "Other" is selected, shows `AppInput` to specify business type. Validates on save.
+- **Crate safety:** Crate switch and crate features are strictly gated via `isCrateBusiness(effectiveType)`. Non-drink shops and custom "Other" types normalize safely to `Industry.generic` without crate UI.
+- **Docs & ADR:** Added 2026-10-23 amendment to ADR 0015 and updated `CONTEXT/project-overview.md`.
+- **Tests & Goldens:** `test/industry/industry_registry_test.dart` (18 tests), `test/auth/ceo_sign_up_shop_types_test.dart` (4 tests), `test/settings/business_info_shop_types_test.dart` (4 tests), `test/redesign/ceo_sign_up_golden_test.dart` (107 tests with updated goldens).
+
 ### Issue #467: private Storage listings (2026-10-23)
 Branch `fix/467-storage-listing-privacy`, isolated worktree `work/reebaplus-467`.
 - Migration `0191_private_storage_listing.sql` replaces the public metadata SELECT policies with authenticated business-member policies. Product ownership comes from the first folder; logos use the root `<businessId>.jpg|png` filename. Bucket public flags and existing write policies are unchanged, preserving public image display and member upsert.
@@ -7432,3 +7458,4 @@ carried over.)_
 2. No raw Supabase call from `lib/features/` or `lib/data/repositories/`.
 3. No UPDATE or DELETE on an append-only ledger table — corrections are
    new rows only.
+

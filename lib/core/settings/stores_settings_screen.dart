@@ -8,6 +8,7 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/stores/van_store.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/utils/name_case.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/stores/widgets/stores_parts.dart';
@@ -100,7 +101,8 @@ class _StoresSettingsScreenState extends ConsumerState<StoresSettingsScreen> {
       return;
     }
     final isVan = isVanStore(store);
-    final name = _nameControllers[store.id]!.text.trim();
+    final name = toNameCase(_nameControllers[store.id]!.text);
+    _nameControllers[store.id]!.text = name;
     final address = _addressControllers[store.id]!.text.trim();
     if (name.isEmpty) {
       AppNotification.showError(
@@ -432,7 +434,7 @@ class _AddLocationSheetState extends State<_AddLocationSheet> {
     Navigator.pop(
       context,
       _NewLocation(
-        name: _nameController.text.trim(),
+        name: toNameCase(_nameController.text),
         note: _noteController.text.trim(),
       ),
     );
