@@ -1,3 +1,4 @@
+import 'package:reebaplus_pos/core/industry/industry.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -6,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
-import 'package:reebaplus_pos/core/data/business_types.dart';
 import 'package:reebaplus_pos/core/data/currencies.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -36,6 +36,7 @@ class BusinessInfoScreen extends ConsumerStatefulWidget {
 class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _otherTypeController = TextEditingController();
   String? _type;
   bool _tracksEmptyCrates = true;
   String _currency = kDefaultCurrency;
@@ -75,6 +76,7 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
     _nameController.dispose();
     _phoneController.dispose();
     _vatRateController.dispose();
+    _otherTypeController.dispose();
     super.dispose();
   }
 
@@ -110,7 +112,21 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
       if (loadedType == 'Beer distributor') {
         loadedType = 'Beverage distributor';
       }
-      _type = kBusinessTypes.contains(loadedType) ? loadedType : null;
+      if (loadedType != null && loadedType.isNotEmpty) {
+        // Resolve through industryOf so non-canonical casing ('pharmacy',
+        // 'beer distributor') still selects the real type, not "Other".
+        final industry = industryOf(loadedType);
+        if (industry != Industry.generic) {
+          _type = industry.label;
+          _otherTypeController.clear();
+        } else {
+          _type = 'Other';
+          _otherTypeController.text = loadedType == 'Other' ? '' : loadedType;
+        }
+      } else {
+        _type = null;
+        _otherTypeController.clear();
+      }
       _tracksEmptyCrates = biz?.tracksEmptyCrates ?? true;
       // Normalise legacy label-style values (e.g. "NGN (₦)") to a clean ISO
       // code so the picker shows "NGN" and saving repairs the stored value.
@@ -176,9 +192,19 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
     final db = ref.read(databaseProvider);
     try {
       // Map display label back to DB canonical before writing.
-      final dbType = _type == 'Beverage distributor'
-          ? 'Beer distributor'
+      if (_type == 'Other' && _otherTypeController.text.trim().isEmpty) {
+        AppNotification.showError(
+          context,
+          'Please specify your business type.',
+        );
+        return;
+      }
+      final effectiveType = _type == 'Other'
+          ? _otherTypeController.text.trim()
           : _type;
+      final dbType = effectiveType == 'Beverage distributor'
+          ? 'Beer distributor'
+          : effectiveType;
 
       // -- Logo changes first (get the URL before writing the business row).
       final bizId = db.currentBusinessId;
@@ -260,13 +286,10 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
     // Screen-level gate (hard rule #6) + keeps the permission chain warm for
     // the save-site guard.
     final canManage = Gates.manageSettings.allows(ref);
-    // Offer only the selectable trades (#112). If this tenant is already on a
-    // now-hidden trade, keep its current type visible + selected (grandfathered)
-    // so opening this screen can never blank or silently change their industry —
-    // switching still offers only the three.
+    // Offer all nine trades plus Other (#492).
     final typeOptions = <String>[
-      ...kSelectableBusinessTypes,
-      if (_type != null && !kSelectableBusinessTypes.contains(_type)) _type!,
+      ...Industry.selectableCatalogue.map((i) => i.label),
+      'Other',
     ];
     final t = Theme.of(context);
     final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
@@ -338,11 +361,29 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
                           ],
                           onChanged: (v) => setState(() {
                             _type = v;
+                            if (v != 'Other') {
+                              _otherTypeController.clear();
+                            }
                             // Reset to default when type changes.
                             _tracksEmptyCrates = true;
                           }),
                         ),
-                        if (isCrateBusiness(_type)) ...[
+                        if (_type == 'Other') ...[
+                          gap,
+                          AppInput(
+                            controller: _otherTypeController,
+                            textCapitalization: TextCapitalization.words,
+                            labelText: 'Specify business type',
+                            hintText: 'e.g. Bakery, Salon, Electronics',
+                            prefixIcon: Icon(AppIcons.category, color: muted),
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ],
+                        if (isCrateBusiness(
+                          _type == 'Other'
+                              ? _otherTypeController.text.trim()
+                              : _type,
+                        )) ...[
                           SizedBox(height: context.getRSize(8)),
                           _SwitchRow(
                             value: _tracksEmptyCrates,

@@ -99,8 +99,10 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
   final _fullNameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _otpCtrl = TextEditingController();
+  final _otherTypeCtrl = TextEditingController();
 
   String? _businessType;
+  bool _isOther = false;
   bool _tracksEmptyCrates = true;
   String _countryValue = '';
 
@@ -158,6 +160,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
     _fullNameCtrl.dispose();
     _emailCtrl.dispose();
     _otpCtrl.dispose();
+    _otherTypeCtrl.dispose();
     _resendTimer?.cancel();
     _lockoutTimer?.cancel();
     super.dispose();
@@ -305,12 +308,13 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
   // ── Step 2: business type ────────────────────────────────────────────────
 
   void _submitBusinessType() {
-    if (_businessType == null) return;
+    final rawType = _isOther ? _otherTypeCtrl.text.trim() : _businessType;
+    if (rawType == null || rawType.isEmpty) return;
     // 'Beverage distributor' is the display label; DB canonical is 'Beer distributor'
     // (existing rows use that string — preserves crate gating without a migration).
-    final dbType = _businessType == 'Beverage distributor'
+    final dbType = rawType == 'Beverage distributor'
         ? 'Beer distributor'
-        : _businessType;
+        : rawType;
     ref.read(onboardingDraftProvider.notifier).update((d) {
       d.businessType = dbType;
       // Only write the flag for crate-eligible types; non-crate types always
@@ -898,13 +902,17 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
   }
 
   Widget _buildBusinessTypeStep() {
-    final showCrateToggle = isCrateBusiness(_businessType);
+    final effectiveType = _isOther ? _otherTypeCtrl.text.trim() : _businessType;
+    final showCrateToggle = isCrateBusiness(effectiveType);
+    final canContinue = _isOther
+        ? _otherTypeCtrl.text.trim().isNotEmpty
+        : _businessType != null;
     return AuthFormShell(
       title: 'What type of business?',
       subtitle: 'Pick the one that fits best.',
       children: [
         ...Industry.selectableCatalogue.map((t) {
-          final selected = _businessType == t.label;
+          final selected = !_isOther && _businessType == t.label;
           return Padding(
             padding: EdgeInsets.only(bottom: context.getRSize(12)),
             child: _TypeCard(
@@ -916,12 +924,54 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
                   ? null
                   : () => setState(() {
                       _businessType = t.label;
+                      _isOther = false;
                       // Reset to default when the type changes.
                       _tracksEmptyCrates = true;
                     }),
             ),
           );
         }),
+        Padding(
+          padding: EdgeInsets.only(bottom: context.getRSize(12)),
+          child: _TypeCard(
+            label: 'Other',
+            icon: AppIcons.storefront,
+            selected: _isOther,
+            onTap: () => setState(() {
+              _businessType = 'Other';
+              _isOther = true;
+              _tracksEmptyCrates = true;
+            }),
+          ),
+        ),
+        if (_isOther) ...[
+          Padding(
+            padding: EdgeInsets.only(bottom: context.getRSize(12)),
+            child: AuthInputCard(
+              child: TextField(
+                controller: _otherTypeCtrl,
+                textCapitalization: TextCapitalization.words,
+                textInputAction: TextInputAction.done,
+                autofocus: true,
+                onChanged: (_) => setState(() {}),
+                onSubmitted: (_) {
+                  if (_otherTypeCtrl.text.trim().isNotEmpty) {
+                    _submitBusinessType();
+                  }
+                },
+                style: context
+                    .mediumStyle(16)
+                    .copyWith(color: authTextPrimary(context)),
+                decoration: AppDecorations.authInputDecoration(
+                  context,
+                  label: 'Business type',
+                  helperText: 'e.g. Bakery, Salon, Electronics',
+                  prefixIcon: AppIcons.category,
+                ),
+              ),
+            ),
+          ),
+        ],
         if (showCrateToggle) ...[
           const SizedBox(height: 4),
           _CrateTrackingToggle(
@@ -932,7 +982,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
         const SizedBox(height: 8),
         AppButton(
           text: 'Continue',
-          onPressed: _businessType == null ? null : _submitBusinessType,
+          onPressed: canContinue ? _submitBusinessType : null,
         ),
       ],
     );
