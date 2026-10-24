@@ -111,12 +111,7 @@ void main() {
 
     test('any other shop: Bottle Cough Syrup stays Bottle Cough Syrup', () {
       expect(
-        productDisplayName(
-          'Cough Syrup',
-          null,
-          unit: 'Bottle',
-          crates: false,
-        ),
+        productDisplayName('Cough Syrup', null, unit: 'Bottle', crates: false),
         'Bottle Cough Syrup',
       );
       expect(
@@ -171,5 +166,21 @@ void main() {
     test('Crate stays a valid saved value', () {
       expect(kProductUnits, contains('Crate'));
     });
+
+    test(
+      'saved units (Sachet, Tin, Crate...) stay valid and keep showing in unitChoices (#492 G3)',
+      () {
+        expect(unitChoices(kGenericUnits, keep: ['Crate']), contains('Crate'));
+        expect(
+          unitChoices(kGenericUnits, keep: ['Sachet']),
+          contains('Sachet'),
+        );
+        expect(unitChoices(kGenericUnits, keep: ['Tin']), contains('Tin'));
+        expect(
+          unitChoices(kGenericUnits, keep: ['sachet']),
+          contains('sachet'),
+        );
+      },
+    );
   });
 }
