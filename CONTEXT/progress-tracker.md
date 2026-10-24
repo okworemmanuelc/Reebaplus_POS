@@ -33,6 +33,14 @@ Branch `feat/492-g1-shop-types`, worktree `../drinkPosApp-wt-492-g1`.
 - **Docs & ADR:** Added 2026-10-23 amendment to ADR 0015 and updated `CONTEXT/project-overview.md`.
 - **Tests & Goldens:** `test/industry/industry_registry_test.dart` (18 tests), `test/auth/ceo_sign_up_shop_types_test.dart` (4 tests), `test/settings/business_info_shop_types_test.dart` (4 tests), `test/redesign/ceo_sign_up_golden_test.dart` (107 tests with updated goldens).
 
+### Issue #467: private Storage listings (2026-10-23)
+Branch `fix/467-storage-listing-privacy`, isolated worktree `work/reebaplus-467`.
+- Migration `0191_private_storage_listing.sql` replaces the public metadata SELECT policies with authenticated business-member policies. Product ownership comes from the first folder; logos use the root `<businessId>.jpg|png` filename. Bucket public flags and existing write policies are unchanged, preserving public image display and member upsert.
+- Caller audit: POS `lib/` and web `master` at the time of implementation have no Storage `.list()` callers for these buckets. Both POS image services use upsert and public URLs. No web code change or table/column/status/money change, so no parity issue is required by #467's conditional criterion.
+- Tier-2 `private_storage_listing_test.dart` uses fresh auth/business/object fixtures and refuses writes outside the approved `reebaplus-dev` project. It checks populated-bucket listing denial for anonymous/nonmember users, positive owner listing/new upload/replacement, and anonymous public HTTP bytes. Explicit opt-in: `TEST_STORAGE_ISOLATION_ALLOW_WRITES=1` plus the three `TEST_SUPABASE_*` credentials.
+- Real development verification: both tests first failed against the old policies because anonymous listing returned seeded objects. After applying only 0191 to the verified development project, **2 pass / 0 skipped**; public image bytes and owner writes both work. Fixtures cleaned. `flutter analyze --no-pub`: zero issues; existing photo cache / URL sync tests: **13 pass**. Full suite: **5225 pass / 295 skipped / 0 failures** (8m05s, `.dart_tool/issue-467-full-tests.log`). Standards and spec checked directly against `985e80be` (worker did not spawn further agents). Compatibility review against main `c019ea4f`: no change to the touched services, Storage policies or test harness; new migration 0187 does not collide with reserved 0191.
+- No production deployment. The issue's historical “dev and prod are the same project” deployment note is superseded by the owner's separate development-project decision.
+
 ### #487 PR 6 / #465: scan a barcode on Add Product (2026-10-23)
 Branch `feat/465-scan-add-product`, worktree `../drinkPosApp-wt-487-6`. Scan button beside the barcode box (`barcodeScannerProvider`, camera closes after the first read; POS unchanged). `_onBarcodeChanged` now: own products first (`findProductsByBarcode`), then, factory codes only, the shared list via `lookupOutcome` (offline -> note, never blocks save). Own match offers Open it (Product Details; restock mode is gone) / Create a new product anyway. Edit mode: scan only fills the box. Tests in `add_product_catalogue_prefill_test.dart` (+1 in `add_product_form_test.dart`); Add Product goldens regenerated.
 
@@ -7450,3 +7458,4 @@ carried over.)_
 2. No raw Supabase call from `lib/features/` or `lib/data/repositories/`.
 3. No UPDATE or DELETE on an append-only ledger table — corrections are
    new rows only.
+
