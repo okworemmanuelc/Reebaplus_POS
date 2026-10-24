@@ -143,6 +143,21 @@ class $BusinessesTable extends Businesses
     ),
     defaultValue: const Constant(true),
   );
+  static const VerificationMeta _sellsOnePriceMeta = const VerificationMeta(
+    'sellsOnePrice',
+  );
+  @override
+  late final GeneratedColumn<bool> sellsOnePrice = GeneratedColumn<bool>(
+    'sells_one_price',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("sells_one_price" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _subscriptionStatusMeta =
       const VerificationMeta('subscriptionStatus');
   @override
@@ -203,6 +218,7 @@ class $BusinessesTable extends Businesses
     lastUpdatedAt,
     ownerId,
     tracksEmptyCrates,
+    sellsOnePrice,
     subscriptionStatus,
     subscriptionPlan,
     trialEndsAt,
@@ -300,6 +316,15 @@ class $BusinessesTable extends Businesses
         ),
       );
     }
+    if (data.containsKey('sells_one_price')) {
+      context.handle(
+        _sellsOnePriceMeta,
+        sellsOnePrice.isAcceptableOrUnknown(
+          data['sells_one_price']!,
+          _sellsOnePriceMeta,
+        ),
+      );
+    }
     if (data.containsKey('subscription_status')) {
       context.handle(
         _subscriptionStatusMeta,
@@ -393,6 +418,10 @@ class $BusinessesTable extends Businesses
         DriftSqlType.bool,
         data['${effectivePrefix}tracks_empty_crates'],
       )!,
+      sellsOnePrice: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}sells_one_price'],
+      )!,
       subscriptionStatus: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}subscription_status'],
@@ -431,6 +460,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
   final DateTime lastUpdatedAt;
   final String? ownerId;
   final bool tracksEmptyCrates;
+  final bool sellsOnePrice;
   final String subscriptionStatus;
   final String? subscriptionPlan;
   final DateTime? trialEndsAt;
@@ -448,6 +478,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
     required this.lastUpdatedAt,
     this.ownerId,
     required this.tracksEmptyCrates,
+    required this.sellsOnePrice,
     required this.subscriptionStatus,
     this.subscriptionPlan,
     this.trialEndsAt,
@@ -478,6 +509,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
       map['owner_id'] = Variable<String>(ownerId);
     }
     map['tracks_empty_crates'] = Variable<bool>(tracksEmptyCrates);
+    map['sells_one_price'] = Variable<bool>(sellsOnePrice);
     map['subscription_status'] = Variable<String>(subscriptionStatus);
     if (!nullToAbsent || subscriptionPlan != null) {
       map['subscription_plan'] = Variable<String>(subscriptionPlan);
@@ -513,6 +545,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
           ? const Value.absent()
           : Value(ownerId),
       tracksEmptyCrates: Value(tracksEmptyCrates),
+      sellsOnePrice: Value(sellsOnePrice),
       subscriptionStatus: Value(subscriptionStatus),
       subscriptionPlan: subscriptionPlan == null && nullToAbsent
           ? const Value.absent()
@@ -544,6 +577,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
       ownerId: serializer.fromJson<String?>(json['ownerId']),
       tracksEmptyCrates: serializer.fromJson<bool>(json['tracksEmptyCrates']),
+      sellsOnePrice: serializer.fromJson<bool>(json['sellsOnePrice']),
       subscriptionStatus: serializer.fromJson<String>(
         json['subscriptionStatus'],
       ),
@@ -570,6 +604,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
       'ownerId': serializer.toJson<String?>(ownerId),
       'tracksEmptyCrates': serializer.toJson<bool>(tracksEmptyCrates),
+      'sellsOnePrice': serializer.toJson<bool>(sellsOnePrice),
       'subscriptionStatus': serializer.toJson<String>(subscriptionStatus),
       'subscriptionPlan': serializer.toJson<String?>(subscriptionPlan),
       'trialEndsAt': serializer.toJson<DateTime?>(trialEndsAt),
@@ -590,6 +625,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
     DateTime? lastUpdatedAt,
     Value<String?> ownerId = const Value.absent(),
     bool? tracksEmptyCrates,
+    bool? sellsOnePrice,
     String? subscriptionStatus,
     Value<String?> subscriptionPlan = const Value.absent(),
     Value<DateTime?> trialEndsAt = const Value.absent(),
@@ -607,6 +643,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
     ownerId: ownerId.present ? ownerId.value : this.ownerId,
     tracksEmptyCrates: tracksEmptyCrates ?? this.tracksEmptyCrates,
+    sellsOnePrice: sellsOnePrice ?? this.sellsOnePrice,
     subscriptionStatus: subscriptionStatus ?? this.subscriptionStatus,
     subscriptionPlan: subscriptionPlan.present
         ? subscriptionPlan.value
@@ -636,6 +673,9 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
       tracksEmptyCrates: data.tracksEmptyCrates.present
           ? data.tracksEmptyCrates.value
           : this.tracksEmptyCrates,
+      sellsOnePrice: data.sellsOnePrice.present
+          ? data.sellsOnePrice.value
+          : this.sellsOnePrice,
       subscriptionStatus: data.subscriptionStatus.present
           ? data.subscriptionStatus.value
           : this.subscriptionStatus,
@@ -666,6 +706,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
           ..write('ownerId: $ownerId, ')
           ..write('tracksEmptyCrates: $tracksEmptyCrates, ')
+          ..write('sellsOnePrice: $sellsOnePrice, ')
           ..write('subscriptionStatus: $subscriptionStatus, ')
           ..write('subscriptionPlan: $subscriptionPlan, ')
           ..write('trialEndsAt: $trialEndsAt, ')
@@ -688,6 +729,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
     lastUpdatedAt,
     ownerId,
     tracksEmptyCrates,
+    sellsOnePrice,
     subscriptionStatus,
     subscriptionPlan,
     trialEndsAt,
@@ -709,6 +751,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
           other.lastUpdatedAt == this.lastUpdatedAt &&
           other.ownerId == this.ownerId &&
           other.tracksEmptyCrates == this.tracksEmptyCrates &&
+          other.sellsOnePrice == this.sellsOnePrice &&
           other.subscriptionStatus == this.subscriptionStatus &&
           other.subscriptionPlan == this.subscriptionPlan &&
           other.trialEndsAt == this.trialEndsAt &&
@@ -728,6 +771,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
   final Value<DateTime> lastUpdatedAt;
   final Value<String?> ownerId;
   final Value<bool> tracksEmptyCrates;
+  final Value<bool> sellsOnePrice;
   final Value<String> subscriptionStatus;
   final Value<String?> subscriptionPlan;
   final Value<DateTime?> trialEndsAt;
@@ -746,6 +790,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
     this.lastUpdatedAt = const Value.absent(),
     this.ownerId = const Value.absent(),
     this.tracksEmptyCrates = const Value.absent(),
+    this.sellsOnePrice = const Value.absent(),
     this.subscriptionStatus = const Value.absent(),
     this.subscriptionPlan = const Value.absent(),
     this.trialEndsAt = const Value.absent(),
@@ -765,6 +810,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
     this.lastUpdatedAt = const Value.absent(),
     this.ownerId = const Value.absent(),
     this.tracksEmptyCrates = const Value.absent(),
+    this.sellsOnePrice = const Value.absent(),
     this.subscriptionStatus = const Value.absent(),
     this.subscriptionPlan = const Value.absent(),
     this.trialEndsAt = const Value.absent(),
@@ -784,6 +830,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
     Expression<DateTime>? lastUpdatedAt,
     Expression<String>? ownerId,
     Expression<bool>? tracksEmptyCrates,
+    Expression<bool>? sellsOnePrice,
     Expression<String>? subscriptionStatus,
     Expression<String>? subscriptionPlan,
     Expression<DateTime>? trialEndsAt,
@@ -803,6 +850,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
       if (ownerId != null) 'owner_id': ownerId,
       if (tracksEmptyCrates != null) 'tracks_empty_crates': tracksEmptyCrates,
+      if (sellsOnePrice != null) 'sells_one_price': sellsOnePrice,
       if (subscriptionStatus != null) 'subscription_status': subscriptionStatus,
       if (subscriptionPlan != null) 'subscription_plan': subscriptionPlan,
       if (trialEndsAt != null) 'trial_ends_at': trialEndsAt,
@@ -824,6 +872,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
     Value<DateTime>? lastUpdatedAt,
     Value<String?>? ownerId,
     Value<bool>? tracksEmptyCrates,
+    Value<bool>? sellsOnePrice,
     Value<String>? subscriptionStatus,
     Value<String?>? subscriptionPlan,
     Value<DateTime?>? trialEndsAt,
@@ -843,6 +892,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
       ownerId: ownerId ?? this.ownerId,
       tracksEmptyCrates: tracksEmptyCrates ?? this.tracksEmptyCrates,
+      sellsOnePrice: sellsOnePrice ?? this.sellsOnePrice,
       subscriptionStatus: subscriptionStatus ?? this.subscriptionStatus,
       subscriptionPlan: subscriptionPlan ?? this.subscriptionPlan,
       trialEndsAt: trialEndsAt ?? this.trialEndsAt,
@@ -890,6 +940,9 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
     if (tracksEmptyCrates.present) {
       map['tracks_empty_crates'] = Variable<bool>(tracksEmptyCrates.value);
     }
+    if (sellsOnePrice.present) {
+      map['sells_one_price'] = Variable<bool>(sellsOnePrice.value);
+    }
     if (subscriptionStatus.present) {
       map['subscription_status'] = Variable<String>(subscriptionStatus.value);
     }
@@ -923,6 +976,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
           ..write('ownerId: $ownerId, ')
           ..write('tracksEmptyCrates: $tracksEmptyCrates, ')
+          ..write('sellsOnePrice: $sellsOnePrice, ')
           ..write('subscriptionStatus: $subscriptionStatus, ')
           ..write('subscriptionPlan: $subscriptionPlan, ')
           ..write('trialEndsAt: $trialEndsAt, ')
@@ -48862,6 +48916,7 @@ typedef $$BusinessesTableCreateCompanionBuilder =
       Value<DateTime> lastUpdatedAt,
       Value<String?> ownerId,
       Value<bool> tracksEmptyCrates,
+      Value<bool> sellsOnePrice,
       Value<String> subscriptionStatus,
       Value<String?> subscriptionPlan,
       Value<DateTime?> trialEndsAt,
@@ -48882,6 +48937,7 @@ typedef $$BusinessesTableUpdateCompanionBuilder =
       Value<DateTime> lastUpdatedAt,
       Value<String?> ownerId,
       Value<bool> tracksEmptyCrates,
+      Value<bool> sellsOnePrice,
       Value<String> subscriptionStatus,
       Value<String?> subscriptionPlan,
       Value<DateTime?> trialEndsAt,
@@ -50318,6 +50374,11 @@ class $$BusinessesTableFilterComposer
 
   ColumnFilters<bool> get tracksEmptyCrates => $composableBuilder(
     column: $table.tracksEmptyCrates,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get sellsOnePrice => $composableBuilder(
+    column: $table.sellsOnePrice,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -51949,6 +52010,11 @@ class $$BusinessesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get sellsOnePrice => $composableBuilder(
+    column: $table.sellsOnePrice,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get subscriptionStatus => $composableBuilder(
     column: $table.subscriptionStatus,
     builder: (column) => ColumnOrderings(column),
@@ -52018,6 +52084,11 @@ class $$BusinessesTableAnnotationComposer
 
   GeneratedColumn<bool> get tracksEmptyCrates => $composableBuilder(
     column: $table.tracksEmptyCrates,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get sellsOnePrice => $composableBuilder(
+    column: $table.sellsOnePrice,
     builder: (column) => column,
   );
 
@@ -53695,6 +53766,7 @@ class $$BusinessesTableTableManager
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<String?> ownerId = const Value.absent(),
                 Value<bool> tracksEmptyCrates = const Value.absent(),
+                Value<bool> sellsOnePrice = const Value.absent(),
                 Value<String> subscriptionStatus = const Value.absent(),
                 Value<String?> subscriptionPlan = const Value.absent(),
                 Value<DateTime?> trialEndsAt = const Value.absent(),
@@ -53713,6 +53785,7 @@ class $$BusinessesTableTableManager
                 lastUpdatedAt: lastUpdatedAt,
                 ownerId: ownerId,
                 tracksEmptyCrates: tracksEmptyCrates,
+                sellsOnePrice: sellsOnePrice,
                 subscriptionStatus: subscriptionStatus,
                 subscriptionPlan: subscriptionPlan,
                 trialEndsAt: trialEndsAt,
@@ -53733,6 +53806,7 @@ class $$BusinessesTableTableManager
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<String?> ownerId = const Value.absent(),
                 Value<bool> tracksEmptyCrates = const Value.absent(),
+                Value<bool> sellsOnePrice = const Value.absent(),
                 Value<String> subscriptionStatus = const Value.absent(),
                 Value<String?> subscriptionPlan = const Value.absent(),
                 Value<DateTime?> trialEndsAt = const Value.absent(),
@@ -53751,6 +53825,7 @@ class $$BusinessesTableTableManager
                 lastUpdatedAt: lastUpdatedAt,
                 ownerId: ownerId,
                 tracksEmptyCrates: tracksEmptyCrates,
+                sellsOnePrice: sellsOnePrice,
                 subscriptionStatus: subscriptionStatus,
                 subscriptionPlan: subscriptionPlan,
                 trialEndsAt: trialEndsAt,

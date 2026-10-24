@@ -267,6 +267,7 @@ void main() {
       'owner_id',
       'onboarding_complete',
       'tracks_empty_crates',
+      'sells_one_price',
       'created_at',
       'last_updated_at',
     },

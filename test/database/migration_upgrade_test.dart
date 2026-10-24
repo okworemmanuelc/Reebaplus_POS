@@ -50,7 +50,7 @@ void main() {
     return rows.map((r) => r.read<String>('name')).toSet();
   }
 
-  test('v85 to v86 preserves categories and adds optional online mapping', () async {
+  test('v86 to v87 preserves categories and adds optional online mapping', () async {
     var db = await openAndInit();
     final businessId = UuidV7.generate();
     final categoryId = UuidV7.generate();
@@ -63,7 +63,7 @@ void main() {
         id: Value(productId), businessId: businessId, name: 'Rice',
         unit: const Value('Kg'), categoryId: Value(categoryId)));
     await db.customStatement('ALTER TABLE categories DROP COLUMN marketplace_category');
-    await db.customStatement('PRAGMA user_version = 85');
+    await db.customStatement('PRAGMA user_version = 86');
     await db.close();
     db = await openAndInit();
     try {
@@ -81,7 +81,7 @@ void main() {
     }
   });
 
-  test('v86 to v87 preserves archived products and defaults listing on', () async {
+  test('v87 to v88 preserves archived products and defaults listing on', () async {
     var db = await openAndInit();
     final businessId = UuidV7.generate();
     final productId = UuidV7.generate();
@@ -93,7 +93,7 @@ void main() {
     await db.customStatement('ALTER TABLE products DROP COLUMN show_online');
     await db.customStatement("DELETE FROM permissions WHERE key = 'products.manage_listing'");
     expect(await columnsOf(db, 'products'), isNot(contains('show_online')));
-    await db.customStatement('PRAGMA user_version = 86');
+    await db.customStatement('PRAGMA user_version = 87');
     await db.close();
     db = await openAndInit();
     try {
@@ -112,7 +112,7 @@ void main() {
       expect(await columnsOf(db, 'categories'), contains('marketplace_category'));
       await (db.update(db.products)..where((p) => p.id.equals(productId)))
         .write(const ProductsCompanion(showOnline: Value(false)));
-      await db.customStatement('PRAGMA user_version = 86');
+      await db.customStatement('PRAGMA user_version = 87');
       await db.close();
       db = await openAndInit();
       expect((await (db.select(db.products)
@@ -121,7 +121,7 @@ void main() {
   });
 
 
-  test('v84 to v87 carries products through unit, category and listing upgrades', () async {
+  test('v84 to v88 carries products through unit, shop pricing, category and listing upgrades', () async {
     var db = await openAndInit();
     final businessId = UuidV7.generate();
     final categoryId = UuidV7.generate();
@@ -136,6 +136,7 @@ void main() {
       unitsPerPack: const Value(12), isAvailable: const Value(false)));
     await db.customStatement('ALTER TABLE products DROP COLUMN show_online');
     await db.customStatement('ALTER TABLE categories DROP COLUMN marketplace_category');
+    await db.customStatement('ALTER TABLE businesses DROP COLUMN sells_one_price');
     await db.customStatement('PRAGMA user_version = 84');
     await db.close();
     db = await openAndInit();
@@ -151,6 +152,8 @@ void main() {
         ..where((c) => c.id.equals(categoryId))).getSingle();
       expect(category.name, 'Water');
       expect(category.marketplaceCategory, isNull);
+      expect((await (db.select(db.businesses)
+        ..where((b) => b.id.equals(businessId))).getSingle()).sellsOnePrice, isFalse);
       await db.into(db.products).insert(ProductsCompanion.insert(
         businessId: businessId, name: 'Oil', unit: const Value('Litre')));
     } finally { await db.close(); }
@@ -4150,6 +4153,57 @@ void main() {
       )..where((t) => t.id.equals(id))).getSingle();
       expect(product.unit, 'Kg');
       expect(product.unitsPerPack, 25);
+    });
+  });
+
+  group('onUpgrade v85 -> v86 (businesses.sells_one_price, #493)', () {
+    test('adds the column OFF for every existing shop', () async {
+      final db1 = await openAndInit();
+      final biz = UuidV7.generate();
+      await db1
+          .into(db1.businesses)
+          .insert(
+            BusinessesCompanion.insert(id: Value(biz), name: 'Sample Biz'),
+          );
+      // Revert the v86 delta: drop the column, step back to v85.
+      await db1.customStatement(
+        'ALTER TABLE businesses DROP COLUMN sells_one_price',
+      );
+      expect(await columnsOf(db1, 'businesses'), isNot(contains('sells_one_price')));
+      await db1.customStatement('PRAGMA user_version = 85');
+      await db1.close();
+
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+      expect(await columnsOf(db2, 'businesses'), contains('sells_one_price'));
+      final row = await (db2.select(
+        db2.businesses,
+      )..where((b) => b.id.equals(biz))).getSingle();
+      expect(row.sellsOnePrice, isFalse);
+      expect(row.name, 'Sample Biz');
+    });
+
+    test('the upgrade step is idempotent (column already present)', () async {
+      final db1 = await openAndInit();
+      final biz = UuidV7.generate();
+      await db1
+          .into(db1.businesses)
+          .insert(
+            BusinessesCompanion.insert(
+              id: Value(biz),
+              name: 'Sample Biz',
+              sellsOnePrice: const Value(true),
+            ),
+          );
+      await db1.customStatement('PRAGMA user_version = 85');
+      await db1.close();
+
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+      final row = await (db2.select(
+        db2.businesses,
+      )..where((b) => b.id.equals(biz))).getSingle();
+      expect(row.sellsOnePrice, isTrue);
     });
   });
 }

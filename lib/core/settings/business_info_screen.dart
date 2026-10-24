@@ -34,12 +34,17 @@ class BusinessInfoScreen extends ConsumerStatefulWidget {
   ConsumerState<BusinessInfoScreen> createState() => _BusinessInfoScreenState();
 }
 
+/// The "We sell at one price" switch row (#493), for tests.
+const kBusinessInfoSellsOnePriceKey = Key('business-info-sells-one-price');
+
 class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _otherTypeController = TextEditingController();
   String? _type;
   bool _tracksEmptyCrates = true;
+  // "We sell at one price" (#493). OFF unless the owner turned it on.
+  bool _sellsOnePrice = false;
   String _currency = kDefaultCurrency;
   // VAT is opt-in and OFF by default (not every business is authorised to
   // charge it). Rate is entered as a percentage and stored as basis points.
@@ -129,6 +134,7 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
         _otherTypeController.clear();
       }
       _tracksEmptyCrates = biz?.tracksEmptyCrates ?? true;
+      _sellsOnePrice = biz?.sellsOnePrice ?? false;
       // Normalise legacy label-style values (e.g. "NGN (₦)") to a clean ISO
       // code so the picker shows "NGN" and saving repairs the stored value.
       _currency = normalizeCurrencyCode(currency);
@@ -250,6 +256,7 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
         type: dbType,
         phone: _phoneController.text.trim(),
         tracksEmptyCrates: isCrateBusiness(dbType) ? _tracksEmptyCrates : true,
+        sellsOnePrice: _sellsOnePrice,
         logoUrl: clearLogo
             ? ''
             : newLogoUrl ?? const Object(), // sentinel = leave unchanged
@@ -399,6 +406,15 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
                                 'Enable to track returnable bottles and crate deposits.',
                           ),
                         ],
+                        SizedBox(height: context.getRSize(8)),
+                        _SwitchRow(
+                          key: kBusinessInfoSellsOnePriceKey,
+                          value: _sellsOnePrice,
+                          onChanged: (v) => setState(() => _sellsOnePrice = v),
+                          title: 'We sell at one price',
+                          subtitle:
+                              'Hides wholesale prices. Every customer pays the retail price.',
+                        ),
                         gap,
                         AppDropdown<String>(
                           value: _currency,
@@ -492,6 +508,7 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
 /// subtitle, the primary-coloured [Switch] on the right (48dp tall at least).
 class _SwitchRow extends StatelessWidget {
   const _SwitchRow({
+    super.key,
     required this.value,
     required this.onChanged,
     required this.title,
