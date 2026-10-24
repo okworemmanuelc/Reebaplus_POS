@@ -270,7 +270,7 @@ Realtime is a **signal that triggers a pull, never the transport for the data it
    - **Authorize** (`0148_realtime_broadcast_authorization.sql`): a single `SELECT` RLS policy on `realtime.messages` scopes topic `store_<business_id>` to the caller's own businesses (`current_user_business_ids()`), so a client can only ever subscribe to its own tenant's topic — no cross-tenant signal leak (invariant #5's spirit). There is **no** `INSERT` (send) policy: clients only receive; the trigger emits as a definer and cannot be spoofed by a client.
    - **Subscribe** (client): `CloudTransport.startBroadcast(businessId, {onSignal})` opens one **private** channel on `store_<businessId>` (`realtime.setAuth` before subscribe, as with `postgres_changes`), on the **same lifecycle as realtime** (sign-in / resume / connectivity handoff / logout). Any signal → a **debounced `catchUpPull(reason: 'broadcast')`** (shares the 20 s catch-up debounce, so a burst from one multi-row write collapses to one pull).
 
-**Invariants this preserves.** A Broadcast signal **MUST NOT write Drift** — its only effect is to schedule a pull (the signal callback is handed no row data by construction). Broadcast is **ephemeral (no replay)**: a device that misses a signal (asleep/offline/backgrounded) converges on the next **periodic / reconnect pull**, which is why the periodic pull is retained as the safety net (Workstream C). Adding a new synced tenant table auto-inherits the trigger (the attach loop is DB-driven), so "add a synced table = one registry entry" still holds.
+**Invariants this preserves.** A Broadcast signal **MUST NOT write Drift** — its only effect is to schedule a pull (the signal callback is handed no row data by construction). Broadcast is **ephemeral (no replay)**: a device that misses a signal (asleep/offline/backgrounded) converges on the next **periodic / reconnect pull**, which is why the periodic pull is retained as the safety net (Workstream C). A new tenant table does **not** auto-inherit the trigger: 0147's attach loop ran once, over the tables that existed then (#470 found nine later tables without it; `0198_broadcast_trigger_gap.sql` backfilled them). Every migration that creates a business-scoped table must attach `zz_broadcast_sync_signal` itself (AFTER INSERT OR UPDATE OR DELETE, FOR EACH ROW) — or re-run 0198, which is idempotent. The tier-2 guard `test/integration/rpcs/broadcast_trigger_coverage_test.dart` calls the service-role helper `broadcast_trigger_missing_tables()` (0198) and fails if any `kSyncedTenantTables` table, or any `public` table with `business_id`, lacks the trigger.
 
 ### Sync progress and UI feedback (Fix 4)
 
@@ -331,6 +331,13 @@ build red if a sync-fingerprinted table has no entry, and a golden-equivalence
 test pins the derived accessors against their frozen historical values. This
 retires the recurring "forgot to register the table in one of the switches →
 peer devices silently drop its rows" bug-class.
+
+**New synced tenant table checklist (cloud side).** The registry entry is the
+only *client* step, but the cloud migration that creates the table must also
+attach the live-sync trigger `zz_broadcast_sync_signal` (see "Live signal" above;
+0147 does not cover tables created after it). `0198`'s helper
+`broadcast_trigger_missing_tables()` and the tier-2 test
+`test/integration/rpcs/broadcast_trigger_coverage_test.dart` enforce it (#470).
 
 Restore strategies are built from helpers (`Restore.plain` / `.naturalKey` /
 `.dedup` / `.ledger`, with a hand-written closure for the genuinely bespoke
