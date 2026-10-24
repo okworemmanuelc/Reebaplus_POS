@@ -235,6 +235,7 @@ class Categories extends Table {
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get name => text()();
   TextColumn get description => text().nullable()();
+  TextColumn get marketplaceCategory => text().nullable()();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
@@ -2929,7 +2930,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 85;
+  int get schemaVersion => 86;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -6414,7 +6415,6 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(products, products.unitsPerPack);
         }
       }
-
       if (from < 85) {
         // ── v85 — #490 / #492 G4: products.unit CHECK admits Kg and Litre ────
         //
@@ -6423,6 +6423,16 @@ class AppDatabase extends _$AppDatabase {
         // alongside the 13 legacy units. TableMigration rebuilds the table
         // to update the SQLite table-level CHECK constraint.
         await m.alterTable(TableMigration(products));
+      }
+      if (from < 86) {
+        // #472: existing shop categories stay sellable with no online mapping.
+        final exists = await customSelect(
+          "SELECT 1 FROM pragma_table_info('categories') "
+          "WHERE name = 'marketplace_category'",
+        ).get();
+        if (exists.isEmpty) {
+          await m.addColumn(categories, categories.marketplaceCategory);
+        }
       }
     },
     beforeOpen: (details) async {

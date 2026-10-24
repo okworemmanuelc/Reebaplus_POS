@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:reebaplus_pos/core/permissions/gate.dart';
+import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
 import 'package:reebaplus_pos/features/inventory/screens/inventory_screen.dart';
@@ -90,6 +91,25 @@ void main() {
       find.byKey(inventoryProductRowKey(sample.productIds[name]!));
 
   group('renders its controls', () {
+    testWidgets('Manage categories offers the public category picker', (tester) async {
+      await pump(tester);
+      await tester.tap(find.byKey(const ValueKey('inventory-manage-categories')));
+      await tester.pumpAndSettle();
+      final dropdown = find.descendant(of: find.byType(ManageCategoriesSheet),
+          matching: find.byType(AppDropdown<String>)).first;
+      expect(dropdown, findsOneWidget);
+      await tester.tap(dropdown);
+      await tester.pumpAndSettle();
+      expect(find.text('Beverages / Water'), findsOneWidget);
+      await tester.tap(find.text('Beverages / Water'));
+      await tester.pumpAndSettle();
+      final rows = await tester.runAsync(() =>
+          env.db.inventoryDao.watchAllCategories().firstWhere(
+            (rows) => rows.any((c) => c.marketplaceCategory == 'water')));
+      expect(rows!.any((c) => c.marketplaceCategory == 'water'), isTrue);
+      expect(tester.takeException(), isNull);
+      await disposeScreen(tester);
+    });
     testWidgets('top bar, figure cards, tabs, filters and rows', (
       tester,
     ) async {

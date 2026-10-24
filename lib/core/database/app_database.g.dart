@@ -3658,6 +3658,17 @@ class $CategoriesTable extends Categories
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _marketplaceCategoryMeta =
+      const VerificationMeta('marketplaceCategory');
+  @override
+  late final GeneratedColumn<String> marketplaceCategory =
+      GeneratedColumn<String>(
+        'marketplace_category',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _isDeletedMeta = const VerificationMeta(
     'isDeleted',
   );
@@ -3704,6 +3715,7 @@ class $CategoriesTable extends Categories
     businessId,
     name,
     description,
+    marketplaceCategory,
     isDeleted,
     createdAt,
     lastUpdatedAt,
@@ -3745,6 +3757,15 @@ class $CategoriesTable extends Categories
         description.isAcceptableOrUnknown(
           data['description']!,
           _descriptionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('marketplace_category')) {
+      context.handle(
+        _marketplaceCategoryMeta,
+        marketplaceCategory.isAcceptableOrUnknown(
+          data['marketplace_category']!,
+          _marketplaceCategoryMeta,
         ),
       );
     }
@@ -3794,6 +3815,10 @@ class $CategoriesTable extends Categories
         DriftSqlType.string,
         data['${effectivePrefix}description'],
       ),
+      marketplaceCategory: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}marketplace_category'],
+      ),
       isDeleted: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_deleted'],
@@ -3820,6 +3845,7 @@ class CategoryData extends DataClass implements Insertable<CategoryData> {
   final String businessId;
   final String name;
   final String? description;
+  final String? marketplaceCategory;
   final bool isDeleted;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
@@ -3828,6 +3854,7 @@ class CategoryData extends DataClass implements Insertable<CategoryData> {
     required this.businessId,
     required this.name,
     this.description,
+    this.marketplaceCategory,
     required this.isDeleted,
     required this.createdAt,
     required this.lastUpdatedAt,
@@ -3840,6 +3867,9 @@ class CategoryData extends DataClass implements Insertable<CategoryData> {
     map['name'] = Variable<String>(name);
     if (!nullToAbsent || description != null) {
       map['description'] = Variable<String>(description);
+    }
+    if (!nullToAbsent || marketplaceCategory != null) {
+      map['marketplace_category'] = Variable<String>(marketplaceCategory);
     }
     map['is_deleted'] = Variable<bool>(isDeleted);
     map['created_at'] = Variable<DateTime>(createdAt);
@@ -3855,6 +3885,9 @@ class CategoryData extends DataClass implements Insertable<CategoryData> {
       description: description == null && nullToAbsent
           ? const Value.absent()
           : Value(description),
+      marketplaceCategory: marketplaceCategory == null && nullToAbsent
+          ? const Value.absent()
+          : Value(marketplaceCategory),
       isDeleted: Value(isDeleted),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
@@ -3871,6 +3904,9 @@ class CategoryData extends DataClass implements Insertable<CategoryData> {
       businessId: serializer.fromJson<String>(json['businessId']),
       name: serializer.fromJson<String>(json['name']),
       description: serializer.fromJson<String?>(json['description']),
+      marketplaceCategory: serializer.fromJson<String?>(
+        json['marketplaceCategory'],
+      ),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
@@ -3884,6 +3920,7 @@ class CategoryData extends DataClass implements Insertable<CategoryData> {
       'businessId': serializer.toJson<String>(businessId),
       'name': serializer.toJson<String>(name),
       'description': serializer.toJson<String?>(description),
+      'marketplaceCategory': serializer.toJson<String?>(marketplaceCategory),
       'isDeleted': serializer.toJson<bool>(isDeleted),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
@@ -3895,6 +3932,7 @@ class CategoryData extends DataClass implements Insertable<CategoryData> {
     String? businessId,
     String? name,
     Value<String?> description = const Value.absent(),
+    Value<String?> marketplaceCategory = const Value.absent(),
     bool? isDeleted,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
@@ -3903,6 +3941,9 @@ class CategoryData extends DataClass implements Insertable<CategoryData> {
     businessId: businessId ?? this.businessId,
     name: name ?? this.name,
     description: description.present ? description.value : this.description,
+    marketplaceCategory: marketplaceCategory.present
+        ? marketplaceCategory.value
+        : this.marketplaceCategory,
     isDeleted: isDeleted ?? this.isDeleted,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -3917,6 +3958,9 @@ class CategoryData extends DataClass implements Insertable<CategoryData> {
       description: data.description.present
           ? data.description.value
           : this.description,
+      marketplaceCategory: data.marketplaceCategory.present
+          ? data.marketplaceCategory.value
+          : this.marketplaceCategory,
       isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       lastUpdatedAt: data.lastUpdatedAt.present
@@ -3932,6 +3976,7 @@ class CategoryData extends DataClass implements Insertable<CategoryData> {
           ..write('businessId: $businessId, ')
           ..write('name: $name, ')
           ..write('description: $description, ')
+          ..write('marketplaceCategory: $marketplaceCategory, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
@@ -3945,6 +3990,7 @@ class CategoryData extends DataClass implements Insertable<CategoryData> {
     businessId,
     name,
     description,
+    marketplaceCategory,
     isDeleted,
     createdAt,
     lastUpdatedAt,
@@ -3957,6 +4003,7 @@ class CategoryData extends DataClass implements Insertable<CategoryData> {
           other.businessId == this.businessId &&
           other.name == this.name &&
           other.description == this.description &&
+          other.marketplaceCategory == this.marketplaceCategory &&
           other.isDeleted == this.isDeleted &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
@@ -3967,6 +4014,7 @@ class CategoriesCompanion extends UpdateCompanion<CategoryData> {
   final Value<String> businessId;
   final Value<String> name;
   final Value<String?> description;
+  final Value<String?> marketplaceCategory;
   final Value<bool> isDeleted;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
@@ -3976,6 +4024,7 @@ class CategoriesCompanion extends UpdateCompanion<CategoryData> {
     this.businessId = const Value.absent(),
     this.name = const Value.absent(),
     this.description = const Value.absent(),
+    this.marketplaceCategory = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -3986,6 +4035,7 @@ class CategoriesCompanion extends UpdateCompanion<CategoryData> {
     required String businessId,
     required String name,
     this.description = const Value.absent(),
+    this.marketplaceCategory = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -3997,6 +4047,7 @@ class CategoriesCompanion extends UpdateCompanion<CategoryData> {
     Expression<String>? businessId,
     Expression<String>? name,
     Expression<String>? description,
+    Expression<String>? marketplaceCategory,
     Expression<bool>? isDeleted,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
@@ -4007,6 +4058,8 @@ class CategoriesCompanion extends UpdateCompanion<CategoryData> {
       if (businessId != null) 'business_id': businessId,
       if (name != null) 'name': name,
       if (description != null) 'description': description,
+      if (marketplaceCategory != null)
+        'marketplace_category': marketplaceCategory,
       if (isDeleted != null) 'is_deleted': isDeleted,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
@@ -4019,6 +4072,7 @@ class CategoriesCompanion extends UpdateCompanion<CategoryData> {
     Value<String>? businessId,
     Value<String>? name,
     Value<String?>? description,
+    Value<String?>? marketplaceCategory,
     Value<bool>? isDeleted,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
@@ -4029,6 +4083,7 @@ class CategoriesCompanion extends UpdateCompanion<CategoryData> {
       businessId: businessId ?? this.businessId,
       name: name ?? this.name,
       description: description ?? this.description,
+      marketplaceCategory: marketplaceCategory ?? this.marketplaceCategory,
       isDeleted: isDeleted ?? this.isDeleted,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -4050,6 +4105,9 @@ class CategoriesCompanion extends UpdateCompanion<CategoryData> {
     }
     if (description.present) {
       map['description'] = Variable<String>(description.value);
+    }
+    if (marketplaceCategory.present) {
+      map['marketplace_category'] = Variable<String>(marketplaceCategory.value);
     }
     if (isDeleted.present) {
       map['is_deleted'] = Variable<bool>(isDeleted.value);
@@ -4073,6 +4131,7 @@ class CategoriesCompanion extends UpdateCompanion<CategoryData> {
           ..write('businessId: $businessId, ')
           ..write('name: $name, ')
           ..write('description: $description, ')
+          ..write('marketplaceCategory: $marketplaceCategory, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
@@ -62467,6 +62526,7 @@ typedef $$CategoriesTableCreateCompanionBuilder =
       required String businessId,
       required String name,
       Value<String?> description,
+      Value<String?> marketplaceCategory,
       Value<bool> isDeleted,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -62478,6 +62538,7 @@ typedef $$CategoriesTableUpdateCompanionBuilder =
       Value<String> businessId,
       Value<String> name,
       Value<String?> description,
+      Value<String?> marketplaceCategory,
       Value<bool> isDeleted,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -62547,6 +62608,11 @@ class $$CategoriesTableFilterComposer
 
   ColumnFilters<String> get description => $composableBuilder(
     column: $table.description,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get marketplaceCategory => $composableBuilder(
+    column: $table.marketplaceCategory,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -62638,6 +62704,11 @@ class $$CategoriesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get marketplaceCategory => $composableBuilder(
+    column: $table.marketplaceCategory,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isDeleted => $composableBuilder(
     column: $table.isDeleted,
     builder: (column) => ColumnOrderings(column),
@@ -62694,6 +62765,11 @@ class $$CategoriesTableAnnotationComposer
 
   GeneratedColumn<String> get description => $composableBuilder(
     column: $table.description,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get marketplaceCategory => $composableBuilder(
+    column: $table.marketplaceCategory,
     builder: (column) => column,
   );
 
@@ -62789,6 +62865,7 @@ class $$CategoriesTableTableManager
                 Value<String> businessId = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<String?> description = const Value.absent(),
+                Value<String?> marketplaceCategory = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -62798,6 +62875,7 @@ class $$CategoriesTableTableManager
                 businessId: businessId,
                 name: name,
                 description: description,
+                marketplaceCategory: marketplaceCategory,
                 isDeleted: isDeleted,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -62809,6 +62887,7 @@ class $$CategoriesTableTableManager
                 required String businessId,
                 required String name,
                 Value<String?> description = const Value.absent(),
+                Value<String?> marketplaceCategory = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -62818,6 +62897,7 @@ class $$CategoriesTableTableManager
                 businessId: businessId,
                 name: name,
                 description: description,
+                marketplaceCategory: marketplaceCategory,
                 isDeleted: isDeleted,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
