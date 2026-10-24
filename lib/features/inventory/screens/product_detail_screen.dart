@@ -521,8 +521,9 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         p?.wholesalerPriceKobo ??
         ((widget.item.wholesalerPrice ?? 0) * 100).round();
     final canSeeCost = _canEditBuying;
-    final hasWholesale =
-        businessHasWholesale(ref.watch(currentBusinessProvider));
+    final hasWholesale = !businessSellsOnePrice(
+      ref.watch(currentBusinessProvider),
+    );
     return ProductPricesCard(
       perNoun: unitCountNoun(_unit, 1, crates: _crates),
       retailKobo: retailKobo,

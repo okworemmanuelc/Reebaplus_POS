@@ -316,6 +316,8 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
       // Only write the flag for crate-eligible types; non-crate types always
       // get true (the default) since the flag is meaningless for them.
       d.tracksEmptyCrates = isCrateBusiness(dbType) ? _tracksEmptyCrates : true;
+      // #493: suggest "We sell at one price" for a Restaurant only.
+      d.sellsOnePrice = suggestsOnePriceAtSignUp(dbType);
     });
     _goTo(2);
   }

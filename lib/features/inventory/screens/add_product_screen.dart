@@ -275,9 +275,6 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   }
 
   void _onFieldEdited() {
-    if (!_hasWholesale && _wholesalePriceCtrl.text != _retailPriceCtrl.text) {
-      _wholesalePriceCtrl.text = _retailPriceCtrl.text;
-    }
     if (mounted) setState(() {});
   }
 
@@ -776,9 +773,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   bool get _isCrateBusiness =>
       businessTracksCrates(ref.read(currentBusinessProvider));
 
-  /// Wholesale pricing is enabled only for Beverage distributor (#493).
+  /// The Wholesale box shows unless the shop sells at one price (#493).
   bool get _hasWholesale =>
-      businessHasWholesale(ref.read(currentBusinessProvider));
+      !businessSellsOnePrice(ref.read(currentBusinessProvider));
 
   /// The Track Empty Crates card shows for a crate business AND unit Bottle.
   bool get _showsCrateCard =>
@@ -865,7 +862,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         storeIds: _stores.map((s) => s.id).toList(),
         // Edit mode has no store either.
         routesToReceiveCart: widget.receiveMode || _isEdit,
-        hasWholesale: _hasWholesale,
+        sellsOnePrice: !_hasWholesale,
+        // Edit keeps the saved wholesale price in a one-price shop (#493).
+        existingWholesalerPriceKobo: widget.editProduct?.wholesalerPriceKobo,
       ),
     );
 

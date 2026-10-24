@@ -122,7 +122,7 @@ Future<ScreenTestEnvironment> setupScreenTestEnvironment({
   int productCount = kDefaultSeedProductCount,
   int manufacturerCount = 0,
   String businessName = 'Test Biz',
-  String businessType = 'Beverage distributor',
+  String? businessType,
   Map<String, Object> sharedPreferences = const {},
 }) async {
   SharedPreferences.setMockInitialValues(sharedPreferences);
@@ -148,7 +148,7 @@ Future<ScreenTestEnvironment> setupScreenTestEnvironment({
         BusinessesCompanion.insert(
           id: Value(businessId),
           name: businessName,
-          type: Value(businessType),
+          type: businessType == null ? const Value.absent() : Value(businessType),
         ),
       );
 

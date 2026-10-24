@@ -615,7 +615,9 @@ class CustomerProfileCard extends StatelessWidget {
                     SizedBox(height: context.getRSize(6)),
                     TagPill(
                       label: wholesaler ? 'Wholesaler' : 'Retailer',
-                      tone: wholesaler ? TagPillTone.green : TagPillTone.warning,
+                      tone: wholesaler
+                          ? TagPillTone.green
+                          : TagPillTone.warning,
                       dense: true,
                     ),
                   ],

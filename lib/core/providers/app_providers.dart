@@ -551,20 +551,17 @@ bool businessTracksCrates(BusinessData? business) {
   return business.tracksEmptyCrates;
 }
 
-/// Combined visibility gate for wholesale pricing surfaces (#493). True only
-/// when the business type uses wholesale pricing (Beverage distributor only).
-/// Every other trade operates as a one-price shop.
+/// "We sell at one price" (#493, option A): the owner's Business Info
+/// setting, stored on `businesses.sells_one_price`. When true the app hides
+/// every wholesale price box and the price-tier choice, and the till always
+/// charges the Retail price. Saved wholesale prices are never overwritten, so
+/// turning it off brings them all back.
 ///
-/// Use this everywhere instead of calling [isWholesaleBusiness] directly. Pass the
-/// [BusinessData] row from [currentBusinessProvider]. Returns true when null to
-/// safely default to full pricing surfaces before tenant context loads.
-bool businessHasWholesale(BusinessData? business) {
-  if (business == null) return true;
-  return isWholesaleBusiness(business.type);
-}
-
-/// Convenience inverse of [businessHasWholesale] (#493).
-bool businessIsOnePrice(BusinessData? business) => !businessHasWholesale(business);
+/// The single read site for the setting. Pass the [BusinessData] row from
+/// [currentBusinessProvider]. False while no business is loaded (the safe,
+/// existing behaviour).
+bool businessSellsOnePrice(BusinessData? business) =>
+    business?.sellsOnePrice ?? false;
 
 /// The active business name, live (see [currentBusinessProvider]). Empty when
 /// no business is bound yet.

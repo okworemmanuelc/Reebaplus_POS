@@ -73,14 +73,7 @@ class _EditReceiveItemModalState extends ConsumerState<EditReceiveItemModal> {
     });
   }
 
-  void _onInputChanged() {
-    final hasWholesale =
-        businessHasWholesale(ref.read(currentBusinessProvider));
-    if (!hasWholesale && _wholesaleCtrl.text != _retailCtrl.text) {
-      _wholesaleCtrl.text = _retailCtrl.text;
-    }
-    setState(() {});
-  }
+  void _onInputChanged() => setState(() {});
 
   static String _trimNum(num n) =>
       n == n.toInt() ? n.toInt().toString() : n.toString();
@@ -319,7 +312,7 @@ class _EditReceiveItemModalState extends ConsumerState<EditReceiveItemModal> {
               inputFormatters: [CurrencyInputFormatter(grouping: true)],
               prefixIcon: currencyPrefix(editPricePermission),
             ),
-            if (businessHasWholesale(ref.watch(currentBusinessProvider))) ...[
+            if (!businessSellsOnePrice(ref.watch(currentBusinessProvider))) ...[
               SizedBox(height: context.getRSize(16)),
               AppInput(
                 controller: _wholesaleCtrl,
@@ -414,10 +407,13 @@ class _EditReceiveItemModalState extends ConsumerState<EditReceiveItemModal> {
                           (r * 100).round(),
                         );
 
-                        final hasWholesale = businessHasWholesale(
+                        // One-price shop (#493): the Wholesale box is hidden,
+                        // so the line keeps the product's saved wholesale price
+                        // untouched (never overwritten with retail).
+                        final sellsOnePrice = businessSellsOnePrice(
                           ref.read(currentBusinessProvider),
                         );
-                        if (hasWholesale) {
+                        if (!sellsOnePrice) {
                           final w =
                               double.tryParse(
                                 _wholesaleCtrl.text.replaceAll(',', ''),
@@ -426,12 +422,6 @@ class _EditReceiveItemModalState extends ConsumerState<EditReceiveItemModal> {
                           notifier.setWholesalePrice(
                             widget.item.productId,
                             (w * 100).round(),
-                          );
-                        } else {
-                          // One-price shop: mirror retail price behind the scenes
-                          notifier.setWholesalePrice(
-                            widget.item.productId,
-                            (r * 100).round(),
                           );
                         }
                       }

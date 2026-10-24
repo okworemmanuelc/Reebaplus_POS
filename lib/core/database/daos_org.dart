@@ -86,6 +86,7 @@ class BusinessesDao extends DatabaseAccessor<AppDatabase>
     String? type,
     String? phone,
     bool? tracksEmptyCrates,
+    bool? sellsOnePrice,
     // null = leave unchanged; empty string = clear (remove logo).
     Object? logoUrl = _absent,
   }) async {
@@ -101,6 +102,9 @@ class BusinessesDao extends DatabaseAccessor<AppDatabase>
         tracksEmptyCrates: tracksEmptyCrates == null
             ? const Value.absent()
             : Value(tracksEmptyCrates),
+        sellsOnePrice: sellsOnePrice == null
+            ? const Value.absent()
+            : Value(sellsOnePrice),
         // logoUrl: pass a String to set/update, '' to clear, omit to leave.
         logoUrl: logoUrl == _absent
             ? const Value.absent()

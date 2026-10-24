@@ -67,6 +67,14 @@ class Businesses extends Table {
   // Set explicitly at onboarding and editable via CEO Settings → Business Info.
   BoolColumn get tracksEmptyCrates =>
       boolean().withDefault(const Constant(true))();
+  // "We sell at one price" (#493, option A). An owner setting in CEO
+  // Settings → Business Info, suggested ON at sign-up for a Restaurant only.
+  // When true the app hides every wholesale price box and the till always
+  // charges the Retail price; saved wholesale prices are never touched, so
+  // turning it off brings them all back. Default false: every existing shop
+  // keeps wholesale. Mirrors 0197_businesses_sells_one_price.sql.
+  BoolColumn get sellsOnePrice =>
+      boolean().withDefault(const Constant(false))();
   // Subscription / access gating (master plan §32). Set by the web admin
   // console in the cloud; CLOUD-AUTHORITATIVE / APP-READ-ONLY — these columns
   // are deliberately omitted from the businesses push whitelist
@@ -2929,7 +2937,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 85;
+  int get schemaVersion => 86;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -6423,6 +6431,23 @@ class AppDatabase extends _$AppDatabase {
         // alongside the 13 legacy units. TableMigration rebuilds the table
         // to update the SQLite table-level CHECK constraint.
         await m.alterTable(TableMigration(products));
+      }
+
+      if (from < 86) {
+        // ── v86 — #493: businesses.sells_one_price ("We sell at one price") ──
+        //
+        // Mirrors supabase/migrations/0197_businesses_sells_one_price.sql. One
+        // NOT NULL boolean with DEFAULT false, so a plain ADD COLUMN fills every
+        // existing shop with OFF. No businesses rebuild exists, so no stale-
+        // column pin is needed. Guarded, because a DB stepped back by the
+        // revert-then-re-upgrade tests already carries it from onCreate.
+        final hasSellsOnePrice = (await customSelect(
+          "SELECT 1 FROM pragma_table_info('businesses') "
+          "WHERE name = 'sells_one_price'",
+        ).get()).isNotEmpty;
+        if (!hasSellsOnePrice) {
+          await m.addColumn(businesses, businesses.sellsOnePrice);
+        }
       }
     },
     beforeOpen: (details) async {

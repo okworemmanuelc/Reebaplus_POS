@@ -65,8 +65,9 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
   }
 
   Widget _groupDropdown() {
-    final hasWholesale =
-        businessHasWholesale(ref.watch(currentBusinessProvider));
+    final hasWholesale = !businessSellsOnePrice(
+      ref.watch(currentBusinessProvider),
+    );
     if (!hasWholesale) return const SizedBox.shrink();
     return Column(
       children: [

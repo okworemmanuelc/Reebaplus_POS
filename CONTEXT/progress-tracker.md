@@ -7,17 +7,13 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
-### #493: One-price shops (2026-10-24)
-Branch `feat/493-one-price-shops`, worktree `../drinkPosApp-wt-493`.
-- All trades except Beverage distributor (`Industry.beverage`) operate as one-price shops: Restaurant, Supermarket, Pharmacy, Boutique, Phone & Gadgets, Bar, Building Materials, Frozen Foods & Grocery, and Other/Generic.
-- Core: Added `hasWholesale` flag to `Industry`, `isWholesaleBusiness(type)` and `isOnePriceBusiness(type)` helpers, and `businessHasWholesale(business)` / `businessIsOnePrice(business)` in `app_providers.dart`.
-- Mirroring & Forms: In `FastAddContext`, `hasWholesale` automatically mirrors `wholesalerPriceKobo = retailerPriceKobo` on save whenever wholesale pricing is absent or blank. On `AddProductScreen`, hides Wholesale Price input box and Wholesale profit row when `!hasWholesale`, keeping wholesale mirrored to retail.
-- Surfaces:
-  - Product Details: `ProductPricesCard` accepts `showWholesale: hasWholesale`, hiding the wholesale price tile and wholesale profit row for one-price shops.
-  - POS Home: Hides the price tier dropdown in header and search bar when `!hasWholesale`.
-  - Customers: Hides the Price Tier dropdown in `AddCustomerSheet` and `EditCustomerSheet`; hides customer tier `TagPill` in `CustomerProfileCard` and `CustomerListRow` when `!hasWholesale`.
-  - Receiving: `ReceiveCartScreen` displays "Price: ₦..." instead of "Ret: ... • Whls: ..." when `!hasWholesale`; `EditReceiveItemModal` hides Wholesale Price input and mirrors retail to wholesale on save.
-- Tests: Added comprehensive integration and unit tests in `test/industry/one_price_shops_test.dart` (13 tests passing) and updated `test/industry/industry_registry_test.dart` and `test/inventory/fast_add_product_model_test.dart`.
+### #493: "We sell at one price" (2026-10-24, reworked to owner option A)
+Branch `feat/493-one-price-shops`, worktree `../drinkPosApp-wt-493`, PR #510.
+- **Decision (owner, option A):** an owner setting in Business Info, "We sell at one price" (`businesses.sells_one_price`, default false). OFF for every existing shop; suggested ON at CEO sign-up for a Restaurant only (`suggestsOnePriceAtSignUp`, via `industryOf`); the owner can change it any time. The earlier per-industry flag (`Industry.hasWholesale`, `isWholesaleBusiness`/`isOnePriceBusiness`, `businessHasWholesale`) is removed; the one read site is `businessSellsOnePrice(BusinessData?)` in `app_providers.dart`.
+- **Data:** Drift v86 (guarded `addColumn`, no businesses rebuild exists); cloud `0197_businesses_sells_one_price.sql`; on the businesses push whitelist; pull defaults a missing value to false. Sign-up writes it by a best-effort follow-up `businesses` update after `complete_onboarding` (RPC unchanged, no overload); on failure the shop starts OFF and the local mirror records OFF.
+- **Money rules when ON:** the till charges Retail only — `PosController.selectedGroup` is always retailer and a Wholesaler customer does not switch it (every grid/scan/modal price pick and the line's `priceTier` read that getter). Saved wholesale prices are never overwritten: edit keeps `existingWholesalerPriceKobo`, a new product mirrors retail, Edit Receive Item leaves the line's wholesale alone. Turning it OFF brings every saved wholesale price back.
+- **UI when ON:** wholesale boxes, the POS tier dropdown, customer Price Tier pickers and tier pills are hidden; Product Details and the receive cart show one "Price".
+- **Deploy order:** push 0197 BEFORE shipping a v86 app (the app pushes the column on every businesses upsert). Parity: reebaplus-web#142.
 
 ### #490 / #492 G4: products.unit CHECK admits Kg and Litre (2026-10-24)
 Branch `feat/490-g4-unit-check`, worktree `../drinkPosApp-wt-490-g4`. Widens `products.unit` in Drift (`kProductUnits` and `Products.customConstraints`) and PostgreSQL to include `Kg` and `Litre` (15 units total). Bumps Drift `schemaVersion` from 84 to 85 with `TableMigration(products)` rebuild (preserving all columns and `units_per_pack`). Created cloud migration `supabase/migrations/0196_products_unit_kg_litre.sql` (drops old unit constraints while carefully excluding `units_per_pack`). Added migration upgrade and CHECK constraint tests in `test/database/migration_upgrade_test.dart`.

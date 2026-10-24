@@ -58,6 +58,7 @@ BusinessData _business({required String type}) => BusinessData(
   // Opted in — so for a non-crate TRADE the gate can only be closed by the
   // type, which is exactly the axis under test.
   tracksEmptyCrates: true,
+  sellsOnePrice: false,
   subscriptionStatus: 'active',
   subscriptionPlan: null,
   trialEndsAt: null,
@@ -314,6 +315,7 @@ void main() {
                 lastUpdatedAt: DateTime.utc(2026, 1, 1),
                 ownerId: null,
                 tracksEmptyCrates: false,
+                sellsOnePrice: false,
                 subscriptionStatus: 'active',
                 subscriptionPlan: null,
                 trialEndsAt: null,

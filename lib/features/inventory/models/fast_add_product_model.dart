@@ -23,7 +23,8 @@ class FastAddContext {
     required this.canEditBuying,
     required this.storeIds,
     this.routesToReceiveCart = false,
-    this.hasWholesale = true,
+    this.sellsOnePrice = false,
+    this.existingWholesalerPriceKobo,
   });
 
   /// `businessTracksCrates(business)` — a crate business surfaces a
@@ -43,9 +44,16 @@ class FastAddContext {
   /// delivery list, not into a store, so no store is resolved or asked for.
   final bool routesToReceiveCart;
 
-  /// Whether wholesale pricing is supported (#493). When false (one-price shops),
-  /// the wholesale price automatically mirrors retail price behind the scenes.
-  final bool hasWholesale;
+  /// "We sell at one price" (#493): `businessSellsOnePrice(business)`. When
+  /// true the Wholesale box is hidden, so the model decides the stored value:
+  /// a new product's wholesale = its retail price, and an edited product keeps
+  /// [existingWholesalerPriceKobo] untouched.
+  final bool sellsOnePrice;
+
+  /// The product's saved wholesale price on EDIT (null on ADD). In a one-price
+  /// shop it is written back unchanged, so a saved wholesale price is never
+  /// overwritten and turning the setting off brings it back.
+  final int? existingWholesalerPriceKobo;
 
   /// A business with exactly one store never asks which store to stock into.
   bool get isSingleStore => storeIds.length == 1;
@@ -271,11 +279,19 @@ FastAddResult resolveFastAdd(FastAddInput input, FastAddContext context) {
     );
   }
 
-  // Wholesaler mirror: blank OR one-price trade ⇒ copy the selling price into the stored value.
+  // Wholesaler price. One-price shop (#493): an edit keeps the saved value
+  // untouched; a new product mirrors the selling price. Otherwise a blank box
+  // mirrors the selling price into the stored value.
   final wholesaleRaw = input.wholesalePrice.trim();
-  final wholesalerPriceKobo = (!context.hasWholesale || wholesaleRaw.isEmpty)
-      ? retailerPriceKobo
-      : _toKobo(wholesaleRaw);
+  final existingWholesale = context.existingWholesalerPriceKobo;
+  final int wholesalerPriceKobo;
+  if (context.sellsOnePrice) {
+    wholesalerPriceKobo = existingWholesale ?? retailerPriceKobo;
+  } else {
+    wholesalerPriceKobo = wholesaleRaw.isEmpty
+        ? retailerPriceKobo
+        : _toKobo(wholesaleRaw);
+  }
 
   // Unit + effective crate tracking. A blank/cleared unit (#108) resolves to
   // null — no unit — not a trade default; the form pre-fills the trade's
