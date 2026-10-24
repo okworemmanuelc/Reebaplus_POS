@@ -10,7 +10,6 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
-import 'package:reebaplus_pos/features/inventory/widgets/update_product_sheet.dart';
 import 'package:reebaplus_pos/features/receiving/widgets/receive_product_grid.dart';
 
 void main() {
@@ -82,8 +81,8 @@ void main() {
 
   tearDown(() => db.close());
 
-  testWidgets('AddProductScreen receiveMode = false is a Fast-Add form: '
-      'single-store hides Store, Supplier lives under More details', (
+  testWidgets('AddProductScreen receiveMode = false: single-store hides '
+      'Store, Supplier sits in the open More details card (#487)', (
     tester,
   ) async {
     final container = ProviderContainer(
@@ -112,23 +111,17 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // The fast section carries the three required fields (ADR 0006).
-    expect(find.text('Product Name *'), findsOneWidget);
-    expect(find.textContaining('Selling Price'), findsOneWidget);
-    expect(find.text('Quantity *'), findsOneWidget);
+    // The three required fields are all on screen (ADR 0006).
+    expect(find.text('Product Name'), findsOneWidget);
+    expect(find.text('Retail Price'), findsOneWidget);
+    expect(find.text('Opening Quantity'), findsOneWidget);
 
     // A single-store business is never asked which store to stock into.
-    expect(find.text('STORE *'), findsNothing);
+    expect(find.byKey(AddProductKeys.store), findsNothing);
 
-    // Supplier is collapsed under "More details" until the section is expanded.
-    expect(find.text('Supplier'), findsNothing);
+    // More details is an open card (no fold): Supplier is already there.
     expect(find.text('More details'), findsOneWidget);
-
-    await tester.ensureVisible(find.text('More details'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('More details'));
-    await tester.pumpAndSettle();
-    expect(find.text('Supplier'), findsOneWidget);
+    expect(find.byKey(AddProductKeys.supplier), findsOneWidget);
 
     container.dispose();
     await tester.pump(Duration.zero);
@@ -161,132 +154,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('SUPPLIER (optional)'), findsNothing);
-    expect(find.text('STORE *'), findsNothing);
-
-    container.dispose();
-    await tester.pump(Duration.zero);
-  });
-
-  testWidgets('UpdateProductSheet receiveMode = false hides Stock Management and renders Store/Supplier', (tester) async {
-    final container = ProviderContainer(
-      overrides: [
-        databaseProvider.overrideWithValue(db),
-        currentUserPermissionsProvider.overrideWithValue({
-          'products.edit_buying_price',
-          'products.edit_price',
-          'stock.add',
-        }),
-      ],
-    );
-
-    final user = await db.storesDao.getUserById(userId);
-    container.read(authProvider).value = user;
-
-    final product = ProductData(
-      id: 'prod-1',
-      businessId: businessId,
-      name: 'Star 60cl',
-      retailerPriceKobo: 12000,
-      wholesalerPriceKobo: 11000,
-      buyingPriceKobo: 10000,
-      unit: 'Bottle',
-      trackEmpties: true,
-      emptyCrateValueKobo: 200,
-      allowFractionalSales: false,
-      lowStockThreshold: 5,
-      avgDailySales: 0.0,
-      leadTimeDays: 0,
-      safetyStockQty: 0,
-      monthlyTargetUnits: 0,
-      isAvailable: true,
-      isDeleted: false,
-      version: 1,
-      createdAt: DateTime.now(),
-      lastUpdatedAt: DateTime.now(),
-    );
-
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: MaterialApp(
-          home: Scaffold(
-            body: UpdateProductSheet(
-              product: product,
-              totalStock: 10,
-              receiveMode: false,
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Stock Management'), findsNothing);
-    expect(find.text('SUPPLIER (optional)'), findsOneWidget);
-    expect(find.text('STORE *'), findsOneWidget);
-
-    container.dispose();
-    await tester.pump(Duration.zero);
-  });
-
-  testWidgets('UpdateProductSheet receiveMode = true renders Stock Management and hides Store/Supplier', (tester) async {
-    final container = ProviderContainer(
-      overrides: [
-        databaseProvider.overrideWithValue(db),
-        currentUserPermissionsProvider.overrideWithValue({
-          'products.edit_buying_price',
-          'products.edit_price',
-          'stock.add',
-        }),
-      ],
-    );
-
-    final user = await db.storesDao.getUserById(userId);
-    container.read(authProvider).value = user;
-
-    final product = ProductData(
-      id: 'prod-1',
-      businessId: businessId,
-      name: 'Star 60cl',
-      retailerPriceKobo: 12000,
-      wholesalerPriceKobo: 11000,
-      buyingPriceKobo: 10000,
-      unit: 'Bottle',
-      trackEmpties: true,
-      emptyCrateValueKobo: 200,
-      allowFractionalSales: false,
-      lowStockThreshold: 5,
-      avgDailySales: 0.0,
-      leadTimeDays: 0,
-      safetyStockQty: 0,
-      monthlyTargetUnits: 0,
-      isAvailable: true,
-      isDeleted: false,
-      version: 1,
-      createdAt: DateTime.now(),
-      lastUpdatedAt: DateTime.now(),
-    );
-
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: MaterialApp(
-          home: Scaffold(
-            body: UpdateProductSheet(
-              product: product,
-              totalStock: 10,
-              receiveMode: true,
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Stock Management'), findsOneWidget);
-    expect(find.text('SUPPLIER (optional)'), findsNothing);
-    expect(find.text('STORE *'), findsNothing);
+    // The same form; the Store box is hidden (the quantity goes onto the
+    // delivery list) and the delivery carries its own supplier.
+    expect(find.text('Opening Quantity'), findsOneWidget);
+    expect(find.byKey(AddProductKeys.store), findsNothing);
+    expect(find.byKey(AddProductKeys.supplier), findsNothing);
 
     container.dispose();
     await tester.pump(Duration.zero);
@@ -309,6 +181,7 @@ void main() {
         safetyStockQty: 0,
         monthlyTargetUnits: 0,
         isAvailable: true,
+        showOnline: true,
         isDeleted: false,
         version: 1,
         createdAt: DateTime.now(),

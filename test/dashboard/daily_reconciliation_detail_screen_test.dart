@@ -80,6 +80,7 @@ BusinessData _business({required bool crates}) => BusinessData(
   timezone: 'Africa/Lagos',
   onboardingComplete: true,
   tracksEmptyCrates: crates,
+  sellsOnePrice: false,
   subscriptionStatus: 'active',
   createdAt: DateTime.utc(2026, 1, 1),
   lastUpdatedAt: DateTime.utc(2026, 1, 1),

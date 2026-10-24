@@ -4,48 +4,100 @@ import 'package:drift/drift.dart' as drift;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:reebaplus_pos/core/theme/app_icons.dart';
+import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/industry/lexicon.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
-import 'package:reebaplus_pos/core/industry/lexicon.dart';
 import 'package:reebaplus_pos/core/result.dart';
-import 'package:reebaplus_pos/features/inventory/widgets/product_photo_field.dart';
-import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
-import 'package:reebaplus_pos/core/utils/number_format.dart';
-import 'package:reebaplus_pos/core/utils/notifications.dart';
-import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/services/barcode_suggestion.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
+import 'package:reebaplus_pos/core/services/catalogue_lookup.dart';
 import 'package:reebaplus_pos/core/utils/factory_barcode.dart';
+import 'package:reebaplus_pos/shared/scanner/scanner_providers.dart';
+import 'package:reebaplus_pos/core/utils/notifications.dart';
+import 'package:reebaplus_pos/core/utils/number_format.dart';
+import 'package:reebaplus_pos/core/utils/product_name.dart';
+import 'package:reebaplus_pos/core/utils/product_unit.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/inventory/models/fast_add_product_model.dart';
+import 'package:reebaplus_pos/features/inventory/models/product_form_rules.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/catalogue_filled_note.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/inventory_parts.dart';
-import 'package:reebaplus_pos/core/theme/app_decorations.dart';
-import 'package:reebaplus_pos/core/theme/app_theme.dart';
-import 'package:reebaplus_pos/core/theme/design_tokens.dart';
-import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/product_details_route.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/product_form_parts.dart';
+import 'package:reebaplus_pos/features/payments/widgets/supplier_form_sheet.dart';
+import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
+import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
+import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
-import 'package:reebaplus_pos/features/inventory/models/fast_add_product_model.dart';
-import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
-import 'package:reebaplus_pos/core/utils/responsive.dart';
-import 'package:reebaplus_pos/core/utils/product_name.dart';
-import 'package:reebaplus_pos/shared/widgets/app_button.dart';
-import 'package:reebaplus_pos/shared/widgets/app_input.dart';
-import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
-import 'package:reebaplus_pos/features/payments/widgets/supplier_form_sheet.dart';
+/// Keys the Add Product tests find its boxes and buttons by (#487).
+abstract final class AddProductKeys {
+  static const name = ValueKey('add-product-name');
+  static const barcode = ValueKey('add-product-barcode');
+  static const category = ValueKey('add-product-category');
+  static const manufacturer = ValueKey('add-product-manufacturer');
+  static const unitsPerPack = ValueKey('add-product-units-per-pack');
+  static const cost = ValueKey('add-product-cost');
+  static const retail = ValueKey('add-product-retail');
+  static const wholesale = ValueKey('add-product-wholesale');
+  static const store = ValueKey('add-product-store');
+  static const quantity = ValueKey('add-product-quantity');
+  static const lowStock = ValueKey('add-product-low-stock');
+  static const trackEmpties = ValueKey('add-product-track-empties');
+  static const crateDeposit = ValueKey('add-product-crate-deposit');
+  static const description = ValueKey('add-product-description');
+  static const supplier = ValueKey('add-product-supplier');
+  static const save = ValueKey('add-product-save');
+  static const saveAndNew = ValueKey('add-product-save-and-new');
+  static const preview = ValueKey('add-product-preview');
 
-/// Add Product — a full pushed screen (master plan §16.5, amended 2026-05-30:
-/// the form outgrew a bottom-sheet modal). Also doubles as the "add stock to an
-/// existing product" surface when a name search matches an existing product.
+  /// One unit chip, by its SAVED value ("Bottle", shown as "Bottle Crate").
+  static ValueKey<String> unitChip(String unit) =>
+      ValueKey('add-product-unit-$unit');
+}
+
+/// How the form is laid out, from the MEASURED body width (#487).
+enum _FormLayout {
+  /// Under 600: one column of cards, the footer bar.
+  phone,
+
+  /// 600 to 1000: two columns of cards, the footer bar.
+  twoColumn,
+
+  /// 1000 and over: two columns plus the Preview panel, which holds the save
+  /// buttons (no footer bar).
+  wide;
+
+  static _FormLayout of(double width) => width >= 1000
+      ? _FormLayout.wide
+      : (width >= 600 ? _FormLayout.twoColumn : _FormLayout.phone);
+}
+
+/// Add Product (#487, `phone-add-product-light.png` /
+/// `wide-add-product-light.png`): one form for every new product — from
+/// Inventory, Home, a POS scan of an unknown code, and Receive Stock's "New
+/// product". It only creates; typing a name you already have lists that
+/// product, and tapping it opens its Product Details.
 ///
-/// Pivot step 15 changes vs the old `AddProductSheet`:
-///  - Scaffold screen (AppBar + body + pinned save button) instead of a modal.
-///  - Three prices: Retailer + Wholesaler (both required), Buying (required,
-///    hidden unless the role grants `products.edit_buying_price`). The interim
-///    "wholesaler mirrors retailer" stopgap is gone.
-///  - Empty Crate Value (₦) shown only when "Track empty crate returns" is on.
-///  - Optional Expiry Date (all business types).
-///  - Colour selector removed (products keep a default `colorHex`).
+/// Cards: Product Details (photo, name, barcode, category, brand), Product
+/// Unit (chips + "how many in one"), Pricing (cost, retail, wholesale, profit
+/// rows), Stock (store, opening quantity, low-stock alert), Track Empty Crates
+/// (crate business + Bottle only) and an open More details card. Validation
+/// and defaulting stay in the pure Fast-Add model (ADR 0006); an error scrolls
+/// to its box.
+///
+/// In [receiveMode] the Store box is hidden and the opening quantity goes onto
+/// the Receive Stock delivery list instead of into a store.
+/// The small note under the barcode box about the shared-list check (#465).
+enum _BarcodeNote { offline, newBarcode }
+
 class AddProductScreen extends ConsumerStatefulWidget {
   final void Function(ProductData)? onProductAdded;
   final bool receiveMode;
@@ -60,12 +112,18 @@ class AddProductScreen extends ConsumerStatefulWidget {
   /// POS is selling from rather than the first store. Ignored when the id is
   /// not among the active stores (falls back to the first store).
   final String? initialStoreId;
+
+  /// Edit mode (#487 PR 4): the product to change. The form opens filled in
+  /// from it, hides Store and Opening Quantity (stock changes go through
+  /// Adjust Stock) and saves through the same calls the old Edit pop-up used.
+  final ProductData? editProduct;
   const AddProductScreen({
     super.key,
     this.onProductAdded,
     this.receiveMode = false,
     this.prefilledBarcode,
     this.initialStoreId,
+    this.editProduct,
   });
 
   @override
@@ -81,43 +139,45 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   final _emptyCrateValueCtrl = TextEditingController();
   final _lowStockCtrl = TextEditingController(text: '5');
   final _initialStockCtrl = TextEditingController(text: '0');
-  final _supplierCtrl = TextEditingController();
-  final _manufacturerCtrl = TextEditingController();
-  final _categoryCtrl = TextEditingController();
   final _barcodeCtrl = TextEditingController();
+  final _unitsPerPackCtrl = TextEditingController();
+  final _nameFocus = FocusNode();
+
+  /// The boxes a validation error scrolls to.
+  final _fieldKeys = {for (final f in FastAddField.values) f: GlobalKey()};
 
   /// The name of another product already using the typed barcode (#113). Non-
   /// null ⇒ a soft collision the form warns about; it never blocks the save.
   String? _barcodeCollisionName;
 
-  // Nullable (#108): null = no unit. Pre-filled with the trade's Lexicon unit
-  // as a clearable suggestion (initState / _clearExistingProduct); clearing it
-  // via the dropdown's "No unit" option saves null.
+  // Nullable (#108): null = no unit, the default. Tapping the selected chip
+  // again clears it.
   String? _unit;
-  bool _trackEmpties = true; // defaults true when unit is Bottle
+  bool _trackEmpties = false; // turns on when Bottle is picked
   bool _allowFractionalSales = false;
   // Colour selector is deferred (master plan §16.5); products keep a default.
   final String _colorHex = '#3B82F6';
-  String? _size; // null = not a crate-based product
   DateTime? _expiryDate; // optional single expiry date (all business types)
   StoreData? _selectedStore;
-  SupplierData? _selectedSupplier;
+
+  // Category / Brand / Supplier: an existing row, or a new name the save
+  // creates (get-or-create, so nothing is written before the save is
+  // confirmed).
   CategoryData? _selectedCategory;
+  String? _newCategoryName;
   ManufacturerData? _selectedManufacturer;
+  String? _newManufacturerName;
+  SupplierData? _selectedSupplier;
+  String? _newSupplierName;
 
   List<StoreData> _stores = [];
   List<SupplierData> _allSuppliers = [];
   List<CategoryData> _allCategories = [];
-  List<CategoryData> _categorySuggestions = [];
-  List<SupplierData> _supplierSuggestions = [];
   List<ManufacturerData> _allManufacturers = [];
-  List<ManufacturerData> _manufacturerSuggestions = [];
 
   List<ProductData> _allProducts = [];
   List<ProductData> _productSuggestions = [];
-  ProductData? _selectedExistingProduct;
   bool _isSaving = false;
-  String? _errorMessage;
 
   /// Optional product photo picked but not yet saved (#78). Uploaded after the
   /// new product row is created, in [_persistNewProduct].
@@ -133,34 +193,30 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   /// so [_loadData] re-adds it when it rebuilds [_dynamicUnits].
   String? _catalogueUnit;
 
+  /// Edit mode: the saved photo's local file, shown until a new one is picked.
+  String? _existingImagePath;
+
+  /// Edit mode: the category / brand / supplier are seeded once, on the first
+  /// load, from the product's ids.
+  bool _editSeeded = false;
+
+  bool get _isEdit => widget.editProduct != null;
+
+  /// The shop's own products that carry the barcode in the box (#465), the
+  /// person's "Create a new product anyway", and the shared-list note.
+  List<ProductData> _barcodeMatches = const [];
+  bool _matchesDismissed = false;
+  _BarcodeNote? _barcodeNote;
+
   /// Debounces catalogue lookups while the barcode box is being typed in.
   Timer? _catalogueDebounce;
   static const _catalogueDebounceDelay = Duration(milliseconds: 500);
 
-  /// Fast-Add: the "More details" section is collapsed by default (ADR 0006).
-  bool _showMoreDetails = false;
-
-  /// The required fields that live in the always-visible fast section. A
-  /// validation error naming anything else (only Store today) expands "More
-  /// details" first, so an error never points at a collapsed field. The item
-  /// label morphs per trade (#112), so the name entry is built from the active
-  /// Lexicon — a hardcoded 'Product Name' would never match 'Medicine Name'.
-  Set<String> get _fastSectionFields => {
-    '${_lexicon.item} Name',
-    'Selling Price',
-    'Quantity',
-    'Buying Price',
-    'Manufacturer',
-  };
-
-  List<String> _dynamicUnits = kProductUnits;
+  List<String> _dynamicUnits = kGenericUnits;
 
   /// The active industry's words + presets (#80). Read (not watched) in helpers
   /// called during build; the form is opened for one business so it is stable.
   Lexicon get _lexicon => ref.read(industryLexiconProvider);
-
-  String get _nameHint => _lexicon.itemNameHint;
-  String get _descriptionHint => _lexicon.itemDescriptionHint;
 
   /// Whether the current role may see / set the buying price (master plan
   /// §16.5 / §16.7). Reads (not watches) so it is safe to call from `_save`.
@@ -170,156 +226,262 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   void initState() {
     super.initState();
     // Default to "No unit" (owner request): the unit is a deliberate, up-front
-    // choice, not a pre-filled trade guess. The trade's starter units are still
-    // OFFERED in the dropdown (via _dynamicUnits) — just not pre-selected — so a
-    // crate business picks Bottle itself to engage empty-crate tracking.
-    _unit = null;
+    // choice. The trade's starter units are offered as chips, none selected.
     _dynamicUnits = _lexicon.starterUnits;
-    _trackEmpties = _unit?.toLowerCase() == 'bottle';
+    // The preview and the profit rows follow what is typed.
+    for (final c in [
+      _nameCtrl,
+      _retailPriceCtrl,
+      _wholesalePriceCtrl,
+      _buyingPriceCtrl,
+      _initialStockCtrl,
+      _lowStockCtrl,
+      _unitsPerPackCtrl,
+    ]) {
+      c.addListener(_onFieldEdited);
+    }
     // #118: seed the Barcode field from a POS scan of an unknown code so the
     // cashier catalogues the just-scanned product without retyping it.
-    final prefillBarcode = widget.prefilledBarcode?.trim() ?? '';
+    final prefillBarcode = _isEdit
+        ? ''
+        : (widget.prefilledBarcode?.trim() ?? '');
     if (prefillBarcode.isNotEmpty) _barcodeCtrl.text = prefillBarcode;
+    if (_isEdit) _seedFromProduct(widget.editProduct!);
     _loadData();
     // #332: a POS scan of an unknown code looks it up in the shared catalogue.
-    if (prefillBarcode.isNotEmpty) _lookUpCatalogue(prefillBarcode);
+    if (prefillBarcode.isNotEmpty) {
+      _onBarcodeChanged(prefillBarcode, immediate: true);
+    }
   }
 
+  /// Edit mode: fills every box from [p]. Money boxes show a blank for a zero
+  /// (an uncosted product), which is what "no cost yet" means.
+  void _seedFromProduct(ProductData p) {
+    String money(int kobo) => kobo == 0 ? '' : (kobo / 100).toStringAsFixed(2);
+    _nameCtrl.text = p.name;
+    _subtitleCtrl.text = p.subtitle ?? '';
+    _barcodeCtrl.text = p.barcode ?? '';
+    _retailPriceCtrl.text = money(p.retailerPriceKobo);
+    _wholesalePriceCtrl.text = money(p.wholesalerPriceKobo);
+    _buyingPriceCtrl.text = money(p.buyingPriceKobo);
+    _emptyCrateValueCtrl.text = money(p.emptyCrateValueKobo);
+    _lowStockCtrl.text = p.lowStockThreshold.toString();
+    _unitsPerPackCtrl.text = p.unitsPerPack?.toString() ?? '';
+    _unit = p.unit;
+    _trackEmpties = p.trackEmpties;
+    _allowFractionalSales = p.allowFractionalSales;
+    _expiryDate = p.expiryDate;
+    _existingImagePath = p.imagePath;
+  }
+
+  void _onFieldEdited() {
+    if (mounted) setState(() {});
+  }
+
+  /// Loads the pickers' lists. Re-run after Save & New, keeping the chosen
+  /// store, category and manufacturer (re-read, so a row the save created or
+  /// changed is current).
   Future<void> _loadData() async {
     final db = ref.read(databaseProvider);
     final whs = await db.storesDao.getActiveStores();
     final suppliers = await db.catalogDao.getAllSuppliers();
     final manufacturers = await db.inventoryDao.getAllManufacturers();
-    // Categories are no longer preloaded — they are created on the fly via the
-    // searchable category dropdown (_createNewCategory / _getOrCreateCategory).
     final cats = await db.inventoryDao.getAllCategories();
-    final productsList = await (db.select(
-      db.products,
-    )..where((t) => t.isDeleted.not())).get();
+    final productsList = await db.catalogDao.getActiveProducts();
     final uniqueUnits = await db.catalogDao.getUniqueProductUnits();
+    // Edit mode: resolve a renderable path for the saved photo (downloads it
+    // once if only the cloud URL is known), as the old Edit pop-up did.
+    final edit = widget.editProduct;
+    final cachedPhoto = edit == null
+        ? null
+        : await ref
+              .read(productImageServiceProvider)
+              .ensureCached(productId: edit.id, imageUrl: edit.imageUrl);
 
-    if (mounted) {
-      setState(() {
-        _stores = whs;
-        _allSuppliers = suppliers;
-        _allManufacturers = manufacturers;
-        _allCategories = cats;
-        _allProducts = productsList;
-        // Merge the industry's starter units (#80) with any already in use.
-        final listedUnits = {..._lexicon.starterUnits, ...uniqueUnits};
-        // A catalogue unit (#332) filled in before this load: take the
-        // list's own spelling when it is listed after all, else keep it.
-        final catalogueUnit = _catalogueUnit;
-        if (catalogueUnit != null) {
-          final listed = listedUnits
-              .where((u) => u.toLowerCase() == catalogueUnit.toLowerCase())
-              .firstOrNull;
-          if (listed != null) {
-            if (_unit == catalogueUnit) _unit = listed;
-            _catalogueUnit = null;
-          }
-        }
-        final mergedUnits = {...listedUnits, ?_catalogueUnit}.toList()..sort();
-        _dynamicUnits = mergedUnits;
+    if (!mounted) return;
+    setState(() {
+      _stores = whs;
+      _allSuppliers = suppliers;
+      _allManufacturers = manufacturers;
+      _allCategories = cats;
+      _allProducts = productsList;
+      _dynamicUnits = _mergeUnits(uniqueUnits);
 
-        // #320: start on the caller's store (the POS active store) when it is
-        // one of the active stores; otherwise the first store, as before.
-        if (whs.isNotEmpty) {
-          _selectedStore = whs.firstWhere(
-            (w) => w.id == widget.initialStoreId,
-            orElse: () => whs.first,
-          );
-        }
-      });
+      if (cachedPhoto != null) _existingImagePath = cachedPhoto;
+      if (edit != null && !_editSeeded) {
+        _editSeeded = true;
+        _selectedCategory = cats
+            .where((c) => c.id == edit.categoryId)
+            .firstOrNull;
+        _selectedManufacturer = manufacturers
+            .where((m) => m.id == edit.manufacturerId)
+            .firstOrNull;
+        _selectedSupplier = suppliers
+            .where((s) => s.id == edit.supplierId)
+            .firstOrNull;
+      }
+      _selectedCategory = cats
+          .where((c) => c.id == _selectedCategory?.id)
+          .firstOrNull;
+      _selectedManufacturer = manufacturers
+          .where((m) => m.id == _selectedManufacturer?.id)
+          .firstOrNull;
+      // #320: start on the caller's store (the POS active store) when it is
+      // one of the active stores; otherwise the first store. A store already
+      // chosen is kept.
+      if (whs.isNotEmpty) {
+        final keep = _selectedStore?.id ?? widget.initialStoreId;
+        _selectedStore = whs.firstWhere(
+          (w) => w.id == keep,
+          orElse: () => whs.first,
+        );
+      }
+    });
+  }
+
+  /// The chips' units: the trade's starter units in their own order, then any
+  /// other unit already in use (and a catalogue unit, #332), A–Z.
+  List<String> _mergeUnits(List<String> inUse) {
+    final starters = _lexicon.starterUnits;
+    bool listed(String u, Iterable<String> list) =>
+        list.any((s) => s.toLowerCase() == u.toLowerCase());
+    // A catalogue unit (#332) filled in before this load: take the list's own
+    // spelling when it is listed after all, else keep it.
+    final catalogueUnit = _catalogueUnit;
+    if (catalogueUnit != null) {
+      final match = [...starters, ...inUse]
+          .where((u) => u.toLowerCase() == catalogueUnit.toLowerCase())
+          .firstOrNull;
+      if (match != null) {
+        if (_unit == catalogueUnit) _unit = match;
+        _catalogueUnit = null;
+      }
     }
+    final extras = <String>[];
+    for (final u in [...inUse, ?_catalogueUnit, ?widget.editProduct?.unit]) {
+      if (!listed(u, starters) && !listed(u, extras)) extras.add(u);
+    }
+    extras.sort();
+    return [...starters, ...extras];
   }
 
   @override
   void dispose() {
-    _nameCtrl.dispose();
-    _subtitleCtrl.dispose();
-    _retailPriceCtrl.dispose();
-    _wholesalePriceCtrl.dispose();
-    _buyingPriceCtrl.dispose();
-    _emptyCrateValueCtrl.dispose();
-    _lowStockCtrl.dispose();
-    _initialStockCtrl.dispose();
-    _supplierCtrl.dispose();
-    _manufacturerCtrl.dispose();
-    _categoryCtrl.dispose();
-    _barcodeCtrl.dispose();
+    for (final c in [
+      _nameCtrl,
+      _subtitleCtrl,
+      _retailPriceCtrl,
+      _wholesalePriceCtrl,
+      _buyingPriceCtrl,
+      _emptyCrateValueCtrl,
+      _lowStockCtrl,
+      _initialStockCtrl,
+      _barcodeCtrl,
+      _unitsPerPackCtrl,
+    ]) {
+      c.dispose();
+    }
+    _nameFocus.dispose();
     _catalogueDebounce?.cancel();
     super.dispose();
   }
 
-  /// Soft barcode-collision check (#113): looks up the typed barcode and, if a
-  /// DIFFERENT product already uses it, records that product's name so the field
-  /// can warn. Never blocks — barcodes are only softly unique (no DB UNIQUE, to
-  /// avoid jamming the offline outbox).
-  Future<void> _onBarcodeChanged(String value) async {
-    final trimmed = value.trim();
-    _scheduleCatalogueLookup(trimmed);
-    if (trimmed.isEmpty) {
-      if (_barcodeCollisionName != null) {
-        setState(() => _barcodeCollisionName = null);
+  /// Checks the barcode in the box (#465): the shop's own products first (works
+  /// offline), then, for a factory barcode, the shared list. Never blocks a
+  /// save. Edit mode keeps only the soft "already used" warning (#113).
+  Future<void> _onBarcodeChanged(String value, {bool immediate = false}) async {
+    final code = value.trim();
+    _catalogueDebounce?.cancel();
+    if (code.isEmpty) {
+      if (_barcodeCollisionName != null ||
+          _barcodeMatches.isNotEmpty ||
+          _barcodeNote != null) {
+        setState(() {
+          _barcodeCollisionName = null;
+          _barcodeMatches = const [];
+          _barcodeNote = null;
+        });
       }
       return;
     }
-    final db = ref.read(databaseProvider);
-    final match = await db.catalogDao.findProductByBarcode(trimmed);
-    if (!mounted) return;
-    final collision =
-        (match != null && match.id != _selectedExistingProduct?.id)
-        ? match.name
-        : null;
-    if (collision != _barcodeCollisionName) {
-      setState(() => _barcodeCollisionName = collision);
+    final matches = await ref
+        .read(databaseProvider)
+        .catalogDao
+        .findProductsByBarcode(code);
+    if (!mounted || _barcodeCtrl.text.trim() != code) return;
+    if (_isEdit) {
+      // The product's own barcode is not a collision.
+      final other = matches
+          .where((p) => p.id != widget.editProduct!.id)
+          .firstOrNull;
+      if (other?.name != _barcodeCollisionName) {
+        setState(() => _barcodeCollisionName = other?.name);
+      }
+      return;
     }
+    setState(() {
+      _barcodeMatches = matches;
+      _matchesDismissed = false;
+      _barcodeNote = null;
+    });
+    if (matches.isNotEmpty) return;
+    if (FactoryBarcode.tryParse(code) == null) {
+      // A shop-made code never reaches the shared list.
+      setState(() => _barcodeNote = _BarcodeNote.newBarcode);
+    } else if (immediate) {
+      await _lookUpCatalogue(code);
+    } else {
+      _catalogueDebounce = Timer(
+        _catalogueDebounceDelay,
+        () => _lookUpCatalogue(code),
+      );
+    }
+  }
+
+  /// The camera button (#465). A new product checks the code like a typed one,
+  /// at once; edit mode only drops it into the box. The camera closes after
+  /// the first read here (POS keeps scanning).
+  Future<void> _scanBarcode() async {
+    await ref
+        .read(barcodeScannerProvider)
+        .scanSession(
+          context,
+          onCode: (scannerContext, code) async {
+            final trimmed = code.trim();
+            if (trimmed.isEmpty) return;
+            _barcodeCtrl.text = trimmed;
+            Navigator.of(scannerContext).pop();
+            if (!_isEdit) await _onBarcodeChanged(trimmed, immediate: true);
+          },
+        );
   }
 
   // ── Shared barcode catalogue (ADR 0029 §8, #332) ─────────────────────────
-
-  /// Only a brand-new product is filled in: never with an existing product
-  /// picked for restock. (Edits use Update Product, and the #321 "link to an
-  /// existing product" flow never opens this screen.)
-  bool get _canSuggestFromCatalogue => _selectedExistingProduct == null;
-
-  /// The photo box only exists on the Fast-Add form for a new product, so a
-  /// suggested photo is only held there.
-  bool get _showsPhotoField =>
-      _selectedExistingProduct == null && !widget.receiveMode;
-
-  /// Looks a typed or scanned [code] up after a short pause. A code that is
-  /// not a factory barcode never reaches the service.
-  void _scheduleCatalogueLookup(String code) {
-    _catalogueDebounce?.cancel();
-    if (!_canSuggestFromCatalogue || FactoryBarcode.tryParse(code) == null) {
-      return;
-    }
-    _catalogueDebounce = Timer(
-      _catalogueDebounceDelay,
-      () => _lookUpCatalogue(code),
-    );
-  }
 
   /// Asks the shared catalogue about [code] and fills only the boxes that are
   /// still empty when the answer comes. The answer is dropped when the barcode
   /// box no longer holds [code]. Any failure leaves the form alone, silently;
   /// saving never waits on this.
   Future<void> _lookUpCatalogue(String code) async {
-    if (!_canSuggestFromCatalogue || FactoryBarcode.tryParse(code) == null) {
-      return;
-    }
+    if (FactoryBarcode.tryParse(code) == null) return;
     final service = ref.read(barcodeCatalogueServiceProvider);
-    // Only download the photo when it could be used (saves phone data);
+    // Only download the photo while none is held (saves phone data);
     // _applyCatalogueSuggestion re-checks before using the bytes.
-    final suggestion = await service.lookup(
+    final outcome = await service.lookupOutcome(
       code,
-      includePhoto: _showsPhotoField && _pendingImageBytes == null,
+      includePhoto: _pendingImageBytes == null,
     );
-    if (suggestion == null || !mounted) return;
-    if (_barcodeCtrl.text.trim() != code || !_canSuggestFromCatalogue) return;
-    _applyCatalogueSuggestion(suggestion);
+    if (!mounted || _barcodeCtrl.text.trim() != code) return;
+    switch (outcome) {
+      case CatalogueFound(:final suggestion) when !suggestion.isEmpty:
+        _applyCatalogueSuggestion(suggestion);
+      case CatalogueUnreachable():
+        setState(() => _barcodeNote = _BarcodeNote.offline);
+      case CatalogueLookupFailed():
+        break;
+      case CatalogueFound() || CatalogueNothingShared():
+        setState(() => _barcodeNote = _BarcodeNote.newBarcode);
+    }
   }
 
   void _applyCatalogueSuggestion(BarcodeSuggestion suggestion) {
@@ -328,8 +490,11 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     final unit = suggestion.unit == null
         ? null
         : _matchListedUnit(suggestion.unit!);
-    final fillUnit = unit != null && _unit == null;
-    final photo = _showsPhotoField && _pendingImageBytes == null
+    // A suggested plain Crate is not filled in: new products can't pick it
+    // (#487).
+    final fillUnit =
+        unit != null && _unit == null && !isUnitHiddenForNewProducts(unit);
+    final photo = _pendingImageBytes == null
         ? _processCataloguePhoto(suggestion.photoBytes)
         : null;
     if (!fillName && !fillUnit && photo == null) return;
@@ -340,7 +505,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       if (fillUnit) {
         if (!_dynamicUnits.contains(unit)) {
           _catalogueUnit = unit;
-          _dynamicUnits = [..._dynamicUnits, unit]..sort();
+          _dynamicUnits = [..._dynamicUnits, unit];
         }
         _unit = unit;
         // As picking a unit by hand: Bottle turns empties tracking on.
@@ -350,14 +515,11 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       if (photo != null) {
         _pendingImageBytes = photo;
         _isPhotoFromCatalogue = true;
-        // The photo box sits in "More details": open it so the filled photo
-        // is seen rather than saved unnoticed.
-        _showMoreDetails = true;
       }
     });
   }
 
-  /// The dropdown's own spelling of [unit] when it is already listed (case
+  /// The chips' own spelling of [unit] when it is already listed (case
   /// aside), else [unit] as suggested.
   String _matchListedUnit(String unit) {
     final lower = unit.toLowerCase();
@@ -379,61 +541,60 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     };
   }
 
-  void _onUnitPicked(String? value) {
+  /// A chip tap: picks [value], or clears the unit when it is already picked
+  /// ("No unit" stays a valid choice, #108).
+  void _onUnitTapped(String value) {
+    final next = _unit == value ? null : value;
     setState(() {
-      _unit = value;
+      _unit = next;
       // Auto-enable tracking for bottle products, off otherwise (a null unit
       // is not a bottle).
-      _trackEmpties = value?.toLowerCase() == 'bottle';
+      _trackEmpties = next?.toLowerCase() == 'bottle';
       _isUnitFromCatalogue = false;
     });
   }
 
-  void _onSupplierChanged(String query) {
+  void _onNameChanged(String query) {
     final q = query.trim().toLowerCase();
     setState(() {
-      _supplierSuggestions = q.isEmpty
+      _isNameFromCatalogue = false;
+      // Edit mode has no name-match list.
+      _productSuggestions = (q.isEmpty || _isEdit)
           ? []
-          : _allSuppliers
-                .where((s) => s.name.toLowerCase().contains(q))
+          : _allProducts
+                .where((p) => p.name.toLowerCase().contains(q))
                 .take(20)
                 .toList();
     });
   }
 
-  void _selectSupplier(SupplierData supplier) {
-    _supplierCtrl.text = supplier.name;
-    setState(() {
-      _selectedSupplier = supplier;
-      _supplierSuggestions = [];
-    });
-  }
-
-  void _clearSupplier() {
-    _supplierCtrl.clear();
-    setState(() {
-      _selectedSupplier = null;
-      _supplierSuggestions = [];
-    });
-  }
-
-  void _onManufacturerChanged(String query) {
-    final q = query.trim().toLowerCase();
-    setState(() {
-      _manufacturerSuggestions = q.isEmpty
-          ? []
-          : _allManufacturers
-                .where((m) => m.name.toLowerCase().contains(q))
-                .take(20)
-                .toList();
-    });
+  /// A name match was tapped (#487 owner decision 8): open that product's
+  /// Product Details over the form, which stays as it is underneath.
+  Future<void> _openExistingProduct(ProductData product) async {
+    FocusScope.of(context).unfocus();
+    final storeId = ref.read(lockedStoreProvider).value;
+    final rows = await ref
+        .read(databaseProvider)
+        .inventoryDao
+        .getProductsWithStock(storeId: storeId);
+    if (!mounted) return;
+    final stock = rows.where((r) => r.product.id == product.id).firstOrNull;
+    await openProductDetails(
+      context,
+      product,
+      manufacturerName: _allManufacturers
+          .where((m) => m.id == product.manufacturerId)
+          .map((m) => m.name)
+          .firstOrNull,
+      totalStock: stock?.totalStock.toDouble() ?? 0,
+      storeId: storeId,
+    );
   }
 
   void _selectManufacturer(ManufacturerData manufacturer) {
-    _manufacturerCtrl.text = manufacturer.name;
     setState(() {
       _selectedManufacturer = manufacturer;
-      _manufacturerSuggestions = [];
+      _newManufacturerName = null;
       // Crate value is shared at the manufacturer level — autofill it from the
       // chosen manufacturer (§16.5). The user can still override the field.
       if (manufacturer.depositAmountKobo > 0) {
@@ -443,219 +604,100 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     });
   }
 
-  void _clearManufacturer() {
-    _manufacturerCtrl.clear();
-    setState(() {
-      _selectedManufacturer = null;
-      _manufacturerSuggestions = [];
-    });
-  }
-
-  void _onCategoryChanged(String query) {
-    final q = query.trim().toLowerCase();
-    setState(() {
-      _categorySuggestions = q.isEmpty
-          ? []
-          : _allCategories
-                .where((c) => c.name.toLowerCase().contains(q))
-                .take(20)
-                .toList();
-    });
-  }
-
-  void _selectCategory(CategoryData category) {
-    _categoryCtrl.text = category.name;
-    setState(() {
-      _selectedCategory = category;
-      _categorySuggestions = [];
-    });
-  }
-
-  void _clearCategory() {
-    _categoryCtrl.clear();
-    setState(() {
-      _selectedCategory = null;
-      _categorySuggestions = [];
-    });
-  }
-
-  void _onNameChanged(String query) {
-    final q = query.trim().toLowerCase();
-    setState(() {
-      _isNameFromCatalogue = false;
-      _selectedExistingProduct = null;
-      _productSuggestions = q.isEmpty
-          ? []
-          : _allProducts
-                .where((p) => p.name.toLowerCase().contains(q))
-                .take(20)
-                .toList();
-    });
-  }
-
-  void _selectProduct(ProductData product) {
-    _nameCtrl.text = product.name;
-    _subtitleCtrl.text = product.subtitle ?? '';
-    _retailPriceCtrl.text = (product.retailerPriceKobo / 100).toStringAsFixed(
-      2,
+  Future<void> _pickCategory() async {
+    final choice = await showProductPickerSheet(
+      context,
+      title: _lexicon.category,
+      searchHint: 'Search or add a ${_lexicon.category.toLowerCase()}',
+      options: [
+        for (final c in _allCategories)
+          ProductPickerOption(id: c.id, label: c.name),
+      ],
+      selectedId: _selectedCategory?.id,
+      // Starter categories for a fresh shop (#80), offered while it has none.
+      starterNames: _lexicon.starterCategories,
     );
-    _wholesalePriceCtrl.text = (product.wholesalerPriceKobo / 100)
-        .toStringAsFixed(2);
-    _buyingPriceCtrl.text = (product.buyingPriceKobo / 100).toStringAsFixed(2);
-    _emptyCrateValueCtrl.text = product.emptyCrateValueKobo > 0
-        ? (product.emptyCrateValueKobo / 100).toStringAsFixed(2)
-        : '';
-    _lowStockCtrl.text = product.lowStockThreshold.toString();
-    // #320: a barcode already in the field (scanned or typed) is kept, so
-    // picking the product it belongs to saves that code onto it. Only an empty
-    // field takes the product's own barcode.
-    final keepTypedBarcode = _barcodeCtrl.text.trim().isNotEmpty;
-    if (!keepTypedBarcode) _barcodeCtrl.text = product.barcode ?? '';
-
-    _catalogueDebounce?.cancel();
+    if (!mounted || choice == null) return;
     setState(() {
-      _selectedExistingProduct = product;
-      _barcodeCollisionName = null;
-      _isNameFromCatalogue = false;
-      _isUnitFromCatalogue = false;
-      _unit = product.unit;
-      _size = product.size;
-      _trackEmpties = product.trackEmpties;
-      _allowFractionalSales = product.allowFractionalSales;
-      _expiryDate = product.expiryDate;
-      _selectedCategory = _allCategories.cast<CategoryData?>().firstWhere(
-        (c) => c?.id == product.categoryId,
-        orElse: () => null,
-      );
-      if (_selectedCategory != null) {
-        _categoryCtrl.text = _selectedCategory!.name;
+      switch (choice) {
+        case ProductPickerPicked(:final id):
+          _selectedCategory = _allCategories.firstWhere((c) => c.id == id);
+          _newCategoryName = null;
+        case ProductPickerNew(:final name):
+          final match = _allCategories
+              .where((c) => c.name.toLowerCase() == name.toLowerCase())
+              .firstOrNull;
+          _selectedCategory = match;
+          _newCategoryName = match == null ? name : null;
+        case ProductPickerAddFull():
+          break;
       }
-      _selectedManufacturer = _allManufacturers
-          .cast<ManufacturerData?>()
-          .firstWhere(
-            (m) => m?.id == product.manufacturerId,
-            orElse: () => null,
-          );
-      if (_selectedManufacturer != null) {
-        _manufacturerCtrl.text = _selectedManufacturer!.name;
-      }
-      _selectedSupplier = _allSuppliers.cast<SupplierData?>().firstWhere(
-        (s) => s?.id == product.supplierId,
-        orElse: () => null,
-      );
-      if (_selectedSupplier != null) {
-        _supplierCtrl.text = _selectedSupplier!.name;
-      }
-      _productSuggestions = [];
-    });
-    // The kept code may belong to a third product: re-run the soft warning
-    // against the newly picked one.
-    if (keepTypedBarcode) _onBarcodeChanged(_barcodeCtrl.text);
-  }
-
-  void _clearExistingProduct() {
-    _nameCtrl.clear();
-    _subtitleCtrl.clear();
-    _retailPriceCtrl.clear();
-    _wholesalePriceCtrl.clear();
-    _buyingPriceCtrl.clear();
-    _emptyCrateValueCtrl.clear();
-    _lowStockCtrl.text = '5';
-    _initialStockCtrl.text = '0';
-    _manufacturerCtrl.clear();
-    _supplierCtrl.clear();
-    _categoryCtrl.clear();
-    _barcodeCtrl.clear();
-    setState(() {
-      _selectedExistingProduct = null;
-      _barcodeCollisionName = null;
-      _isNameFromCatalogue = false;
-      _isUnitFromCatalogue = false;
-      // Clearing an existing selection to add fresh resets to "No unit" (owner
-      // request) — the same up-front, non-pre-filled default as initState.
-      _unit = null;
-      _size = null;
-      _expiryDate = null;
-      _trackEmpties = _unit?.toLowerCase() == 'bottle';
-      _allowFractionalSales = false;
-      _selectedManufacturer = null;
-      _selectedSupplier = null;
-      _selectedCategory = null;
     });
   }
 
-  Future<void> _createNewManufacturer(String name) async {
-    final db = ref.read(databaseProvider);
-    final businessId = ref.read(authProvider).currentUser?.businessId;
-    if (businessId == null) return;
-    try {
-      final id = await db.inventoryDao.insertManufacturer(
-        ManufacturersCompanion.insert(name: name, businessId: businessId),
-      );
-      final manufacturers = await db.inventoryDao.getAllManufacturers();
-      final newM = manufacturers.firstWhere((m) => m.id == id);
-      if (!mounted) return;
-      setState(() {
-        _allManufacturers = manufacturers;
-        _selectManufacturer(newM);
-      });
-    } catch (_) {
-      if (mounted) {
-        AppNotification.showError(
-          context,
-          'Could not create manufacturer. Please try again.',
-        );
-      }
+  Future<void> _pickManufacturer() async {
+    final choice = await showProductPickerSheet(
+      context,
+      title: 'Brand / Manufacturer',
+      searchHint: 'Search or add a brand',
+      options: [
+        for (final m in _allManufacturers)
+          ProductPickerOption(id: m.id, label: m.name),
+      ],
+      selectedId: _selectedManufacturer?.id,
+    );
+    if (!mounted || choice == null) return;
+    switch (choice) {
+      case ProductPickerPicked(:final id):
+        _selectManufacturer(_allManufacturers.firstWhere((m) => m.id == id));
+      case ProductPickerNew(:final name):
+        final match = _allManufacturers
+            .where((m) => m.name.toLowerCase() == name.toLowerCase())
+            .firstOrNull;
+        if (match != null) {
+          _selectManufacturer(match);
+        } else {
+          setState(() {
+            _selectedManufacturer = null;
+            _newManufacturerName = name;
+          });
+        }
+      case ProductPickerAddFull():
+        break;
     }
   }
 
-  Future<void> _createNewCategory(String name) async {
-    final db = ref.read(databaseProvider);
-    final businessId = ref.read(authProvider).currentUser?.businessId;
-    if (businessId == null) return;
-    try {
-      final id = await db.catalogDao.insertCategory(
-        CategoriesCompanion.insert(name: name, businessId: businessId),
-      );
-      final categories = await db.inventoryDao.getAllCategories();
-      final newC = categories.firstWhere((c) => c.id == id);
-      if (!mounted) return;
-      setState(() {
-        _allCategories = categories;
-        _selectCategory(newC);
-      });
-    } catch (_) {
-      if (mounted) {
-        AppNotification.showError(
-          context,
-          'Could not create category. Please try again.',
-        );
-      }
-    }
-  }
-
-  Future<void> _createNewSupplier(String name) async {
-    final db = ref.read(databaseProvider);
-    final businessId = ref.read(authProvider).currentUser?.businessId;
-    if (businessId == null) return;
-    try {
-      final id = await db.catalogDao.insertSupplier(
-        SuppliersCompanion.insert(name: name, businessId: businessId),
-      );
-      final suppliers = await db.catalogDao.getAllSuppliers();
-      final newS = suppliers.firstWhere((s) => s.id == id);
-      if (!mounted) return;
-      setState(() {
-        _allSuppliers = suppliers;
-        _selectSupplier(newS);
-      });
-    } catch (_) {
-      if (mounted) {
-        AppNotification.showError(
-          context,
-          'Could not create supplier. Please try again.',
-        );
-      }
+  Future<void> _pickSupplier() async {
+    final choice = await showProductPickerSheet(
+      context,
+      title: 'Supplier',
+      searchHint: 'Search or add a supplier',
+      options: [
+        for (final s in _allSuppliers)
+          ProductPickerOption(id: s.id, label: s.name),
+      ],
+      selectedId: _selectedSupplier?.id,
+      addFullLabel: Gates.manageSuppliers.allows(ref)
+          ? 'Add new supplier'
+          : null,
+    );
+    if (!mounted || choice == null) return;
+    switch (choice) {
+      case ProductPickerPicked(:final id):
+        setState(() {
+          _selectedSupplier = _allSuppliers.firstWhere((s) => s.id == id);
+          _newSupplierName = null;
+        });
+      case ProductPickerNew(:final name):
+        final match = _allSuppliers
+            .where((s) => s.name.toLowerCase() == name.toLowerCase())
+            .firstOrNull;
+        setState(() {
+          _selectedSupplier = match;
+          _newSupplierName = match == null ? name : null;
+        });
+      case ProductPickerAddFull():
+        await _addSupplierViaForm();
     }
   }
 
@@ -723,32 +765,21 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   }
 
   /// §13.4 / rule #13 — empty-crate tracking only exists for Bar / Beer
-  /// Distributor businesses. `Bottle` is the default unit and the toggle below
-  /// defaults on, so gate it on the business type — otherwise a non-crate
-  /// business would silently create trackEmpties products (which leak the crate
-  /// deposit UI into the cart/checkout and accrue crate-owed ledger rows).
+  /// Distributor businesses. It also decides the unit words (#487): only such
+  /// a shop reads a Bottle as "Bottle Crate" / "crates". Gate it on the business type — otherwise a
+  /// non-crate business would silently create trackEmpties products (which
+  /// leak the crate deposit UI into the cart/checkout and accrue crate-owed
+  /// ledger rows).
   bool get _isCrateBusiness =>
       businessTracksCrates(ref.read(currentBusinessProvider));
 
-  /// The adaptive Fast-Add layout is used for creating a brand-new product in
-  /// direct mode. Receive Stock's mini-form and the "add stock to an existing
-  /// product" path keep the full classic layout untouched.
-  bool get _useFastLayout =>
-      !widget.receiveMode && _selectedExistingProduct == null;
+  /// The Wholesale box shows unless the shop sells at one price (#493).
+  bool get _hasWholesale =>
+      !businessSellsOnePrice(ref.read(currentBusinessProvider));
 
-  /// trackEmpties as actually saved — forced off for non-crate businesses even
-  /// if the (hidden) checkbox state is on.
-  bool get _effectiveTrackEmpties => _isCrateBusiness && _trackEmpties;
-
-  /// Empty-crate value in kobo, or null when not tracking empties / left blank.
-  int? get _emptyCrateValueKobo {
-    if (!(_effectiveTrackEmpties && _unit?.toLowerCase() == 'bottle')) {
-      return null;
-    }
-    final raw = _emptyCrateValueCtrl.text.trim();
-    if (raw.isEmpty) return null;
-    return (parseCurrency(raw) * 100).round();
-  }
+  /// The Track Empty Crates card shows for a crate business AND unit Bottle.
+  bool get _showsCrateCard =>
+      _unit?.toLowerCase() == 'bottle' && _isCrateBusiness;
 
   Future<bool> _confirmSaveProduct(String name) async {
     final confirmed = await showDialog<bool>(
@@ -787,377 +818,23 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     return confirmed ?? false;
   }
 
-  Future<void> _save() async {
-    final db = ref.read(databaseProvider);
-    final auth = ref.read(authProvider);
-    final canEditBuying = _canEditBuying;
-
-    setState(() => _errorMessage = null);
-
-    // ── EXISTING PRODUCT: update details + add stock ───────────────────────
-    if (_selectedExistingProduct != null) {
-      final existingName = _nameCtrl.text.trim();
-      if (!widget.receiveMode && _selectedStore == null) {
-        AppNotification.showError(context, 'Store is required.');
-        return;
-      }
-      final qty = int.tryParse(_initialStockCtrl.text) ?? 0;
-      if (qty <= 0) {
-        AppNotification.showError(context, 'Quantity must be greater than 0.');
-        return;
-      }
-      if (existingName.isEmpty) {
-        AppNotification.showError(
-          context,
-          '${_lexicon.item} Name is required.',
-        );
-        return;
-      }
-      if (_retailPriceCtrl.text.trim().isEmpty) {
-        AppNotification.showError(context, 'Retailer Price is required.');
-        return;
-      }
-      if (_wholesalePriceCtrl.text.trim().isEmpty) {
-        AppNotification.showError(context, 'Wholesaler Price is required.');
-        return;
-      }
-      final existingRetail = parseCurrency(_retailPriceCtrl.text);
-      final existingWholesale = parseCurrency(_wholesalePriceCtrl.text);
-      // Buying price stays hidden (and untouched) for roles without the
-      // permission — preserve the stored value rather than zeroing it.
-      final existingBuying = canEditBuying
-          ? parseCurrency(_buyingPriceCtrl.text)
-          : _selectedExistingProduct!.buyingPriceKobo / 100;
-      if (existingBuying > existingRetail) {
-        AppNotification.showError(
-          context,
-          'Buying price cannot be higher than retailer price.',
-        );
-        return;
-      }
-
-      final confirmed = await _confirmSaveProduct(existingName);
-      if (!confirmed) return;
-
-      setState(() => _isSaving = true);
-      try {
-        // Auto-handle manufacturer/supplier/category if typed but not selected
-        if (_selectedManufacturer == null &&
-            _manufacturerCtrl.text.trim().isNotEmpty) {
-          _selectedManufacturer = await _getOrCreateManufacturer(
-            _manufacturerCtrl.text.trim(),
-          );
-        }
-        if (_selectedSupplier == null && _supplierCtrl.text.trim().isNotEmpty) {
-          _selectedSupplier = await _getOrCreateSupplier(
-            _supplierCtrl.text.trim(),
-          );
-        }
-        if (_selectedCategory == null && _categoryCtrl.text.trim().isNotEmpty) {
-          _selectedCategory = await _getOrCreateCategory(
-            _categoryCtrl.text.trim(),
-          );
-        }
-
-        final productId = _selectedExistingProduct!.id;
-        final retailKobo = (existingRetail * 100).round();
-        final wholesaleKobo = (existingWholesale * 100).round();
-        final buyingKobo = (existingBuying * 100).round();
-        final lowStock = int.tryParse(_lowStockCtrl.text) ?? 5;
-
-        // 1. Update product details
-        await db.catalogDao.updateProductDetails(
-          productId,
-          name: existingName,
-          manufacturerId: _selectedManufacturer?.id,
-          buyingPriceKobo: buyingKobo,
-          retailerPriceKobo: retailKobo,
-          wholesalerPriceKobo: wholesaleKobo,
-          emptyCrateValueKobo: _emptyCrateValueKobo,
-          categoryId: _selectedCategory?.id,
-          unit: _unit,
-          trackEmpties: _effectiveTrackEmpties,
-          allowFractionalSales: _allowFractionalSales,
-          lowStockThreshold: lowStock,
-          subtitle: _subtitleCtrl.text.trim().isEmpty
-              ? null
-              : _subtitleCtrl.text.trim(),
-          colorHex: _colorHex,
-          supplierId: _selectedSupplier?.id,
-          size: _size,
-          expiryDate: _expiryDate,
-          barcode: _barcodeCtrl.text.trim().isEmpty
-              ? null
-              : _barcodeCtrl.text.trim(),
-        );
-
-        // Persist the crate value at the manufacturer level (§16.5).
-        if (_selectedManufacturer != null && _emptyCrateValueKobo != null) {
-          await db.catalogDao.updateManufacturerEmptyCrateValue(
-            _selectedManufacturer!.id,
-            _emptyCrateValueKobo!,
-          );
-        }
-
-        // 2. Add to receive cart if in receive mode; otherwise adjust stock directly.
-        final updatedProduct = await (db.select(
-          db.products,
-        )..where((t) => t.id.equals(productId))).getSingle();
-        if (qty > 0) {
-          if (widget.receiveMode) {
-            ref
-                .read(receiveCartProvider.notifier)
-                .addOrIncrement(updatedProduct, amount: qty);
-            if (mounted) {
-              AppNotification.showSuccess(
-                context,
-                '$qty units of $existingName added to Receive Cart',
-              );
-            }
-          } else {
-            // #170 #7a: the existing-product "Add quantity" shortcut now records
-            // its cost like a delivery — adjustStock creates a Cost Batch at the
-            // entered buying price (0 → Uncosted), so these units no longer sell
-            // at phantom 0 COGS.
-            await db.inventoryDao.adjustStock(
-              productId,
-              _selectedStore!.id,
-              qty,
-              'Stock received',
-              auth.currentUser?.id ?? 'unknown',
-              inflowUnitCostKobo: buyingKobo,
-            );
-            if (mounted) {
-              AppNotification.showSuccess(
-                context,
-                '$qty units of $existingName added to stock',
-              );
-            }
-          }
-        }
-
-        await ref
-            .read(activityLogProvider)
-            .logAction(
-              'product_update',
-              '${auth.currentUser?.name ?? 'Unknown'} updated $existingName${qty > 0 ? (widget.receiveMode ? ' and routed $qty units to receive cart' : ' and added $qty units to stock') : ''}',
-              productId: productId,
-            );
-        if (mounted) Navigator.pop(context);
-        widget.onProductAdded?.call(updatedProduct);
-      } catch (e, st) {
-        CrashReporter.record(e, st, context: 'inventory.add_product');
-        debugPrint('AddProductScreen._save (existing) error: $e');
-        if (mounted) {
-          AppNotification.showError(
-            context,
-            'Could not update ${_lexicon.itemLower}: $e',
-          );
-        }
-      } finally {
-        if (mounted) setState(() => _isSaving = false);
-      }
-      return;
-    }
-
-    // ── NEW PRODUCT ─────────────────────────────────────────────────────────
-    // Direct-mode (Fast-Add) creates run through the pure Fast-Add form model
-    // (Seam 1). Receive Stock's mini-form and the "add stock to an existing
-    // product" path keep the full classic layout untouched.
-    if (!widget.receiveMode) {
-      await _saveFastAddNewProduct();
-      return;
-    }
-
-    final name = _nameCtrl.text.trim();
-    final hasCategory =
-        _selectedCategory != null || _categoryCtrl.text.trim().isNotEmpty;
-
-    if (!mounted) return;
-
-    String? missingField;
-    if (name.isEmpty) {
-      missingField = '${_lexicon.item} Name';
-    } else if (_subtitleCtrl.text.trim().isEmpty) {
-      missingField = 'Description / Subtitle';
-    } else if (!hasCategory) {
-      missingField = _lexicon.category;
-    } else if (_retailPriceCtrl.text.trim().isEmpty) {
-      missingField = 'Retailer Price';
-    } else if (_wholesalePriceCtrl.text.trim().isEmpty) {
-      missingField = 'Wholesaler Price';
-    } else if (canEditBuying && _buyingPriceCtrl.text.trim().isEmpty) {
-      missingField = 'Buying Price';
-    } else if (_lowStockCtrl.text.trim().isEmpty) {
-      missingField = 'Low Stock Alert';
-    } else if (!widget.receiveMode && _selectedStore == null) {
-      missingField = 'Store';
-    } else if (_initialStockCtrl.text.trim().isEmpty) {
-      missingField = 'Initial Quantity';
-    }
-
-    if (missingField != null) {
-      AppNotification.showError(context, '$missingField is required.');
-      return;
-    }
-
-    final retailPrice = parseCurrency(_retailPriceCtrl.text);
-    final wholesalePrice = parseCurrency(_wholesalePriceCtrl.text);
-    final buyingPrice = canEditBuying
-        ? parseCurrency(_buyingPriceCtrl.text)
-        : 0.0;
-
-    if (canEditBuying && buyingPrice > retailPrice) {
-      AppNotification.showError(
-        context,
-        'Buying price (${formatCurrency(buyingPrice)}) cannot be higher than retailer price (${formatCurrency(retailPrice)}).',
-      );
-      return;
-    }
-
-    // Check for duplicate product name
-    final existing = await db.catalogDao.findByName(name);
-    if (existing != null) {
-      if (mounted) {
-        AppNotification.showError(
-          context,
-          'A ${_lexicon.itemLower} named "$name" already exists.',
-        );
-      }
-      return;
-    }
-
-    final confirmed = await _confirmSaveProduct(name);
-    if (!confirmed) return;
-
-    setState(() => _isSaving = true);
-    try {
-      if (_selectedCategory == null && _categoryCtrl.text.trim().isNotEmpty) {
-        _selectedCategory = await _getOrCreateCategory(
-          _categoryCtrl.text.trim(),
-        );
-      }
-      // Auto-handle Manufacturer & Supplier if they were typed but not explicitly "selected"
-      if (_selectedManufacturer == null &&
-          _manufacturerCtrl.text.trim().isNotEmpty) {
-        _selectedManufacturer = await _getOrCreateManufacturer(
-          _manufacturerCtrl.text.trim(),
-        );
-      }
-      if (_selectedSupplier == null && _supplierCtrl.text.trim().isNotEmpty) {
-        _selectedSupplier = await _getOrCreateSupplier(
-          _supplierCtrl.text.trim(),
-        );
-      }
-
-      final productBusinessId = auth.currentUser?.businessId;
-      if (productBusinessId == null) {
-        setState(() => _isSaving = false);
-        if (mounted) {
-          AppNotification.showError(context, 'Account not loaded yet.');
-        }
-        return;
-      }
-
-      final retailKobo = (retailPrice * 100).round();
-      final wholesaleKobo = (wholesalePrice * 100).round();
-      final buyingKobo = (buyingPrice * 100).round();
-      final lowStock = int.tryParse(_lowStockCtrl.text) ?? 5;
-      final initialStock = int.tryParse(_initialStockCtrl.text) ?? 0;
-      final crateValueKobo = _emptyCrateValueKobo;
-      final productId = await db.catalogDao.insertProductWithInitialStock(
-        ProductsCompanion.insert(
-          name: name,
-          businessId: productBusinessId,
-          subtitle: drift.Value(
-            _subtitleCtrl.text.trim().isEmpty
-                ? null
-                : _subtitleCtrl.text.trim(),
-          ),
-          retailerPriceKobo: drift.Value(retailKobo),
-          wholesalerPriceKobo: drift.Value(wholesaleKobo),
-          buyingPriceKobo: drift.Value(buyingKobo),
-          unit: drift.Value(_unit),
-          trackEmpties: drift.Value(_effectiveTrackEmpties),
-          emptyCrateValueKobo: crateValueKobo == null
-              ? const drift.Value.absent()
-              : drift.Value(crateValueKobo),
-          allowFractionalSales: drift.Value(_allowFractionalSales),
-          colorHex: drift.Value(_colorHex),
-          size: drift.Value(_size),
-          expiryDate: drift.Value(_expiryDate),
-          barcode: drift.Value(
-            _barcodeCtrl.text.trim().isEmpty ? null : _barcodeCtrl.text.trim(),
-          ),
-          lowStockThreshold: drift.Value(lowStock),
-          manufacturerId: drift.Value(_selectedManufacturer?.id),
-          supplierId: drift.Value(_selectedSupplier?.id),
-          categoryId: drift.Value(_selectedCategory?.id),
-        ),
-        initialStock: widget.receiveMode ? null : initialStock,
-        storeId: widget.receiveMode ? null : _selectedStore?.id,
-        performedBy: auth.currentUser?.id,
-      );
-
-      // Persist the crate value at the manufacturer level so every product of
-      // this manufacturer shares one value (§16.5).
-      if (_selectedManufacturer != null && _emptyCrateValueKobo != null) {
-        await db.catalogDao.updateManufacturerEmptyCrateValue(
-          _selectedManufacturer!.id,
-          _emptyCrateValueKobo!,
-        );
-      }
-
-      final newProduct = await (db.select(
-        db.products,
-      )..where((t) => t.id.equals(productId))).getSingle();
-      if (initialStock > 0 && widget.receiveMode) {
-        ref
-            .read(receiveCartProvider.notifier)
-            .addOrIncrement(newProduct, amount: initialStock);
-        if (mounted) {
-          AppNotification.showSuccess(
-            context,
-            '$name added to catalog and $initialStock units routed to Receive Cart',
-          );
-        }
-      } else {
-        if (mounted) {
-          AppNotification.showSuccess(context, '$name added to catalog');
-        }
-      }
-
-      await ref
-          .read(activityLogProvider)
-          .logAction(
-            'new_product',
-            '${auth.currentUser?.name ?? 'Unknown'} added product: $name'
-                '${initialStock > 0 ? ' and routed $initialStock units to receive cart' : ''}',
-            productId: productId,
-          );
-
-      if (mounted) Navigator.pop(context);
-      widget.onProductAdded?.call(newProduct);
-    } catch (e, st) {
-      CrashReporter.record(e, st, context: 'inventory.add_product');
-      debugPrint('AddProductScreen._save error: $e');
-      if (mounted) {
-        AppNotification.showError(
-          context,
-          'Could not save ${_lexicon.itemLower}: $e',
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
-    }
-  }
-
-  /// Fast-Add (direct mode) create: validate + shape through the pure Fast-Add
-  /// form model (Seam 1, ADR 0006), then persist via the existing DAOs.
-  Future<void> _saveFastAddNewProduct() async {
+  /// Save Product ([andNew] false: save and close) or Save & New ([andNew]
+  /// true: save, then clear the form for the next product). Validates and
+  /// shapes through the pure Fast-Add form model (Seam 1, ADR 0006).
+  Future<void> _save({required bool andNew}) async {
+    if (_isSaving) return;
     final businessId = ref.read(authProvider).currentUser?.businessId;
     if (businessId == null) {
       AppNotification.showError(context, 'Account not loaded yet.');
+      return;
+    }
+    // Defense-in-depth (hard rule #6): bail if the grant was revoked while the
+    // form was open.
+    if (_isEdit && !Gates.editProductPrice.allowsNow(ref)) {
+      AppNotification.showError(
+        context,
+        'You no longer have permission to edit ${_lexicon.itemPluralLower}.',
+      );
       return;
     }
 
@@ -1165,7 +842,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       FastAddInput(
         name: _nameCtrl.text,
         sellingPrice: _retailPriceCtrl.text,
-        quantity: _initialStockCtrl.text,
+        // Edit mode has no opening quantity: any positive count passes.
+        quantity: _isEdit ? '1' : _initialStockCtrl.text,
         buyingPrice: _buyingPriceCtrl.text,
         wholesalePrice: _wholesalePriceCtrl.text,
         lowStock: _lowStockCtrl.text,
@@ -1173,38 +851,54 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         trackEmpties: _trackEmpties,
         emptyCrateValue: _emptyCrateValueCtrl.text,
         hasManufacturer:
-            _selectedManufacturer != null ||
-            _manufacturerCtrl.text.trim().isNotEmpty,
+            _selectedManufacturer != null || _newManufacturerName != null,
         selectedStoreId: _selectedStore?.id,
         barcode: _barcodeCtrl.text,
+        unitsPerPack: _unitsPerPackCtrl.text,
       ),
       FastAddContext(
         tracksCrates: _isCrateBusiness,
         canEditBuying: _canEditBuying,
         storeIds: _stores.map((s) => s.id).toList(),
+        // Edit mode has no store either.
+        routesToReceiveCart: widget.receiveMode || _isEdit,
+        sellsOnePrice: !_hasWholesale,
+        // Edit keeps the saved wholesale price in a one-price shop (#493).
+        existingWholesalerPriceKobo: widget.editProduct?.wholesalerPriceKobo,
       ),
     );
 
     switch (result) {
       case FastAddInvalid(:final field, :final message):
-        // Reveal a "More details" field before pointing at it, so an error
-        // never references a collapsed field (ADR 0006).
-        if (!_fastSectionFields.contains(field) && !_showMoreDetails) {
-          setState(() => _showMoreDetails = true);
-        }
+        _pointAt(field);
         AppNotification.showError(context, message);
+      case FastAddIntent() when _isEdit:
+        await _persistEdit(result);
       case FastAddIntent():
         final confirmed = await _confirmSaveProduct(result.name);
         if (!confirmed) return;
-        await _persistNewProduct(result);
+        await _persistNewProduct(result, andNew: andNew);
     }
   }
 
+  /// Scrolls the box behind a validation error into view.
+  void _pointAt(FastAddField field) {
+    final target = _fieldKeys[field]!.currentContext;
+    if (target == null) return;
+    Scrollable.ensureVisible(
+      target,
+      duration: const Duration(milliseconds: 250),
+      alignment: 0.15,
+    );
+  }
+
   /// Persist a resolved Fast-Add write intent through the existing catalog /
-  /// inventory DAOs — the same path a fully-filled form has always used. Only
-  /// the shaped scalar values come from the model; the get-or-create foreign
-  /// keys and pass-through fields are attached here.
-  Future<void> _persistNewProduct(FastAddIntent intent) async {
+  /// inventory DAOs. Only the shaped scalar values come from the model; the
+  /// get-or-create foreign keys and pass-through fields are attached here.
+  Future<void> _persistNewProduct(
+    FastAddIntent intent, {
+    required bool andNew,
+  }) async {
     final db = ref.read(databaseProvider);
     final auth = ref.read(authProvider);
     final businessId = auth.currentUser?.businessId;
@@ -1224,33 +918,30 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
 
     setState(() => _isSaving = true);
     try {
-      // Get-or-create the typed-but-unselected foreign keys, exactly as before.
-      if (_selectedManufacturer == null &&
-          _manufacturerCtrl.text.trim().isNotEmpty) {
-        _selectedManufacturer = await _getOrCreateManufacturer(
-          _manufacturerCtrl.text.trim(),
-        );
+      // Get-or-create the new names picked in the sheets, only now that the
+      // save is confirmed.
+      final newManufacturer = _newManufacturerName;
+      if (_selectedManufacturer == null && newManufacturer != null) {
+        _selectedManufacturer = await _getOrCreateManufacturer(newManufacturer);
+        _newManufacturerName = null;
       }
-      if (_selectedSupplier == null && _supplierCtrl.text.trim().isNotEmpty) {
-        _selectedSupplier = await _getOrCreateSupplier(
-          _supplierCtrl.text.trim(),
-        );
+      final newSupplier = _newSupplierName;
+      if (_selectedSupplier == null && newSupplier != null) {
+        _selectedSupplier = await _getOrCreateSupplier(newSupplier);
+        _newSupplierName = null;
       }
-      if (_selectedCategory == null && _categoryCtrl.text.trim().isNotEmpty) {
-        _selectedCategory = await _getOrCreateCategory(
-          _categoryCtrl.text.trim(),
-        );
+      final newCategory = _newCategoryName;
+      if (_selectedCategory == null && newCategory != null) {
+        _selectedCategory = await _getOrCreateCategory(newCategory);
+        _newCategoryName = null;
       }
 
+      final description = _subtitleCtrl.text.trim();
       final productId = await db.catalogDao.insertProductWithInitialStock(
         ProductsCompanion.insert(
           name: intent.name,
           businessId: businessId,
-          subtitle: drift.Value(
-            _subtitleCtrl.text.trim().isEmpty
-                ? null
-                : _subtitleCtrl.text.trim(),
-          ),
+          subtitle: drift.Value(description.isEmpty ? null : description),
           retailerPriceKobo: drift.Value(intent.retailerPriceKobo),
           wholesalerPriceKobo: drift.Value(intent.wholesalerPriceKobo),
           buyingPriceKobo: drift.Value(intent.buyingPriceKobo),
@@ -1259,9 +950,14 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
           emptyCrateValueKobo: intent.emptyCrateValueKobo == null
               ? const drift.Value.absent()
               : drift.Value(intent.emptyCrateValueKobo!),
+          // Left out when blank, so the push payload only carries the key
+          // once a count is set (#487 PR 1).
+          unitsPerPack: intent.unitsPerPack == null
+              ? const drift.Value.absent()
+              : drift.Value(intent.unitsPerPack),
           allowFractionalSales: drift.Value(_allowFractionalSales),
           colorHex: drift.Value(_colorHex),
-          size: drift.Value(_size),
+          size: const drift.Value(null),
           expiryDate: drift.Value(_expiryDate),
           barcode: drift.Value(intent.barcode),
           lowStockThreshold: drift.Value(intent.lowStockThreshold),
@@ -1269,7 +965,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
           supplierId: drift.Value(_selectedSupplier?.id),
           categoryId: drift.Value(_selectedCategory?.id),
         ),
-        initialStock: intent.initialStock,
+        // Receive Stock routes the opening quantity to its delivery list
+        // below instead of into a store.
+        initialStock: widget.receiveMode ? null : intent.initialStock,
         storeId: intent.storeId,
         performedBy: auth.currentUser?.id,
       );
@@ -1299,23 +997,50 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         }
       }
 
-      final newProduct = await (db.select(
-        db.products,
-      )..where((t) => t.id.equals(productId))).getSingle();
-      if (mounted) {
-        AppNotification.showSuccess(context, '${intent.name} added to catalog');
+      final newProduct = (await db.catalogDao.findById(productId))!;
+      final userName = auth.currentUser?.name ?? 'Unknown';
+      if (widget.receiveMode) {
+        ref
+            .read(receiveCartProvider.notifier)
+            .addOrIncrement(newProduct, amount: intent.initialStock);
+        if (mounted) {
+          AppNotification.showSuccess(
+            context,
+            '${intent.name} added to catalog and ${intent.initialStock} '
+            'units routed to Receive Cart',
+          );
+        }
+        await ref
+            .read(activityLogProvider)
+            .logAction(
+              'new_product',
+              '$userName added product: ${intent.name} and routed '
+                  '${intent.initialStock} units to receive cart',
+              productId: productId,
+            );
+      } else {
+        if (mounted) {
+          AppNotification.showSuccess(
+            context,
+            '${intent.name} added to catalog',
+          );
+        }
+        await ref
+            .read(activityLogProvider)
+            .logAction(
+              'new_product',
+              '$userName added product: ${intent.name}',
+              productId: productId,
+            );
       }
 
-      await ref
-          .read(activityLogProvider)
-          .logAction(
-            'new_product',
-            '${auth.currentUser?.name ?? 'Unknown'} added product: ${intent.name}',
-            productId: productId,
-          );
-
-      if (mounted) Navigator.pop(context);
-      widget.onProductAdded?.call(newProduct);
+      if (andNew) {
+        widget.onProductAdded?.call(newProduct);
+        if (mounted) await _resetForNextProduct();
+      } else {
+        if (mounted) Navigator.pop(context);
+        widget.onProductAdded?.call(newProduct);
+      }
     } catch (e, st) {
       CrashReporter.record(e, st, context: 'inventory.add_product');
       debugPrint('AddProductScreen._persistNewProduct error: $e');
@@ -1328,6 +1053,248 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  /// Edit mode save: EXACTLY what the old Edit pop-up's save did (moved from
+  /// `UpdateProductSheet._save`, #487 PR 4) — details, photo, manufacturer
+  /// crate value, activity log, the cost 0 -> real follow-up and the notice.
+  Future<void> _persistEdit(FastAddIntent intent) async {
+    final old = widget.editProduct!;
+    final db = ref.read(databaseProvider);
+    final auth = ref.read(authProvider);
+    final name = intent.name;
+    final canEditBuying = _canEditBuying;
+    final oldBuyingKobo = old.buyingPriceKobo;
+    // Cost stays untouched for roles without the permission.
+    final buyingKobo = canEditBuying ? intent.buyingPriceKobo : oldBuyingKobo;
+
+    setState(() => _isSaving = true);
+    try {
+      final newManufacturer = _newManufacturerName;
+      if (_selectedManufacturer == null && newManufacturer != null) {
+        _selectedManufacturer = await _getOrCreateManufacturer(newManufacturer);
+        _newManufacturerName = null;
+      }
+      final newSupplier = _newSupplierName;
+      if (_selectedSupplier == null && newSupplier != null) {
+        _selectedSupplier = await _getOrCreateSupplier(newSupplier);
+        _newSupplierName = null;
+      }
+      final newCategory = _newCategoryName;
+      if (_selectedCategory == null && newCategory != null) {
+        _selectedCategory = await _getOrCreateCategory(newCategory);
+        _newCategoryName = null;
+      }
+
+      // Optional product photo (#78): upload a freshly picked image, keyed by
+      // the product id (image_url + the ProductImageService cache).
+      String? newImageUrl;
+      if (_pendingImageBytes != null) {
+        final businessId = auth.currentUser?.businessId;
+        if (businessId != null) {
+          final imgSvc = ref.read(productImageServiceProvider);
+          final res = await imgSvc.save(
+            businessId: businessId,
+            productId: old.id,
+            bytes: _pendingImageBytes!,
+          );
+          _existingImagePath = await imgSvc.localPathFor(old.id);
+          if (res case Ok(:final value)) newImageUrl = value;
+        }
+      }
+
+      final description = _subtitleCtrl.text.trim();
+      // 1. Update product (core + cosmetic fields in one enqueue).
+      await db.catalogDao.updateProductDetails(
+        old.id,
+        name: name,
+        manufacturerId: _selectedManufacturer?.id,
+        buyingPriceKobo: buyingKobo,
+        retailerPriceKobo: intent.retailerPriceKobo,
+        wholesalerPriceKobo: intent.wholesalerPriceKobo,
+        emptyCrateValueKobo: intent.emptyCrateValueKobo,
+        categoryId: _selectedCategory?.id,
+        unit: intent.unit,
+        trackEmpties: intent.trackEmpties,
+        allowFractionalSales: _allowFractionalSales,
+        lowStockThreshold: intent.lowStockThreshold,
+        subtitle: description.isEmpty ? null : description,
+        colorHex: old.colorHex ?? _colorHex,
+        supplierId: _selectedSupplier?.id,
+        size: old.size,
+        expiryDate: _expiryDate,
+        barcode: intent.barcode,
+        unitsPerPack: intent.unitsPerPack,
+      );
+
+      // Patch the cloud image URL so the photo converges cross-device. Null
+      // when offline: the reconnect flush sets it.
+      if (newImageUrl != null) {
+        await db.catalogDao.setProductImageUrl(old.id, newImageUrl);
+      }
+
+      // 2. The crate value is per manufacturer (§16.5).
+      if (_selectedManufacturer != null && intent.emptyCrateValueKobo != null) {
+        await db.catalogDao.updateManufacturerEmptyCrateValue(
+          _selectedManufacturer!.id,
+          intent.emptyCrateValueKobo!,
+        );
+      }
+
+      // 3. A cleared box must reach the cloud: outbox payloads drop nulls, so
+      //    push the full row with an explicit null for each cleared column.
+      await db.catalogDao.enqueueProductEdit(
+        old.id,
+        clearedUnitsPerPack:
+            old.unitsPerPack != null && intent.unitsPerPack == null,
+        clearedSubtitle: (old.subtitle ?? '').isNotEmpty && description.isEmpty,
+        clearedBarcode: old.barcode != null && intent.barcode == null,
+        clearedExpiry: old.expiryDate != null && _expiryDate == null,
+        clearedSupplier: old.supplierId != null && _selectedSupplier == null,
+        clearedManufacturer:
+            old.manufacturerId != null && _selectedManufacturer == null,
+        clearedCategory: old.categoryId != null && _selectedCategory == null,
+      );
+
+      // 4. Log the update.
+      await ref
+          .read(activityLogProvider)
+          .logAction(
+            'update_product',
+            '${auth.currentUser?.name ?? 'Unknown'} updated product: $name',
+            productId: old.id,
+          );
+
+      // 5. Cost just became real (0 -> a positive value): cost the still-
+      //    uncosted batches and offer once to backfill past uncosted sales
+      //    (ADR 0005 "Cost backfill", #41).
+      if (canEditBuying && oldBuyingKobo == 0 && buyingKobo > 0) {
+        final offer = await db.costBatchesDao.onCostBecameReal(
+          old.id,
+          buyingKobo,
+        );
+        if (mounted && !offer.isEmpty) {
+          await _promptCostBackfill(db, offer, name, auth.currentUser?.id);
+        }
+      }
+
+      if (mounted) {
+        AppNotification.showSuccess(context, '$name updated successfully');
+        // Business-scoped read (never a raw select of a tenant table).
+        final updated = await db.catalogDao.findById(old.id);
+        if (mounted) Navigator.pop(context, updated);
+      }
+    } catch (e, st) {
+      CrashReporter.record(e, st, context: 'inventory.update_product');
+      debugPrint('AddProductScreen._persistEdit error: $e');
+      if (mounted) {
+        AppNotification.showError(
+          context,
+          'Could not update ${_lexicon.itemLower}: $e',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  /// One-time prompt (ADR 0005 "Cost backfill", #41) offered when a product's
+  /// cost first becomes real and it has past uncosted sales. On accept,
+  /// restates those lines' snapshots to the new cost (gaps only, each in its
+  /// own period); [applyCostBackfill] writes the single Activity Log row.
+  Future<void> _promptCostBackfill(
+    AppDatabase db,
+    CostBackfillOffer offer,
+    String productName,
+    String? staffId,
+  ) async {
+    final costLabel = formatCurrency(offer.newCostKobo / 100);
+    final apply = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        scrollable: true,
+        title: Text(
+          'Apply cost to past sales?',
+          style: ctx.screenTitleStyle.copyWith(
+            color: Theme.of(ctx).colorScheme.onSurface,
+          ),
+        ),
+        content: Text(
+          'You sold ${offer.unitsUncosted} unit(s) of "$productName" before a '
+          'cost was recorded. Apply $costLabel per unit to those past sales so '
+          'their profit is restated in the period they happened?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Apply'),
+          ),
+        ],
+      ),
+    );
+    if (apply != true) return;
+    final restated = await db.costBatchesDao.applyCostBackfill(
+      offer,
+      description:
+          '$productName: applied $costLabel/unit to ${offer.unitsUncosted} '
+          'unit(s) across ${offer.lineIds.length} past uncosted sale(s)',
+      staffId: staffId,
+    );
+    if (mounted && restated > 0) {
+      AppNotification.showSuccess(
+        context,
+        'Restated $restated past sale(s) of $productName',
+      );
+    }
+  }
+
+  /// Save & New: clears the form for the next product, keeping the store,
+  /// category and manufacturer, and puts the cursor in Name.
+  Future<void> _resetForNextProduct() async {
+    _catalogueDebounce?.cancel();
+    for (final c in [
+      _nameCtrl,
+      _subtitleCtrl,
+      _retailPriceCtrl,
+      _wholesalePriceCtrl,
+      _buyingPriceCtrl,
+      _emptyCrateValueCtrl,
+      _barcodeCtrl,
+      _unitsPerPackCtrl,
+    ]) {
+      c.clear();
+    }
+    _lowStockCtrl.text = '5';
+    _initialStockCtrl.text = '0';
+    setState(() {
+      _unit = null;
+      _trackEmpties = false;
+      _allowFractionalSales = false;
+      _expiryDate = null;
+      _selectedSupplier = null;
+      _newSupplierName = null;
+      _pendingImageBytes = null;
+      _isNameFromCatalogue = false;
+      _isUnitFromCatalogue = false;
+      _isPhotoFromCatalogue = false;
+      _barcodeCollisionName = null;
+      _barcodeMatches = const [];
+      _matchesDismissed = false;
+      _barcodeNote = null;
+      _productSuggestions = [];
+    });
+    await _loadData();
+    if (!mounted) return;
+    // The kept manufacturer's (possibly just saved) crate value.
+    final manufacturer = _selectedManufacturer;
+    if (manufacturer != null) _selectManufacturer(manufacturer);
+    _nameFocus.requestFocus();
+    final nameBox = _fieldKeys[FastAddField.name]!.currentContext;
+    if (nameBox != null && nameBox.mounted) Scrollable.ensureVisible(nameBox);
   }
 
   /// Pick + process an optional product photo, held in memory until the product
@@ -1350,648 +1317,313 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   }
 
   Future<void> _addSupplierViaForm() async {
+    if (!Gates.manageSuppliers.allowsNow(ref)) return;
     final created = await SupplierFormSheet.show(context);
     if (created == null || !mounted) return;
-    _allSuppliers = await ref
+    final suppliers = await ref
         .read(databaseProvider)
         .catalogDao
         .getAllSuppliers();
     if (!mounted) return;
-    _selectSupplier(created);
+    setState(() {
+      _allSuppliers = suppliers;
+      _selectedSupplier = created;
+      _newSupplierName = null;
+    });
   }
+
+  // ── Derived values for the build ────────────────────────────────────────
+
+  int _kobo(String raw) => (parseCurrency(raw.trim()) * 100).round();
+
+  int get _openingQuantity => int.tryParse(_initialStockCtrl.text.trim()) ?? 0;
+
+  /// The − / + buttons: reads the box at the tap, never below 0.
+  void _stepQuantity(int by) {
+    final next = _openingQuantity + by;
+    _initialStockCtrl.text = '${next < 0 ? 0 : next}';
+  }
+
+  /// The profit rows (#487): only when a cost is filled and the person may
+  /// see it. Wholesale mirrors retail when blank, as the model saves it.
+  List<ProductProfitLine> _profitLines({
+    required bool canSeeCost,
+    String suffix = '',
+  }) {
+    final costRaw = _buyingPriceCtrl.text.trim();
+    if (!canSeeCost || costRaw.isEmpty) return const [];
+    final cost = _kobo(costRaw);
+    final retail = _kobo(_retailPriceCtrl.text);
+    final wholesaleRaw = _wholesalePriceCtrl.text.trim();
+    final wholesale = wholesaleRaw.isEmpty ? retail : _kobo(wholesaleRaw);
+    return [
+      for (final (title, price) in [
+        ('Retail profit', retail),
+        if (_hasWholesale) ('Wholesale profit', wholesale),
+      ])
+        if (productProfit(priceKobo: price, costKobo: cost) case final p?)
+          ProductProfitLine(
+            title: '$title$suffix',
+            share: '${p.percent}% of selling price',
+            amount: formatCurrency(p.amountKobo / 100),
+            isLoss: p.isLoss,
+          ),
+    ];
+  }
+
+  // ── Build ───────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    final isExisting = _selectedExistingProduct != null;
     final canEditBuying = Gates.editBuyingPrice.allows(ref);
-    final gap = context.getRSize(14);
+    // Watched so the crate rule follows the business (and the provider stays
+    // loaded for [_isCrateBusiness] at save time).
+    ref.watch(currentBusinessProvider);
 
     return Container(
       decoration: AppDecorations.pageBackground(context),
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        // Keep the body + save button above the keyboard. This screen is
-        // pushed from two places onto DIFFERENT navigators: the Inventory FAB
-        // pushes it on the tab's nested navigator (under MainLayout, whose
-        // Scaffold already resizes for the keyboard), but the post-onboarding
-        // auto-show (main_layout.dart) pushes it on the ROOT navigator, ABOVE
-        // MainLayout — there nothing resizes for the keyboard, so the save
-        // button and the bottom Quantity/Store fields end up hidden behind it.
-        // `true` is correct in BOTH cases: nested, MainLayout's Scaffold has
-        // already zeroed the bottom viewInsets for descendants, so this is a
-        // no-op; on the root navigator it lifts the body + bottomNavigationBar
-        // above the keyboard. The save-button padding stays nav-only
-        // (deviceBottomPadding) — when the keyboard is up the system nav bar
-        // is occluded, so the extra is harmless.
-        resizeToAvoidBottomInset: true,
-        appBar: InventoryTopBar(
-          icon: isExisting ? AppIcons.inventory : AppIcons.tag,
-          title: isExisting ? 'Add Stock' : 'Add ${_lexicon.item}',
-          height: inventoryTopBarHeight(context),
-          // Same pop as the old BackButton, drawn with the app's icon set
-          // like CEO Settings' back button.
-          leading: IconButton(
-            tooltip: MaterialLocalizations.of(context).backButtonTooltip,
-            constraints: const BoxConstraints(
-              minWidth: kMinInteractiveDimension,
-              minHeight: kMinInteractiveDimension,
-            ),
-            onPressed: () => Navigator.of(context).maybePop(),
-            icon: AppIcon(
-              AppIcons.arrowBack,
-              size: context.getRSize(24),
-              color: Theme.of(context).colorScheme.onSurface,
-            ),
-          ),
-        ),
-        body: SafeArea(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              // Forms cap at the fixed 720 and centre (#392), measured.
-              final gutter = inventoryGutter(context, constraints.maxWidth);
-              return SingleChildScrollView(
-                padding: EdgeInsets.fromLTRB(
-                  gutter,
-                  context.getRSize(16),
-                  gutter,
-                  context.getRSize(16),
+      // The body width decides the layout. Measured here, around the Scaffold,
+      // because it also decides whether there is a footer bar.
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final insets = MediaQuery.paddingOf(context);
+          final layout = _FormLayout.of(
+            constraints.maxWidth - insets.left - insets.right,
+          );
+          return Scaffold(
+            backgroundColor: Colors.transparent,
+            // Keep the body above the keyboard. This screen is pushed from two
+            // places onto DIFFERENT navigators: the Inventory FAB pushes it on
+            // the tab's nested navigator (under MainLayout, whose Scaffold
+            // already resizes for the keyboard), but the post-onboarding
+            // auto-show (main_layout.dart) pushes it on the ROOT navigator,
+            // ABOVE MainLayout — there nothing resizes for the keyboard, so the
+            // bottom boxes end up hidden behind it. `true` is correct in BOTH
+            // cases: nested, MainLayout's Scaffold has already zeroed the
+            // bottom viewInsets for descendants, so this is a no-op; on the
+            // root navigator it lifts the body above the keyboard. The footer
+            // padding stays nav-only (deviceBottomPadding) — when the keyboard
+            // is up the system nav bar is occluded, so the extra is harmless.
+            resizeToAvoidBottomInset: true,
+            appBar: InventoryTopBar(
+              icon: AppIcons.addSquare,
+              title: _isEdit ? 'Edit ${_lexicon.item}' : 'Add ${_lexicon.item}',
+              subtitle: _isEdit
+                  ? "Update this item's details"
+                  : 'Add a new item to your inventory',
+              height: inventoryTopBarHeight(context),
+              leading: IconButton(
+                tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+                constraints: const BoxConstraints(
+                  minWidth: kMinInteractiveDimension,
+                  minHeight: kMinInteractiveDimension,
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                onPressed: () => Navigator.of(context).maybePop(),
+                icon: AppIcon(
+                  AppIcons.arrowBack,
+                  size: context.getRSize(24),
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+            ),
+            body: SafeArea(
+              child: switch (layout) {
+                _FormLayout.phone => _phoneBody(canEditBuying),
+                _FormLayout.twoColumn => _columnsBody(canEditBuying),
+                _FormLayout.wide => Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (_errorMessage != null) ...[
-                      InventoryNotice(
-                        icon: AppIcons.alertCircle,
-                        tone: IconTileTone.danger,
-                        message: _errorMessage!,
-                        onClose: () => setState(() => _errorMessage = null),
-                      ),
-                      SizedBox(height: context.getRSize(16)),
-                    ],
-                    // ── FAST-ADD (direct mode, new product) vs the classic
-                    // full layout (Receive Stock mini-form / add-stock-to-
-                    // existing). ───────────────────────────────────────────
-                    if (_useFastLayout)
-                      ..._fastFormChildren(canEditBuying: canEditBuying)
-                    else
-                      ..._classicFormChildren(
-                        isExisting: isExisting,
-                        canEditBuying: canEditBuying,
-                        gap: gap,
-                      ),
+                    Expanded(child: _columnsBody(canEditBuying)),
+                    _previewPanel(canEditBuying),
                   ],
                 ),
-              );
-            },
-          ),
-        ),
-        bottomNavigationBar: InventoryFormFooter(
-          child: AppButton(
-            text: isExisting ? 'Add Stock' : 'Add ${_lexicon.item}',
-            variant: AppButtonVariant.primary,
-            isLoading: _isSaving,
-            onPressed: _save,
-          ),
-        ),
+              },
+            ),
+            bottomNavigationBar: layout == _FormLayout.wide ? null : _footer(),
+          );
+        },
       ),
     );
   }
 
-  // ── CLASSIC LAYOUT (Receive Stock mini-form / add stock to existing) ──────
+  /// Under 600: one column of cards, capped at 720 and centred (#392).
+  Widget _phoneBody(bool canEditBuying) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final gutter = inventoryGutter(context, constraints.maxWidth);
+        return SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+            gutter,
+            context.getRSize(16),
+            gutter,
+            context.getRSize(16),
+          ),
+          child: _cardColumn([
+            ..._leftCards(),
+            ..._rightCards(canEditBuying: canEditBuying, sideBySide: false),
+          ]),
+        );
+      },
+    );
+  }
 
-  List<Widget> _classicFormChildren({
-    required bool isExisting,
+  /// 600 and over: Product Details + Product Unit on the left; Pricing,
+  /// Stock, Track Empty Crates and More details on the right.
+  Widget _columnsBody(bool canEditBuying) {
+    final gap = context.getRSize(16);
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(gap),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: _cardColumn(_leftCards())),
+          SizedBox(width: gap),
+          Expanded(
+            child: _cardColumn(
+              _rightCards(canEditBuying: canEditBuying, sideBySide: true),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _cardColumn(List<Widget> cards) {
+    final gap = context.getRSize(16);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < cards.length; i++) ...[
+          if (i > 0) SizedBox(height: gap),
+          cards[i],
+        ],
+      ],
+    );
+  }
+
+  List<Widget> _leftCards() => [_detailsCard(), _unitCard()];
+
+  List<Widget> _rightCards({
     required bool canEditBuying,
-    required double gap,
-  }) {
-    final section = context.getRSize(16);
-    return [
-      InventoryFormCard(
-        children: [
-          // ── EXISTING PRODUCT BANNER ──────────────────────────────
-          if (isExisting) ...[
-            InventoryNotice(
-              icon: AppIcons.inventory,
-              tone: IconTileTone.green,
-              title: 'Adding stock to existing ${_lexicon.itemLower}',
-              message: productDisplayName(
-                _selectedExistingProduct!.name,
-                _selectedExistingProduct!.size,
-                unit: _selectedExistingProduct!.unit,
-              ),
-              onClose: _clearExistingProduct,
-              closeTooltip: 'Clear',
-            ),
-            SizedBox(height: section),
-          ] else ...[
-            // ── NAME SEARCH (new product mode only) ────────────────
-            AppInput(
-              controller: _nameCtrl,
-              labelText: '${_lexicon.item} Name *',
-              hintText: _nameHint,
-              prefixIcon: const InventorySearchIcon(),
-              onChanged: _onNameChanged,
-            ),
-            if (_isNameFromCatalogue) const CatalogueFilledNote(),
-            if (_productSuggestions.isNotEmpty) _productSuggestionsList(),
-            SizedBox(height: gap),
-          ],
-          // ── DETAIL FIELDS (always shown; pre-filled for existing) ─
-          AppInput(
-            controller: _categoryCtrl,
-            labelText: '${_lexicon.category.toUpperCase()} *',
-            hintText: 'Search or type category name…',
-            prefixIcon: const InventorySearchIcon(),
-            onChanged: _onCategoryChanged,
-            suffixIcon: _selectedCategory != null
-                ? InventoryFieldClear(onPressed: _clearCategory)
-                : null,
-          ),
-          // Starter category suggestions for a fresh shop (#80) — shown
-          // before the owner types and only while they have no categories
-          // yet, so a new business isn't a blank slate.
-          if (_allCategories.isEmpty &&
-              _selectedCategory == null &&
-              _categoryCtrl.text.trim().isEmpty)
-            InventorySuggestionList(
-              children: [
-                for (final name in _lexicon.starterCategories)
-                  InventorySuggestionTile(
-                    label: name,
-                    icon: AppIcons.addCircle,
-                    onTap: () {
-                      _categoryCtrl.text = name;
-                      _onCategoryChanged(name);
-                    },
-                  ),
-              ],
-            ),
-          if (_categorySuggestions.isNotEmpty ||
-              (_categoryCtrl.text.trim().isNotEmpty &&
-                  _selectedCategory == null))
-            _categorySuggestionsList(),
-          SizedBox(height: section),
-          AppInput(
-            controller: _subtitleCtrl,
-            labelText: 'Description / Subtitle *',
-            hintText: _descriptionHint,
-          ),
-          SizedBox(height: gap),
-          // ── BARCODE (optional) ─────────────────────────────────
-          _barcodeField(),
-          SizedBox(height: gap),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: AppInput(
-                  controller: _retailPriceCtrl,
-                  labelText: 'Retailer Price ($activeCurrencySymbol) *',
-                  hintText: '0.00',
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  inputFormatters: [CurrencyInputFormatter()],
-                ),
-              ),
-              SizedBox(width: context.getRSize(12)),
-              Expanded(
-                child: AppInput(
-                  controller: _wholesalePriceCtrl,
-                  labelText: 'Wholesaler Price ($activeCurrencySymbol) *',
-                  hintText: '0.00',
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  inputFormatters: [CurrencyInputFormatter()],
-                ),
-              ),
-            ],
-          ),
-          if (canEditBuying) ...[
-            SizedBox(height: gap),
-            AppInput(
-              controller: _buyingPriceCtrl,
-              labelText: 'Buying Price ($activeCurrencySymbol) *',
-              hintText: '0.00',
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              inputFormatters: [CurrencyInputFormatter()],
-            ),
-          ],
-          SizedBox(height: gap),
-          AppInput(
-            controller: _lowStockCtrl,
-            labelText: 'Low Stock Alert *',
-            hintText: '5',
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          ),
-          SizedBox(height: section),
+    required bool sideBySide,
+  }) => [
+    _pricingCard(canEditBuying),
+    _stockCard(allowSideBySide: sideBySide),
+    if (_showsCrateCard) _cratesCard(),
+    _moreDetailsCard(),
+  ];
 
-          // ── PRODUCT UNIT SELECTOR (optional, #108) ─────────────
-          const InventoryFieldLabel('PRODUCT UNIT'),
-          SizedBox(height: context.getRSize(8)),
-          _unitDropdown(),
-          if (_isUnitFromCatalogue && !isExisting) const CatalogueFilledNote(),
-          SizedBox(height: context.getRSize(8)),
-
-          // ── ALLOW FRACTIONAL SALES ─────────────────────────────
-          _fractionalRow(),
-          SizedBox(height: section),
-
-          // ── EXPIRY DATE (optional, all business types) ─────────
-          ..._expiryChildren(),
-          SizedBox(height: section),
-
-          // ── MANUFACTURER ───────────────────────────────────────
-          AppInput(
-            controller: _manufacturerCtrl,
-            labelText: 'MANUFACTURER (optional)',
-            hintText: 'Search or type manufacturer name…',
-            prefixIcon: const InventorySearchIcon(),
-            onChanged: _onManufacturerChanged,
-            suffixIcon: _selectedManufacturer != null
-                ? InventoryFieldClear(onPressed: _clearManufacturer)
-                : null,
-          ),
-          if (_manufacturerSuggestions.isNotEmpty ||
-              (_manufacturerCtrl.text.trim().isNotEmpty &&
-                  _selectedManufacturer == null))
-            _manufacturerSuggestionsList(),
-          SizedBox(height: section),
-
-          // ── TRACK EMPTIES + CRATE VALUE (directly below Manufacturer) ─
-          // Crate-only (rule #13): hidden for non-Bar/Beer-distributor
-          // businesses; _effectiveTrackEmpties also forces it off on save.
-          if (_unit?.toLowerCase() == 'bottle' && _isCrateBusiness) ...[
-            ..._trackEmptiesChildren(),
-            SizedBox(height: section),
-          ],
-
-          if (!widget.receiveMode) ...[
-            // ── SUPPLIER ───────────────────────────────────────────
-            ..._supplierChildren(labelText: 'SUPPLIER (optional)'),
-            SizedBox(height: section),
-          ],
-        ],
-      ),
-      SizedBox(height: section),
-      InventoryFormCard(
-        children: [
-          // ── QUANTITY & STORE (always visible) ───────────────
-          AppInput(
-            controller: _initialStockCtrl,
-            labelText: isExisting ? 'QUANTITY TO ADD *' : 'INITIAL QUANTITY *',
-            hintText: '0',
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          ),
-          if (!widget.receiveMode) ...[
-            SizedBox(height: section),
-            const InventoryFieldLabel('STORE *'),
-            SizedBox(height: context.getRSize(8)),
-            if (_stores.isEmpty)
-              const InventoryEmptyCard(icon: AppIcons.store, title: 'No stores')
-            else
-              _storeDropdown(),
-          ],
-        ],
-      ),
-    ];
-  }
-
-  // ── FAST-ADD LAYOUT (direct mode) ───────────────────────────────────────────
-
-  /// The adaptive Fast-Add form (ADR 0006): a short fast section — Name (with a
-  /// size hint), Selling Price, skippable Buying Price, optional Category, and
-  /// (crate businesses only) a required Manufacturer, then Quantity — followed
-  /// by a collapsible "More details" section holding everything else.
-  List<Widget> _fastFormChildren({required bool canEditBuying}) {
-    final gap = context.getRSize(14);
-    final section = context.getRSize(16);
-    return [
-      InventoryFormCard(
-        children: [
-          // ── NAME (include the size) ─────────────────────────────────────
-          AppInput(
-            controller: _nameCtrl,
-            labelText: '${_lexicon.item} Name *',
-            hintText: _nameHint,
-            prefixIcon: const InventorySearchIcon(),
-            onChanged: _onNameChanged,
-          ),
-          const InventoryFieldHelper(
-            'Include the size or key detail in the name.',
-          ),
-          if (_isNameFromCatalogue) const CatalogueFilledNote(),
-          if (_productSuggestions.isNotEmpty) _productSuggestionsList(),
-          SizedBox(height: section),
-
-          // ── SELLING PRICE ───────────────────────────────────────────────
-          AppInput(
-            controller: _retailPriceCtrl,
-            labelText: 'Selling Price ($activeCurrencySymbol) *',
-            hintText: '0.00',
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [CurrencyInputFormatter()],
-          ),
-          SizedBox(height: gap),
-
-          // ── BUYING PRICE (skippable) ────────────────────────────────────
-          if (canEditBuying) ...[
-            AppInput(
-              controller: _buyingPriceCtrl,
-              labelText: 'Buying Price ($activeCurrencySymbol)',
-              hintText: '0.00',
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              inputFormatters: [CurrencyInputFormatter()],
-            ),
-            const InventoryFieldHelper(
-              'Add what you paid so profit shows correctly. You can add it '
-              'later.',
-            ),
-            SizedBox(height: gap),
-          ],
-
-          // ── CATEGORY (optional, with examples) ──────────────────────────
-          AppInput(
-            controller: _categoryCtrl,
-            labelText: _lexicon.category,
-            hintText: 'Search or type category name…',
-            prefixIcon: const InventorySearchIcon(),
-            onChanged: _onCategoryChanged,
-            suffixIcon: _selectedCategory != null
-                ? InventoryFieldClear(onPressed: _clearCategory)
-                : null,
-          ),
-          InventoryFieldHelper(
-            'e.g. ${_lexicon.starterCategories.take(3).join(', ')}',
-          ),
-          if (_categorySuggestions.isNotEmpty ||
-              (_categoryCtrl.text.trim().isNotEmpty &&
-                  _selectedCategory == null))
-            _categorySuggestionsList(),
-          SizedBox(height: section),
-
-          // ── MANUFACTURER (crate businesses only, optional) ──────────────
-          if (_isCrateBusiness) ...[
-            AppInput(
-              controller: _manufacturerCtrl,
-              labelText: 'Manufacturer (optional)',
-              hintText: 'Search or type manufacturer name…',
-              prefixIcon: const InventorySearchIcon(),
-              onChanged: _onManufacturerChanged,
-              suffixIcon: _selectedManufacturer != null
-                  ? InventoryFieldClear(onPressed: _clearManufacturer)
-                  : null,
-            ),
-            if (_manufacturerSuggestions.isNotEmpty ||
-                (_manufacturerCtrl.text.trim().isNotEmpty &&
-                    _selectedManufacturer == null))
-              _manufacturerSuggestionsList(),
-            SizedBox(height: section),
-          ],
-
-          // ── QUANTITY ────────────────────────────────────────────────────
-          AppInput(
-            controller: _initialStockCtrl,
-            labelText: 'Quantity *',
-            hintText: '0',
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          ),
-          SizedBox(height: context.getRSize(20)),
-
-          // ── PRODUCT UNIT (surfaced up-front, owner request) ─────────────
-          // Always visible — not tucked inside "More details". Defaults to
-          // "No unit"; the trade's starter units are offered but not
-          // pre-selected. "No unit" is a real, always-valid choice, so save
-          // is never blocked.
-          const InventoryFieldLabel('PRODUCT UNIT'),
-          SizedBox(height: context.getRSize(8)),
-          _unitDropdown(),
-          if (_isUnitFromCatalogue) const CatalogueFilledNote(),
-        ],
-      ),
-      SizedBox(height: section),
-
-      // ── MORE DETAILS (collapsible) ──────────────────────────────────────
-      InventoryFormCard(
-        children: [
-          _moreDetailsHeader(),
-          if (_showMoreDetails) ...[
-            SizedBox(height: section),
-            ..._moreDetailsChildren(),
-          ],
-        ],
-      ),
-    ];
-  }
-
-  /// The collapsed "More details" fields: everything optional or defaulted.
-  List<Widget> _moreDetailsChildren() {
-    final gap = context.getRSize(14);
-    final section = context.getRSize(16);
-    return [
-      // ── PHOTO (optional, new products only — edits use Update Product) ───
-      if (_selectedExistingProduct == null && !widget.receiveMode) ...[
-        ProductPhotoField(
-          pendingBytes: _pendingImageBytes,
-          onPick: _pickPhoto,
-          onRemove: _pendingImageBytes == null
-              ? null
-              : () => setState(() {
-                  _pendingImageBytes = null;
-                  _isPhotoFromCatalogue = false;
-                }),
+  Widget _footer() {
+    if (_isEdit) {
+      return InventoryFormFooter(
+        child: AppButton(
+          key: AddProductKeys.save,
+          text: 'Save Changes',
+          icon: AppIcons.check,
+          isLoading: _isSaving,
+          onPressed: () => _save(andNew: false),
         ),
-        if (_isPhotoFromCatalogue) const CatalogueFilledNote(),
-        SizedBox(height: gap),
-      ],
-      // ── DESCRIPTION (optional) ──────────────────────────────────────────
-      AppInput(
-        controller: _subtitleCtrl,
-        labelText: 'Description',
-        hintText: _descriptionHint,
-      ),
-      SizedBox(height: gap),
-
-      // ── BARCODE (optional) ──────────────────────────────────────────────
-      _barcodeField(),
-      SizedBox(height: gap),
-
-      // ── WHOLESALER PRICE (optional; mirrors selling on save) ────────────
-      AppInput(
-        controller: _wholesalePriceCtrl,
-        labelText: 'Wholesaler Price ($activeCurrencySymbol)',
-        hintText: 'Defaults to the selling price',
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        inputFormatters: [CurrencyInputFormatter()],
-      ),
-      SizedBox(height: section),
-
-      // ── ALLOW FRACTIONAL SALES ──────────────────────────────────────────
-      _fractionalRow(),
-      SizedBox(height: section),
-
-      // ── TRACK EMPTIES + CRATE VALUE (crate business + bottle only) ──────
-      if (_unit?.toLowerCase() == 'bottle' && _isCrateBusiness) ...[
-        ..._trackEmptiesChildren(),
-        SizedBox(height: section),
-      ],
-
-      // ── LOW STOCK ALERT (default 5) ─────────────────────────────────────
-      AppInput(
-        controller: _lowStockCtrl,
-        labelText: 'Low Stock Alert',
-        hintText: '5',
-        keyboardType: TextInputType.number,
-        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-      ),
-      SizedBox(height: section),
-
-      // ── SUPPLIER (optional) ─────────────────────────────────────────────
-      ..._supplierChildren(labelText: 'Supplier'),
-      SizedBox(height: section),
-
-      // ── EXPIRY DATE (optional) ──────────────────────────────────────────
-      ..._expiryChildren(),
-
-      // ── STORE (multi-store only; single-store is used silently) ─────────
-      if (_stores.length > 1) ...[
-        SizedBox(height: section),
-        const InventoryFieldLabel('STORE *'),
-        SizedBox(height: context.getRSize(8)),
-        _storeDropdown(),
-      ],
-    ];
-  }
-
-  // ── SHARED FIELDS ───────────────────────────────────────────────────────────
-
-  Widget _unitDropdown() => AppDropdown<String?>(
-    value: _unit,
-    hintText: 'No unit',
-    // "No unit" (#108) clears the unit — the product saves with just its
-    // name and is hidden wherever the unit would render.
-    items: [
-      const DropdownMenuItem<String?>(value: null, child: Text('No unit')),
-      ..._dynamicUnits.map(
-        (u) => DropdownMenuItem<String?>(value: u, child: Text(u)),
-      ),
-    ],
-    onChanged: _onUnitPicked,
-  );
-
-  Widget _storeDropdown() => AppDropdown<StoreData?>(
-    value: _selectedStore,
-    items: _stores
-        .map(
-          (w) => DropdownMenuItem<StoreData?>(
-            value: w,
-            child: Text(w.name, overflow: TextOverflow.ellipsis),
-          ),
-        )
-        .toList(),
-    onChanged: (v) => setState(() => _selectedStore = v),
-  );
-
-  Widget _fractionalRow() => InventoryCheckRow(
-    value: _allowFractionalSales,
-    onChanged: (v) => setState(() => _allowFractionalSales = v ?? false),
-    title: 'Allow fractional sales',
-    subtitle:
-        'Enables ±0.5 quantity steps when selling this ${_lexicon.itemLower}',
-  );
-
-  List<Widget> _trackEmptiesChildren() => [
-    InventoryCheckRow(
-      value: _trackEmpties,
-      onChanged: (v) => setState(() => _trackEmpties = v ?? false),
-      title: 'Track empty crate returns',
-      subtitle:
-          'Enables deposit collection and crate return flow for this '
-          '${_lexicon.itemLower}',
-    ),
-    // Crate value is shared at the manufacturer level; selecting a
-    // manufacturer autofills it (§16.5).
-    if (_trackEmpties) ...[
-      SizedBox(height: context.getRSize(6)),
-      AppInput(
-        controller: _emptyCrateValueCtrl,
-        labelText: 'Empty Crate Value ($activeCurrencySymbol)',
-        hintText: '0.00',
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        inputFormatters: [CurrencyInputFormatter()],
-      ),
-    ],
-  ];
-
-  List<Widget> _supplierChildren({required String labelText}) => [
-    AppInput(
-      controller: _supplierCtrl,
-      labelText: labelText,
-      hintText: 'Search supplier name…',
-      prefixIcon: const InventorySearchIcon(),
-      onChanged: _onSupplierChanged,
-      suffixIcon: _selectedSupplier != null
-          ? InventoryFieldClear(onPressed: _clearSupplier)
-          : null,
-    ),
-    if (_supplierSuggestions.isNotEmpty ||
-        (_supplierCtrl.text.trim().isNotEmpty && _selectedSupplier == null))
-      _supplierSuggestionsList(),
-    if (Gates.manageSuppliers.allows(ref)) ...[
-      SizedBox(height: context.getRSize(8)),
-      AppButton(
-        text: 'Add new supplier',
-        variant: AppButtonVariant.outline,
-        onPressed: _addSupplierViaForm,
-      ),
-    ],
-  ];
-
-  List<Widget> _expiryChildren() {
-    String? label() {
-      final d = _expiryDate;
-      if (d == null) return null;
-      return '${d.day.toString().padLeft(2, '0')}/'
-          '${d.month.toString().padLeft(2, '0')}/${d.year}';
+      );
     }
-
-    return [
-      const InventoryFieldLabel('EXPIRY DATE'),
-      const InventoryFieldHelper(
-        'Optional — used to flag stock nearing expiry',
+    return InventoryFormFooter(
+      child: Row(
+        children: [
+          Expanded(
+            flex: 2,
+            child: AppButton(
+              key: AddProductKeys.saveAndNew,
+              text: 'Save & New',
+              variant: AppButtonVariant.secondary,
+              onPressed: _isSaving ? null : () => _save(andNew: true),
+            ),
+          ),
+          SizedBox(width: context.getRSize(12)),
+          Expanded(
+            flex: 3,
+            child: AppButton(
+              key: AddProductKeys.save,
+              text: 'Save ${_lexicon.item}',
+              icon: AppIcons.check,
+              isLoading: _isSaving,
+              onPressed: () => _save(andNew: false),
+            ),
+          ),
+        ],
       ),
-      SizedBox(height: context.getRSize(8)),
-      InventoryDateField(
-        label: label(),
-        placeholder: 'No expiry date',
-        onTap: _pickExpiryDate,
-        onClear: () => setState(() => _expiryDate = null),
-      ),
-    ];
+    );
   }
 
-  /// Optional barcode field (#113) with a live soft-collision warning. Shared by
-  /// the Fast-Add and classic layouts. Typing runs [_onBarcodeChanged], which
-  /// warns (never blocks) if another product already uses the code.
-  Widget _barcodeField() {
+  // ── Cards ───────────────────────────────────────────────────────────────
+
+  Widget _detailsCard() {
     final f =
         Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final gap = context.getRSize(16);
+    final categoryName = _selectedCategory?.name ?? _newCategoryName;
+    final manufacturerName =
+        _selectedManufacturer?.name ?? _newManufacturerName;
+    return ProductFormSection(
+      icon: AppIcons.tag,
+      title: '${_lexicon.item} Details',
       children: [
-        AppInput(
-          controller: _barcodeCtrl,
-          labelText: 'Barcode (optional)',
-          hintText: 'Type or scan the ${_lexicon.itemLower} barcode',
-          onChanged: _onBarcodeChanged,
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ProductPhotoBox(
+              pendingBytes: _pendingImageBytes,
+              existingPath: _existingImagePath,
+              onPick: _pickPhoto,
+              onRemove: () => setState(() {
+                _pendingImageBytes = null;
+                _isPhotoFromCatalogue = false;
+              }),
+            ),
+            SizedBox(width: gap),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  KeyedSubtree(
+                    key: _fieldKeys[FastAddField.name],
+                    child: AppInput(
+                      key: AddProductKeys.name,
+                      controller: _nameCtrl,
+                      focusNode: _nameFocus,
+                      labelText: '${_lexicon.item} Name',
+                      hintText: _lexicon.itemNameHint,
+                      textCapitalization: TextCapitalization.words,
+                      onChanged: _onNameChanged,
+                    ),
+                  ),
+                  if (_isNameFromCatalogue) const CatalogueFilledNote(),
+                ],
+              ),
+            ),
+          ],
+        ),
+        if (_isPhotoFromCatalogue) const CatalogueFilledNote(),
+        if (_productSuggestions.isNotEmpty) _nameMatches(),
+        SizedBox(height: gap),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(
+              child: AppInput(
+                key: AddProductKeys.barcode,
+                controller: _barcodeCtrl,
+                labelText: 'Barcode',
+                hintText: 'Scan or type the barcode',
+                prefixIcon: AppIcon(
+                  AppIcons.barcode,
+                  size: context.getRSize(20),
+                  color: Theme.of(context).textTheme.bodySmall?.color,
+                ),
+                onChanged: _onBarcodeChanged,
+              ),
+            ),
+            SizedBox(width: gap),
+            ProductScanButton(onTap: _scanBarcode),
+          ],
         ),
         if (_barcodeCollisionName != null)
           InventoryFieldHelper(
@@ -1999,120 +1631,483 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
             icon: AppIcons.warning,
             color: f.danger,
           ),
+        if (_barcodeMatches.isNotEmpty && !_matchesDismissed && !_isEdit)
+          ProductBarcodeMatchesCard(
+            names: [for (final p in _barcodeMatches) p.name],
+            onOpen: (i) => _openExistingProduct(_barcodeMatches[i]),
+            onCreateAnyway: () => setState(() => _matchesDismissed = true),
+          ),
+        if (_barcodeNote == _BarcodeNote.offline)
+          const InventoryFieldHelper(
+            "Couldn't check the shared list — no internet",
+            icon: AppIcons.warning,
+          ),
+        if (_barcodeNote == _BarcodeNote.newBarcode)
+          const InventoryFieldHelper(
+            'New barcode — fill in the details',
+            icon: AppIcons.infoCircle,
+          ),
+        SizedBox(height: gap),
+        ProductFieldLabel(_lexicon.category),
+        ProductPickerField(
+          key: AddProductKeys.category,
+          value: categoryName,
+          placeholder: 'Choose a ${_lexicon.category.toLowerCase()}',
+          onTap: _pickCategory,
+          onClear: () => setState(() {
+            _selectedCategory = null;
+            _newCategoryName = null;
+          }),
+        ),
+        SizedBox(height: gap),
+        const ProductFieldLabel('Brand / Manufacturer'),
+        ProductPickerField(
+          key: AddProductKeys.manufacturer,
+          value: manufacturerName,
+          placeholder: 'Choose a brand',
+          onTap: _pickManufacturer,
+          onClear: () => setState(() {
+            _selectedManufacturer = null;
+            _newManufacturerName = null;
+          }),
+        ),
       ],
     );
   }
 
-  /// The "More details" toggle: a 48dp row, Bold 15 title and a chevron.
-  Widget _moreDetailsHeader() {
-    final t = Theme.of(context);
-    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
-    return Semantics(
-      button: true,
-      expanded: _showMoreDetails,
-      child: InkWell(
-        onTap: () => setState(() => _showMoreDetails = !_showMoreDetails),
-        borderRadius: BorderRadius.circular(AppSpacing.borderRadiusM),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(
-            minHeight: kMinInteractiveDimension,
+  /// Products already named like the typed name (#487 owner decision 8).
+  /// Tapping one opens its Product Details; an archived one says so.
+  Widget _nameMatches() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const InventoryFieldHelper(
+          'Already in your inventory. Tap one to open it.',
+        ),
+        InventorySuggestionList(
+          children: [
+            for (final p in _productSuggestions)
+              InventorySuggestionTile(
+                label: productDisplayName(
+                  p.name,
+                  p.size,
+                  unit: p.unit,
+                  crates: _isCrateBusiness,
+                ),
+                icon: AppIcons.inventory,
+                trailing: p.isAvailable
+                    ? null
+                    : const TagPill(
+                        label: 'Archived',
+                        tone: TagPillTone.neutral,
+                        dense: true,
+                      ),
+                onTap: () => _openExistingProduct(p),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _unitCard() {
+    final packLabel = unitsPerPackLabel(_unit, crates: _isCrateBusiness);
+    return ProductFormSection(
+      icon: AppIcons.inventory,
+      title: '${_lexicon.item} Unit',
+      subtitle: 'How do you sell and count this ${_lexicon.itemLower}?',
+      children: [
+        Wrap(
+          spacing: context.getRSize(8),
+          runSpacing: context.getRSize(8),
+          children: [
+            // Plain "Crate" is not offered to a new product (#487); a stored
+            // Bottle reads "Bottle Crate" but saves Bottle.
+            for (final u in unitChoices(
+              _dynamicUnits,
+              keep: [_unit, widget.editProduct?.unit],
+            ))
+              ProductUnitChip(
+                key: AddProductKeys.unitChip(u),
+                label: formUnitLabel(u, crates: _isCrateBusiness)!,
+                selected: _unit == u,
+                onTap: () => _onUnitTapped(u),
+              ),
+          ],
+        ),
+        if (_isUnitFromCatalogue) const CatalogueFilledNote(),
+        if (packLabel != null) ...[
+          SizedBox(height: context.getRSize(16)),
+          AppInput(
+            key: AddProductKeys.unitsPerPack,
+            controller: _unitsPerPackCtrl,
+            labelText: packLabel,
+            hintText: 'e.g. 12',
+            suffixText: 'pieces',
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'More details',
-                  style: context
-                      .boldStyle(15)
-                      .copyWith(color: t.colorScheme.onSurface),
+        ],
+      ],
+    );
+  }
+
+  Widget _pricingCard(bool canEditBuying) {
+    final gap = context.getRSize(16);
+    final lines = _profitLines(canSeeCost: canEditBuying);
+    return ProductFormSection(
+      icon: AppIcons.cash,
+      title: 'Pricing',
+      subtitle: pricingSubtitle(_unit, crates: _isCrateBusiness),
+      children: [
+        if (canEditBuying) ...[
+          KeyedSubtree(
+            key: _fieldKeys[FastAddField.buyingPrice],
+            child: _moneyInput(
+              key: AddProductKeys.cost,
+              controller: _buyingPriceCtrl,
+              label: 'Cost Price',
+            ),
+          ),
+          // Blank is accepted: the product is saved Uncosted (ADR 0006).
+          if (_buyingPriceCtrl.text.trim().isEmpty)
+            const InventoryFieldHelper(
+              'Add what you paid so profit shows correctly. You can add it '
+              'later.',
+            ),
+          SizedBox(height: gap),
+        ],
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: KeyedSubtree(
+                key: _fieldKeys[FastAddField.sellingPrice],
+                child: _moneyInput(
+                  key: AddProductKeys.retail,
+                  controller: _retailPriceCtrl,
+                  label: 'Retail Price',
                 ),
               ),
-              AppIcon(
-                _showMoreDetails ? AppIcons.chevronUp : AppIcons.chevronDown,
-                size: context.getRSize(24),
-                color: muted,
+            ),
+            if (_hasWholesale) ...[
+              SizedBox(width: context.getRSize(12)),
+              Expanded(
+                child: _moneyInput(
+                  key: AddProductKeys.wholesale,
+                  controller: _wholesalePriceCtrl,
+                  label: 'Wholesale Price',
+                  hint: 'Same as retail',
+                ),
               ),
             ],
-          ),
+          ],
         ),
+        if (lines.isNotEmpty) ...[
+          SizedBox(height: gap),
+          ProductProfitBox(lines: lines),
+        ],
+      ],
+    );
+  }
+
+  Widget _moneyInput({
+    required Key key,
+    required TextEditingController controller,
+    required String label,
+    String hint = '0',
+    String? suffix,
+  }) {
+    return AppInput(
+      key: key,
+      controller: controller,
+      labelText: label,
+      hintText: hint,
+      prefixText: '$activeCurrencySymbol ',
+      suffixText: suffix,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      inputFormatters: [CurrencyInputFormatter()],
+    );
+  }
+
+  /// [allowSideBySide] (two columns and wider): Opening Quantity and
+  /// Low-Stock Alert share a row when the card is wide enough to hold the
+  /// stepper's number (MEASURED).
+  Widget _stockCard({required bool allowSideBySide}) {
+    final gap = context.getRSize(16);
+    final showsStore = !widget.receiveMode && !_isEdit && _stores.length > 1;
+    return KeyedSubtree(
+      // A store error with no store box to show points at the card.
+      key: showsStore ? null : _fieldKeys[FastAddField.store],
+      child: ProductFormSection(
+        icon: AppIcons.warehouse,
+        title: 'Stock',
+        children: [
+          if (showsStore) ...[
+            KeyedSubtree(
+              key: _fieldKeys[FastAddField.store],
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const ProductFieldLabel('Store'),
+                  AppDropdown<StoreData?>(
+                    key: AddProductKeys.store,
+                    value: _selectedStore,
+                    items: _stores
+                        .map(
+                          (w) => DropdownMenuItem<StoreData?>(
+                            value: w,
+                            child: Text(
+                              w.name,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (v) => setState(() => _selectedStore = v),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: gap),
+          ],
+          LayoutBuilder(
+            builder: (context, constraints) => _stockFields(
+              sideBySide: allowSideBySide && constraints.maxWidth >= 360,
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _productSuggestionsList() => InventorySuggestionList(
-    children: [
-      for (final p in _productSuggestions)
-        InventorySuggestionTile(
-          label: productDisplayName(p.name, p.size, unit: p.unit),
-          onTap: () => _selectProduct(p),
-        ),
-    ],
-  );
+  /// Opening Quantity and Low-Stock Alert. [sideBySide]: one row, each with
+  /// its count word under it; else stacked with the count word in the box.
+  Widget _stockFields({required bool sideBySide}) {
+    final gap = context.getRSize(16);
+    final quantity = _openingQuantity;
+    final lowStock = int.tryParse(_lowStockCtrl.text.trim()) ?? 0;
 
-  Widget _categorySuggestionsList() => InventorySuggestionList(
-    children: [
-      ..._categorySuggestions.map(
-        (c) => InventorySuggestionTile(
-          label: c.name,
-          onTap: () => _selectCategory(c),
+    final quantityBox = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const ProductFieldLabel('Opening Quantity'),
+        KeyedSubtree(
+          key: _fieldKeys[FastAddField.quantity],
+          child: ProductQuantityStepper(
+            field: AppInput(
+              key: AddProductKeys.quantity,
+              controller: _initialStockCtrl,
+              hintText: '0',
+              textAlign: TextAlign.center,
+              suffixText: sideBySide
+                  ? null
+                  : formCountNoun(_unit, quantity, crates: _isCrateBusiness),
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            ),
+            onDecrement: () => _stepQuantity(-1),
+            onIncrement: () => _stepQuantity(1),
+          ),
         ),
-      ),
-      if (_categoryCtrl.text.trim().isNotEmpty &&
-          !_categorySuggestions.any(
-            (c) =>
-                c.name.toLowerCase() == _categoryCtrl.text.trim().toLowerCase(),
-          ))
-        InventorySuggestionTile(
-          label: 'Create "${_categoryCtrl.text.trim()}"',
-          icon: AppIcons.addCircle,
-          emphasis: true,
-          onTap: () => _createNewCategory(_categoryCtrl.text.trim()),
+        if (sideBySide)
+          InventoryFieldHelper(
+            'Counted in ${formCountNoun(_unit, 2, crates: _isCrateBusiness)}',
+          ),
+        if (widget.receiveMode)
+          const InventoryFieldHelper(
+            'This amount goes onto the delivery list.',
+          ),
+      ],
+    );
+    final lowStockBox = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AppInput(
+          key: AddProductKeys.lowStock,
+          controller: _lowStockCtrl,
+          labelText: 'Low-Stock Alert',
+          hintText: '5',
+          prefixIcon: AppIcon(
+            AppIcons.notification,
+            size: context.getRSize(20),
+            color: Theme.of(context).textTheme.bodySmall?.color,
+          ),
+          suffixText: sideBySide
+              ? null
+              : formCountNoun(_unit, lowStock, crates: _isCrateBusiness),
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
         ),
-    ],
-  );
+        InventoryFieldHelper(
+          sideBySide
+              ? 'Notify me at this level'
+              : 'You will get a notice when stock falls to this level.',
+        ),
+      ],
+    );
 
-  Widget _manufacturerSuggestionsList() => InventorySuggestionList(
-    children: [
-      ..._manufacturerSuggestions.map(
-        (m) => InventorySuggestionTile(
-          label: m.name,
-          onTap: () => _selectManufacturer(m),
-        ),
-      ),
-      if (_manufacturerCtrl.text.trim().isNotEmpty &&
-          !_manufacturerSuggestions.any(
-            (m) =>
-                m.name.toLowerCase() ==
-                _manufacturerCtrl.text.trim().toLowerCase(),
-          ))
-        InventorySuggestionTile(
-          label: 'Create "${_manufacturerCtrl.text.trim()}"',
-          icon: AppIcons.addCircle,
-          emphasis: true,
-          onTap: () => _createNewManufacturer(_manufacturerCtrl.text.trim()),
-        ),
-    ],
-  );
+    // Edit mode: stock changes go through Adjust Stock, so only the alert.
+    if (_isEdit) return lowStockBox;
+    if (sideBySide) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(flex: 3, child: quantityBox),
+          SizedBox(width: gap),
+          Expanded(flex: 2, child: lowStockBox),
+        ],
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        quantityBox,
+        SizedBox(height: gap),
+        lowStockBox,
+      ],
+    );
+  }
 
-  Widget _supplierSuggestionsList() => InventorySuggestionList(
-    children: [
-      ..._supplierSuggestions.map(
-        (s) => InventorySuggestionTile(
-          label: s.name,
-          onTap: () => _selectSupplier(s),
-        ),
+  /// Track Empty Crates (crate business + Bottle only, rule #13). The crate
+  /// value is shared at the manufacturer level: picking a manufacturer fills
+  /// it, and the save writes it back manufacturer-wide (§16.5).
+  Widget _cratesCard() {
+    final manufacturerName =
+        _selectedManufacturer?.name ?? _newManufacturerName;
+    return ProductFormSection(
+      icon: AppIcons.recycle,
+      title: 'Track Empty Crates',
+      subtitle: 'Count returnable crates and charge a deposit.',
+      trailing: Switch(
+        key: AddProductKeys.trackEmpties,
+        value: _trackEmpties,
+        onChanged: (v) => setState(() => _trackEmpties = v),
       ),
-      if (_supplierCtrl.text.trim().isNotEmpty &&
-          !_supplierSuggestions.any(
-            (s) =>
-                s.name.toLowerCase() == _supplierCtrl.text.trim().toLowerCase(),
-          ))
-        InventorySuggestionTile(
-          label: 'Create "${_supplierCtrl.text.trim()}"',
-          icon: AppIcons.addCircle,
-          emphasis: true,
-          onTap: () => _createNewSupplier(_supplierCtrl.text.trim()),
+      children: [
+        if (_trackEmpties) ...[
+          _moneyInput(
+            key: AddProductKeys.crateDeposit,
+            controller: _emptyCrateValueCtrl,
+            label: 'Crate Deposit',
+            suffix: 'per crate',
+          ),
+          InventoryFieldHelper(
+            manufacturerName == null
+                ? 'Crates are counted under the brand / manufacturer you '
+                      'choose above.'
+                : 'Crates are counted under the manufacturer: '
+                      '$manufacturerName.',
+            icon: AppIcons.infoCircle,
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _moreDetailsCard() {
+    final gap = context.getRSize(16);
+    final expiry = _expiryDate;
+    final expiryLabel = expiry == null
+        ? null
+        : '${expiry.day.toString().padLeft(2, '0')}/'
+              '${expiry.month.toString().padLeft(2, '0')}/${expiry.year}';
+    return ProductFormSection(
+      icon: AppIcons.description,
+      title: 'More details',
+      children: [
+        AppInput(
+          key: AddProductKeys.description,
+          controller: _subtitleCtrl,
+          labelText: 'Description',
+          hintText: _lexicon.itemDescriptionHint,
         ),
-    ],
-  );
+        // Receive Stock's delivery carries its own supplier (as before).
+        if (!widget.receiveMode) ...[
+          SizedBox(height: gap),
+          const ProductFieldLabel('Supplier'),
+          ProductPickerField(
+            key: AddProductKeys.supplier,
+            value: _selectedSupplier?.name ?? _newSupplierName,
+            placeholder: 'Choose a supplier',
+            onTap: _pickSupplier,
+            onClear: () => setState(() {
+              _selectedSupplier = null;
+              _newSupplierName = null;
+            }),
+          ),
+        ],
+        SizedBox(height: gap),
+        const ProductFieldLabel('Expiry Date'),
+        InventoryDateField(
+          label: expiryLabel,
+          placeholder: 'No expiry date',
+          onTap: _pickExpiryDate,
+          onClear: () => setState(() => _expiryDate = null),
+        ),
+        const InventoryFieldHelper(
+          'Optional — used to flag stock nearing expiry',
+        ),
+        SizedBox(height: context.getRSize(8)),
+        InventoryCheckRow(
+          value: _allowFractionalSales,
+          onChanged: (v) => setState(() => _allowFractionalSales = v ?? false),
+          title: 'Allow fractional sales',
+          subtitle:
+              'Enables ±0.5 quantity steps when selling this '
+              '${_lexicon.itemLower}',
+        ),
+      ],
+    );
+  }
+
+  /// 1000 and over: the Preview side panel with the save buttons.
+  Widget _previewPanel(bool canEditBuying) {
+    final name = _nameCtrl.text.trim();
+    final pack = int.tryParse(_unitsPerPackCtrl.text.trim());
+    final noun = priceUnitNoun(_unit, crates: _isCrateBusiness);
+    final lines = _profitLines(canSeeCost: canEditBuying, suffix: ' per $noun');
+    final retail = _retailPriceCtrl.text.trim();
+    return ProductPreviewPanel(
+      key: AddProductKeys.preview,
+      preview: ProductPreviewCard(
+        name: name.isEmpty ? '${_lexicon.item} name' : name,
+        stockLabel: _isEdit ? null : '$_openingQuantity in stock',
+        detailLine: previewDetailLine(
+          unit: _unit,
+          crates: _isCrateBusiness,
+          unitsPerPack: (pack != null && pack > 0) ? pack : null,
+          category: _selectedCategory?.name ?? _newCategoryName,
+        ),
+        priceLabel: formatCurrency(retail.isEmpty ? 0 : _kobo(retail) / 100),
+        categoryName: _selectedCategory?.name ?? _newCategoryName,
+        photoBytes: _pendingImageBytes,
+      ),
+      profit: lines.isEmpty ? null : ProductProfitBox(lines: lines),
+      actions: [
+        AppButton(
+          key: AddProductKeys.save,
+          text: _isEdit ? 'Save Changes' : 'Save ${_lexicon.item}',
+          icon: AppIcons.check,
+          isLoading: _isSaving,
+          onPressed: () => _save(andNew: false),
+        ),
+        if (!_isEdit) ...[
+          SizedBox(height: context.getRSize(12)),
+          AppButton(
+            key: AddProductKeys.saveAndNew,
+            text: 'Save & Add Another',
+            variant: AppButtonVariant.secondary,
+            onPressed: _isSaving ? null : () => _save(andNew: true),
+          ),
+        ],
+        SizedBox(height: context.getRSize(8)),
+        AppButton(
+          text: 'Cancel',
+          variant: AppButtonVariant.ghost,
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+      ],
+    );
+  }
 }

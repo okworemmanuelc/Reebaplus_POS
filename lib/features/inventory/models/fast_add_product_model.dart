@@ -7,6 +7,10 @@
 /// value object and returns either a validation error naming a **visible**
 /// field or a resolved [FastAddIntent] the caller persists through the existing
 /// catalog/inventory DAOs. No widgets, no database, no `BuildContext`.
+///
+/// Since #487 every required field is always on screen (Add Product has no
+/// folded section), so [FastAddInvalid.field] tells the screen which box to
+/// scroll to and point at.
 library;
 
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
@@ -18,6 +22,9 @@ class FastAddContext {
     required this.tracksCrates,
     required this.canEditBuying,
     required this.storeIds,
+    this.routesToReceiveCart = false,
+    this.sellsOnePrice = false,
+    this.existingWholesalerPriceKobo,
   });
 
   /// `businessTracksCrates(business)` — a crate business surfaces a
@@ -32,6 +39,21 @@ class FastAddContext {
   /// The ids of the business's active stores. A single-store business resolves
   /// its store silently; a multi-store business must be given a selection.
   final List<String> storeIds;
+
+  /// Receive Stock's "New product" (#487): the opening quantity goes onto the
+  /// delivery list, not into a store, so no store is resolved or asked for.
+  final bool routesToReceiveCart;
+
+  /// "We sell at one price" (#493): `businessSellsOnePrice(business)`. When
+  /// true the Wholesale box is hidden, so the model decides the stored value:
+  /// a new product's wholesale = its retail price, and an edited product keeps
+  /// [existingWholesalerPriceKobo] untouched.
+  final bool sellsOnePrice;
+
+  /// The product's saved wholesale price on EDIT (null on ADD). In a one-price
+  /// shop it is written back unchanged, so a saved wholesale price is never
+  /// overwritten and turning the setting off brings it back.
+  final int? existingWholesalerPriceKobo;
 
   /// A business with exactly one store never asks which store to stock into.
   bool get isSingleStore => storeIds.length == 1;
@@ -54,6 +76,7 @@ class FastAddInput {
     this.hasManufacturer = false,
     this.selectedStoreId,
     this.barcode = '',
+    this.unitsPerPack = '',
   });
 
   /// Product name (required). Trimmed by the model.
@@ -96,21 +119,36 @@ class FastAddInput {
   /// the save; a soft collision warning is surfaced by the screen, not here (a
   /// lookup is a DB call, which this pure model does not do).
   final String barcode;
+
+  /// "How many in one" (#487), e.g. bottles in one crate. Blank, zero or a unit
+  /// without a pack count ([unitTakesPackCount]) ⇒ null. Display only.
+  final String unitsPerPack;
 }
+
+/// The units that carry a "how many in one" count (#487): Pack, Carton or
+/// Box, and — only in a shop that counts empty crates ([crates]) — a Bottle
+/// Crate. Case aside.
+bool unitTakesPackCount(String? unit, {required bool crates}) {
+  final u = unit?.trim().toLowerCase();
+  if (u == 'bottle') return crates;
+  return const {'pack', 'carton', 'box'}.contains(u);
+}
+
+/// The form boxes a [FastAddInvalid] can point at.
+enum FastAddField { name, sellingPrice, quantity, store, buyingPrice }
 
 /// The outcome of validating + shaping a Fast-Add submission.
 sealed class FastAddResult {
   const FastAddResult();
 }
 
-/// A validation failure. [field] is always a field the user can currently see
-/// (the fast section, or the "More details" section the caller expands before
-/// surfacing the error) — never a silently-collapsed field.
+/// A validation failure. [field] is always a box the user can see; the screen
+/// scrolls to it.
 final class FastAddInvalid extends FastAddResult {
   const FastAddInvalid({required this.field, required this.message});
 
-  /// The human name of the offending field, matching its on-screen label.
-  final String field;
+  /// The offending box.
+  final FastAddField field;
 
   /// The user-facing error message.
   final String message;
@@ -135,6 +173,7 @@ final class FastAddIntent extends FastAddResult {
     required this.initialStock,
     required this.storeId,
     this.barcode,
+    this.unitsPerPack,
   });
 
   final String name;
@@ -158,10 +197,16 @@ final class FastAddIntent extends FastAddResult {
   final int? emptyCrateValueKobo;
   final int lowStockThreshold;
   final int initialStock;
-  final String storeId;
+
+  /// The store the opening stock goes into; null when it goes onto Receive
+  /// Stock's delivery list instead ([FastAddContext.routesToReceiveCart]).
+  final String? storeId;
 
   /// Optional product barcode (#113); null when the field was left blank.
   final String? barcode;
+
+  /// "How many in one" (#487); null when blank or not offered for the unit.
+  final int? unitsPerPack;
 
   /// A product saved with no buying price is Uncosted (ADR 0006 / CONTEXT.md
   /// §Inventory & Costing): reports exclude it from COGS and count it
@@ -178,7 +223,7 @@ FastAddResult resolveFastAdd(FastAddInput input, FastAddContext context) {
   final name = input.name.trim();
   if (name.isEmpty) {
     return const FastAddInvalid(
-      field: 'Product Name',
+      field: FastAddField.name,
       message: 'Product Name is required.',
     );
   }
@@ -186,29 +231,32 @@ FastAddResult resolveFastAdd(FastAddInput input, FastAddContext context) {
   final sellingRaw = input.sellingPrice.trim();
   if (sellingRaw.isEmpty) {
     return const FastAddInvalid(
-      field: 'Selling Price',
-      message: 'Selling Price is required.',
+      field: FastAddField.sellingPrice,
+      message: 'Retail Price is required.',
     );
   }
 
   final quantity = int.tryParse(input.quantity.trim()) ?? 0;
   if (quantity <= 0) {
     return const FastAddInvalid(
-      field: 'Quantity',
-      message: 'Quantity must be greater than 0.',
+      field: FastAddField.quantity,
+      message: 'Opening Quantity must be greater than 0.',
     );
   }
 
   // Target store: a single-store business resolves silently; a multi-store one
-  // must be given a selection.
-  final String storeId;
-  if (context.isSingleStore) {
+  // must be given a selection. Receive Stock routes the quantity to its
+  // delivery list, so it needs no store.
+  final String? storeId;
+  if (context.routesToReceiveCart) {
+    storeId = null;
+  } else if (context.isSingleStore) {
     storeId = context.storeIds.single;
   } else {
     final selected = input.selectedStoreId;
     if (selected == null || selected.isEmpty) {
       return const FastAddInvalid(
-        field: 'Store',
+        field: FastAddField.store,
         message: 'Store is required.',
       );
     }
@@ -219,21 +267,31 @@ FastAddResult resolveFastAdd(FastAddInput input, FastAddContext context) {
 
   // Buying price is optional; a blank (or a role that cannot edit it) yields an
   // Uncosted product rather than blocking the save.
-  final buyingPriceKobo =
-      context.canEditBuying ? _toKobo(input.buyingPrice) : 0;
+  final buyingPriceKobo = context.canEditBuying
+      ? _toKobo(input.buyingPrice)
+      : 0;
   if (context.canEditBuying &&
       input.buyingPrice.trim().isNotEmpty &&
       buyingPriceKobo > retailerPriceKobo) {
     return const FastAddInvalid(
-      field: 'Buying Price',
-      message: 'Buying price cannot be higher than selling price.',
+      field: FastAddField.buyingPrice,
+      message: 'Cost price cannot be higher than retail price.',
     );
   }
 
-  // Wholesaler mirror: blank ⇒ copy the selling price into the stored value.
+  // Wholesaler price. One-price shop (#493): an edit keeps the saved value
+  // untouched; a new product mirrors the selling price. Otherwise a blank box
+  // mirrors the selling price into the stored value.
   final wholesaleRaw = input.wholesalePrice.trim();
-  final wholesalerPriceKobo =
-      wholesaleRaw.isEmpty ? retailerPriceKobo : _toKobo(wholesaleRaw);
+  final existingWholesale = context.existingWholesalerPriceKobo;
+  final int wholesalerPriceKobo;
+  if (context.sellsOnePrice) {
+    wholesalerPriceKobo = existingWholesale ?? retailerPriceKobo;
+  } else {
+    wholesalerPriceKobo = wholesaleRaw.isEmpty
+        ? retailerPriceKobo
+        : _toKobo(wholesaleRaw);
+  }
 
   // Unit + effective crate tracking. A blank/cleared unit (#108) resolves to
   // null — no unit — not a trade default; the form pre-fills the trade's
@@ -254,6 +312,12 @@ FastAddResult resolveFastAdd(FastAddInput input, FastAddContext context) {
   final barcodeRaw = input.barcode.trim();
   final barcode = barcodeRaw.isEmpty ? null : barcodeRaw;
 
+  // "How many in one": digits only, kept only for a unit that offers the box.
+  // Zero is no count (the column's CHECK is > 0).
+  final pack = int.tryParse(input.unitsPerPack.trim());
+  final takesCount = unitTakesPackCount(unit, crates: context.tracksCrates);
+  final unitsPerPack = (takesCount && pack != null && pack > 0) ? pack : null;
+
   return FastAddIntent(
     name: name,
     retailerPriceKobo: retailerPriceKobo,
@@ -266,6 +330,7 @@ FastAddResult resolveFastAdd(FastAddInput input, FastAddContext context) {
     initialStock: quantity,
     storeId: storeId,
     barcode: barcode,
+    unitsPerPack: unitsPerPack,
   );
 }
 

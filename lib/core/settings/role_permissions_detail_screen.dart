@@ -54,6 +54,7 @@ bool isPermissionKeyHidden(String key) =>
 const _categoryOrder = [
   'Sales',
   'Products',
+  'Online store',
   'Stock',
   'Expenses',
   'Reports',

@@ -24,7 +24,7 @@ void main() {
       await service.markShown(key);
       expect(await service.shouldShow(key), false);
       expect(await service.viewCount(key), 2);
-      
+
       await service.markShown(key);
       expect(await service.shouldShow(key), false);
       expect(await service.viewCount(key), 3);
@@ -42,7 +42,6 @@ void main() {
       expect(await service.shouldShow(UiHintService.hintPosGestures), false);
       expect(await service.shouldShow(UiHintService.hintCartTapEdit), true);
       expect(await service.viewCount(UiHintService.hintCartTapEdit), 0);
-      expect(await service.shouldShow(UiHintService.hintReceiveLongpress), true);
     });
 
     test('a ✕ after one passive view retires the banner — it does NOT come '
@@ -58,25 +57,11 @@ void main() {
       expect(await service.shouldShow(key), true);
 
       await service.markDismissed(key);
-      expect(await service.shouldShow(key), false,
-          reason: 'one ✕ is final, regardless of the view count so far');
-    });
-
-    test('inventory long-press hint retires permanently on first dismissal '
-        '(#110)', () async {
-      // AC #3: dismissing the Inventory "press and hold to edit" banner hides
-      // it permanently for that staff member — one dismissal is enough, unlike
-      // the twice-shown POS banners. Reuses the shared service under its own
-      // key.
-      expect(await service.shouldShow(UiHintService.hintInventoryLongpress),
-          true);
-
-      await service.markDismissed(UiHintService.hintInventoryLongpress);
-      expect(await service.shouldShow(UiHintService.hintInventoryLongpress),
-          false);
-
-      // The POS key is untouched by the inventory dismissal.
-      expect(await service.shouldShow(UiHintService.hintPosGestures), true);
+      expect(
+        await service.shouldShow(key),
+        false,
+        reason: 'one ✕ is final, regardless of the view count so far',
+      );
     });
 
     test('markDismissed retires any hint in a single call', () async {

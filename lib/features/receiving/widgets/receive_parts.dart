@@ -150,7 +150,6 @@ abstract final class ReceiveKeys {
   static const back = Key('receive-back');
   static const searchToggle = Key('receive-search-toggle');
   static const search = Key('receive-search');
-  static const hint = Key('receive-hint');
   static const scroll = Key('receive-scroll');
   static const reviewBar = Key('receive-review-bar');
   static const newProduct = Key('receive-new-product');

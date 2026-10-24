@@ -102,11 +102,15 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     Future.microtask(() {
       if (!mounted) return;
       setState(() {
-        _controller = PosController(
-          database: ref.read(databaseProvider),
-          navigationService: ref.read(navigationProvider),
-          cartService: ref.read(cartProvider),
-        );
+        _controller =
+            PosController(
+                database: ref.read(databaseProvider),
+                navigationService: ref.read(navigationProvider),
+                cartService: ref.read(cartProvider),
+              )
+              ..sellsOnePrice = businessSellsOnePrice(
+                ref.read(currentBusinessProvider),
+              );
       });
     });
   }
@@ -161,6 +165,11 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     ref.watch(
       currencySymbolProvider,
     ); // rebuild money displays when currency changes
+    // #493: keep the till's one-price gate current before any child reads
+    // `selectedGroup` in this build.
+    _controller?.sellsOnePrice = businessSellsOnePrice(
+      ref.watch(currentBusinessProvider),
+    );
     // §12 / hard rule #6: POS is gated to roles that hold `sales.make` (CEO,
     // Manager, Cashier); Stock keeper is already hidden in the sidebar, so this
     // is defense-in-depth against deep-links / bottom-nav. Guarded.screen owns
@@ -418,6 +427,9 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     required bool shortHeight,
   }) {
     final gutter = context.getRSize(16);
+    final hasWholesale = !businessSellsOnePrice(
+      ref.watch(currentBusinessProvider),
+    );
     final gap = context.getRSize(shortHeight ? 8 : 12);
     return PinnedHeaderSliver(
       child: Container(
@@ -447,11 +459,13 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                 children: [
                   Expanded(child: _buildSearchField()),
                   if (shortHeight) ...[
-                    SizedBox(width: gap),
-                    SizedBox(
-                      width: context.getRSize(kPosShortTierWidth),
-                      child: _buildTierDropdown(),
-                    ),
+                    if (hasWholesale) ...[
+                      SizedBox(width: gap),
+                      SizedBox(
+                        width: context.getRSize(kPosShortTierWidth),
+                        child: _buildTierDropdown(),
+                      ),
+                    ],
                     SizedBox(width: gap),
                     SizedBox(
                       width: context.getRSize(kPosShortManufacturerWidth),
@@ -693,6 +707,9 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
   /// row is not built.
   Widget _buildHeader(BuildContext context) {
     final gutter = context.getRSize(16);
+    final hasWholesale = !businessSellsOnePrice(
+      ref.watch(currentBusinessProvider),
+    );
     return Padding(
       key: kPosTierRowKey,
       padding: EdgeInsets.fromLTRB(
@@ -703,8 +720,10 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
       ),
       child: Row(
         children: [
-          Expanded(flex: 4, child: _buildTierDropdown()),
-          SizedBox(width: context.getRSize(8)),
+          if (hasWholesale) ...[
+            Expanded(flex: 4, child: _buildTierDropdown()),
+            SizedBox(width: context.getRSize(8)),
+          ],
           Expanded(flex: 5, child: _buildManufacturerDropdown()),
           SizedBox(width: context.getRSize(8)),
           PosQuickSaleButton(

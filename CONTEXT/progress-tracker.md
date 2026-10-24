@@ -61,6 +61,213 @@ base `985e80be` (latest origin/main when started). Owner authorized the remainin
 - Open: staged deletion-status rollout verification; separate #467/#468;
   live execution on a dedicated migrated test project. Do not close #422 yet.
 
+### Issue #424: Show online and listing permission (2026-10-24, ready for review)
+Current continuation:main1f3e3643 (#501 merged) integrated. Unit85, shop
+pricing86 and category87 remain intact; listing moves to88. Real87→88 and
+84→88 fixtures preserve defaults, archive state, units, shop pricing and category
+links. Drift regenerated, analyzer clean and77focused migration/restore tests
+pass. Listing switch and named permission are complete. Cloud0195 unchanged;
+deployment needs `--include-all` because0196/0197 are already on main.
+- Listing consumer added: independent `Gates.manageListing`, visible Online store
+  permission group, existing Manage Product card switch and fire-time check.
+  Core service returns typed errors; transactional DAO scopes by tenant and
+  excludes tombstones, preserves sale/archive state and queues explicit nulls.
+  Service/DAO tests cover denied/foreign/deleted writes, full payloads and
+  second-device off/on restore; widget tests cover stale grants/live updates.
+  Validation:173focused feature/permission/archive tests,77migration/restore
+  tests,42previous-failure-path checks and34golden cases pass. Analyzer clean.
+  Product phone/wide and permission visuals inspected; baselines updated only
+  for the listing control/permission addition. Final full suite ran once at
+  concurrency2:5459passed /298skipped /0failures (12m10s). PR511 targets main
+  for owner review; do not merge as part of this task. Web parity139 updated to
+  schema88 and the out-of-order0195 deployment note. No production deployment.
+The following notes record the earlier blocked draft and its prior test results.
+Branch `feat/424-show-online`, stacked on #472 (`d2e174ef`). Units stay85,
+category mapping86, listing87. Must land after #472; no version87 client may ship
+without those dependencies. Cloud0195 stays unchanged.
+- Cloud increment `0195_product_online_listing.sql` adds `products.show_online` (NOT NULL, default true) and `products.manage_listing` in the `Online store` permission group. Existing/new CEO and Manager defaults receive the key; the seed function's signature and current ACL are preserved. Storefront queries in #425 must require `show_online AND is_available AND NOT is_deleted` together.
+- Cloud applied only to approved development project: pre-existing fixture product became `show_online=true`; both existing CEO/Manager roles received the grant. Tier-2 `product_online_listing_test.dart`: **2 pass / 0 skipped**, checking new defaults, stored opt-out, availability/deletion query contract, new-business role grants and permission group. This pins the query contract; the actual public storefront boundary is #425. Fixtures cleaned. SQL parses as seven statements; analysis clean. Web parity: https://github.com/okworemmanuelc/reebaplus-web/issues/139.
+- Local increment: preserved the unfinished schema/fixture edits, moved listing
+  to87 and upgrade fixture86→87. The85 products rebuild defaults the new column
+  only when absent; an84→87 regression checks all three steps together.
+  Drift regenerated; analyzer clean and133focused tests pass (including the
+  actual86→87/84→87 upgrades and opt-out retention). Full suite exposed stale
+  permission counts and one JSON product fixture, corrected in place. Its
+  enforcement guard also requires the new inert permission to stay hidden until
+  the listing gate/switch ships; applied that existing repo convention.
+  Full suite ran once:5390passed /298skipped /36failed (30m38s). Failures
+  covered those stale fixtures/counts, eight role goldens, nine legacy restore
+  cases, and11timeout/cascade failures in Sync Issues access. Added the existing
+  restore-helper default for absent showOnline (explicit false preserved).
+  All10affected files rerun:82passed, including unchanged visual baselines,
+  legacy restore and the timed-out screen. No second full-suite run.
+  Dedicated listing write coverage/gate/UI remain unfinished;
+  publish as draft. No production deployment.
+- Final analyzer after corrections:clean. New merge blocker discovered at the
+  finish:main advanced to4b476c24 (#510/#493) and now reserves86 for
+  businesses.sells_one_price. This branch retains the owner's requested86/87
+  chain against9732ed17; do not merge/release. Both PRs must be reconciled with
+  the new main (recommended category87/listing88) in a subsequent pass.
+
+### #472: shared online category reference (2026-10-24, ready for review)
+
+Branch feat/472-marketplace-categories, isolated workspace reebaplus-472.
+Migration0190 creates service-written marketplace_categories and nullable
+categories.marketplace_category FK. Schema87 mirrors nullable mapping locally.
+Bundled catalogue is independent of Lexicon starter suggestions. New categories
+pre-map only by exact trimmed/case-insensitive public child names, with distinct
+phone/fashion Accessories and General → Other; unmatched names stay null.
+Category mapping uses an atomic full-row outbox write; selecting Other emits
+explicit null. Manage Categories uses existing theme/dropdown tokens and gates.
+Snapshot to_jsonb(t) already includes all categories columns. No production
+changes. Details docs/data/marketplace-categories.md.
+- Owner-review fix: removed the starter-list dependency; independent pure and
+  DAO regressions reproduce the old failure and verify Water/Beer/Phones for a
+  custom business, exact-child matching, no fuzzy matches and Accessories split.
+  Both regressions fail before the correction; all14focused tests now pass and
+  analyzer is clean. The final full-suite run waits for the prerequisite merges.
+- Integrated main9732ed17 after #505 → #503 merged: unit CHECK remains85;
+  category mapping is86 with a real85→86 upgrade test. Cloud0190 is unchanged.
+  Drift regenerated successfully; analyzer clean and132focused tests pass.
+  Final full suite:5424passed /296skipped /0failures (8m29s).
+  Regeneration produced no additional generated diff. No production changes.
+- Integrated main c019ea4f; preserved products.units_per_pack (schema84) and #493 (schema86) and
+  allocated schema87 to this mapping. Regenerated Drift, no hand edits.
+- Analyzer clean. Full suite on original base: 5233 pass / 294 skipped;
+  after main integration: 108 focused tests and 4 sheet goldens pass.
+- Self-review: standards and issue acceptance checked; foreign-business mapping,
+  explicit null clearing, starter mappings, catalogue seed parity and real
+  v86-to-v87 upgrade are covered. Phone/wide goldens visually inspected.
+- Required web parity: okworemmanuelc/reebaplus-web#138.
+- Migration0190 applied only to reebaplus-dev after the security test window.
+  Public cloud parity: 1 pass / 0 skips, all46 entries. Rolled-back SQL verifies
+  six anon/authenticated write denials, valid/invalid FK mappings and null
+  clearing. Both client roles can read; service_role can write. Fixtures rolled
+  back. Root review fixes add standard permission-denied feedback and import
+  ordering. No production DDL was run.
+### #493: "We sell at one price" (2026-10-24, reworked to owner option A)
+Branch `feat/493-one-price-shops`, worktree `../drinkPosApp-wt-493`, PR #510.
+- **Decision (owner, option A):** an owner setting in Business Info, "We sell at one price" (`businesses.sells_one_price`, default false). OFF for every existing shop; suggested ON at CEO sign-up for a Restaurant only (`suggestsOnePriceAtSignUp`, via `industryOf`); the owner can change it any time. The earlier per-industry flag (`Industry.hasWholesale`, `isWholesaleBusiness`/`isOnePriceBusiness`, `businessHasWholesale`) is removed; the one read site is `businessSellsOnePrice(BusinessData?)` in `app_providers.dart`.
+- **Data:** Drift v86 (guarded `addColumn`, no businesses rebuild exists); cloud `0197_businesses_sells_one_price.sql`; on the businesses push whitelist; pull defaults a missing value to false. Sign-up writes it by a best-effort follow-up `businesses` update after `complete_onboarding` (RPC unchanged, no overload); on failure the shop starts OFF and the local mirror records OFF.
+- **Money rules when ON:** the till charges Retail only — `PosController.selectedGroup` is always retailer and a Wholesaler customer does not switch it (every grid/scan/modal price pick and the line's `priceTier` read that getter). Saved wholesale prices are never overwritten: edit keeps `existingWholesalerPriceKobo`, a new product mirrors retail, Edit Receive Item leaves the line's wholesale alone. Turning it OFF brings every saved wholesale price back.
+- **UI when ON:** wholesale boxes, the POS tier dropdown, customer Price Tier pickers and tier pills are hidden; Product Details and the receive cart show one "Price".
+- **Deploy order:** push 0197 BEFORE shipping a v86 app (the app pushes the column on every businesses upsert). Parity: reebaplus-web#142.
+
+### #507 PR 1: Name case helper and save-time casing in sign-up, profile, business info, stores (2026-10-24)
+Branch `feat/507-name-case`, worktree `../drinkPosApp-wt-507-1`.
+- **Helper:** Created `lib/core/utils/name_case.dart` with `toNameCase(String input)`.
+  - Trims, squashes repeated spaces into one.
+  - In each word, first letter is capitalized, rest lowercase ("sTAR" → "Star").
+  - Capitalizes after hyphens ("coca-cola" → "Coca-Cola") and opening brackets ("(big)" → "(Big)").
+  - Preserves lowercase after apostrophes ("mama's" → "Mama's", "MAMA'S" → "Mama's").
+  - Preserves words containing digits as typed ("50cl", "1.5L", "7UP", "A14").
+  - Empty input gives empty output (""). Never null. Idempotent.
+- **Save-time casing & TextCapitalization:**
+  - CEO sign-up: business name, full name, and typed "Other" business type run through `toNameCase`.
+  - Staff sign-up: staff name runs through `toNameCase`.
+  - Edit profile sheet: name runs through `toNameCase`.
+  - Business Info: business name and typed "Other" business type run through `toNameCase`.
+  - Stores settings & Stores screen: store/van creation and update run through `toNameCase`. Store name input has `textCapitalization: TextCapitalization.words`.
+- **Tests:** `test/utils/name_case_test.dart` (8 test groups), plus save-time tests in `test/settings/stores_settings_screen_test.dart` and `test/settings/business_info_shop_types_test.dart`.
+
+### #492 G1: Sign-up and Business Info offer every shop type plus "Other" (2026-10-23)
+Branch `feat/492-g1-shop-types`, worktree `../drinkPosApp-wt-492-g1`.
+- **Registry:** All nine industries in `Industry.catalogue` have `selectable = true`; `selectableCatalogue` exposes all nine.
+- **CEO sign-up:** Shows all nine industry cards plus "Other" (10th card). When "Other" is selected, an input field asks to specify the business type. Continue button is enabled only after typing a non-empty name. Saves typed type directly in `businesses.type`.
+- **Settings → Business Info:** Dropdown lists all nine catalogue types plus "Other". Custom types load as "Other" with text pre-filled. When "Other" is selected, shows `AppInput` to specify business type. Validates on save.
+- **Crate safety:** Crate switch and crate features are strictly gated via `isCrateBusiness(effectiveType)`. Non-drink shops and custom "Other" types normalize safely to `Industry.generic` without crate UI.
+- **Docs & ADR:** Added 2026-10-23 amendment to ADR 0015 and updated `CONTEXT/project-overview.md`.
+- **Tests & Goldens:** `test/industry/industry_registry_test.dart` (18 tests), `test/auth/ceo_sign_up_shop_types_test.dart` (4 tests), `test/settings/business_info_shop_types_test.dart` (4 tests), `test/redesign/ceo_sign_up_golden_test.dart` (107 tests with updated goldens).
+
+### Issue #467: private Storage listings (2026-10-23)
+Branch `fix/467-storage-listing-privacy`, isolated worktree `work/reebaplus-467`.
+- Migration `0191_private_storage_listing.sql` replaces the public metadata SELECT policies with authenticated business-member policies. Product ownership comes from the first folder; logos use the root `<businessId>.jpg|png` filename. Bucket public flags and existing write policies are unchanged, preserving public image display and member upsert.
+- Caller audit: POS `lib/` and web `master` at the time of implementation have no Storage `.list()` callers for these buckets. Both POS image services use upsert and public URLs. No web code change or table/column/status/money change, so no parity issue is required by #467's conditional criterion.
+- Tier-2 `private_storage_listing_test.dart` uses fresh auth/business/object fixtures and refuses writes outside the approved `reebaplus-dev` project. It checks populated-bucket listing denial for anonymous/nonmember users, positive owner listing/new upload/replacement, and anonymous public HTTP bytes. Explicit opt-in: `TEST_STORAGE_ISOLATION_ALLOW_WRITES=1` plus the three `TEST_SUPABASE_*` credentials.
+- Real development verification: both tests first failed against the old policies because anonymous listing returned seeded objects. After applying only 0191 to the verified development project, **2 pass / 0 skipped**; public image bytes and owner writes both work. Fixtures cleaned. `flutter analyze --no-pub`: zero issues; existing photo cache / URL sync tests: **13 pass**. Full suite: **5225 pass / 295 skipped / 0 failures** (8m05s, `.dart_tool/issue-467-full-tests.log`). Standards and spec checked directly against `985e80be` (worker did not spawn further agents). Compatibility review against main `c019ea4f`: no change to the touched services, Storage policies or test harness; new migration 0187 does not collide with reserved 0191.
+- No production deployment. The issue's historical “dev and prod are the same project” deployment note is superseded by the owner's separate development-project decision.
+
+### #492 G2: Stop crate words leaking to non-drink shops (2026-10-24)
+Branch `feat/492-g2-crate-words`, worktree `../drinkPosApp-wt-492-g2`. Part of #492.
+- Orders Completed tab: "Crate Deposits" stat card is gated on `businessTracksCrates(business)` (hidden for Pharmacy and non-crate shops).
+- `CartService.addItem`: default unit "Bottle" fallback removed; unit is left null when none is set.
+- Rejected sale dialogs: confirmation message in `SyncIssuesScreen` and `NotificationCard` (`NotificationsModal`) conditioned on `tracksCrates`. Non-crate businesses see neutral wording without mention of "customer empties balance".
+- Tests: `test/industry/non_crate_shop_crate_words_test.dart` (CartService unit, Pharmacy vs Bar Orders stat card, Sync Issues neutral dialog, Notifications modal neutral dialog).
+
+### #490 / #492 G4: products.unit CHECK admits Kg and Litre (2026-10-24)
+Branch `feat/490-g4-unit-check`, worktree `../drinkPosApp-wt-490-g4`. Widens `products.unit` in Drift (`kProductUnits` and `Products.customConstraints`) and PostgreSQL to include `Kg` and `Litre` (15 units total). Bumps Drift `schemaVersion` from 84 to 85 with `TableMigration(products)` rebuild (preserving all columns and `units_per_pack`). Created cloud migration `supabase/migrations/0196_products_unit_kg_litre.sql` (drops old unit constraints while carefully excluding `units_per_pack`). Added migration upgrade and CHECK constraint tests in `test/database/migration_upgrade_test.dart`.
+
+### #492 G3: one generic Lexicon for every shop (2026-10-24)
+Branch `feat/492-g3-lexicon`, worktree `../drinkPosApp-wt-492-g3`. Every trade gets generic nouns ("Product", "Category"), plain example hints ("e.g. Product name", "e.g. Short description"), no starter categories, and no unit filled in by default. Units: `kGenericUnits` (Piece, Pack, Box, Carton, Bag, Bottle, Can, Kg, Litre, Other) offered to all shops; crate-tracking shops (Bar and Beverage distributor) also get PET and Keg (`kCrateUnits`). Saved units (Sachet, Tin, Crate, …) stay valid and keep showing via `unitChoices(units, keep: [...])` in `product_unit.dart`. Updated `lexicon_test.dart`, `product_unit_test.dart`, `van_sales_trade_neutral_test.dart` and regenerated Add Product goldens.
+### Signed-out RPC surface (#468, 2026-10-23)
+- Owner review (2026-10-24): filed legacy invite-preview bug #506 and clarified
+  the two migration header entries as broken legacy functions left unchanged.
+  Migration body unchanged; no database application required for this correction.
+- Web review fixes: non-admin rejection signs out locally; account-related OTP
+  responses share one neutral code screen. Nine login regressions and all613web
+  tests pass, with build and changed-file ESLint green. Deployment checks now
+  include preserved phone sessions and identical unregistered-email feedback.
+- Prepared0194: revoke five accidental anon RPC grants, retain four documented
+  pre-auth contracts, and explicitly preserve authenticated flows. No signature
+  changes. Read-only audit, six dedicated-dev HTTP tests and a rollback SQL
+  trigger-permission test added.
+- Found required web login dependency; companion branch removes pre-OTP email
+  admin probe and retains post-OTP membership enforcement. Web parity136.
+- 2026-10-24: fresh nine-function/27-role-check dev privileges exactly match
+  read-only production baseline before0194. No legitimate email-probe callers
+  remain; helper is service-role-only in POS0194 and canonical web setup.
+-0194 applied only to development: six HTTP tests + trigger rollback SQL pass.
+  Actual fresh onboarding and a member100-kobo Quick Sale succeed in rollback
+  SQL; signed-in non-admin another-email probing is denied. Analyzer clean.
+  Web full suite607passed. Production untouched.
+- Final integrated verification (main c019ea4f): full Flutter suite5384passed,
+  299skipped, zero failures; analyzer clean. Six development HTTP tests and both
+  rollback SQL compatibility probes pass. Stop after opening the two review PRs;
+  production remains gated by the owner's web-deployment/login checkpoints.
+- Legacy accept_invite_preview* already fail42P01 because invites/warehouses
+  are absent in live metadata; documented rather than fabricated fixtures.
+
+### #487 PR 6 / #465: scan a barcode on Add Product (2026-10-23)
+Branch `feat/465-scan-add-product`, worktree `../drinkPosApp-wt-487-6`. Scan button beside the barcode box (`barcodeScannerProvider`, camera closes after the first read; POS unchanged). `_onBarcodeChanged` now: own products first (`findProductsByBarcode`), then, factory codes only, the shared list via `lookupOutcome` (offline -> note, never blocks save). Own match offers Open it (Product Details; restock mode is gone) / Create a new product anyway. Edit mode: scan only fills the box. Tests in `add_product_catalogue_prefill_test.dart` (+1 in `add_product_form_test.dart`); Add Product goldens regenerated.
+
+### #487 PR 5: Sales and Stock History cards (2026-10-23)
+Branch `feat/487-sales-history`, worktree `../drinkPosApp-wt-487-5`. Replaces the two placeholder cards on Product Details. New `OrdersDao.getProductSalesByDay` (per business-local day, `orderRevenueStatuses`, profit from `buying_price_kobo` per line, uncosted lines add no profit and flag the day); `getSalesSummaryForProduct` now uses `orderRevenueStatuses` too. `paginatedStockHistoryProvider` arg gained `productId` (Inventory History passes null) and `StockTransactionWithDetails.adjustmentReason`. New `product_sales_history_cards.dart` and `product_stock_history_screen.dart`; `ProductDetailTopBar` takes a `title`. Sales Target now reads this month's units from the same days. Tests: DAO, widget (switch, Profit gate, rows, View All, empty), goldens regenerated with fixed-date seed.
+
+### #487 PR 4: Edit Product uses the new form (2026-10-23)
+Branch `feat/487-edit-product`, worktree `../drinkPosApp-wt-487-4`. `AddProductScreen(editProduct:)` is the edit mode: filled in from the product, "Edit Product" / "Update this item's details", no Store or Opening Quantity, one "Save Changes" button (wide Preview: Save Changes + Cancel), no name-match list or barcode-list prefill, a saved plain "Crate" unit is kept. `_persistEdit` is the old `UpdateProductSheet._save` moved over (details incl. `unitsPerPack`, photo, manufacturer crate value, activity log, `onCostBecameReal` + backfill offer, notice; `editProductPrice` re-checked on Save). New `CatalogDao.enqueueProductEdit` re-enqueues the FULL row with an explicit null per cleared column (units per pack, description, barcode, expiry, supplier, brand, category), because `toCompanion(true)` drops nulls. Product Details' Edit Product pushes the form. `UpdateProductSheet`, both long-press edits and the two "hold to edit" hints (`hintReceiveLongpress`, `hintInventoryLongpress`) are deleted. Tests: `edit_product_save_test.dart`, edit group in `add_product_redesign_test.dart`, edit goldens (phone + 1280x800 light).
+
+### #487 PR 2: the new Add Product form (2026-10-23)
+Branch `feat/487-product-form` (base `feat/487-product-data`), worktree `../drinkPosApp-wt-487-2`.
+- `add_product_screen.dart` rebuilt from the mockups: one form for every new product (Inventory, Home, POS scan, Receive Stock's "New product"). Cards: Product Details (dashed photo box, name, barcode, Category + Brand / Manufacturer pickers), Product Unit (chips, "how many in one"), Pricing (Cost / Retail / Wholesale + profit rows), Stock (Store, − / + Opening Quantity, Low-Stock Alert), Track Empty Crates (crate business + Bottle), More details (open: Description, Supplier, Expiry, Allow fractional sales). Footer Save & New + Save Product. Layout by MEASURED body width: < 600 one column (720 cap), 600–1000 two columns, ≥ 1000 two columns + Preview panel (its own Save / Save & Add Another / Cancel, no footer).
+- Removed: the restock-existing mode ("Add Stock"), the classic layout, the "More details" fold, the inline category/manufacturer/supplier suggestion lists. A name match now lists the product (Archived ones tagged) and tapping it opens Product Details via the new shared `openProductDetails` (`widgets/product_details_route.dart`, also used by Inventory rows).
+- Category / Brand / Supplier pick from a searchable sheet (`ProductPickerSheet`); "Add new “X”" is created at save time (get-or-create), so nothing is written before the confirm. Supplier's sheet keeps "Add new supplier" (full form) behind `Gates.manageSuppliers`.
+- Receive mode = the same form: Store and Supplier hidden; validation now runs through the Fast-Add model (only Name, Retail Price, Opening Quantity > 0 are required, was: description, category, both prices, cost, low stock); the quantity goes onto the receive cart as before; the photo box is there too.
+- Model: `FastAddInvalid.field` is now a `FastAddField` enum (an error scrolls its box into view); `FastAddContext.routesToReceiveCart` (no store; `FastAddIntent.storeId` nullable); `FastAddInput.unitsPerPack` → `FastAddIntent.unitsPerPack` (kept only for a unit with the box, > 0). Messages now say Retail Price / Opening Quantity / Cost price.
+- Merged PR 1's crate-only wording (`unitLabel` / `unitCountNoun` / `productDisplayName` take `crates:`); the form's wrappers pass it through. The Preview panel's buttons sit in their own band under a hairline; the preview scrolls above it (checked at 1280x800 and 1024x700).
+- Crate words follow `businessTracksCrates` (`product_form_rules.dart`: `formUnitLabel`, `formCountNoun`, `unitsPerPackLabel`, `pricingSubtitle`, `previewDetailLine`, `productProfit`): a non-crate shop's Bottle reads "Bottle", has no "how many in one" box and no crate card.
+- Writes `units_per_pack` when set: **cloud 0187 must be deployed before this ships.** The #465 scan button is left out (a `TODO(#465)` marks its spot beside Barcode).
+- Tests: `test/inventory/add_product_form_test.dart` (new), `product_form_rules_test.dart` (new), rewritten `add_product_redesign_test.dart`, `add_product_confirmation_test.dart`, `add_product_catalogue_prefill_test.dart`, `fast_add_product_model_test.dart`, `receive_flow_mode_test.dart`, `scan_unknown_barcode_test.dart`; `add_product_barcode_keep_test.dart` deleted (restock mode gone). Goldens: `add_product_*` and `add_product_filled_*` (390x844, 844x390, 800x1280, 1280x800, light + dark); `add_product_existing_*` / `add_product_more_*` deleted.
+
+### #487 PR 3: Product Details restyle (2026-10-23)
+Branch `feat/487-product-details` (base `feat/487-product-data`), worktree `../drinkPosApp-wt-487-3`.
+- `product_detail_screen.dart` rebuilt: the dormant inline edit mode (`_editMode`, text controllers, `_saveChanges`, `_trailingBox` and friends, the `ignore_for_file`) is gone. Kept: `_UpdateStockSheet` (now titled "Adjust Stock", opened from the top bar), `_pickImage` (gated on `Gates.editProductPrice`), `_confirmDelete`, the data loads. The old Stock & Info rows (supplier, size, unit, track empties, crate value, empties count) are no longer shown here; Edit Product (PR 4) is where they live.
+- Cards: hero, Description (pencil pop-up), Prices & Profit, Stock by Store, Sales Target (CEO pencil pop-up), plain Sales Summary + Last Delivery (PR 5 replaces them), Manage Product (Archive with confirm / Unarchive, Delete). Layout is measured: 1 column under 600, 2 from 600, 3 from 1000, content capped at 1400.
+- New: `widgets/product_detail_cards.dart`, `widgets/product_detail_figures.dart` (pure rules: kind line, profit %, `SalesTargetFigures`, expiry pill), `ProductDetailTopBar` + `DetailBarSquare` in `product_detail_parts.dart`, `InventoryDao.watchStockByStoreForProduct` + `productStockByStoreProvider`, `AppIcons.unarchive` / `tune`, `CatalogueReportLink.open` (static; now the menu's "Report a problem" item).
+- "Edit Product" calls `_openEditProduct()`, which still opens `UpdateProductSheet`; PR 4 rewires that one method.
+- Tests: `test/inventory/product_detail_redesign_test.dart`, `product_detail_figures_test.dart`, `test/redesign/product_detail_golden_test.dart` (+ `test/helpers/product_detail_seed.dart`).
+
+### #487 PR 1: product data groundwork (2026-10-23)
+Branch `feat/487-product-data`, worktree `../drinkPosApp-wt-487-1`. No screen redesign.
+- **Bottle Crate label**: `lib/core/utils/product_unit.dart` — `unitLabel` (stored `Bottle` → "Bottle Crate"), `unitCountNoun` ("crates", "packs", "units"), `unitChoices` / `isUnitHiddenForNewProducts` (plain Crate hidden for new products, kept while it is a product's own unit). Used by `productDisplayName`, the three unit dropdowns (Add Product, Update Product sheet, Product Details), inventory rows, POS tile, cart detail, scan sheets, receive grid/cart, request-stock grid, store details, catalogue report sheet. Saved values, `== 'bottle'` checks, `kProductUnits`, the CHECK and Lexicon untouched. A catalogue suggestion of "Crate" is no longer filled in.
+- **`products.units_per_pack`** (nullable int, CHECK > 0, display only): Drift **v84** (plain guarded ADD COLUMN; the v24 and v62 products `TableMigration` rebuilds pin it to NULL), cloud **0187** (NOT pushed — supervisor deploys before any build that writes it). `updateProductDetails(unitsPerPack:)` is sentinel-defaulted so an edit never wipes it. Known gap: `pos_create_product_v2` (flag OFF) has no parameter for it.
+- **Archive**: `CatalogDao.setProductArchived(id, archived)` writes `isAvailable = !archived` + `lastUpdatedAt`, full-row enqueue. Inventory hides archived products from the Products list and figure cards; an **Archived** figure card (`neutral`, `AppIcons.archive`) appears only while something is archived and lists just those. Receive Stock's grid hides them. Stock count, reports and history keep them. The Archive button lands in PR 3.
+- **Fix before merge (crate shops only)**: the wording now applies only where `businessTracksCrates(business)` is true. `unitLabel`, `unitCountNoun` and `productDisplayName` take a **required** `crates` bool (`false` → "Bottle", "bottle/bottles"); `posTileSubtitle` / `receiveTileSubtitle` take it too; `ReceiptWidget` and `ThermalReceiptService.buildReceipt` take a required `tracksCrates`. Widgets pass `businessTracksCrates(ref.watch(currentBusinessProvider))`; the four receipt screens (checkout, orders, customer detail, van receipt) pass it from the same provider, the orders and customer-detail receipt sheets through a `Consumer` watch. Plain Crate stays hidden for new products in every shop. Test: `test/inventory/bottle_label_by_shop_test.dart` (Pharmacy, Supermarket, Bar with crate counting off → "Bottle"; Beverage distributor → "Bottle Crate"; Inventory row + Orders receipt), plus both modes in `product_unit_test.dart`, `optional_unit_test.dart` and the receipt tests. Goldens: the 20 receive_cart / receive_stock / request_stock goldens (generic-business harness) are back to their pre-PR-1 "Bottle" images; the 12 `add_product_{size}` / `add_product_more_*` goldens changed because Add Product now watches the business and so renders its Beverage-distributor form (the screen read it once before, so the harness captured the not-yet-loaded generic form).
+- Mockups copied to `docs/redesign/mockups/`. 44 goldens regenerated (Bottle → Bottle Crate text only).
+- Tests: `test/utils/product_unit_test.dart`, `test/inventory/product_archive_test.dart`, `test/inventory/inventory_archived_filter_test.dart`, `test/sync/product_units_per_pack_sync_test.dart`, v83→v84 group in `migration_upgrade_test.dart`, Crate-hiding cases in `add_product_catalogue_prefill_test.dart`, archived case in `receive_stock_redesign_test.dart`.
+
+### Camera scanner moved to shared code (#487 PR 0, 2026-10-23)
+Part of #487 / #465 (step 4). Branch `feat/487-scanner-seam`. `git mv` of the scanner seam from `lib/features/pos/` to `lib/shared/scanner/` (barcode_scanner, mobile_scanner_*, scan_camera, camera_permission(+sheet), scan_gate, barcode_scan_page, scan_cart_count, and the two providers as `scanner_providers.dart`); `sales_parts.dart` moved to `lib/shared/widgets/` because the scan page uses it. Imports only; no behaviour change. POS keeps the resolver, the scan button and the sheets.
+
 ### Fast-Add: a shared-list photo opens "More details" (2026-10-23)
 Branch `feat/fast-add-open-details-on-catalogue-photo`, worktree `../drinkPosApp-wt-moredetails`. Owner approved the #332 follow-up.
 - `_applyCatalogueSuggestion` (add_product_screen.dart) sets `_showMoreDetails = true` when it fills the photo, because the photo box lives in the collapsed "More details" section and would otherwise be saved unseen. Name/unit-only fills leave it closed. Tests: `test/inventory/add_product_catalogue_prefill_test.dart` (+2).

@@ -67,6 +67,14 @@ class Businesses extends Table {
   // Set explicitly at onboarding and editable via CEO Settings → Business Info.
   BoolColumn get tracksEmptyCrates =>
       boolean().withDefault(const Constant(true))();
+  // "We sell at one price" (#493, option A). An owner setting in CEO
+  // Settings → Business Info, suggested ON at sign-up for a Restaurant only.
+  // When true the app hides every wholesale price box and the till always
+  // charges the Retail price; saved wholesale prices are never touched, so
+  // turning it off brings them all back. Default false: every existing shop
+  // keeps wholesale. Mirrors 0197_businesses_sells_one_price.sql.
+  BoolColumn get sellsOnePrice =>
+      boolean().withDefault(const Constant(false))();
   // Subscription / access gating (master plan §32). Set by the web admin
   // console in the cloud; CLOUD-AUTHORITATIVE / APP-READ-ONLY — these columns
   // are deliberately omitted from the businesses push whitelist
@@ -235,6 +243,7 @@ class Categories extends Table {
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get name => text()();
   TextColumn get description => text().nullable()();
+  TextColumn get marketplaceCategory => text().nullable()();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
@@ -682,6 +691,8 @@ const List<String> kProductUnits = [
   'Box',
   'Tin',
   'Other',
+  'Kg',
+  'Litre',
 ];
 
 @DataClassName('ProductData')
@@ -716,6 +727,8 @@ class Products extends Table {
   IntColumn get iconCodePoint => integer().nullable()();
   TextColumn get colorHex => text().nullable()();
   BoolColumn get isAvailable => boolean().withDefault(const Constant(true))();
+  // Independent online listing preference (#424); archive still hides online.
+  BoolColumn get showOnline => boolean().withDefault(const Constant(true))();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
   IntColumn get lowStockThreshold => integer().withDefault(const Constant(5))();
   RealColumn get avgDailySales => real().withDefault(const Constant(0.0))();
@@ -743,6 +756,14 @@ class Products extends Table {
   // pass-through push table) so every device shows the same picture; the local
   // [imagePath] continues to serve offline render. Null = no photo.
   TextColumn get imageUrl => text().nullable()();
+  // How many in one (schema v84, #487): "12" for 12 bottles in one crate, 6
+  // pieces in one pack. DISPLAY ONLY ("Crate of 12") — it never feeds stock,
+  // prices, crate counts or any money. Null = not given. The column CHECK
+  // mirrors supabase/migrations/0187_products_units_per_pack.sql; being a
+  // column constraint it rides the plain ADD COLUMN of the v84 step.
+  IntColumn get unitsPerPack => integer().nullable().check(
+    const CustomExpression<bool>('units_per_pack > 0'),
+  )();
   IntColumn get version => integer().withDefault(const Constant(1))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
@@ -756,7 +777,7 @@ class Products extends Table {
     "CHECK (size IS NULL OR size IN ('big','medium','small'))",
     // Keep in lock-step with [kProductUnits] above. NULL allowed (#108): a
     // product may have no unit.
-    "CHECK (unit IS NULL OR unit IN ('Bottle','Can','PET','Sachet','Keg','Crate','Pack','Carton','Piece','Bag','Box','Tin','Other'))",
+    "CHECK (unit IS NULL OR unit IN ('Bottle','Can','PET','Sachet','Keg','Crate','Pack','Carton','Piece','Bag','Box','Tin','Other','Kg','Litre'))",
   ];
 }
 
@@ -2919,7 +2940,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 83;
+  int get schemaVersion => 88;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3752,7 +3773,20 @@ class AppDatabase extends _$AppDatabase {
         // bump_products_version trigger (re-creates them from sqlite_master),
         // so nothing here needs manual recreation. Mirrors
         // supabase/migrations/0065_widen_product_unit_check.sql.
-        await m.alterTable(TableMigration(products));
+        //
+        // `columnTransformer`: TableMigration rebuilds from the CURRENT schema,
+        // so a column added after v24 is emitted as a bare "name" identifier
+        // that SQLite degrades to the STRING 'name'. units_per_pack (v84, #487)
+        // did not exist at v24: pin it to NULL (see the v64 note).
+        await m.alterTable(
+          TableMigration(
+            products,
+            columnTransformer: {
+              products.unitsPerPack: const Constant<int>(null),
+              products.showOnline: const Constant(true),
+            },
+          ),
+        );
       }
       if (from < 25) {
         // v25 (Ring 0 #2, §24.4/§26.2): activity_logs generic shape +
@@ -5126,7 +5160,19 @@ class AppDatabase extends _$AppDatabase {
         // from sqlite_master), so nothing here needs manual recreation (same as
         // the v24 products rebuild). Mirrors
         // supabase/migrations/0151_products_unit_nullable.sql.
-        await m.alterTable(TableMigration(products));
+        //
+        // `columnTransformer`: units_per_pack (v84, #487) did not exist at
+        // v62, so pin it to NULL rather than let SQLite copy the string
+        // 'units_per_pack' into every row (the stale-column trap, see v64).
+        await m.alterTable(
+          TableMigration(
+            products,
+            columnTransformer: {
+              products.unitsPerPack: const Constant<int>(null),
+              products.showOnline: const Constant(true),
+            },
+          ),
+        );
       }
       if (from < 63) {
         // v63 (#157 crate-pool prefactor): seed one reconciling opening-balance
@@ -6364,6 +6410,74 @@ class AppDatabase extends _$AppDatabase {
           await customStatement(stmt);
         }
       }
+
+      if (from < 84) {
+        // ── v84 — #487: products.units_per_pack ("how many in one") ────────
+        //
+        // Mirrors supabase/migrations/0187_products_units_per_pack.sql. One
+        // nullable INTEGER column whose CHECK (> 0) is a column constraint, so
+        // a plain ADD COLUMN carries it (no rebuild). Display only: nothing is
+        // backfilled. Guarded, because a DB that came through the v24 or v62
+        // products rebuild already has it (both pin it to NULL).
+        final hasUnitsPerPack = (await customSelect(
+          "SELECT 1 FROM pragma_table_info('products') "
+          "WHERE name = 'units_per_pack'",
+        ).get()).isNotEmpty;
+        if (!hasUnitsPerPack) {
+          await m.addColumn(products, products.unitsPerPack);
+        }
+      }
+      if (from < 85) {
+        // ── v85 — #490 / #492 G4: products.unit CHECK admits Kg and Litre ────
+        //
+        // Mirrors supabase/migrations/0196_products_unit_kg_litre.sql.
+        // Widens customConstraints on products to admit 'Kg' and 'Litre'
+        // alongside the 13 legacy units. TableMigration rebuilds the table
+        // to update the SQLite table-level CHECK constraint.
+        final hasShowOnline = (await customSelect(
+          "SELECT 1 FROM pragma_table_info('products') WHERE name = 'show_online'",
+        ).get()).isNotEmpty;
+        await m.alterTable(TableMigration(products, columnTransformer: {
+          if (!hasShowOnline) products.showOnline: const Constant(true),
+        }));
+      }
+      if (from < 86) {
+        // ── v86 — #493: businesses.sells_one_price ("We sell at one price") ──
+        //
+        // Mirrors supabase/migrations/0197_businesses_sells_one_price.sql. One
+        // NOT NULL boolean with DEFAULT false, so a plain ADD COLUMN fills every
+        // existing shop with OFF. No businesses rebuild exists, so no stale-
+        // column pin is needed. Guarded, because a DB stepped back by the
+        // revert-then-re-upgrade tests already carries it from onCreate.
+        final hasSellsOnePrice = (await customSelect(
+          "SELECT 1 FROM pragma_table_info('businesses') "
+          "WHERE name = 'sells_one_price'",
+        ).get()).isNotEmpty;
+        if (!hasSellsOnePrice) {
+          await m.addColumn(businesses, businesses.sellsOnePrice);
+        }
+      }
+      if (from < 87) {
+        // #472: existing shop categories stay sellable with no online mapping.
+        final exists = await customSelect(
+          "SELECT 1 FROM pragma_table_info('categories') "
+          "WHERE name = 'marketplace_category'",
+        ).get();
+        if (exists.isEmpty) {
+          await m.addColumn(categories, categories.marketplaceCategory);
+        }
+      }
+      if (from < 88) {
+        // #424: old product rebuilds already include the current column.
+        final exists = await customSelect(
+          "SELECT 1 FROM pragma_table_info('products') WHERE name = 'show_online'",
+        ).get();
+        if (exists.isEmpty) await m.addColumn(products, products.showOnline);
+        await customStatement(
+          "INSERT OR IGNORE INTO permissions (key, description, category) VALUES "
+          "('products.manage_listing', 'Manage online product listings', 'Online store')",
+        );
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -6857,6 +6971,7 @@ const List<List<String>> _defaultPermissionRows = [
   // Products
   ['products.add', 'Add a new product', 'Products'],
   ['products.edit_price', 'Edit product', 'Products'],
+  ['products.manage_listing', 'Manage online product listings', 'Online store'],
   ['products.edit_buying_price', 'View buying price', 'Products'],
   ['products.delete', 'Delete a product', 'Products'],
   // Stock

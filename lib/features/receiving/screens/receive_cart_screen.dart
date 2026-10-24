@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
@@ -18,6 +19,7 @@ import 'package:reebaplus_pos/shared/widgets/redesign/cart_line.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/category_visual.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/icon_tile.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/tag_pill.dart';
+import 'package:reebaplus_pos/core/utils/product_unit.dart';
 
 /// The receiving cart (#394): the lines on this receipt, each a shared
 /// [CartLine] without a stepper (tap opens the Edit sheet, swipe left
@@ -141,12 +143,16 @@ class _ReceiveCartLineCard extends ConsumerWidget {
         ?.name;
     final visual = categoryVisual(categoryName, f);
     final cost = formatCurrency(line.buyingPriceKobo / 100);
-    final prices =
-        'Ret: ${formatCurrency(line.retailKobo / 100)} • '
-        'Whls: ${formatCurrency(line.wholesaleKobo / 100)}';
+    final hasWholesale = !businessSellsOnePrice(
+      ref.watch(currentBusinessProvider),
+    );
+    final prices = hasWholesale
+        ? 'Ret: ${formatCurrency(line.retailKobo / 100)} • '
+              'Whls: ${formatCurrency(line.wholesaleKobo / 100)}'
+        : 'Price: ${formatCurrency(line.retailKobo / 100)}';
     // A unitless product (#108) shows no unit label — just its prices.
     final detail = (line.unit ?? '').isNotEmpty
-        ? '${line.unit} · $prices'
+        ? '${unitLabel(line.unit, crates: businessTracksCrates(ref.watch(currentBusinessProvider)))} · $prices'
         : prices;
     final radius = BorderRadius.circular(AppSpacing.borderRadiusXL);
     return Dismissible(

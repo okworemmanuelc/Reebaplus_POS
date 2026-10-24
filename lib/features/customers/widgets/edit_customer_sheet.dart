@@ -123,6 +123,10 @@ class _EditCustomerSheetState extends ConsumerState<EditCustomerSheet> {
   }
 
   Widget _groupDropdown() {
+    final hasWholesale = !businessSellsOnePrice(
+      ref.watch(currentBusinessProvider),
+    );
+    if (!hasWholesale) return const SizedBox.shrink();
     return Column(
       children: [
         AppDropdown<PriceTier>(

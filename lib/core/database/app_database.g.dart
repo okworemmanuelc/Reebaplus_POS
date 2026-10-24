@@ -143,6 +143,21 @@ class $BusinessesTable extends Businesses
     ),
     defaultValue: const Constant(true),
   );
+  static const VerificationMeta _sellsOnePriceMeta = const VerificationMeta(
+    'sellsOnePrice',
+  );
+  @override
+  late final GeneratedColumn<bool> sellsOnePrice = GeneratedColumn<bool>(
+    'sells_one_price',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("sells_one_price" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _subscriptionStatusMeta =
       const VerificationMeta('subscriptionStatus');
   @override
@@ -203,6 +218,7 @@ class $BusinessesTable extends Businesses
     lastUpdatedAt,
     ownerId,
     tracksEmptyCrates,
+    sellsOnePrice,
     subscriptionStatus,
     subscriptionPlan,
     trialEndsAt,
@@ -300,6 +316,15 @@ class $BusinessesTable extends Businesses
         ),
       );
     }
+    if (data.containsKey('sells_one_price')) {
+      context.handle(
+        _sellsOnePriceMeta,
+        sellsOnePrice.isAcceptableOrUnknown(
+          data['sells_one_price']!,
+          _sellsOnePriceMeta,
+        ),
+      );
+    }
     if (data.containsKey('subscription_status')) {
       context.handle(
         _subscriptionStatusMeta,
@@ -393,6 +418,10 @@ class $BusinessesTable extends Businesses
         DriftSqlType.bool,
         data['${effectivePrefix}tracks_empty_crates'],
       )!,
+      sellsOnePrice: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}sells_one_price'],
+      )!,
       subscriptionStatus: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}subscription_status'],
@@ -431,6 +460,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
   final DateTime lastUpdatedAt;
   final String? ownerId;
   final bool tracksEmptyCrates;
+  final bool sellsOnePrice;
   final String subscriptionStatus;
   final String? subscriptionPlan;
   final DateTime? trialEndsAt;
@@ -448,6 +478,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
     required this.lastUpdatedAt,
     this.ownerId,
     required this.tracksEmptyCrates,
+    required this.sellsOnePrice,
     required this.subscriptionStatus,
     this.subscriptionPlan,
     this.trialEndsAt,
@@ -478,6 +509,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
       map['owner_id'] = Variable<String>(ownerId);
     }
     map['tracks_empty_crates'] = Variable<bool>(tracksEmptyCrates);
+    map['sells_one_price'] = Variable<bool>(sellsOnePrice);
     map['subscription_status'] = Variable<String>(subscriptionStatus);
     if (!nullToAbsent || subscriptionPlan != null) {
       map['subscription_plan'] = Variable<String>(subscriptionPlan);
@@ -513,6 +545,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
           ? const Value.absent()
           : Value(ownerId),
       tracksEmptyCrates: Value(tracksEmptyCrates),
+      sellsOnePrice: Value(sellsOnePrice),
       subscriptionStatus: Value(subscriptionStatus),
       subscriptionPlan: subscriptionPlan == null && nullToAbsent
           ? const Value.absent()
@@ -544,6 +577,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
       ownerId: serializer.fromJson<String?>(json['ownerId']),
       tracksEmptyCrates: serializer.fromJson<bool>(json['tracksEmptyCrates']),
+      sellsOnePrice: serializer.fromJson<bool>(json['sellsOnePrice']),
       subscriptionStatus: serializer.fromJson<String>(
         json['subscriptionStatus'],
       ),
@@ -570,6 +604,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
       'ownerId': serializer.toJson<String?>(ownerId),
       'tracksEmptyCrates': serializer.toJson<bool>(tracksEmptyCrates),
+      'sellsOnePrice': serializer.toJson<bool>(sellsOnePrice),
       'subscriptionStatus': serializer.toJson<String>(subscriptionStatus),
       'subscriptionPlan': serializer.toJson<String?>(subscriptionPlan),
       'trialEndsAt': serializer.toJson<DateTime?>(trialEndsAt),
@@ -590,6 +625,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
     DateTime? lastUpdatedAt,
     Value<String?> ownerId = const Value.absent(),
     bool? tracksEmptyCrates,
+    bool? sellsOnePrice,
     String? subscriptionStatus,
     Value<String?> subscriptionPlan = const Value.absent(),
     Value<DateTime?> trialEndsAt = const Value.absent(),
@@ -607,6 +643,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
     ownerId: ownerId.present ? ownerId.value : this.ownerId,
     tracksEmptyCrates: tracksEmptyCrates ?? this.tracksEmptyCrates,
+    sellsOnePrice: sellsOnePrice ?? this.sellsOnePrice,
     subscriptionStatus: subscriptionStatus ?? this.subscriptionStatus,
     subscriptionPlan: subscriptionPlan.present
         ? subscriptionPlan.value
@@ -636,6 +673,9 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
       tracksEmptyCrates: data.tracksEmptyCrates.present
           ? data.tracksEmptyCrates.value
           : this.tracksEmptyCrates,
+      sellsOnePrice: data.sellsOnePrice.present
+          ? data.sellsOnePrice.value
+          : this.sellsOnePrice,
       subscriptionStatus: data.subscriptionStatus.present
           ? data.subscriptionStatus.value
           : this.subscriptionStatus,
@@ -666,6 +706,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
           ..write('ownerId: $ownerId, ')
           ..write('tracksEmptyCrates: $tracksEmptyCrates, ')
+          ..write('sellsOnePrice: $sellsOnePrice, ')
           ..write('subscriptionStatus: $subscriptionStatus, ')
           ..write('subscriptionPlan: $subscriptionPlan, ')
           ..write('trialEndsAt: $trialEndsAt, ')
@@ -688,6 +729,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
     lastUpdatedAt,
     ownerId,
     tracksEmptyCrates,
+    sellsOnePrice,
     subscriptionStatus,
     subscriptionPlan,
     trialEndsAt,
@@ -709,6 +751,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
           other.lastUpdatedAt == this.lastUpdatedAt &&
           other.ownerId == this.ownerId &&
           other.tracksEmptyCrates == this.tracksEmptyCrates &&
+          other.sellsOnePrice == this.sellsOnePrice &&
           other.subscriptionStatus == this.subscriptionStatus &&
           other.subscriptionPlan == this.subscriptionPlan &&
           other.trialEndsAt == this.trialEndsAt &&
@@ -728,6 +771,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
   final Value<DateTime> lastUpdatedAt;
   final Value<String?> ownerId;
   final Value<bool> tracksEmptyCrates;
+  final Value<bool> sellsOnePrice;
   final Value<String> subscriptionStatus;
   final Value<String?> subscriptionPlan;
   final Value<DateTime?> trialEndsAt;
@@ -746,6 +790,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
     this.lastUpdatedAt = const Value.absent(),
     this.ownerId = const Value.absent(),
     this.tracksEmptyCrates = const Value.absent(),
+    this.sellsOnePrice = const Value.absent(),
     this.subscriptionStatus = const Value.absent(),
     this.subscriptionPlan = const Value.absent(),
     this.trialEndsAt = const Value.absent(),
@@ -765,6 +810,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
     this.lastUpdatedAt = const Value.absent(),
     this.ownerId = const Value.absent(),
     this.tracksEmptyCrates = const Value.absent(),
+    this.sellsOnePrice = const Value.absent(),
     this.subscriptionStatus = const Value.absent(),
     this.subscriptionPlan = const Value.absent(),
     this.trialEndsAt = const Value.absent(),
@@ -784,6 +830,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
     Expression<DateTime>? lastUpdatedAt,
     Expression<String>? ownerId,
     Expression<bool>? tracksEmptyCrates,
+    Expression<bool>? sellsOnePrice,
     Expression<String>? subscriptionStatus,
     Expression<String>? subscriptionPlan,
     Expression<DateTime>? trialEndsAt,
@@ -803,6 +850,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
       if (ownerId != null) 'owner_id': ownerId,
       if (tracksEmptyCrates != null) 'tracks_empty_crates': tracksEmptyCrates,
+      if (sellsOnePrice != null) 'sells_one_price': sellsOnePrice,
       if (subscriptionStatus != null) 'subscription_status': subscriptionStatus,
       if (subscriptionPlan != null) 'subscription_plan': subscriptionPlan,
       if (trialEndsAt != null) 'trial_ends_at': trialEndsAt,
@@ -824,6 +872,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
     Value<DateTime>? lastUpdatedAt,
     Value<String?>? ownerId,
     Value<bool>? tracksEmptyCrates,
+    Value<bool>? sellsOnePrice,
     Value<String>? subscriptionStatus,
     Value<String?>? subscriptionPlan,
     Value<DateTime?>? trialEndsAt,
@@ -843,6 +892,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
       ownerId: ownerId ?? this.ownerId,
       tracksEmptyCrates: tracksEmptyCrates ?? this.tracksEmptyCrates,
+      sellsOnePrice: sellsOnePrice ?? this.sellsOnePrice,
       subscriptionStatus: subscriptionStatus ?? this.subscriptionStatus,
       subscriptionPlan: subscriptionPlan ?? this.subscriptionPlan,
       trialEndsAt: trialEndsAt ?? this.trialEndsAt,
@@ -890,6 +940,9 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
     if (tracksEmptyCrates.present) {
       map['tracks_empty_crates'] = Variable<bool>(tracksEmptyCrates.value);
     }
+    if (sellsOnePrice.present) {
+      map['sells_one_price'] = Variable<bool>(sellsOnePrice.value);
+    }
     if (subscriptionStatus.present) {
       map['subscription_status'] = Variable<String>(subscriptionStatus.value);
     }
@@ -923,6 +976,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
           ..write('ownerId: $ownerId, ')
           ..write('tracksEmptyCrates: $tracksEmptyCrates, ')
+          ..write('sellsOnePrice: $sellsOnePrice, ')
           ..write('subscriptionStatus: $subscriptionStatus, ')
           ..write('subscriptionPlan: $subscriptionPlan, ')
           ..write('trialEndsAt: $trialEndsAt, ')
@@ -3658,6 +3712,17 @@ class $CategoriesTable extends Categories
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _marketplaceCategoryMeta =
+      const VerificationMeta('marketplaceCategory');
+  @override
+  late final GeneratedColumn<String> marketplaceCategory =
+      GeneratedColumn<String>(
+        'marketplace_category',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _isDeletedMeta = const VerificationMeta(
     'isDeleted',
   );
@@ -3704,6 +3769,7 @@ class $CategoriesTable extends Categories
     businessId,
     name,
     description,
+    marketplaceCategory,
     isDeleted,
     createdAt,
     lastUpdatedAt,
@@ -3745,6 +3811,15 @@ class $CategoriesTable extends Categories
         description.isAcceptableOrUnknown(
           data['description']!,
           _descriptionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('marketplace_category')) {
+      context.handle(
+        _marketplaceCategoryMeta,
+        marketplaceCategory.isAcceptableOrUnknown(
+          data['marketplace_category']!,
+          _marketplaceCategoryMeta,
         ),
       );
     }
@@ -3794,6 +3869,10 @@ class $CategoriesTable extends Categories
         DriftSqlType.string,
         data['${effectivePrefix}description'],
       ),
+      marketplaceCategory: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}marketplace_category'],
+      ),
       isDeleted: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_deleted'],
@@ -3820,6 +3899,7 @@ class CategoryData extends DataClass implements Insertable<CategoryData> {
   final String businessId;
   final String name;
   final String? description;
+  final String? marketplaceCategory;
   final bool isDeleted;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
@@ -3828,6 +3908,7 @@ class CategoryData extends DataClass implements Insertable<CategoryData> {
     required this.businessId,
     required this.name,
     this.description,
+    this.marketplaceCategory,
     required this.isDeleted,
     required this.createdAt,
     required this.lastUpdatedAt,
@@ -3840,6 +3921,9 @@ class CategoryData extends DataClass implements Insertable<CategoryData> {
     map['name'] = Variable<String>(name);
     if (!nullToAbsent || description != null) {
       map['description'] = Variable<String>(description);
+    }
+    if (!nullToAbsent || marketplaceCategory != null) {
+      map['marketplace_category'] = Variable<String>(marketplaceCategory);
     }
     map['is_deleted'] = Variable<bool>(isDeleted);
     map['created_at'] = Variable<DateTime>(createdAt);
@@ -3855,6 +3939,9 @@ class CategoryData extends DataClass implements Insertable<CategoryData> {
       description: description == null && nullToAbsent
           ? const Value.absent()
           : Value(description),
+      marketplaceCategory: marketplaceCategory == null && nullToAbsent
+          ? const Value.absent()
+          : Value(marketplaceCategory),
       isDeleted: Value(isDeleted),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
@@ -3871,6 +3958,9 @@ class CategoryData extends DataClass implements Insertable<CategoryData> {
       businessId: serializer.fromJson<String>(json['businessId']),
       name: serializer.fromJson<String>(json['name']),
       description: serializer.fromJson<String?>(json['description']),
+      marketplaceCategory: serializer.fromJson<String?>(
+        json['marketplaceCategory'],
+      ),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
@@ -3884,6 +3974,7 @@ class CategoryData extends DataClass implements Insertable<CategoryData> {
       'businessId': serializer.toJson<String>(businessId),
       'name': serializer.toJson<String>(name),
       'description': serializer.toJson<String?>(description),
+      'marketplaceCategory': serializer.toJson<String?>(marketplaceCategory),
       'isDeleted': serializer.toJson<bool>(isDeleted),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
@@ -3895,6 +3986,7 @@ class CategoryData extends DataClass implements Insertable<CategoryData> {
     String? businessId,
     String? name,
     Value<String?> description = const Value.absent(),
+    Value<String?> marketplaceCategory = const Value.absent(),
     bool? isDeleted,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
@@ -3903,6 +3995,9 @@ class CategoryData extends DataClass implements Insertable<CategoryData> {
     businessId: businessId ?? this.businessId,
     name: name ?? this.name,
     description: description.present ? description.value : this.description,
+    marketplaceCategory: marketplaceCategory.present
+        ? marketplaceCategory.value
+        : this.marketplaceCategory,
     isDeleted: isDeleted ?? this.isDeleted,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -3917,6 +4012,9 @@ class CategoryData extends DataClass implements Insertable<CategoryData> {
       description: data.description.present
           ? data.description.value
           : this.description,
+      marketplaceCategory: data.marketplaceCategory.present
+          ? data.marketplaceCategory.value
+          : this.marketplaceCategory,
       isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       lastUpdatedAt: data.lastUpdatedAt.present
@@ -3932,6 +4030,7 @@ class CategoryData extends DataClass implements Insertable<CategoryData> {
           ..write('businessId: $businessId, ')
           ..write('name: $name, ')
           ..write('description: $description, ')
+          ..write('marketplaceCategory: $marketplaceCategory, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
@@ -3945,6 +4044,7 @@ class CategoryData extends DataClass implements Insertable<CategoryData> {
     businessId,
     name,
     description,
+    marketplaceCategory,
     isDeleted,
     createdAt,
     lastUpdatedAt,
@@ -3957,6 +4057,7 @@ class CategoryData extends DataClass implements Insertable<CategoryData> {
           other.businessId == this.businessId &&
           other.name == this.name &&
           other.description == this.description &&
+          other.marketplaceCategory == this.marketplaceCategory &&
           other.isDeleted == this.isDeleted &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
@@ -3967,6 +4068,7 @@ class CategoriesCompanion extends UpdateCompanion<CategoryData> {
   final Value<String> businessId;
   final Value<String> name;
   final Value<String?> description;
+  final Value<String?> marketplaceCategory;
   final Value<bool> isDeleted;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
@@ -3976,6 +4078,7 @@ class CategoriesCompanion extends UpdateCompanion<CategoryData> {
     this.businessId = const Value.absent(),
     this.name = const Value.absent(),
     this.description = const Value.absent(),
+    this.marketplaceCategory = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -3986,6 +4089,7 @@ class CategoriesCompanion extends UpdateCompanion<CategoryData> {
     required String businessId,
     required String name,
     this.description = const Value.absent(),
+    this.marketplaceCategory = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -3997,6 +4101,7 @@ class CategoriesCompanion extends UpdateCompanion<CategoryData> {
     Expression<String>? businessId,
     Expression<String>? name,
     Expression<String>? description,
+    Expression<String>? marketplaceCategory,
     Expression<bool>? isDeleted,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
@@ -4007,6 +4112,8 @@ class CategoriesCompanion extends UpdateCompanion<CategoryData> {
       if (businessId != null) 'business_id': businessId,
       if (name != null) 'name': name,
       if (description != null) 'description': description,
+      if (marketplaceCategory != null)
+        'marketplace_category': marketplaceCategory,
       if (isDeleted != null) 'is_deleted': isDeleted,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
@@ -4019,6 +4126,7 @@ class CategoriesCompanion extends UpdateCompanion<CategoryData> {
     Value<String>? businessId,
     Value<String>? name,
     Value<String?>? description,
+    Value<String?>? marketplaceCategory,
     Value<bool>? isDeleted,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
@@ -4029,6 +4137,7 @@ class CategoriesCompanion extends UpdateCompanion<CategoryData> {
       businessId: businessId ?? this.businessId,
       name: name ?? this.name,
       description: description ?? this.description,
+      marketplaceCategory: marketplaceCategory ?? this.marketplaceCategory,
       isDeleted: isDeleted ?? this.isDeleted,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -4050,6 +4159,9 @@ class CategoriesCompanion extends UpdateCompanion<CategoryData> {
     }
     if (description.present) {
       map['description'] = Variable<String>(description.value);
+    }
+    if (marketplaceCategory.present) {
+      map['marketplace_category'] = Variable<String>(marketplaceCategory.value);
     }
     if (isDeleted.present) {
       map['is_deleted'] = Variable<bool>(isDeleted.value);
@@ -4073,6 +4185,7 @@ class CategoriesCompanion extends UpdateCompanion<CategoryData> {
           ..write('businessId: $businessId, ')
           ..write('name: $name, ')
           ..write('description: $description, ')
+          ..write('marketplaceCategory: $marketplaceCategory, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
@@ -9894,10 +10007,10 @@ class CrateShortfallWriteoffData extends DataClass
   /// The brand. The ONLY axis a shortfall has — see the class doc.
   final String manufacturerId;
 
-  /// The store whose device took the decision, for the audit trail only.
-  /// Nullable, and it never scopes the figure: a shortfall is business-wide
-  /// (`CRATE_TRACKING_AUDIT` C4), so splitting the loss per branch would let two
-  /// stores each believe the same crates were theirs to lose.
+  /// The store the decision was taken at. On a `count_shortage` row (#296) it
+  /// is always set and scopes the row: the Crate Shortage is per store, so the
+  /// write-off belongs to the store whose count found the crates missing. On
+  /// the older `manual` and `customer_forfeit` rows it is an audit trail only.
   final String? storeId;
 
   /// Crates accepted as lost. **Signed:** positive is a write-off, negative is
@@ -10514,6 +10627,21 @@ class $ProductsTable extends Products
     ),
     defaultValue: const Constant(true),
   );
+  static const VerificationMeta _showOnlineMeta = const VerificationMeta(
+    'showOnline',
+  );
+  @override
+  late final GeneratedColumn<bool> showOnline = GeneratedColumn<bool>(
+    'show_online',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("show_online" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
   static const VerificationMeta _isDeletedMeta = const VerificationMeta(
     'isDeleted',
   );
@@ -10672,6 +10800,18 @@ class $ProductsTable extends Products
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _unitsPerPackMeta = const VerificationMeta(
+    'unitsPerPack',
+  );
+  @override
+  late final GeneratedColumn<int> unitsPerPack = GeneratedColumn<int>(
+    'units_per_pack',
+    aliasedName,
+    true,
+    check: () => const CustomExpression<bool>('units_per_pack > 0'),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _versionMeta = const VerificationMeta(
     'version',
   );
@@ -10728,6 +10868,7 @@ class $ProductsTable extends Products
     iconCodePoint,
     colorHex,
     isAvailable,
+    showOnline,
     isDeleted,
     lowStockThreshold,
     avgDailySales,
@@ -10741,6 +10882,7 @@ class $ProductsTable extends Products
     expiryDate,
     imagePath,
     imageUrl,
+    unitsPerPack,
     version,
     createdAt,
     lastUpdatedAt,
@@ -10881,6 +11023,12 @@ class $ProductsTable extends Products
         ),
       );
     }
+    if (data.containsKey('show_online')) {
+      context.handle(
+        _showOnlineMeta,
+        showOnline.isAcceptableOrUnknown(data['show_online']!, _showOnlineMeta),
+      );
+    }
     if (data.containsKey('is_deleted')) {
       context.handle(
         _isDeletedMeta,
@@ -10983,6 +11131,15 @@ class $ProductsTable extends Products
         imageUrl.isAcceptableOrUnknown(data['image_url']!, _imageUrlMeta),
       );
     }
+    if (data.containsKey('units_per_pack')) {
+      context.handle(
+        _unitsPerPackMeta,
+        unitsPerPack.isAcceptableOrUnknown(
+          data['units_per_pack']!,
+          _unitsPerPackMeta,
+        ),
+      );
+    }
     if (data.containsKey('version')) {
       context.handle(
         _versionMeta,
@@ -11081,6 +11238,10 @@ class $ProductsTable extends Products
         DriftSqlType.bool,
         data['${effectivePrefix}is_available'],
       )!,
+      showOnline: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}show_online'],
+      )!,
       isDeleted: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_deleted'],
@@ -11133,6 +11294,10 @@ class $ProductsTable extends Products
         DriftSqlType.string,
         data['${effectivePrefix}image_url'],
       ),
+      unitsPerPack: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}units_per_pack'],
+      ),
       version: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}version'],
@@ -11172,6 +11337,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
   final int? iconCodePoint;
   final String? colorHex;
   final bool isAvailable;
+  final bool showOnline;
   final bool isDeleted;
   final int lowStockThreshold;
   final double avgDailySales;
@@ -11185,6 +11351,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
   final DateTime? expiryDate;
   final String? imagePath;
   final String? imageUrl;
+  final int? unitsPerPack;
   final int version;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
@@ -11206,6 +11373,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     this.iconCodePoint,
     this.colorHex,
     required this.isAvailable,
+    required this.showOnline,
     required this.isDeleted,
     required this.lowStockThreshold,
     required this.avgDailySales,
@@ -11219,6 +11387,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     this.expiryDate,
     this.imagePath,
     this.imageUrl,
+    this.unitsPerPack,
     required this.version,
     required this.createdAt,
     required this.lastUpdatedAt,
@@ -11263,6 +11432,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       map['color_hex'] = Variable<String>(colorHex);
     }
     map['is_available'] = Variable<bool>(isAvailable);
+    map['show_online'] = Variable<bool>(showOnline);
     map['is_deleted'] = Variable<bool>(isDeleted);
     map['low_stock_threshold'] = Variable<int>(lowStockThreshold);
     map['avg_daily_sales'] = Variable<double>(avgDailySales);
@@ -11283,6 +11453,9 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     }
     if (!nullToAbsent || imageUrl != null) {
       map['image_url'] = Variable<String>(imageUrl);
+    }
+    if (!nullToAbsent || unitsPerPack != null) {
+      map['units_per_pack'] = Variable<int>(unitsPerPack);
     }
     map['version'] = Variable<int>(version);
     map['created_at'] = Variable<DateTime>(createdAt);
@@ -11323,6 +11496,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
           ? const Value.absent()
           : Value(colorHex),
       isAvailable: Value(isAvailable),
+      showOnline: Value(showOnline),
       isDeleted: Value(isDeleted),
       lowStockThreshold: Value(lowStockThreshold),
       avgDailySales: Value(avgDailySales),
@@ -11344,6 +11518,9 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       imageUrl: imageUrl == null && nullToAbsent
           ? const Value.absent()
           : Value(imageUrl),
+      unitsPerPack: unitsPerPack == null && nullToAbsent
+          ? const Value.absent()
+          : Value(unitsPerPack),
       version: Value(version),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
@@ -11375,6 +11552,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       iconCodePoint: serializer.fromJson<int?>(json['iconCodePoint']),
       colorHex: serializer.fromJson<String?>(json['colorHex']),
       isAvailable: serializer.fromJson<bool>(json['isAvailable']),
+      showOnline: serializer.fromJson<bool>(json['showOnline']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
       lowStockThreshold: serializer.fromJson<int>(json['lowStockThreshold']),
       avgDailySales: serializer.fromJson<double>(json['avgDailySales']),
@@ -11392,6 +11570,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       expiryDate: serializer.fromJson<DateTime?>(json['expiryDate']),
       imagePath: serializer.fromJson<String?>(json['imagePath']),
       imageUrl: serializer.fromJson<String?>(json['imageUrl']),
+      unitsPerPack: serializer.fromJson<int?>(json['unitsPerPack']),
       version: serializer.fromJson<int>(json['version']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
@@ -11418,6 +11597,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       'iconCodePoint': serializer.toJson<int?>(iconCodePoint),
       'colorHex': serializer.toJson<String?>(colorHex),
       'isAvailable': serializer.toJson<bool>(isAvailable),
+      'showOnline': serializer.toJson<bool>(showOnline),
       'isDeleted': serializer.toJson<bool>(isDeleted),
       'lowStockThreshold': serializer.toJson<int>(lowStockThreshold),
       'avgDailySales': serializer.toJson<double>(avgDailySales),
@@ -11431,6 +11611,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       'expiryDate': serializer.toJson<DateTime?>(expiryDate),
       'imagePath': serializer.toJson<String?>(imagePath),
       'imageUrl': serializer.toJson<String?>(imageUrl),
+      'unitsPerPack': serializer.toJson<int?>(unitsPerPack),
       'version': serializer.toJson<int>(version),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
@@ -11455,6 +11636,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     Value<int?> iconCodePoint = const Value.absent(),
     Value<String?> colorHex = const Value.absent(),
     bool? isAvailable,
+    bool? showOnline,
     bool? isDeleted,
     int? lowStockThreshold,
     double? avgDailySales,
@@ -11468,6 +11650,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     Value<DateTime?> expiryDate = const Value.absent(),
     Value<String?> imagePath = const Value.absent(),
     Value<String?> imageUrl = const Value.absent(),
+    Value<int?> unitsPerPack = const Value.absent(),
     int? version,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
@@ -11495,6 +11678,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
         : this.iconCodePoint,
     colorHex: colorHex.present ? colorHex.value : this.colorHex,
     isAvailable: isAvailable ?? this.isAvailable,
+    showOnline: showOnline ?? this.showOnline,
     isDeleted: isDeleted ?? this.isDeleted,
     lowStockThreshold: lowStockThreshold ?? this.lowStockThreshold,
     avgDailySales: avgDailySales ?? this.avgDailySales,
@@ -11508,6 +11692,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     expiryDate: expiryDate.present ? expiryDate.value : this.expiryDate,
     imagePath: imagePath.present ? imagePath.value : this.imagePath,
     imageUrl: imageUrl.present ? imageUrl.value : this.imageUrl,
+    unitsPerPack: unitsPerPack.present ? unitsPerPack.value : this.unitsPerPack,
     version: version ?? this.version,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -11551,6 +11736,9 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       isAvailable: data.isAvailable.present
           ? data.isAvailable.value
           : this.isAvailable,
+      showOnline: data.showOnline.present
+          ? data.showOnline.value
+          : this.showOnline,
       isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
       lowStockThreshold: data.lowStockThreshold.present
           ? data.lowStockThreshold.value
@@ -11582,6 +11770,9 @@ class ProductData extends DataClass implements Insertable<ProductData> {
           : this.expiryDate,
       imagePath: data.imagePath.present ? data.imagePath.value : this.imagePath,
       imageUrl: data.imageUrl.present ? data.imageUrl.value : this.imageUrl,
+      unitsPerPack: data.unitsPerPack.present
+          ? data.unitsPerPack.value
+          : this.unitsPerPack,
       version: data.version.present ? data.version.value : this.version,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       lastUpdatedAt: data.lastUpdatedAt.present
@@ -11610,6 +11801,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
           ..write('iconCodePoint: $iconCodePoint, ')
           ..write('colorHex: $colorHex, ')
           ..write('isAvailable: $isAvailable, ')
+          ..write('showOnline: $showOnline, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('lowStockThreshold: $lowStockThreshold, ')
           ..write('avgDailySales: $avgDailySales, ')
@@ -11623,6 +11815,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
           ..write('expiryDate: $expiryDate, ')
           ..write('imagePath: $imagePath, ')
           ..write('imageUrl: $imageUrl, ')
+          ..write('unitsPerPack: $unitsPerPack, ')
           ..write('version: $version, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
@@ -11649,6 +11842,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     iconCodePoint,
     colorHex,
     isAvailable,
+    showOnline,
     isDeleted,
     lowStockThreshold,
     avgDailySales,
@@ -11662,6 +11856,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     expiryDate,
     imagePath,
     imageUrl,
+    unitsPerPack,
     version,
     createdAt,
     lastUpdatedAt,
@@ -11687,6 +11882,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
           other.iconCodePoint == this.iconCodePoint &&
           other.colorHex == this.colorHex &&
           other.isAvailable == this.isAvailable &&
+          other.showOnline == this.showOnline &&
           other.isDeleted == this.isDeleted &&
           other.lowStockThreshold == this.lowStockThreshold &&
           other.avgDailySales == this.avgDailySales &&
@@ -11700,6 +11896,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
           other.expiryDate == this.expiryDate &&
           other.imagePath == this.imagePath &&
           other.imageUrl == this.imageUrl &&
+          other.unitsPerPack == this.unitsPerPack &&
           other.version == this.version &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
@@ -11723,6 +11920,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
   final Value<int?> iconCodePoint;
   final Value<String?> colorHex;
   final Value<bool> isAvailable;
+  final Value<bool> showOnline;
   final Value<bool> isDeleted;
   final Value<int> lowStockThreshold;
   final Value<double> avgDailySales;
@@ -11736,6 +11934,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
   final Value<DateTime?> expiryDate;
   final Value<String?> imagePath;
   final Value<String?> imageUrl;
+  final Value<int?> unitsPerPack;
   final Value<int> version;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
@@ -11758,6 +11957,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     this.iconCodePoint = const Value.absent(),
     this.colorHex = const Value.absent(),
     this.isAvailable = const Value.absent(),
+    this.showOnline = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.lowStockThreshold = const Value.absent(),
     this.avgDailySales = const Value.absent(),
@@ -11771,6 +11971,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     this.expiryDate = const Value.absent(),
     this.imagePath = const Value.absent(),
     this.imageUrl = const Value.absent(),
+    this.unitsPerPack = const Value.absent(),
     this.version = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -11794,6 +11995,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     this.iconCodePoint = const Value.absent(),
     this.colorHex = const Value.absent(),
     this.isAvailable = const Value.absent(),
+    this.showOnline = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.lowStockThreshold = const Value.absent(),
     this.avgDailySales = const Value.absent(),
@@ -11807,6 +12009,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     this.expiryDate = const Value.absent(),
     this.imagePath = const Value.absent(),
     this.imageUrl = const Value.absent(),
+    this.unitsPerPack = const Value.absent(),
     this.version = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -11831,6 +12034,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     Expression<int>? iconCodePoint,
     Expression<String>? colorHex,
     Expression<bool>? isAvailable,
+    Expression<bool>? showOnline,
     Expression<bool>? isDeleted,
     Expression<int>? lowStockThreshold,
     Expression<double>? avgDailySales,
@@ -11844,6 +12048,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     Expression<DateTime>? expiryDate,
     Expression<String>? imagePath,
     Expression<String>? imageUrl,
+    Expression<int>? unitsPerPack,
     Expression<int>? version,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
@@ -11868,6 +12073,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
       if (iconCodePoint != null) 'icon_code_point': iconCodePoint,
       if (colorHex != null) 'color_hex': colorHex,
       if (isAvailable != null) 'is_available': isAvailable,
+      if (showOnline != null) 'show_online': showOnline,
       if (isDeleted != null) 'is_deleted': isDeleted,
       if (lowStockThreshold != null) 'low_stock_threshold': lowStockThreshold,
       if (avgDailySales != null) 'avg_daily_sales': avgDailySales,
@@ -11884,6 +12090,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
       if (expiryDate != null) 'expiry_date': expiryDate,
       if (imagePath != null) 'image_path': imagePath,
       if (imageUrl != null) 'image_url': imageUrl,
+      if (unitsPerPack != null) 'units_per_pack': unitsPerPack,
       if (version != null) 'version': version,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
@@ -11909,6 +12116,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     Value<int?>? iconCodePoint,
     Value<String?>? colorHex,
     Value<bool>? isAvailable,
+    Value<bool>? showOnline,
     Value<bool>? isDeleted,
     Value<int>? lowStockThreshold,
     Value<double>? avgDailySales,
@@ -11922,6 +12130,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     Value<DateTime?>? expiryDate,
     Value<String?>? imagePath,
     Value<String?>? imageUrl,
+    Value<int?>? unitsPerPack,
     Value<int>? version,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
@@ -11945,6 +12154,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
       iconCodePoint: iconCodePoint ?? this.iconCodePoint,
       colorHex: colorHex ?? this.colorHex,
       isAvailable: isAvailable ?? this.isAvailable,
+      showOnline: showOnline ?? this.showOnline,
       isDeleted: isDeleted ?? this.isDeleted,
       lowStockThreshold: lowStockThreshold ?? this.lowStockThreshold,
       avgDailySales: avgDailySales ?? this.avgDailySales,
@@ -11958,6 +12168,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
       expiryDate: expiryDate ?? this.expiryDate,
       imagePath: imagePath ?? this.imagePath,
       imageUrl: imageUrl ?? this.imageUrl,
+      unitsPerPack: unitsPerPack ?? this.unitsPerPack,
       version: version ?? this.version,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -12019,6 +12230,9 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     if (isAvailable.present) {
       map['is_available'] = Variable<bool>(isAvailable.value);
     }
+    if (showOnline.present) {
+      map['show_online'] = Variable<bool>(showOnline.value);
+    }
     if (isDeleted.present) {
       map['is_deleted'] = Variable<bool>(isDeleted.value);
     }
@@ -12060,6 +12274,9 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     if (imageUrl.present) {
       map['image_url'] = Variable<String>(imageUrl.value);
     }
+    if (unitsPerPack.present) {
+      map['units_per_pack'] = Variable<int>(unitsPerPack.value);
+    }
     if (version.present) {
       map['version'] = Variable<int>(version.value);
     }
@@ -12095,6 +12312,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
           ..write('iconCodePoint: $iconCodePoint, ')
           ..write('colorHex: $colorHex, ')
           ..write('isAvailable: $isAvailable, ')
+          ..write('showOnline: $showOnline, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('lowStockThreshold: $lowStockThreshold, ')
           ..write('avgDailySales: $avgDailySales, ')
@@ -12108,6 +12326,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
           ..write('expiryDate: $expiryDate, ')
           ..write('imagePath: $imagePath, ')
           ..write('imageUrl: $imageUrl, ')
+          ..write('unitsPerPack: $unitsPerPack, ')
           ..write('version: $version, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
@@ -48697,6 +48916,7 @@ typedef $$BusinessesTableCreateCompanionBuilder =
       Value<DateTime> lastUpdatedAt,
       Value<String?> ownerId,
       Value<bool> tracksEmptyCrates,
+      Value<bool> sellsOnePrice,
       Value<String> subscriptionStatus,
       Value<String?> subscriptionPlan,
       Value<DateTime?> trialEndsAt,
@@ -48717,6 +48937,7 @@ typedef $$BusinessesTableUpdateCompanionBuilder =
       Value<DateTime> lastUpdatedAt,
       Value<String?> ownerId,
       Value<bool> tracksEmptyCrates,
+      Value<bool> sellsOnePrice,
       Value<String> subscriptionStatus,
       Value<String?> subscriptionPlan,
       Value<DateTime?> trialEndsAt,
@@ -50153,6 +50374,11 @@ class $$BusinessesTableFilterComposer
 
   ColumnFilters<bool> get tracksEmptyCrates => $composableBuilder(
     column: $table.tracksEmptyCrates,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get sellsOnePrice => $composableBuilder(
+    column: $table.sellsOnePrice,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -51784,6 +52010,11 @@ class $$BusinessesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get sellsOnePrice => $composableBuilder(
+    column: $table.sellsOnePrice,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get subscriptionStatus => $composableBuilder(
     column: $table.subscriptionStatus,
     builder: (column) => ColumnOrderings(column),
@@ -51853,6 +52084,11 @@ class $$BusinessesTableAnnotationComposer
 
   GeneratedColumn<bool> get tracksEmptyCrates => $composableBuilder(
     column: $table.tracksEmptyCrates,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get sellsOnePrice => $composableBuilder(
+    column: $table.sellsOnePrice,
     builder: (column) => column,
   );
 
@@ -53530,6 +53766,7 @@ class $$BusinessesTableTableManager
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<String?> ownerId = const Value.absent(),
                 Value<bool> tracksEmptyCrates = const Value.absent(),
+                Value<bool> sellsOnePrice = const Value.absent(),
                 Value<String> subscriptionStatus = const Value.absent(),
                 Value<String?> subscriptionPlan = const Value.absent(),
                 Value<DateTime?> trialEndsAt = const Value.absent(),
@@ -53548,6 +53785,7 @@ class $$BusinessesTableTableManager
                 lastUpdatedAt: lastUpdatedAt,
                 ownerId: ownerId,
                 tracksEmptyCrates: tracksEmptyCrates,
+                sellsOnePrice: sellsOnePrice,
                 subscriptionStatus: subscriptionStatus,
                 subscriptionPlan: subscriptionPlan,
                 trialEndsAt: trialEndsAt,
@@ -53568,6 +53806,7 @@ class $$BusinessesTableTableManager
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<String?> ownerId = const Value.absent(),
                 Value<bool> tracksEmptyCrates = const Value.absent(),
+                Value<bool> sellsOnePrice = const Value.absent(),
                 Value<String> subscriptionStatus = const Value.absent(),
                 Value<String?> subscriptionPlan = const Value.absent(),
                 Value<DateTime?> trialEndsAt = const Value.absent(),
@@ -53586,6 +53825,7 @@ class $$BusinessesTableTableManager
                 lastUpdatedAt: lastUpdatedAt,
                 ownerId: ownerId,
                 tracksEmptyCrates: tracksEmptyCrates,
+                sellsOnePrice: sellsOnePrice,
                 subscriptionStatus: subscriptionStatus,
                 subscriptionPlan: subscriptionPlan,
                 trialEndsAt: trialEndsAt,
@@ -62412,6 +62652,7 @@ typedef $$CategoriesTableCreateCompanionBuilder =
       required String businessId,
       required String name,
       Value<String?> description,
+      Value<String?> marketplaceCategory,
       Value<bool> isDeleted,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -62423,6 +62664,7 @@ typedef $$CategoriesTableUpdateCompanionBuilder =
       Value<String> businessId,
       Value<String> name,
       Value<String?> description,
+      Value<String?> marketplaceCategory,
       Value<bool> isDeleted,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -62492,6 +62734,11 @@ class $$CategoriesTableFilterComposer
 
   ColumnFilters<String> get description => $composableBuilder(
     column: $table.description,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get marketplaceCategory => $composableBuilder(
+    column: $table.marketplaceCategory,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -62583,6 +62830,11 @@ class $$CategoriesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get marketplaceCategory => $composableBuilder(
+    column: $table.marketplaceCategory,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isDeleted => $composableBuilder(
     column: $table.isDeleted,
     builder: (column) => ColumnOrderings(column),
@@ -62639,6 +62891,11 @@ class $$CategoriesTableAnnotationComposer
 
   GeneratedColumn<String> get description => $composableBuilder(
     column: $table.description,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get marketplaceCategory => $composableBuilder(
+    column: $table.marketplaceCategory,
     builder: (column) => column,
   );
 
@@ -62734,6 +62991,7 @@ class $$CategoriesTableTableManager
                 Value<String> businessId = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<String?> description = const Value.absent(),
+                Value<String?> marketplaceCategory = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -62743,6 +63001,7 @@ class $$CategoriesTableTableManager
                 businessId: businessId,
                 name: name,
                 description: description,
+                marketplaceCategory: marketplaceCategory,
                 isDeleted: isDeleted,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -62754,6 +63013,7 @@ class $$CategoriesTableTableManager
                 required String businessId,
                 required String name,
                 Value<String?> description = const Value.absent(),
+                Value<String?> marketplaceCategory = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -62763,6 +63023,7 @@ class $$CategoriesTableTableManager
                 businessId: businessId,
                 name: name,
                 description: description,
+                marketplaceCategory: marketplaceCategory,
                 isDeleted: isDeleted,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -70356,6 +70617,7 @@ typedef $$ProductsTableCreateCompanionBuilder =
       Value<int?> iconCodePoint,
       Value<String?> colorHex,
       Value<bool> isAvailable,
+      Value<bool> showOnline,
       Value<bool> isDeleted,
       Value<int> lowStockThreshold,
       Value<double> avgDailySales,
@@ -70369,6 +70631,7 @@ typedef $$ProductsTableCreateCompanionBuilder =
       Value<DateTime?> expiryDate,
       Value<String?> imagePath,
       Value<String?> imageUrl,
+      Value<int?> unitsPerPack,
       Value<int> version,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -70393,6 +70656,7 @@ typedef $$ProductsTableUpdateCompanionBuilder =
       Value<int?> iconCodePoint,
       Value<String?> colorHex,
       Value<bool> isAvailable,
+      Value<bool> showOnline,
       Value<bool> isDeleted,
       Value<int> lowStockThreshold,
       Value<double> avgDailySales,
@@ -70406,6 +70670,7 @@ typedef $$ProductsTableUpdateCompanionBuilder =
       Value<DateTime?> expiryDate,
       Value<String?> imagePath,
       Value<String?> imageUrl,
+      Value<int?> unitsPerPack,
       Value<int> version,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -70814,6 +71079,11 @@ class $$ProductsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<bool> get showOnline => $composableBuilder(
+    column: $table.showOnline,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<bool> get isDeleted => $composableBuilder(
     column: $table.isDeleted,
     builder: (column) => ColumnFilters(column),
@@ -70876,6 +71146,11 @@ class $$ProductsTableFilterComposer
 
   ColumnFilters<String> get imageUrl => $composableBuilder(
     column: $table.imageUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get unitsPerPack => $composableBuilder(
+    column: $table.unitsPerPack,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -71355,6 +71630,11 @@ class $$ProductsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get showOnline => $composableBuilder(
+    column: $table.showOnline,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isDeleted => $composableBuilder(
     column: $table.isDeleted,
     builder: (column) => ColumnOrderings(column),
@@ -71417,6 +71697,11 @@ class $$ProductsTableOrderingComposer
 
   ColumnOrderings<String> get imageUrl => $composableBuilder(
     column: $table.imageUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get unitsPerPack => $composableBuilder(
+    column: $table.unitsPerPack,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -71606,6 +71891,11 @@ class $$ProductsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get showOnline => $composableBuilder(
+    column: $table.showOnline,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<bool> get isDeleted =>
       $composableBuilder(column: $table.isDeleted, builder: (column) => column);
 
@@ -71662,6 +71952,11 @@ class $$ProductsTableAnnotationComposer
 
   GeneratedColumn<String> get imageUrl =>
       $composableBuilder(column: $table.imageUrl, builder: (column) => column);
+
+  GeneratedColumn<int> get unitsPerPack => $composableBuilder(
+    column: $table.unitsPerPack,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<int> get version =>
       $composableBuilder(column: $table.version, builder: (column) => column);
@@ -72130,6 +72425,7 @@ class $$ProductsTableTableManager
                 Value<int?> iconCodePoint = const Value.absent(),
                 Value<String?> colorHex = const Value.absent(),
                 Value<bool> isAvailable = const Value.absent(),
+                Value<bool> showOnline = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<int> lowStockThreshold = const Value.absent(),
                 Value<double> avgDailySales = const Value.absent(),
@@ -72143,6 +72439,7 @@ class $$ProductsTableTableManager
                 Value<DateTime?> expiryDate = const Value.absent(),
                 Value<String?> imagePath = const Value.absent(),
                 Value<String?> imageUrl = const Value.absent(),
+                Value<int?> unitsPerPack = const Value.absent(),
                 Value<int> version = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -72165,6 +72462,7 @@ class $$ProductsTableTableManager
                 iconCodePoint: iconCodePoint,
                 colorHex: colorHex,
                 isAvailable: isAvailable,
+                showOnline: showOnline,
                 isDeleted: isDeleted,
                 lowStockThreshold: lowStockThreshold,
                 avgDailySales: avgDailySales,
@@ -72178,6 +72476,7 @@ class $$ProductsTableTableManager
                 expiryDate: expiryDate,
                 imagePath: imagePath,
                 imageUrl: imageUrl,
+                unitsPerPack: unitsPerPack,
                 version: version,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -72202,6 +72501,7 @@ class $$ProductsTableTableManager
                 Value<int?> iconCodePoint = const Value.absent(),
                 Value<String?> colorHex = const Value.absent(),
                 Value<bool> isAvailable = const Value.absent(),
+                Value<bool> showOnline = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<int> lowStockThreshold = const Value.absent(),
                 Value<double> avgDailySales = const Value.absent(),
@@ -72215,6 +72515,7 @@ class $$ProductsTableTableManager
                 Value<DateTime?> expiryDate = const Value.absent(),
                 Value<String?> imagePath = const Value.absent(),
                 Value<String?> imageUrl = const Value.absent(),
+                Value<int?> unitsPerPack = const Value.absent(),
                 Value<int> version = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -72237,6 +72538,7 @@ class $$ProductsTableTableManager
                 iconCodePoint: iconCodePoint,
                 colorHex: colorHex,
                 isAvailable: isAvailable,
+                showOnline: showOnline,
                 isDeleted: isDeleted,
                 lowStockThreshold: lowStockThreshold,
                 avgDailySales: avgDailySales,
@@ -72250,6 +72552,7 @@ class $$ProductsTableTableManager
                 expiryDate: expiryDate,
                 imagePath: imagePath,
                 imageUrl: imageUrl,
+                unitsPerPack: unitsPerPack,
                 version: version,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,

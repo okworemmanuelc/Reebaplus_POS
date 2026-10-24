@@ -497,6 +497,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
   ) {
     final canSeeMoney = Gates.seeOrderMoney.allows(ref);
     final canSeeExtendedRanges = Gates.seeExtendedDateRanges.allows(ref);
+    final tracksCrates = businessTracksCrates(
+      ref.watch(currentBusinessProvider),
+    );
     final key = (
       status: 'completed',
       storeId: activeStoreId,
@@ -538,11 +541,12 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
               value: formatCurrency(stats.amountPaidKobo / 100.0),
               color: _fixed.green,
             ),
-            _StatItem(
-              label: 'Crate Deposits',
-              value: formatCurrency(stats.crateDepositPaidKobo / 100.0),
-              color: subtextCol,
-            ),
+            if (tracksCrates)
+              _StatItem(
+                label: 'Crate Deposits',
+                value: formatCurrency(stats.crateDepositPaidKobo / 100.0),
+                color: subtextCol,
+              ),
           ],
         ];
 
@@ -1109,56 +1113,64 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                       ),
                       child: Screenshot(
                         controller: _screenshotCtrl,
-                        child: ReceiptWidget(
-                          orderId: currentOrder.orderNumber,
-                          cart: richOrder.items
-                              .map(
-                                (ri) => {
-                                  'name': ri.displayName,
-                                  'size': ri.product?.size,
-                                  'qty': ri.item.quantity,
-                                  'price': ri.item.unitPriceKobo / 100.0,
-                                  'unit': ri.product?.unit,
-                                  'trackEmpties': ri.product?.trackEmpties,
-                                  'manufacturerId': ri.product?.manufacturerId,
-                                },
-                              )
-                              .toList(),
-                          // #176 — a reprint must show the SAME goods/deposit
-                          // split as the original: goods = grand total − deposit,
-                          // the deposit on its own line, grand total = the amount
-                          // owed (goods net + deposit). The old form
-                          // (subtotal: totalAmount, crateDeposit: 0) inflated the
-                          // printed Subtotal by the deposit and hid it entirely.
-                          // #200 — and the discount goes back INTO Subtotal with
-                          // its own line under it, so a discounted order's
-                          // reprint no longer reads a lower Subtotal than the
-                          // original (see [receiptTotalsFromOrder]).
-                          subtotal: totals.subtotalKobo / 100.0,
-                          discount: totals.discountKobo / 100.0,
-                          crateDeposit: totals.depositKobo / 100.0,
-                          total: totals.totalKobo / 100.0,
-                          manufacturerNames: manufacturerNames,
-                          paymentMethod: currentOrder.paymentType,
-                          customerName:
-                              richOrder.customer?.name ?? 'Walk-in Customer',
-                          customerAddress:
-                              richOrder.customer?.addressText ?? 'N/A',
-                          cashReceived:
-                              currentOrder.paymentType == 'Wallet Payment'
-                              ? currentOrder.netAmountKobo / 100.0
-                              : currentOrder.amountPaidKobo / 100.0,
-                          reprintDate: reprintDate,
-                          reshareDate: reshareDate,
-                          riderName: currentOrder.riderName,
-                          deliveryRef: null,
-                          orderStatus: currentOrder.status,
-                          refundAmount: currentOrder.amountPaidKobo / 100.0,
-                          storeAddress: storeAddress,
-                          businessName: ref.read(currentBusinessNameProvider),
-                          logoPath: ref
-                              .read(currentBusinessLogoPathProvider)
-                              .valueOrNull,
+                        child: Consumer(
+                          builder: (_, receiptRef, _) => ReceiptWidget(
+                            orderId: currentOrder.orderNumber,
+                            cart: richOrder.items
+                                .map(
+                                  (ri) => {
+                                    'name': ri.displayName,
+                                    'size': ri.product?.size,
+                                    'qty': ri.item.quantity,
+                                    'price': ri.item.unitPriceKobo / 100.0,
+                                    'unit': ri.product?.unit,
+                                    'trackEmpties': ri.product?.trackEmpties,
+                                    'manufacturerId':
+                                        ri.product?.manufacturerId,
+                                  },
+                                )
+                                .toList(),
+                            // #176 — a reprint must show the SAME goods/deposit
+                            // split as the original: goods = grand total − deposit,
+                            // the deposit on its own line, grand total = the amount
+                            // owed (goods net + deposit). The old form
+                            // (subtotal: totalAmount, crateDeposit: 0) inflated the
+                            // printed Subtotal by the deposit and hid it entirely.
+                            // #200 — and the discount goes back INTO Subtotal with
+                            // its own line under it, so a discounted order's
+                            // reprint no longer reads a lower Subtotal than the
+                            // original (see [receiptTotalsFromOrder]).
+                            subtotal: totals.subtotalKobo / 100.0,
+                            discount: totals.discountKobo / 100.0,
+                            crateDeposit: totals.depositKobo / 100.0,
+                            total: totals.totalKobo / 100.0,
+                            manufacturerNames: manufacturerNames,
+                            paymentMethod: currentOrder.paymentType,
+                            customerName:
+                                richOrder.customer?.name ?? 'Walk-in Customer',
+                            customerAddress:
+                                richOrder.customer?.addressText ?? 'N/A',
+                            cashReceived:
+                                currentOrder.paymentType == 'Wallet Payment'
+                                ? currentOrder.netAmountKobo / 100.0
+                                : currentOrder.amountPaidKobo / 100.0,
+                            reprintDate: reprintDate,
+                            reshareDate: reshareDate,
+                            riderName: currentOrder.riderName,
+                            deliveryRef: null,
+                            orderStatus: currentOrder.status,
+                            refundAmount: currentOrder.amountPaidKobo / 100.0,
+                            storeAddress: storeAddress,
+                            businessName: ref.read(currentBusinessNameProvider),
+                            // Watched, so the label follows the business row
+                            // even when nothing else keeps it loaded (#487).
+                            tracksCrates: businessTracksCrates(
+                              receiptRef.watch(currentBusinessProvider),
+                            ),
+                            logoPath: ref
+                                .read(currentBusinessLogoPathProvider)
+                                .valueOrNull,
+                          ),
                         ),
                       ),
                     ),
@@ -1314,6 +1326,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
             refundAmount: order.amountPaidKobo / 100.0,
             storeAddress: finalStoreAddress,
             businessName: ref.read(currentBusinessNameProvider),
+            tracksCrates: businessTracksCrates(
+              ref.read(currentBusinessProvider),
+            ),
             manufacturerNames: manufacturerNames,
             paperSize: paperSize,
           );

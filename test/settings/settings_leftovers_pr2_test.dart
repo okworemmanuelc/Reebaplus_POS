@@ -83,6 +83,9 @@ void main() {
         scrollable: find.byType(Scrollable).first,
       );
       expect(find.text('VAT rate (%)'), findsNothing);
+      // The #493 one-price switch pushes VAT lower: bring it fully into view.
+      await tester.ensureVisible(find.text('Charge VAT'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Charge VAT'));
       await tester.pumpAndSettle();
       expect(find.text('VAT rate (%)'), findsOneWidget);
