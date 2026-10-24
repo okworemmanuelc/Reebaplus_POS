@@ -21,6 +21,7 @@ import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/utils/name_case.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/features/stores/screens/store_details_screen.dart';
 import 'package:reebaplus_pos/features/stores/widgets/stores_parts.dart';
@@ -67,6 +68,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
     return [
       AppInput(
         controller: nameCtrl,
+        textCapitalization: TextCapitalization.words,
         labelText: 'Store Name',
         hintText: nameHint,
         prefixIcon: const Icon(AppIcons.store, size: 20),
@@ -154,7 +156,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                                   .currentUser
                                   ?.id;
                               await db.storesDao.createStore(
-                                name: nameCtrl.text.trim(),
+                                name: toNameCase(nameCtrl.text),
                                 location: combinedLocation,
                                 userId: currentUserId,
                               );
@@ -250,7 +252,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                           try {
                             await db.storesDao.updateStore(
                               id: store.id,
-                              name: nameCtrl.text.trim(),
+                              name: toNameCase(nameCtrl.text),
                               location: combinedLocation,
                             );
                             if (ctx.mounted) Navigator.pop(ctx);

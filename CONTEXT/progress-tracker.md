@@ -7,6 +7,23 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### #507 PR 1: Name case helper and save-time casing in sign-up, profile, business info, stores (2026-10-24)
+Branch `feat/507-name-case`, worktree `../drinkPosApp-wt-507-1`.
+- **Helper:** Created `lib/core/utils/name_case.dart` with `toNameCase(String input)`.
+  - Trims, squashes repeated spaces into one.
+  - In each word, first letter is capitalized, rest lowercase ("sTAR" → "Star").
+  - Capitalizes after hyphens ("coca-cola" → "Coca-Cola") and opening brackets ("(big)" → "(Big)").
+  - Preserves lowercase after apostrophes ("mama's" → "Mama's", "MAMA'S" → "Mama's").
+  - Preserves words containing digits as typed ("50cl", "1.5L", "7UP", "A14").
+  - Empty input gives empty output (""). Never null. Idempotent.
+- **Save-time casing & TextCapitalization:**
+  - CEO sign-up: business name, full name, and typed "Other" business type run through `toNameCase`.
+  - Staff sign-up: staff name runs through `toNameCase`.
+  - Edit profile sheet: name runs through `toNameCase`.
+  - Business Info: business name and typed "Other" business type run through `toNameCase`.
+  - Stores settings & Stores screen: store/van creation and update run through `toNameCase`. Store name input has `textCapitalization: TextCapitalization.words`.
+- **Tests:** `test/utils/name_case_test.dart` (8 test groups), plus save-time tests in `test/settings/stores_settings_screen_test.dart` and `test/settings/business_info_shop_types_test.dart`.
+
 ### #492 G1: Sign-up and Business Info offer every shop type plus "Other" (2026-10-23)
 Branch `feat/492-g1-shop-types`, worktree `../drinkPosApp-wt-492-g1`.
 - **Registry:** All nine industries in `Industry.catalogue` have `selectable = true`; `selectableCatalogue` exposes all nine.
