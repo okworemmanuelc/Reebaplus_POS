@@ -7,6 +7,13 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### #492 G2: Stop crate words leaking to non-drink shops (2026-10-24)
+Branch `feat/492-g2-crate-words`, worktree `../drinkPosApp-wt-492-g2`. Part of #492.
+- Orders Completed tab: "Crate Deposits" stat card is gated on `businessTracksCrates(business)` (hidden for Pharmacy and non-crate shops).
+- `CartService.addItem`: default unit "Bottle" fallback removed; unit is left null when none is set.
+- Rejected sale dialogs: confirmation message in `SyncIssuesScreen` and `NotificationCard` (`NotificationsModal`) conditioned on `tracksCrates`. Non-crate businesses see neutral wording without mention of "customer empties balance".
+- Tests: `test/industry/non_crate_shop_crate_words_test.dart` (CartService unit, Pharmacy vs Bar Orders stat card, Sync Issues neutral dialog, Notifications modal neutral dialog).
+
 ### #487 PR 6 / #465: scan a barcode on Add Product (2026-10-23)
 Branch `feat/465-scan-add-product`, worktree `../drinkPosApp-wt-487-6`. Scan button beside the barcode box (`barcodeScannerProvider`, camera closes after the first read; POS unchanged). `_onBarcodeChanged` now: own products first (`findProductsByBarcode`), then, factory codes only, the shared list via `lookupOutcome` (offline -> note, never blocks save). Own match offers Open it (Product Details; restock mode is gone) / Create a new product anyway. Edit mode: scan only fills the box. Tests in `add_product_catalogue_prefill_test.dart` (+1 in `add_product_form_test.dart`); Add Product goldens regenerated.
 
