@@ -4,6 +4,8 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
+import 'package:reebaplus_pos/core/permissions/gate.dart';
+import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart'
     show SaleSyncException;
 import 'package:reebaplus_pos/core/utils/order_number.dart';
@@ -329,7 +331,13 @@ class OrderCommands {
   /// **Cancel** / refund an order (§19.7): reverses stock, payments, and the
   /// credit-balance legs so the customer's credit balance returns to its
   /// pre-sale balance.
-  Future<void> cancel(String orderId, String reason, String staffId) {
+  Future<void> cancel(String orderId, String reason, String staffId, {
+    required GateContext gateContext,
+  }) {
+    const gate = Gates.refundOrder;
+    if (!gate.evaluate(gateContext)) {
+      throw GateDeniedError(gateName: gate.name, action: gate.action);
+    }
     return _ordersDao.markCancelled(orderId, reason, staffId);
   }
 
