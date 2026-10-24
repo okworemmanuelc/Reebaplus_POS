@@ -167,6 +167,13 @@ void main() {
       expect(kProductUnits, contains('Crate'));
     });
 
+    // #490: every unit the form offers must pass the products.unit CHECK.
+    test('every offered unit is one the database accepts', () {
+      for (final u in {...kGenericUnits, ...kCrateUnits}) {
+        expect(kProductUnits, contains(u), reason: u);
+      }
+    });
+
     test(
       'saved units (Sachet, Tin, Crate...) stay valid and keep showing in unitChoices (#492 G3)',
       () {

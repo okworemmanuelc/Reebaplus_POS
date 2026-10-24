@@ -1,4 +1,4 @@
--- 0188_products_unit_kg_litre.sql
+-- 0196_products_unit_kg_litre.sql
 --
 -- #490 / #492 G4: widen products.unit CHECK to include Kg and Litre.
 --

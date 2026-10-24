@@ -6418,7 +6418,7 @@ class AppDatabase extends _$AppDatabase {
       if (from < 85) {
         // ── v85 — #490 / #492 G4: products.unit CHECK admits Kg and Litre ────
         //
-        // Mirrors supabase/migrations/0188_products_unit_kg_litre.sql.
+        // Mirrors supabase/migrations/0196_products_unit_kg_litre.sql.
         // Widens customConstraints on products to admit 'Kg' and 'Litre'
         // alongside the 13 legacy units. TableMigration rebuilds the table
         // to update the SQLite table-level CHECK constraint.
