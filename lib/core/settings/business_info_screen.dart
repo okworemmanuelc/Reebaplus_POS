@@ -16,6 +16,7 @@ import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/settings/vat_settings.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/utils/name_case.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
@@ -182,7 +183,8 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
       showGateDenied(context, Gates.manageSettings);
       return;
     }
-    final name = _nameController.text.trim();
+    final name = toNameCase(_nameController.text);
+    _nameController.text = name;
     if (name.isEmpty) {
       AppNotification.showError(context, 'Business name can\'t be empty.');
       return;
@@ -200,8 +202,11 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
         return;
       }
       final effectiveType = _type == 'Other'
-          ? _otherTypeController.text.trim()
+          ? toNameCase(_otherTypeController.text)
           : _type;
+      if (_type == 'Other' && effectiveType != null) {
+        _otherTypeController.text = effectiveType;
+      }
       final dbType = effectiveType == 'Beverage distributor'
           ? 'Beer distributor'
           : effectiveType;
