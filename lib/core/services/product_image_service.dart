@@ -28,8 +28,8 @@ import 'package:reebaplus_pos/core/services/product_photo_cache.dart';
 ///   - The url written to products.image_url carries `?v=<millis>` (#340): the
 ///     object name never changes when a photo is replaced, so the version is
 ///     what tells other phones their copy is out of date ([ProductPhotoCache]).
-///   - Read policy: public (getPublicUrl renders cross-device; offline render
-///     comes from the device copy).
+///   - Public URLs render cross-device (offline from the device copy).
+///     Storage metadata/listing SELECT is member-only (0191, #467).
 ///   - Write policy: authenticated members of the business.
 class ProductImageService {
   ProductImageService(this._client) {
