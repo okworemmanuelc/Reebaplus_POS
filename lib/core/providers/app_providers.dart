@@ -551,6 +551,21 @@ bool businessTracksCrates(BusinessData? business) {
   return business.tracksEmptyCrates;
 }
 
+/// Combined visibility gate for wholesale pricing surfaces (#493). True only
+/// when the business type uses wholesale pricing (Beverage distributor only).
+/// Every other trade operates as a one-price shop.
+///
+/// Use this everywhere instead of calling [isWholesaleBusiness] directly. Pass the
+/// [BusinessData] row from [currentBusinessProvider]. Returns true when null to
+/// safely default to full pricing surfaces before tenant context loads.
+bool businessHasWholesale(BusinessData? business) {
+  if (business == null) return true;
+  return isWholesaleBusiness(business.type);
+}
+
+/// Convenience inverse of [businessHasWholesale] (#493).
+bool businessIsOnePrice(BusinessData? business) => !businessHasWholesale(business);
+
 /// The active business name, live (see [currentBusinessProvider]). Empty when
 /// no business is bound yet.
 final currentBusinessNameProvider = Provider.autoDispose<String>((ref) {

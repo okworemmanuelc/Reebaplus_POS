@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
+import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
@@ -72,7 +73,14 @@ class _EditReceiveItemModalState extends ConsumerState<EditReceiveItemModal> {
     });
   }
 
-  void _onInputChanged() => setState(() {});
+  void _onInputChanged() {
+    final hasWholesale =
+        businessHasWholesale(ref.read(currentBusinessProvider));
+    if (!hasWholesale && _wholesaleCtrl.text != _retailCtrl.text) {
+      _wholesaleCtrl.text = _retailCtrl.text;
+    }
+    setState(() {});
+  }
 
   static String _trimNum(num n) =>
       n == n.toInt() ? n.toInt().toString() : n.toString();
@@ -311,18 +319,19 @@ class _EditReceiveItemModalState extends ConsumerState<EditReceiveItemModal> {
               inputFormatters: [CurrencyInputFormatter(grouping: true)],
               prefixIcon: currencyPrefix(editPricePermission),
             ),
-            SizedBox(height: context.getRSize(16)),
-
-            AppInput(
-              controller: _wholesaleCtrl,
-              enabled: editPricePermission,
-              labelText: 'Wholesale Price',
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
+            if (businessHasWholesale(ref.watch(currentBusinessProvider))) ...[
+              SizedBox(height: context.getRSize(16)),
+              AppInput(
+                controller: _wholesaleCtrl,
+                enabled: editPricePermission,
+                labelText: 'Wholesale Price',
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                inputFormatters: [CurrencyInputFormatter(grouping: true)],
+                prefixIcon: currencyPrefix(editPricePermission),
               ),
-              inputFormatters: [CurrencyInputFormatter(grouping: true)],
-              prefixIcon: currencyPrefix(editPricePermission),
-            ),
+            ],
 
             if (lineTotalKobo > 0) ...[
               SizedBox(height: context.getRSize(20)),
@@ -405,15 +414,26 @@ class _EditReceiveItemModalState extends ConsumerState<EditReceiveItemModal> {
                           (r * 100).round(),
                         );
 
-                        final w =
-                            double.tryParse(
-                              _wholesaleCtrl.text.replaceAll(',', ''),
-                            ) ??
-                            0.0;
-                        notifier.setWholesalePrice(
-                          widget.item.productId,
-                          (w * 100).round(),
+                        final hasWholesale = businessHasWholesale(
+                          ref.read(currentBusinessProvider),
                         );
+                        if (hasWholesale) {
+                          final w =
+                              double.tryParse(
+                                _wholesaleCtrl.text.replaceAll(',', ''),
+                              ) ??
+                              0.0;
+                          notifier.setWholesalePrice(
+                            widget.item.productId,
+                            (w * 100).round(),
+                          );
+                        } else {
+                          // One-price shop: mirror retail price behind the scenes
+                          notifier.setWholesalePrice(
+                            widget.item.productId,
+                            (r * 100).round(),
+                          );
+                        }
                       }
 
                       Navigator.pop(context);

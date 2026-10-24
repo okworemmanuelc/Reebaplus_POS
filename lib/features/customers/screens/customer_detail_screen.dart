@@ -1225,7 +1225,10 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
   // ── Header ──────────────────────────────────────────────────────────────────
 
   Widget _buildHeader(ThemeData theme) {
+    final hasWholesale =
+        businessHasWholesale(ref.watch(currentBusinessProvider));
     return CustomerProfileCard(
+      showTier: hasWholesale,
       initials: _initials(_name),
       name: _name,
       wholesaler: _groupName == 'wholesaler',

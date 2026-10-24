@@ -29,7 +29,7 @@ const customerDetailGrants = {
 BusinessData customerDetailBusiness() => BusinessData(
   id: 'biz-1',
   name: 'Stallion Global',
-  type: 'bar',
+  type: 'Beverage distributor',
   phone: null,
   email: null,
   logoUrl: null,

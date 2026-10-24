@@ -7,6 +7,18 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### #493: One-price shops (2026-10-24)
+Branch `feat/493-one-price-shops`, worktree `../drinkPosApp-wt-493`.
+- All trades except Beverage distributor (`Industry.beverage`) operate as one-price shops: Restaurant, Supermarket, Pharmacy, Boutique, Phone & Gadgets, Bar, Building Materials, Frozen Foods & Grocery, and Other/Generic.
+- Core: Added `hasWholesale` flag to `Industry`, `isWholesaleBusiness(type)` and `isOnePriceBusiness(type)` helpers, and `businessHasWholesale(business)` / `businessIsOnePrice(business)` in `app_providers.dart`.
+- Mirroring & Forms: In `FastAddContext`, `hasWholesale` automatically mirrors `wholesalerPriceKobo = retailerPriceKobo` on save whenever wholesale pricing is absent or blank. On `AddProductScreen`, hides Wholesale Price input box and Wholesale profit row when `!hasWholesale`, keeping wholesale mirrored to retail.
+- Surfaces:
+  - Product Details: `ProductPricesCard` accepts `showWholesale: hasWholesale`, hiding the wholesale price tile and wholesale profit row for one-price shops.
+  - POS Home: Hides the price tier dropdown in header and search bar when `!hasWholesale`.
+  - Customers: Hides the Price Tier dropdown in `AddCustomerSheet` and `EditCustomerSheet`; hides customer tier `TagPill` in `CustomerProfileCard` and `CustomerListRow` when `!hasWholesale`.
+  - Receiving: `ReceiveCartScreen` displays "Price: ₦..." instead of "Ret: ... • Whls: ..." when `!hasWholesale`; `EditReceiveItemModal` hides Wholesale Price input and mirrors retail to wholesale on save.
+- Tests: Added comprehensive integration and unit tests in `test/industry/one_price_shops_test.dart` (13 tests passing) and updated `test/industry/industry_registry_test.dart` and `test/inventory/fast_add_product_model_test.dart`.
+
 ### #490 / #492 G4: products.unit CHECK admits Kg and Litre (2026-10-24)
 Branch `feat/490-g4-unit-check`, worktree `../drinkPosApp-wt-490-g4`. Widens `products.unit` in Drift (`kProductUnits` and `Products.customConstraints`) and PostgreSQL to include `Kg` and `Litre` (15 units total). Bumps Drift `schemaVersion` from 84 to 85 with `TableMigration(products)` rebuild (preserving all columns and `units_per_pack`). Created cloud migration `supabase/migrations/0196_products_unit_kg_litre.sql` (drops old unit constraints while carefully excluding `units_per_pack`). Added migration upgrade and CHECK constraint tests in `test/database/migration_upgrade_test.dart`.
 

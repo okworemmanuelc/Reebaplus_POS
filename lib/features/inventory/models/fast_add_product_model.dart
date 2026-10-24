@@ -23,6 +23,7 @@ class FastAddContext {
     required this.canEditBuying,
     required this.storeIds,
     this.routesToReceiveCart = false,
+    this.hasWholesale = true,
   });
 
   /// `businessTracksCrates(business)` — a crate business surfaces a
@@ -41,6 +42,10 @@ class FastAddContext {
   /// Receive Stock's "New product" (#487): the opening quantity goes onto the
   /// delivery list, not into a store, so no store is resolved or asked for.
   final bool routesToReceiveCart;
+
+  /// Whether wholesale pricing is supported (#493). When false (one-price shops),
+  /// the wholesale price automatically mirrors retail price behind the scenes.
+  final bool hasWholesale;
 
   /// A business with exactly one store never asks which store to stock into.
   bool get isSingleStore => storeIds.length == 1;
@@ -266,9 +271,9 @@ FastAddResult resolveFastAdd(FastAddInput input, FastAddContext context) {
     );
   }
 
-  // Wholesaler mirror: blank ⇒ copy the selling price into the stored value.
+  // Wholesaler mirror: blank OR one-price trade ⇒ copy the selling price into the stored value.
   final wholesaleRaw = input.wholesalePrice.trim();
-  final wholesalerPriceKobo = wholesaleRaw.isEmpty
+  final wholesalerPriceKobo = (!context.hasWholesale || wholesaleRaw.isEmpty)
       ? retailerPriceKobo
       : _toKobo(wholesaleRaw);
 

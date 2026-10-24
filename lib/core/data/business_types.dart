@@ -4,7 +4,7 @@ import 'package:reebaplus_pos/core/industry/industry.dart';
 /// industry facts — labels, icons, coming-soon, crate-eligibility — now live
 /// only in [Industry]; this file derives the old public names from it so
 /// existing callers keep working without a second copy of the list.
-export 'package:reebaplus_pos/core/industry/industry.dart' show isCrateBusiness;
+export 'package:reebaplus_pos/core/industry/industry.dart' show isCrateBusiness, isWholesaleBusiness, isOnePriceBusiness;
 
 /// All known business-type display labels, in plan order — the full registry
 /// via [Industry.catalogue]. Used to VALIDATE / round-trip a stored type on

@@ -12,10 +12,12 @@ void main() {
     bool tracksCrates = false,
     bool canEditBuying = true,
     List<String> storeIds = const ['store-1'],
+    bool hasWholesale = true,
   }) => FastAddContext(
     tracksCrates: tracksCrates,
     canEditBuying: canEditBuying,
     storeIds: storeIds,
+    hasWholesale: hasWholesale,
   );
 
   FastAddInput input({
@@ -142,6 +144,16 @@ void main() {
         ctx(),
       );
       expect((result as FastAddIntent).wholesalerPriceKobo, 45000);
+    });
+
+    test('for one-price shops (hasWholesale: false), wholesaler mirrors retail regardless of input (#493)', () {
+      final result = resolveFastAdd(
+        input(sellingPrice: '500', wholesalePrice: '450'),
+        ctx(hasWholesale: false),
+      );
+      final intent = result as FastAddIntent;
+      expect(intent.retailerPriceKobo, 50000);
+      expect(intent.wholesalerPriceKobo, 50000);
     });
   });
 

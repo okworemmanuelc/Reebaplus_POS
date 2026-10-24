@@ -33,6 +33,7 @@ enum Industry {
     label: 'Beverage distributor',
     icon: AppIcons.beerMug,
     crateEligible: true,
+    hasWholesale: true,
     selectable: true,
     aliases: {'beer distributor'},
   ),
@@ -71,6 +72,7 @@ enum Industry {
     // ignore: unused_element_parameter
     this.comingSoon = false,
     this.crateEligible = false,
+    this.hasWholesale = false,
     this.selectable = false,
     this.aliases = const <String>{},
   });
@@ -91,6 +93,11 @@ enum Industry {
   /// The crate-visibility gate reads this via [isCrateBusiness]; combine it with
   /// the `tracks_empty_crates` opt-in for the full surface gate.
   final bool crateEligible;
+
+  /// Whether this industry uses wholesale pricing (Beverage distributor only).
+  /// Every other trade operates as a one-price shop where Wholesale Price is
+  /// automatically mirrored from Retail Price behind the scenes (#493).
+  final bool hasWholesale;
 
   /// Whether this industry is offered in the onboarding + Settings pickers.
   /// Only Beverage distributor, Pharmacy, and Frozen Foods & Grocery ship
@@ -145,3 +152,11 @@ Industry industryOf(String? type) {
 /// [industryOf] normalizes — keeping the gate correct for that legacy data
 /// without a risky migration of synced rows.
 bool isCrateBusiness(String? type) => industryOf(type).crateEligible;
+
+/// Whether [type] is a business that uses wholesale pricing — Beverage distributor
+/// only (#493). Derived from the registry's [Industry.hasWholesale] flag.
+bool isWholesaleBusiness(String? type) => industryOf(type).hasWholesale;
+
+/// Whether [type] is a one-price business — every trade except Beverage
+/// distributor (#493).
+bool isOnePriceBusiness(String? type) => !isWholesaleBusiness(type);

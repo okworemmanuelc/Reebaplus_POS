@@ -146,6 +146,7 @@ class CustomerListRow extends StatelessWidget {
     required this.balanceLabel,
     required this.owes,
     required this.onTap,
+    this.showTier = true,
   });
 
   final String name;
@@ -158,6 +159,9 @@ class CustomerListRow extends StatelessWidget {
   /// Whether the balance is below zero (drawn red).
   final bool owes;
   final VoidCallback onTap;
+
+  /// Whether to show the price tier pill (#493). False in one-price shops.
+  final bool showTier;
 
   @override
   Widget build(BuildContext context) {
@@ -221,8 +225,10 @@ class CustomerListRow extends StatelessWidget {
                                 .copyWith(color: muted),
                           ),
                         ],
-                        SizedBox(height: context.getRSize(6)),
-                        TagPill(label: tierLabel, dense: true),
+                        if (showTier) ...[
+                          SizedBox(height: context.getRSize(6)),
+                          TagPill(label: tierLabel, dense: true),
+                        ],
                       ],
                     ),
                   ),
@@ -546,6 +552,7 @@ class CustomerProfileCard extends StatelessWidget {
     required this.address,
     required this.since,
     this.onEdit,
+    this.showTier = true,
   });
 
   final String initials;
@@ -555,6 +562,9 @@ class CustomerProfileCard extends StatelessWidget {
   final String address;
   final String since;
   final VoidCallback? onEdit;
+
+  /// Whether to show the Wholesaler/Retailer tier pill (#493). False in one-price shops.
+  final bool showTier;
 
   @override
   Widget build(BuildContext context) {
@@ -601,12 +611,14 @@ class CustomerProfileCard extends StatelessWidget {
                           .copyWith(color: t.colorScheme.onSurface),
                     ),
                   ),
-                  SizedBox(height: context.getRSize(6)),
-                  TagPill(
-                    label: wholesaler ? 'Wholesaler' : 'Retailer',
-                    tone: wholesaler ? TagPillTone.green : TagPillTone.warning,
-                    dense: true,
-                  ),
+                  if (showTier) ...[
+                    SizedBox(height: context.getRSize(6)),
+                    TagPill(
+                      label: wholesaler ? 'Wholesaler' : 'Retailer',
+                      tone: wholesaler ? TagPillTone.green : TagPillTone.warning,
+                      dense: true,
+                    ),
+                  ],
                   if (phone.isNotEmpty) ...[
                     SizedBox(height: context.getRSize(10)),
                     _CustomerInfoLine(icon: AppIcons.phone, text: phone),

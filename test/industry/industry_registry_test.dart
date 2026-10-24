@@ -161,6 +161,51 @@ void main() {
     });
   });
 
+  // === WHOLESALE PRICING — Beverage distributor only (#493) ==============
+
+  group('wholesale pricing', () {
+    test('only Beverage distributor has wholesale; all other trades are one-price', () {
+      expect(Industry.beverage.hasWholesale, isTrue);
+      for (final ind in Industry.values) {
+        if (ind != Industry.beverage) {
+          expect(ind.hasWholesale, isFalse,
+              reason: '${ind.label} must be a one-price trade');
+        }
+      }
+    });
+
+    test('isWholesaleBusiness and isOnePriceBusiness shims behave correctly', () {
+      const wholesaleTrue = [
+        'Beverage distributor',
+        'beverage distributor',
+        'Beer distributor',
+        'Beer Distributor',
+      ];
+      const onePriceTrue = [
+        'Restaurant',
+        'Supermarket',
+        'Pharmacy',
+        'Building Materials',
+        'Boutique',
+        'Phone & Gadgets',
+        'Frozen Foods & Grocery',
+        'Bar',
+        'Salon',
+        '',
+      ];
+      for (final t in wholesaleTrue) {
+        expect(isWholesaleBusiness(t), isTrue, reason: '"$t" should have wholesale');
+        expect(isOnePriceBusiness(t), isFalse, reason: '"$t" should not be one-price');
+      }
+      for (final t in onePriceTrue) {
+        expect(isWholesaleBusiness(t), isFalse, reason: '"$t" should not have wholesale');
+        expect(isOnePriceBusiness(t), isTrue, reason: '"$t" should be one-price');
+      }
+      expect(isWholesaleBusiness(null), isFalse);
+      expect(isOnePriceBusiness(null), isTrue);
+    });
+  });
+
   // === (d) GOLDEN PIN — frozen snapshot of the catalogue =================
 
   group('catalogue golden', () {
