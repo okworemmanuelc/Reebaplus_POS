@@ -3868,4 +3868,183 @@ void main() {
       expect(await unitsPerPackOf(db2, id), 24);
     });
   });
+
+  group('onUpgrade v84 -> v85 (products.unit CHECK admits Kg and Litre, #490 / #492 G4)', () {
+    Future<String> seedProduct(
+      AppDatabase db, {
+      String? unit,
+      int? unitsPerPack,
+    }) async {
+      final biz = UuidV7.generate();
+      final id = UuidV7.generate();
+      await db
+          .into(db.businesses)
+          .insert(
+            BusinessesCompanion.insert(id: Value(biz), name: 'Sample Biz'),
+          );
+      await db
+          .into(db.products)
+          .insert(
+            ProductsCompanion.insert(
+              id: Value(id),
+              businessId: biz,
+              name: 'Sample Product',
+              unit: Value(unit),
+              unitsPerPack: Value(unitsPerPack),
+            ),
+          );
+      return id;
+    }
+
+    test(
+      'widens products.unit CHECK to admit Kg and Litre, preserving rows and units_per_pack',
+      () async {
+        final db1 = await openAndInit();
+        final id = await seedProduct(db1, unit: 'Bottle', unitsPerPack: 12);
+
+        // Revert products table to the v84 shape (with 13-unit CHECK).
+        final originalSql = (await db1.customSelect(
+          "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'products'",
+        ).getSingle()).read<String>('sql');
+        final v84Sql = originalSql.replaceFirst(
+          "'Other','Kg','Litre'",
+          "'Other'",
+        );
+        expect(v84Sql, isNot(originalSql), reason: 'Teeth: must remove Kg and Litre');
+
+        await db1.customStatement('PRAGMA foreign_keys = OFF');
+        await db1.customStatement('DROP TRIGGER IF EXISTS bump_products_version');
+        await db1.customStatement(
+          'CREATE TABLE products_old AS SELECT * FROM products',
+        );
+        await db1.customStatement('DROP TABLE products');
+        await db1.customStatement(v84Sql);
+        await db1.customStatement('INSERT INTO products SELECT * FROM products_old');
+        await db1.customStatement('DROP TABLE products_old');
+        await db1.customStatement(
+          'CREATE TRIGGER bump_products_version '
+          'AFTER UPDATE ON products '
+          'FOR EACH ROW '
+          'WHEN OLD.version IS NEW.version '
+          'BEGIN '
+          'UPDATE products SET version = OLD.version + 1 WHERE id = OLD.id; '
+          'END',
+        );
+        await db1.customStatement('PRAGMA foreign_keys = ON');
+
+        // Teeth: verify that v84 CHECK rejects 'Kg' and 'Litre'.
+        final biz = (await (db1.select(db1.products)..where((t) => t.id.equals(id))).getSingle()).businessId;
+        await expectLater(
+          db1.customStatement(
+            'INSERT INTO products (id, business_id, name, unit) '
+            "VALUES (?, ?, 'Sugar', 'Kg')",
+            [UuidV7.generate(), biz],
+          ),
+          throwsA(anything),
+          reason: 'the v84 CHECK must reject Kg',
+        );
+        await expectLater(
+          db1.customStatement(
+            'INSERT INTO products (id, business_id, name, unit) '
+            "VALUES (?, ?, 'Cooking Oil', 'Litre')",
+            [UuidV7.generate(), biz],
+          ),
+          throwsA(anything),
+          reason: 'the v84 CHECK must reject Litre',
+        );
+
+        await db1.customStatement('PRAGMA user_version = 84');
+        await db1.close();
+
+        final db2 = await openAndInit();
+        addTearDown(db2.close);
+
+        // (1) Existing row survived with unit and units_per_pack.
+        final product = await (db2.select(
+          db2.products,
+        )..where((t) => t.id.equals(id))).getSingle();
+        expect(product.name, 'Sample Product');
+        expect(product.unit, 'Bottle');
+        expect(product.unitsPerPack, 12);
+
+        // (2) 'Kg' and 'Litre' now insert and validate cleanly.
+        final kgId = UuidV7.generate();
+        await db2
+            .into(db2.products)
+            .insert(
+              ProductsCompanion.insert(
+                id: Value(kgId),
+                businessId: biz,
+                name: 'Sugar',
+                unit: const Value('Kg'),
+              ),
+            );
+        final kgRow = await (db2.select(
+          db2.products,
+        )..where((t) => t.id.equals(kgId))).getSingle();
+        expect(kgRow.unit, 'Kg');
+
+        final litreId = UuidV7.generate();
+        await db2
+            .into(db2.products)
+            .insert(
+              ProductsCompanion.insert(
+                id: Value(litreId),
+                businessId: biz,
+                name: 'Cooking Oil',
+                unit: const Value('Litre'),
+              ),
+            );
+        final litreRow = await (db2.select(
+          db2.products,
+        )..where((t) => t.id.equals(litreId))).getSingle();
+        expect(litreRow.unit, 'Litre');
+
+        // (3) Every unit in kProductUnits (all 15) inserts and validates.
+        for (final u in kProductUnits) {
+          final uId = UuidV7.generate();
+          await db2
+              .into(db2.products)
+              .insert(
+                ProductsCompanion.insert(
+                  id: Value(uId),
+                  businessId: biz,
+                  name: 'Product $u',
+                  unit: Value(u),
+                ),
+              );
+          final row = await (db2.select(
+            db2.products,
+          )..where((t) => t.id.equals(uId))).getSingle();
+          expect(row.unit, u);
+        }
+
+        // (4) An invalid unit is still rejected by SQLite CHECK.
+        await expectLater(
+          db2.customStatement(
+            'INSERT INTO products (id, business_id, name, unit) '
+            "VALUES (?, ?, 'Invalid', 'Fathom')",
+            [UuidV7.generate(), biz],
+          ),
+          throwsA(anything),
+          reason: 'unlisted units are still rejected',
+        );
+      },
+    );
+
+    test('the upgrade step is idempotent', () async {
+      final db1 = await openAndInit();
+      final id = await seedProduct(db1, unit: 'Kg', unitsPerPack: 25);
+      await db1.customStatement('PRAGMA user_version = 84');
+      await db1.close();
+
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+      final product = await (db2.select(
+        db2.products,
+      )..where((t) => t.id.equals(id))).getSingle();
+      expect(product.unit, 'Kg');
+      expect(product.unitsPerPack, 25);
+    });
+  });
 }

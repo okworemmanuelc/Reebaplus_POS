@@ -682,6 +682,8 @@ const List<String> kProductUnits = [
   'Box',
   'Tin',
   'Other',
+  'Kg',
+  'Litre',
 ];
 
 @DataClassName('ProductData')
@@ -764,7 +766,7 @@ class Products extends Table {
     "CHECK (size IS NULL OR size IN ('big','medium','small'))",
     // Keep in lock-step with [kProductUnits] above. NULL allowed (#108): a
     // product may have no unit.
-    "CHECK (unit IS NULL OR unit IN ('Bottle','Can','PET','Sachet','Keg','Crate','Pack','Carton','Piece','Bag','Box','Tin','Other'))",
+    "CHECK (unit IS NULL OR unit IN ('Bottle','Can','PET','Sachet','Keg','Crate','Pack','Carton','Piece','Bag','Box','Tin','Other','Kg','Litre'))",
   ];
 }
 
@@ -2927,7 +2929,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 84;
+  int get schemaVersion => 85;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -6411,6 +6413,16 @@ class AppDatabase extends _$AppDatabase {
         if (!hasUnitsPerPack) {
           await m.addColumn(products, products.unitsPerPack);
         }
+      }
+
+      if (from < 85) {
+        // ── v85 — #490 / #492 G4: products.unit CHECK admits Kg and Litre ────
+        //
+        // Mirrors supabase/migrations/0188_products_unit_kg_litre.sql.
+        // Widens customConstraints on products to admit 'Kg' and 'Litre'
+        // alongside the 13 legacy units. TableMigration rebuilds the table
+        // to update the SQLite table-level CHECK constraint.
+        await m.alterTable(TableMigration(products));
       }
     },
     beforeOpen: (details) async {
