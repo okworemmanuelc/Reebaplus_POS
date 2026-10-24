@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/core/data/marketplace_categories.dart';
+import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -61,8 +63,8 @@ class ManageCategoriesSheet extends ConsumerWidget {
           const InventorySheetHeader(title: 'Manage categories'),
           SizedBox(height: context.getRSize(4)),
           Text(
-            'Rename a category, or delete it to move its products to '
-            'Uncategorized.',
+            'Match categories for online shopping. Unmapped products appear '
+            'under Other and still sell at the till.',
             style: context.regularStyle(13).copyWith(color: muted),
           ),
           SizedBox(height: context.getRSize(16)),
@@ -125,13 +127,43 @@ class _CategoryRow extends ConsumerWidget {
             ),
             SizedBox(width: context.getRSize(12)),
             Expanded(
-              child: Text(
-                category.name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: context
-                    .boldStyle(15)
-                    .copyWith(color: t.colorScheme.onSurface),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(category.name, maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.boldStyle(15)
+                        .copyWith(color: t.colorScheme.onSurface)),
+                  if (Gates.addProduct.allows(ref))
+                    AppDropdown<String>(
+                      key: ValueKey('marketplace-${category.id}'),
+                      labelText: 'Online category',
+                      value: marketplaceCategoryFor(
+                          category.marketplaceCategory).slug,
+                      items: [
+                        for (final c in marketplaceCategories)
+                          DropdownMenuItem(value: c.slug,
+                            child: Text(c.parentSlug == null ? c.name
+                              : '${marketplaceCategoryFor(c.parentSlug).name} / ${c.name}',
+                              maxLines: 1, overflow: TextOverflow.ellipsis)),
+                      ],
+                      onChanged: (slug) async {
+                        if (!Gates.addProduct.allowsNow(ref)) {
+                          showGateDenied(context, Gates.addProduct);
+                          return;
+                        }
+                        try {
+                          await ref.read(databaseProvider).catalogDao
+                              .mapCategory(category.id, slug == 'other' ? null : slug);
+                        } catch (_) {
+                          if (context.mounted) {
+                            AppNotification.showError(context,
+                                'Could not update the online category.');
+                          }
+                        }
+                      },
+                    ),
+                ],
               ),
             ),
             _RowAction(

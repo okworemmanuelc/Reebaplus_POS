@@ -49,6 +49,61 @@ void main() {
 
   // ─── Rename ────────────────────────────────────────────────────────────────
 
+  test('creating an exact marketplace child pre-maps it without starter suggestions', () async {
+    await (db.update(db.businesses)..where((b) => b.id.equals(businessId)))
+        .write(const BusinessesCompanion(type: Value('Custom shop')));
+    final water = await newCategory('Water');
+    final beer = await newCategory(' beer ');
+    final phones = await newCategory('PHONES');
+    final custom = await newCategory('Seasonal');
+    expect((await categoryById(water)).marketplaceCategory, 'water');
+    expect((await categoryById(beer)).marketplaceCategory, 'beer');
+    expect((await categoryById(phones)).marketplaceCategory, 'phones');
+    expect((await categoryById(custom)).marketplaceCategory, isNull);
+    final payload = (await getPendingQueue(db))
+        .where((r) => r.actionType == 'categories:upsert')
+        .map(decodePayload).firstWhere((r) => r['id'] == water);
+    expect(payload['marketplace_category'], 'water');
+  });
+
+  test('online mapping queues full row and explicit null clearing', () async {
+    final id = await newCategory('Seasonal');
+    await db.catalogDao.mapCategory(id, 'phones');
+    expect((await categoryById(id)).marketplaceCategory, 'phones');
+    await db.catalogDao.renameCategory(id, name: 'Specials');
+    expect((await categoryById(id)).marketplaceCategory, 'phones');
+    await db.catalogDao.mapCategory(id, null);
+    expect((await categoryById(id)).marketplaceCategory, isNull);
+    final payloads = (await getPendingQueue(db))
+        .where((r) => r.actionType == 'categories:upsert')
+        .map(decodePayload).toList();
+    expect(payloads.last.containsKey('marketplace_category'), isTrue);
+    expect(payloads.last['marketplace_category'], isNull);
+    expect(payloads.last['business_id'], businessId);
+    expect(payloads.last['name'], 'Specials');
+  });
+
+  test('unknown mapping is rejected and deleted categories are not mutated', () async {
+    final id = await newCategory('Seasonal');
+    await expectLater(db.catalogDao.mapCategory(id, 'invented'),
+        throwsArgumentError);
+    await db.catalogDao.softDeleteCategoryAndReassign(id);
+    await db.catalogDao.mapCategory(id, 'phones');
+    expect((await categoryById(id)).marketplaceCategory, isNull);
+  });
+
+  test('mapping never changes a category owned by another business', () async {
+    final otherBusiness = UuidV7.generate();
+    final otherCategory = UuidV7.generate();
+    await db.into(db.businesses).insert(
+        BusinessesCompanion.insert(id: Value(otherBusiness), name: 'Other shop'));
+    await db.into(db.categories).insert(CategoriesCompanion.insert(
+        id: Value(otherCategory), businessId: otherBusiness, name: 'Private'));
+    await db.catalogDao.mapCategory(otherCategory, 'phones');
+    expect((await categoryById(otherCategory)).marketplaceCategory, isNull);
+    expect(await getPendingQueue(db), isEmpty);
+  });
+
   test('renameCategory updates the local name and full-row enqueues it', () async {
     final id = await newCategory('Sodas');
     await newProduct(name: 'Cola', categoryId: id); // untouched by a rename

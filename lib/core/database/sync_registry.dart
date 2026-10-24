@@ -714,6 +714,8 @@ final List<SyncedTable> kSyncRegistry = [
   // --- catalogue --------------------------------------------------------
   SyncedTable(
     name: 'categories',
+    // #472: CategoryData restores marketplace_category. No whitelist: the
+    // complete category row (including explicit null) is pushed unchanged.
     tenantScoped: true,
     restore: Restore.plain(
       (db) => db.categories,

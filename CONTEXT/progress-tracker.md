@@ -7,6 +7,42 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### #472: shared online category reference (2026-10-24, ready for review)
+
+Branch feat/472-marketplace-categories, isolated workspace reebaplus-472.
+Migration0190 creates service-written marketplace_categories and nullable
+categories.marketplace_category FK. Schema87 mirrors nullable mapping locally.
+Bundled catalogue is independent of Lexicon starter suggestions. New categories
+pre-map only by exact trimmed/case-insensitive public child names, with distinct
+phone/fashion Accessories and General → Other; unmatched names stay null.
+Category mapping uses an atomic full-row outbox write; selecting Other emits
+explicit null. Manage Categories uses existing theme/dropdown tokens and gates.
+Snapshot to_jsonb(t) already includes all categories columns. No production
+changes. Details docs/data/marketplace-categories.md.
+- Owner-review fix: removed the starter-list dependency; independent pure and
+  DAO regressions reproduce the old failure and verify Water/Beer/Phones for a
+  custom business, exact-child matching, no fuzzy matches and Accessories split.
+  Both regressions fail before the correction; all14focused tests now pass and
+  analyzer is clean. The final full-suite run waits for the prerequisite merges.
+- Integrated main9732ed17 after #505 → #503 merged: unit CHECK remains85;
+  category mapping is86 with a real85→86 upgrade test. Cloud0190 is unchanged.
+  Drift regenerated successfully; analyzer clean and132focused tests pass.
+  Final full suite:5424passed /296skipped /0failures (8m29s).
+  Regeneration produced no additional generated diff. No production changes.
+- Integrated main c019ea4f; preserved products.units_per_pack (schema84) and #493 (schema86) and
+  allocated schema87 to this mapping. Regenerated Drift, no hand edits.
+- Analyzer clean. Full suite on original base: 5233 pass / 294 skipped;
+  after main integration: 108 focused tests and 4 sheet goldens pass.
+- Self-review: standards and issue acceptance checked; foreign-business mapping,
+  explicit null clearing, starter mappings, catalogue seed parity and real
+  v86-to-v87 upgrade are covered. Phone/wide goldens visually inspected.
+- Required web parity: okworemmanuelc/reebaplus-web#138.
+- Migration0190 applied only to reebaplus-dev after the security test window.
+  Public cloud parity: 1 pass / 0 skips, all46 entries. Rolled-back SQL verifies
+  six anon/authenticated write denials, valid/invalid FK mappings and null
+  clearing. Both client roles can read; service_role can write. Fixtures rolled
+  back. Root review fixes add standard permission-denied feedback and import
+  ordering. No production DDL was run.
 ### #493: "We sell at one price" (2026-10-24, reworked to owner option A)
 Branch `feat/493-one-price-shops`, worktree `../drinkPosApp-wt-493`, PR #510.
 - **Decision (owner, option A):** an owner setting in Business Info, "We sell at one price" (`businesses.sells_one_price`, default false). OFF for every existing shop; suggested ON at CEO sign-up for a Restaurant only (`suggestsOnePriceAtSignUp`, via `industryOf`); the owner can change it any time. The earlier per-industry flag (`Industry.hasWholesale`, `isWholesaleBusiness`/`isOnePriceBusiness`, `businessHasWholesale`) is removed; the one read site is `businessSellsOnePrice(BusinessData?)` in `app_providers.dart`.
@@ -7479,4 +7515,3 @@ carried over.)_
 2. No raw Supabase call from `lib/features/` or `lib/data/repositories/`.
 3. No UPDATE or DELETE on an append-only ledger table — corrections are
    new rows only.
-
