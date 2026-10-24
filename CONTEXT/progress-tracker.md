@@ -7,6 +7,15 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #422: ready for review (2026-10-24)
+- Merged current main (0341e1aa); cloud numbers stay 0188/0192/0193, no Drift
+  bump. 0188 re-checked against main: helper signatures unchanged (0195's
+  `seed_default_roles_for_business` replace keeps its ACL); web console and
+  web-pos only read profiles and reach the helpers through definer RPCs.
+  0191 Storage policies use `current_user_business_ids()`, which 0188 does not
+  change. Deploy: 0188 + 0192 any time (`--include-all`); 0193 only after the
+  RPC client build is on business phones.
+
 ### Issue #422: development isolation verified (2026-10-24)
 - All seven integration checks pass, zero skips, on the isolated development
   schema after reconciling its omitted function ACLs to the read-only live
