@@ -105,6 +105,20 @@ only for the phone/fashion industries. Other parent or unmatched names stay null
 
 Four storage locations, with a strict rule for what lives where. Business data goes to Drift (and syncs); secrets and pointers go to secure storage (and never sync); sync engine state goes to Drift (and never syncs); operator audit records go to Supabase only (and never reach the client). Nothing durable lives only in memory.
 
+**Online listing (#424).** Cloud0195 and Drift88 add
+`products.show_online` defaulting true independently of archive state. Local
+upgrades retain units85, shop pricing86 and category mapping87; older product rebuilds supply
+the new default when the column is absent. Listing permission is seeded as
+`products.manage_listing` under Online store and enforced by `Gates.manageListing`,
+independently of price editing. The Product Details Manage Product card renders
+the switch only with that grant and rechecks it at tap time. The core listing
+service rechecks the effective context before a tenant-scoped transaction writes
+the flag and a complete outbox row (including cleared/null fields). Stock,
+prices and archive state are unchanged. Product restore uses
+the shared helper's default for older rows missing showOnline, preserving an
+explicit false. Storefront reads (#425) must require show_online AND is_available
+AND NOT is_deleted; the listing preference cannot unarchive a product.
+
 | What | Where | Why | Synced to cloud? |
 |---|---|---|---|
 | Products, categories, stock levels, expiry dates | Drift (SQLite) | Read on every POS interaction; must work fully offline. **`products.unit`** is stored raw (`Bottle`, `Crate`, … — `kProductUnits` + the CHECK); a stored `Bottle` is only *shown* as "Bottle Crate", and only in a shop where `businessTracksCrates` is true (`unitLabel(…, crates:)`, #487; every other shop shows "Bottle"), and every crate rule still keys on `unit == 'bottle'`. Plain `Crate` stays valid for existing rows but is not offered to new products. **`products.units_per_pack`** (nullable int > 0, Drift v84 / cloud 0187, #487) is "how many in one" (12 bottles in one crate) — **display only**, it never feeds stock, prices, crate counts or money. **`products.is_available = false` means archived** (#487): off sale (POS grid, scanner), hidden from the Inventory list and figure cards (an Archived card lists them) and from the Receive Stock grid; stock count, reports and history still include it. The one writer is `CatalogDao.setProductArchived`. | Yes |

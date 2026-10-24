@@ -7,6 +7,53 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #424: Show online and listing permission (2026-10-24, ready for review)
+Current continuation:main1f3e3643 (#501 merged) integrated. Unit85, shop
+pricing86 and category87 remain intact; listing moves to88. Real87→88 and
+84→88 fixtures preserve defaults, archive state, units, shop pricing and category
+links. Drift regenerated, analyzer clean and77focused migration/restore tests
+pass. Listing switch and named permission are complete. Cloud0195 unchanged;
+deployment needs `--include-all` because0196/0197 are already on main.
+- Listing consumer added: independent `Gates.manageListing`, visible Online store
+  permission group, existing Manage Product card switch and fire-time check.
+  Core service returns typed errors; transactional DAO scopes by tenant and
+  excludes tombstones, preserves sale/archive state and queues explicit nulls.
+  Service/DAO tests cover denied/foreign/deleted writes, full payloads and
+  second-device off/on restore; widget tests cover stale grants/live updates.
+  Validation:173focused feature/permission/archive tests,77migration/restore
+  tests,42previous-failure-path checks and34golden cases pass. Analyzer clean.
+  Product phone/wide and permission visuals inspected; baselines updated only
+  for the listing control/permission addition. Final full suite ran once at
+  concurrency2:5459passed /298skipped /0failures (12m10s). PR511 targets main
+  for owner review; do not merge as part of this task. Web parity139 updated to
+  schema88 and the out-of-order0195 deployment note. No production deployment.
+The following notes record the earlier blocked draft and its prior test results.
+Branch `feat/424-show-online`, stacked on #472 (`d2e174ef`). Units stay85,
+category mapping86, listing87. Must land after #472; no version87 client may ship
+without those dependencies. Cloud0195 stays unchanged.
+- Cloud increment `0195_product_online_listing.sql` adds `products.show_online` (NOT NULL, default true) and `products.manage_listing` in the `Online store` permission group. Existing/new CEO and Manager defaults receive the key; the seed function's signature and current ACL are preserved. Storefront queries in #425 must require `show_online AND is_available AND NOT is_deleted` together.
+- Cloud applied only to approved development project: pre-existing fixture product became `show_online=true`; both existing CEO/Manager roles received the grant. Tier-2 `product_online_listing_test.dart`: **2 pass / 0 skipped**, checking new defaults, stored opt-out, availability/deletion query contract, new-business role grants and permission group. This pins the query contract; the actual public storefront boundary is #425. Fixtures cleaned. SQL parses as seven statements; analysis clean. Web parity: https://github.com/okworemmanuelc/reebaplus-web/issues/139.
+- Local increment: preserved the unfinished schema/fixture edits, moved listing
+  to87 and upgrade fixture86→87. The85 products rebuild defaults the new column
+  only when absent; an84→87 regression checks all three steps together.
+  Drift regenerated; analyzer clean and133focused tests pass (including the
+  actual86→87/84→87 upgrades and opt-out retention). Full suite exposed stale
+  permission counts and one JSON product fixture, corrected in place. Its
+  enforcement guard also requires the new inert permission to stay hidden until
+  the listing gate/switch ships; applied that existing repo convention.
+  Full suite ran once:5390passed /298skipped /36failed (30m38s). Failures
+  covered those stale fixtures/counts, eight role goldens, nine legacy restore
+  cases, and11timeout/cascade failures in Sync Issues access. Added the existing
+  restore-helper default for absent showOnline (explicit false preserved).
+  All10affected files rerun:82passed, including unchanged visual baselines,
+  legacy restore and the timed-out screen. No second full-suite run.
+  Dedicated listing write coverage/gate/UI remain unfinished;
+  publish as draft. No production deployment.
+- Final analyzer after corrections:clean. New merge blocker discovered at the
+  finish:main advanced to4b476c24 (#510/#493) and now reserves86 for
+  businesses.sells_one_price. This branch retains the owner's requested86/87
+  chain against9732ed17; do not merge/release. Both PRs must be reconciled with
+  the new main (recommended category87/listing88) in a subsequent pass.
 ### #470: broadcast trigger gap (2026-10-24, ready for review)
 
 Branch fix/470-broadcast-trigger-gap (worktree drinkPosApp-wt-470). Migration
@@ -109,6 +156,33 @@ Branch `feat/490-g4-unit-check`, worktree `../drinkPosApp-wt-490-g4`. Widens `pr
 
 ### #492 G3: one generic Lexicon for every shop (2026-10-24)
 Branch `feat/492-g3-lexicon`, worktree `../drinkPosApp-wt-492-g3`. Every trade gets generic nouns ("Product", "Category"), plain example hints ("e.g. Product name", "e.g. Short description"), no starter categories, and no unit filled in by default. Units: `kGenericUnits` (Piece, Pack, Box, Carton, Bag, Bottle, Can, Kg, Litre, Other) offered to all shops; crate-tracking shops (Bar and Beverage distributor) also get PET and Keg (`kCrateUnits`). Saved units (Sachet, Tin, Crate, …) stay valid and keep showing via `unitChoices(units, keep: [...])` in `product_unit.dart`. Updated `lexicon_test.dart`, `product_unit_test.dart`, `van_sales_trade_neutral_test.dart` and regenerated Add Product goldens.
+### Signed-out RPC surface (#468, 2026-10-23)
+- Owner review (2026-10-24): filed legacy invite-preview bug #506 and clarified
+  the two migration header entries as broken legacy functions left unchanged.
+  Migration body unchanged; no database application required for this correction.
+- Web review fixes: non-admin rejection signs out locally; account-related OTP
+  responses share one neutral code screen. Nine login regressions and all613web
+  tests pass, with build and changed-file ESLint green. Deployment checks now
+  include preserved phone sessions and identical unregistered-email feedback.
+- Prepared0194: revoke five accidental anon RPC grants, retain four documented
+  pre-auth contracts, and explicitly preserve authenticated flows. No signature
+  changes. Read-only audit, six dedicated-dev HTTP tests and a rollback SQL
+  trigger-permission test added.
+- Found required web login dependency; companion branch removes pre-OTP email
+  admin probe and retains post-OTP membership enforcement. Web parity136.
+- 2026-10-24: fresh nine-function/27-role-check dev privileges exactly match
+  read-only production baseline before0194. No legitimate email-probe callers
+  remain; helper is service-role-only in POS0194 and canonical web setup.
+-0194 applied only to development: six HTTP tests + trigger rollback SQL pass.
+  Actual fresh onboarding and a member100-kobo Quick Sale succeed in rollback
+  SQL; signed-in non-admin another-email probing is denied. Analyzer clean.
+  Web full suite607passed. Production untouched.
+- Final integrated verification (main c019ea4f): full Flutter suite5384passed,
+  299skipped, zero failures; analyzer clean. Six development HTTP tests and both
+  rollback SQL compatibility probes pass. Stop after opening the two review PRs;
+  production remains gated by the owner's web-deployment/login checkpoints.
+- Legacy accept_invite_preview* already fail42P01 because invites/warehouses
+  are absent in live metadata; documented rather than fabricated fixtures.
 
 ### #487 PR 6 / #465: scan a barcode on Add Product (2026-10-23)
 Branch `feat/465-scan-add-product`, worktree `../drinkPosApp-wt-487-6`. Scan button beside the barcode box (`barcodeScannerProvider`, camera closes after the first read; POS unchanged). `_onBarcodeChanged` now: own products first (`findProductsByBarcode`), then, factory codes only, the shared list via `lookupOutcome` (offline -> note, never blocks save). Own match offers Open it (Product Details; restock mode is gone) / Create a new product anyway. Edit mode: scan only fills the box. Tests in `add_product_catalogue_prefill_test.dart` (+1 in `add_product_form_test.dart`); Add Product goldens regenerated.

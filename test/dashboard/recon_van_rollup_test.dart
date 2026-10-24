@@ -67,6 +67,7 @@ ProductData _product(String id) => ProductData(
   retailerPriceKobo: 1150000,
   wholesalerPriceKobo: 1100000,
   isAvailable: true,
+  showOnline: true,
   isDeleted: false,
   lowStockThreshold: 0,
   avgDailySales: 0,

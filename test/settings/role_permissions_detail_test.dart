@@ -156,10 +156,12 @@ void main() {
 
     final switches =
         tester.widgetList<SwitchListTile>(find.byType(SwitchListTile)).toList();
-    // 42 seeded keys − 3 hidden (#140 added van.manage + van.sell), less those
+    // 43 seeded keys − 3 hidden, less those
     // two van keys while Van Sales is switched off.
-    final shown = isVanSalesEnabled() ? 39 : 37;
+    final shown = isVanSalesEnabled() ? 40 : 38;
     expect(switches.length, shown, reason: 'all $shown permissions shown');
+    expect(find.text('Online store'), findsOneWidget);
+    expect(find.text('Manage online product listings'), findsOneWidget);
     expect(
       switches.every((s) => s.onChanged == null && s.value == true),
       isTrue,
