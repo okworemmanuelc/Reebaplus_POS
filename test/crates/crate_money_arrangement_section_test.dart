@@ -46,6 +46,7 @@ BusinessData _business({
   lastUpdatedAt: DateTime.utc(2026, 1, 1),
   ownerId: null,
   tracksEmptyCrates: tracksEmptyCrates,
+  sellsOnePrice: false,
   subscriptionStatus: 'active',
   subscriptionPlan: null,
   trialEndsAt: null,

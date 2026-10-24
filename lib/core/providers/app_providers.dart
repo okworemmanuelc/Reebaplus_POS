@@ -551,6 +551,18 @@ bool businessTracksCrates(BusinessData? business) {
   return business.tracksEmptyCrates;
 }
 
+/// "We sell at one price" (#493, option A): the owner's Business Info
+/// setting, stored on `businesses.sells_one_price`. When true the app hides
+/// every wholesale price box and the price-tier choice, and the till always
+/// charges the Retail price. Saved wholesale prices are never overwritten, so
+/// turning it off brings them all back.
+///
+/// The single read site for the setting. Pass the [BusinessData] row from
+/// [currentBusinessProvider]. False while no business is loaded (the safe,
+/// existing behaviour).
+bool businessSellsOnePrice(BusinessData? business) =>
+    business?.sellsOnePrice ?? false;
+
 /// The active business name, live (see [currentBusinessProvider]). Empty when
 /// no business is bound yet.
 final currentBusinessNameProvider = Provider.autoDispose<String>((ref) {

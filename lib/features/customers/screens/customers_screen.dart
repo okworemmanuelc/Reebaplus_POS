@@ -154,6 +154,9 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                         itemBuilder: (context, index) {
                           final c = filtered[index];
                           final balanceKobo = balances[c.id] ?? 0;
+                          final hasWholesale = !businessSellsOnePrice(
+                            ref.watch(currentBusinessProvider),
+                          );
                           return CustomerListRow(
                             key: CustomersKeys.row(c.id),
                             name: c.name,
@@ -161,6 +164,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                             tierLabel: c.priceTier.name.toUpperCase(),
                             balanceLabel: formatCurrency(balanceKobo / 100.0),
                             owes: balanceKobo < 0,
+                            showTier: hasWholesale,
                             onTap: () {
                               Navigator.push(
                                 context,

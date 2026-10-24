@@ -4047,4 +4047,55 @@ void main() {
       expect(product.unitsPerPack, 25);
     });
   });
+
+  group('onUpgrade v85 -> v86 (businesses.sells_one_price, #493)', () {
+    test('adds the column OFF for every existing shop', () async {
+      final db1 = await openAndInit();
+      final biz = UuidV7.generate();
+      await db1
+          .into(db1.businesses)
+          .insert(
+            BusinessesCompanion.insert(id: Value(biz), name: 'Sample Biz'),
+          );
+      // Revert the v86 delta: drop the column, step back to v85.
+      await db1.customStatement(
+        'ALTER TABLE businesses DROP COLUMN sells_one_price',
+      );
+      expect(await columnsOf(db1, 'businesses'), isNot(contains('sells_one_price')));
+      await db1.customStatement('PRAGMA user_version = 85');
+      await db1.close();
+
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+      expect(await columnsOf(db2, 'businesses'), contains('sells_one_price'));
+      final row = await (db2.select(
+        db2.businesses,
+      )..where((b) => b.id.equals(biz))).getSingle();
+      expect(row.sellsOnePrice, isFalse);
+      expect(row.name, 'Sample Biz');
+    });
+
+    test('the upgrade step is idempotent (column already present)', () async {
+      final db1 = await openAndInit();
+      final biz = UuidV7.generate();
+      await db1
+          .into(db1.businesses)
+          .insert(
+            BusinessesCompanion.insert(
+              id: Value(biz),
+              name: 'Sample Biz',
+              sellsOnePrice: const Value(true),
+            ),
+          );
+      await db1.customStatement('PRAGMA user_version = 85');
+      await db1.close();
+
+      final db2 = await openAndInit();
+      addTearDown(db2.close);
+      final row = await (db2.select(
+        db2.businesses,
+      )..where((b) => b.id.equals(biz))).getSingle();
+      expect(row.sellsOnePrice, isTrue);
+    });
+  });
 }

@@ -484,6 +484,7 @@ class ProductPricesCard extends StatelessWidget {
     required this.wholesaleKobo,
     this.costKobo,
     this.showProfit = false,
+    this.showWholesale = true,
   });
 
   final String perNoun;
@@ -495,6 +496,9 @@ class ProductPricesCard extends StatelessWidget {
 
   /// True only with the buying-price permission AND a cost above 0.
   final bool showProfit;
+
+  /// False in one-price shops (#493), hiding wholesale price tile and profit row.
+  final bool showWholesale;
 
   @override
   Widget build(BuildContext context) {
@@ -520,28 +524,35 @@ class ProductPricesCard extends StatelessWidget {
                   gap,
                 ],
                 Expanded(
-                  child: _PriceTile(label: 'Retail', kobo: retailKobo),
+                  child: _PriceTile(
+                    label: showWholesale ? 'Retail' : 'Price',
+                    kobo: retailKobo,
+                  ),
                 ),
-                gap,
-                Expanded(
-                  child: _PriceTile(label: 'Wholesale', kobo: wholesaleKobo),
-                ),
+                if (showWholesale) ...[
+                  gap,
+                  Expanded(
+                    child: _PriceTile(label: 'Wholesale', kobo: wholesaleKobo),
+                  ),
+                ],
               ],
             ),
           ),
           if (showProfit && costKobo != null) ...[
             SizedBox(height: context.getRSize(8)),
             _ProfitRow(
-              label: 'Retail profit',
+              label: showWholesale ? 'Retail profit' : 'Profit',
               profitKobo: retailKobo - costKobo!,
               percent: profitPercentOfPrice(retailKobo, costKobo!),
             ),
-            Divider(height: 1, color: Theme.of(context).dividerColor),
-            _ProfitRow(
-              label: 'Wholesale profit',
-              profitKobo: wholesaleKobo - costKobo!,
-              percent: profitPercentOfPrice(wholesaleKobo, costKobo!),
-            ),
+            if (showWholesale) ...[
+              Divider(height: 1, color: Theme.of(context).dividerColor),
+              _ProfitRow(
+                label: 'Wholesale profit',
+                profitKobo: wholesaleKobo - costKobo!,
+                percent: profitPercentOfPrice(wholesaleKobo, costKobo!),
+              ),
+            ],
           ],
         ],
       ),

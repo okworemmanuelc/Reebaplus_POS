@@ -7,6 +7,14 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### #493: "We sell at one price" (2026-10-24, reworked to owner option A)
+Branch `feat/493-one-price-shops`, worktree `../drinkPosApp-wt-493`, PR #510.
+- **Decision (owner, option A):** an owner setting in Business Info, "We sell at one price" (`businesses.sells_one_price`, default false). OFF for every existing shop; suggested ON at CEO sign-up for a Restaurant only (`suggestsOnePriceAtSignUp`, via `industryOf`); the owner can change it any time. The earlier per-industry flag (`Industry.hasWholesale`, `isWholesaleBusiness`/`isOnePriceBusiness`, `businessHasWholesale`) is removed; the one read site is `businessSellsOnePrice(BusinessData?)` in `app_providers.dart`.
+- **Data:** Drift v86 (guarded `addColumn`, no businesses rebuild exists); cloud `0197_businesses_sells_one_price.sql`; on the businesses push whitelist; pull defaults a missing value to false. Sign-up writes it by a best-effort follow-up `businesses` update after `complete_onboarding` (RPC unchanged, no overload); on failure the shop starts OFF and the local mirror records OFF.
+- **Money rules when ON:** the till charges Retail only — `PosController.selectedGroup` is always retailer and a Wholesaler customer does not switch it (every grid/scan/modal price pick and the line's `priceTier` read that getter). Saved wholesale prices are never overwritten: edit keeps `existingWholesalerPriceKobo`, a new product mirrors retail, Edit Receive Item leaves the line's wholesale alone. Turning it OFF brings every saved wholesale price back.
+- **UI when ON:** wholesale boxes, the POS tier dropdown, customer Price Tier pickers and tier pills are hidden; Product Details and the receive cart show one "Price".
+- **Deploy order:** push 0197 BEFORE shipping a v86 app (the app pushes the column on every businesses upsert). Parity: reebaplus-web#142.
+
 ### #507 PR 1: Name case helper and save-time casing in sign-up, profile, business info, stores (2026-10-24)
 Branch `feat/507-name-case`, worktree `../drinkPosApp-wt-507-1`.
 - **Helper:** Created `lib/core/utils/name_case.dart` with `toNameCase(String input)`.
