@@ -7,6 +7,18 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### #470: broadcast trigger gap (2026-10-24, ready for review)
+
+Branch fix/470-broadcast-trigger-gap (worktree drinkPosApp-wt-470). Migration
+0198 attaches zz_broadcast_sync_signal (0147 rule, same timing/events) only where
+missing — by migrations: daily_closings, van_trips, van_trip_lots,
+driver_ledger_entries, van_return_events, supplier_crate_deposit_requests,
+supplier_crate_deposits, crate_shortfall_writeoffs, barcode_catalogue_reports.
+Adds service_role-only helper broadcast_trigger_missing_tables(text[]); tier-2
+guard test/integration/rpcs/broadcast_trigger_coverage_test.dart (skips without
+env). architecture.md wording fixed + new-table checklist line. Not deployed:
+owner applies 0198 with `supabase db push --include-all`. No Drift change.
+
 ### #472: shared online category reference (2026-10-24, ready for review)
 
 Branch feat/472-marketplace-categories, isolated workspace reebaplus-472.
