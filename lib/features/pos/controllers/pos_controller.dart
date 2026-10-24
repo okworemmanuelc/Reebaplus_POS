@@ -16,7 +16,20 @@ class PosController extends ChangeNotifier {
   List<ManufacturerData> manufacturers = [];
   String? selectedCategoryId;
   String selectedManufacturerId = 'All';
-  PriceTier selectedGroup = PriceTier.retailer;
+  PriceTier _selectedGroup = PriceTier.retailer;
+
+  /// "We sell at one price" (#493): the business's `sells_one_price` setting,
+  /// kept current by the POS screen. While true the till charges the Retail
+  /// price only: [selectedGroup] is always [PriceTier.retailer] and picking a
+  /// Wholesaler customer does not switch the tier. Every price pick on the till
+  /// (grid add, barcode scan, the qty modal, and the line's `priceTier` that
+  /// checkout re-prices against) reads its tier from [selectedGroup], so this
+  /// is the one gate.
+  bool sellsOnePrice = false;
+
+  /// The price tier the till charges at. Always Retail in a one-price shop.
+  PriceTier get selectedGroup =>
+      sellsOnePrice ? PriceTier.retailer : _selectedGroup;
   String searchQuery = '';
   String? currentStoreName;
 
@@ -148,8 +161,9 @@ class PosController extends ChangeNotifier {
 
   void _onCustomerSelected() {
     final customer = _cartService.activeCustomer.value;
-    if (customer != null) {
-      selectedGroup = customer.priceTier;
+    // A one-price shop never switches the till to the customer's tier (#493).
+    if (customer != null && !sellsOnePrice) {
+      _selectedGroup = customer.priceTier;
       notifyListeners();
     }
   }
@@ -174,7 +188,7 @@ class PosController extends ChangeNotifier {
   }
 
   void selectGroup(PriceTier group) {
-    selectedGroup = group;
+    _selectedGroup = group;
     notifyListeners();
   }
 

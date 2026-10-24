@@ -12,10 +12,14 @@ void main() {
     bool tracksCrates = false,
     bool canEditBuying = true,
     List<String> storeIds = const ['store-1'],
+    bool sellsOnePrice = false,
+    int? existingWholesalerPriceKobo,
   }) => FastAddContext(
     tracksCrates: tracksCrates,
     canEditBuying: canEditBuying,
     storeIds: storeIds,
+    sellsOnePrice: sellsOnePrice,
+    existingWholesalerPriceKobo: existingWholesalerPriceKobo,
   );
 
   FastAddInput input({
@@ -142,6 +146,26 @@ void main() {
         ctx(),
       );
       expect((result as FastAddIntent).wholesalerPriceKobo, 45000);
+    });
+
+    test('one-price shop, ADD: wholesaler = retail (#493)', () {
+      final result = resolveFastAdd(
+        input(sellingPrice: '500', wholesalePrice: '450'),
+        ctx(sellsOnePrice: true),
+      );
+      final intent = result as FastAddIntent;
+      expect(intent.retailerPriceKobo, 50000);
+      expect(intent.wholesalerPriceKobo, 50000);
+    });
+
+    test('one-price shop, EDIT: the saved wholesaler price is kept (#493)', () {
+      final result = resolveFastAdd(
+        input(sellingPrice: '600', wholesalePrice: '600'),
+        ctx(sellsOnePrice: true, existingWholesalerPriceKobo: 45000),
+      );
+      final intent = result as FastAddIntent;
+      expect(intent.retailerPriceKobo, 60000);
+      expect(intent.wholesalerPriceKobo, 45000);
     });
   });
 

@@ -97,7 +97,7 @@ All ordinary business writes still go to Drift first and drain through the
 `marketplace_categories` is bundled as `core/data/marketplace_categories.dart`,
 with exact SQL-seed parity tests. It is not a tenant table or an outbox target.
 The optional `categories.marketplace_category` slug is ordinary tenant data:
-Drift schema86, full-row outbox and category snapshot restore carry it.
+Drift schema87, full-row outbox and category snapshot restore carry it.
 No mapping means Other in Browse; selling at the till is unaffected.
 New category pre-mapping uses exact public child names (trimmed/case-insensitive),
 not Lexicon starter suggestions. General maps to Other; Accessories is resolved

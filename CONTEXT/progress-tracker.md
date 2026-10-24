@@ -11,7 +11,7 @@ The human updates it when resolving open questions or making architectural decis
 
 Branch feat/472-marketplace-categories, isolated workspace reebaplus-472.
 Migration0190 creates service-written marketplace_categories and nullable
-categories.marketplace_category FK. Schema86 mirrors nullable mapping locally.
+categories.marketplace_category FK. Schema87 mirrors nullable mapping locally.
 Bundled catalogue is independent of Lexicon starter suggestions. New categories
 pre-map only by exact trimmed/case-insensitive public child names, with distinct
 phone/fashion Accessories and General → Other; unmatched names stay null.
@@ -29,13 +29,13 @@ changes. Details docs/data/marketplace-categories.md.
   Drift regenerated successfully; analyzer clean and132focused tests pass.
   Final full suite:5424passed /296skipped /0failures (8m29s).
   Regeneration produced no additional generated diff. No production changes.
-- Integrated main c019ea4f; preserved products.units_per_pack (schema84) and
-  allocated schema85 to this mapping. Regenerated Drift, no hand edits.
+- Integrated main c019ea4f; preserved products.units_per_pack (schema84) and #493 (schema86) and
+  allocated schema87 to this mapping. Regenerated Drift, no hand edits.
 - Analyzer clean. Full suite on original base: 5233 pass / 294 skipped;
   after main integration: 108 focused tests and 4 sheet goldens pass.
 - Self-review: standards and issue acceptance checked; foreign-business mapping,
   explicit null clearing, starter mappings, catalogue seed parity and real
-  v84-to-v85 upgrade are covered. Phone/wide goldens visually inspected.
+  v86-to-v87 upgrade are covered. Phone/wide goldens visually inspected.
 - Required web parity: okworemmanuelc/reebaplus-web#138.
 - Migration0190 applied only to reebaplus-dev after the security test window.
   Public cloud parity: 1 pass / 0 skips, all46 entries. Rolled-back SQL verifies
@@ -43,6 +43,14 @@ changes. Details docs/data/marketplace-categories.md.
   clearing. Both client roles can read; service_role can write. Fixtures rolled
   back. Root review fixes add standard permission-denied feedback and import
   ordering. No production DDL was run.
+### #493: "We sell at one price" (2026-10-24, reworked to owner option A)
+Branch `feat/493-one-price-shops`, worktree `../drinkPosApp-wt-493`, PR #510.
+- **Decision (owner, option A):** an owner setting in Business Info, "We sell at one price" (`businesses.sells_one_price`, default false). OFF for every existing shop; suggested ON at CEO sign-up for a Restaurant only (`suggestsOnePriceAtSignUp`, via `industryOf`); the owner can change it any time. The earlier per-industry flag (`Industry.hasWholesale`, `isWholesaleBusiness`/`isOnePriceBusiness`, `businessHasWholesale`) is removed; the one read site is `businessSellsOnePrice(BusinessData?)` in `app_providers.dart`.
+- **Data:** Drift v86 (guarded `addColumn`, no businesses rebuild exists); cloud `0197_businesses_sells_one_price.sql`; on the businesses push whitelist; pull defaults a missing value to false. Sign-up writes it by a best-effort follow-up `businesses` update after `complete_onboarding` (RPC unchanged, no overload); on failure the shop starts OFF and the local mirror records OFF.
+- **Money rules when ON:** the till charges Retail only — `PosController.selectedGroup` is always retailer and a Wholesaler customer does not switch it (every grid/scan/modal price pick and the line's `priceTier` read that getter). Saved wholesale prices are never overwritten: edit keeps `existingWholesalerPriceKobo`, a new product mirrors retail, Edit Receive Item leaves the line's wholesale alone. Turning it OFF brings every saved wholesale price back.
+- **UI when ON:** wholesale boxes, the POS tier dropdown, customer Price Tier pickers and tier pills are hidden; Product Details and the receive cart show one "Price".
+- **Deploy order:** push 0197 BEFORE shipping a v86 app (the app pushes the column on every businesses upsert). Parity: reebaplus-web#142.
+
 ### #507 PR 1: Name case helper and save-time casing in sign-up, profile, business info, stores (2026-10-24)
 Branch `feat/507-name-case`, worktree `../drinkPosApp-wt-507-1`.
 - **Helper:** Created `lib/core/utils/name_case.dart` with `toNameCase(String input)`.
