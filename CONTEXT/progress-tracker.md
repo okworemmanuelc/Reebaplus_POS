@@ -12,12 +12,21 @@ The human updates it when resolving open questions or making architectural decis
 Branch feat/472-marketplace-categories, isolated workspace reebaplus-472.
 Migration0190 creates service-written marketplace_categories and nullable
 categories.marketplace_category FK. Schema85 mirrors nullable mapping locally.
-Bundled catalogue derives names from Lexicon starter categories, with distinct
-phone/fashion Accessories and Other fallback; custom names stay unmapped.
+Bundled catalogue is independent of Lexicon starter suggestions. New categories
+pre-map only by exact trimmed/case-insensitive public child names, with distinct
+phone/fashion Accessories and General → Other; unmatched names stay null.
 Category mapping uses an atomic full-row outbox write; selecting Other emits
 explicit null. Manage Categories uses existing theme/dropdown tokens and gates.
 Snapshot to_jsonb(t) already includes all categories columns. No production
 changes. Details docs/data/marketplace-categories.md.
+- Owner-review fix: removed the starter-list dependency; independent pure and
+  DAO regressions reproduce the old failure and verify Water/Beer/Phones for a
+  custom business, exact-child matching, no fuzzy matches and Accessories split.
+  Both regressions fail before the correction; all14focused tests now pass and
+  analyzer is clean. The final full-suite run waits for the prerequisite merges.
+- Schema renumbering is pending #505 → #503 landing on main, as the handover
+  requires. Then mapping becomes86 and #424's visibility step87; cloud0190/0195
+  stay unchanged. #424's uncommitted implementation is preserved meanwhile.
 - Integrated main c019ea4f; preserved products.units_per_pack (schema84) and
   allocated schema85 to this mapping. Regenerated Drift, no hand edits.
 - Analyzer clean. Full suite on original base: 5233 pass / 294 skipped;

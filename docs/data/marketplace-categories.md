@@ -3,12 +3,15 @@
 Migration 0190 creates a public-read, service-written catalogue and a nullable
 FK on categories.marketplace_category. The bundled Dart catalogue mirrors
 every seed field; a test compares all rows, order, hierarchy and restrictions.
-The initial names come from the existing Lexicon starter categories, grouped
-under broad public parents. Accessories has distinct phone/fashion mappings.
-Custom categories are not guessed from approximate name matches.
+The public catalogue is independent of Lexicon's UI starter suggestions.
+Accessories has distinct phone/fashion mappings. Names are not guessed from
+approximate or partial matches.
 
-New categories created from exact Lexicon suggestions are pre-mapped for their
-business industry. Existing custom categories remain unchanged until mapped
+New category names pre-map only on a trimmed, case-insensitive exact match to a
+public catalogue child name. Parent names and unknown names remain unmapped.
+General maps to Other; Accessories maps to phone/fashion accessories only for
+Phone & Gadgets/Boutique respectively. This keeps working when #503 removes
+all starter suggestions. Existing custom categories remain unchanged until mapped
 in Manage Categories. A rename preserves the mapping. Clearing to Other
 writes an explicit null through the ordinary outbox. The till does not filter
 on this optional field.
@@ -28,7 +31,7 @@ reference. Existing local rows remain valid and sellable without a mapping.
 No production migration was run.
 
 Validation: all 46 SQL seed rows match the bundled reference, including metadata;
-all industry starter suggestions resolve to a valid slug. Full suite on the
+every public child name has a non-vacuous exact-match regression. Full suite on the
 original base passed 5233 tests (294 skipped). After integrating main c019ea4f,
 108 focused regressions and four visual baselines pass; analyzer is clean.
 The schema85 test reopens an actual v84 SQLite database and preserves its
