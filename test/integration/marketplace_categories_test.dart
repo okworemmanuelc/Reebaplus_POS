@@ -17,7 +17,8 @@ void main() {
     for (var start = 0; ;) {
       final rows = await client.from('marketplace_categories')
           .select('slug,name,parent_slug,sort,restricted')
-          .order('sort').order('slug').range(start, start + 24);
+          .order('sort', ascending: true).order('slug', ascending: true)
+          .range(start, start + 24);
       actual.addAll(rows);
       if (rows.isEmpty) break;
       start += rows.length;

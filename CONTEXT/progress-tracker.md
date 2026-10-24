@@ -32,8 +32,12 @@ changes. Details docs/data/marketplace-categories.md.
   explicit null clearing, starter mappings, catalogue seed parity and real
   v84-to-v85 upgrade are covered. Phone/wide goldens visually inspected.
 - Required web parity: okworemmanuelc/reebaplus-web#138.
-- Development migration0190 and live cloud parity test await coordinated
-  application after the security test run; no production DDL was run.
+- Migration0190 applied only to reebaplus-dev after the security test window.
+  Public cloud parity: 1 pass / 0 skips, all46 entries. Rolled-back SQL verifies
+  six anon/authenticated write denials, valid/invalid FK mappings and null
+  clearing. Both client roles can read; service_role can write. Fixtures rolled
+  back. Root review fixes add standard permission-denied feedback and import
+  ordering. No production DDL was run.
 ### #487 PR 6 / #465: scan a barcode on Add Product (2026-10-23)
 Branch `feat/465-scan-add-product`, worktree `../drinkPosApp-wt-487-6`. Scan button beside the barcode box (`barcodeScannerProvider`, camera closes after the first read; POS unchanged). `_onBarcodeChanged` now: own products first (`findProductsByBarcode`), then, factory codes only, the shared list via `lookupOutcome` (offline -> note, never blocks save). Own match offers Open it (Product Details; restock mode is gone) / Create a new product anyway. Edit mode: scan only fills the box. Tests in `add_product_catalogue_prefill_test.dart` (+1 in `add_product_form_test.dart`); Add Product goldens regenerated.
 
