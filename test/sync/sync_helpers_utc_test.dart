@@ -182,6 +182,7 @@ void main() {
             createdAt: localNow,
             lastUpdatedAt: localNow,
             tracksEmptyCrates: true,
+            sellsOnePrice: false,
             subscriptionStatus: 'trial',
             trialEndsAt: localNow.add(const Duration(days: 14)),
             currentPeriodEnd: localNow.add(const Duration(days: 30)),

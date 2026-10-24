@@ -39,6 +39,7 @@ BusinessData customerDetailBusiness() => BusinessData(
   lastUpdatedAt: DateTime.utc(2026, 1, 1),
   ownerId: null,
   tracksEmptyCrates: true,
+  sellsOnePrice: false,
   subscriptionStatus: 'active',
   subscriptionPlan: null,
   trialEndsAt: null,

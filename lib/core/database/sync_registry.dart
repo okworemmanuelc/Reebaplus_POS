@@ -478,6 +478,8 @@ final List<SyncedTable> kSyncRegistry = [
         'timezone': 'UTC',
         'onboardingComplete': false,
         'subscriptionStatus': 'trial',
+        // Before 0197 deploys the cloud row has no sells_one_price: OFF.
+        'sellsOnePrice': false,
       },
     ),
     pushColumns: {
@@ -490,6 +492,7 @@ final List<SyncedTable> kSyncRegistry = [
       'owner_id',
       'onboarding_complete',
       'tracks_empty_crates',
+      'sells_one_price',
       'created_at',
       'last_updated_at',
       // timezone: local-only. subscription_*: cloud-authoritative (§32) —
@@ -711,6 +714,8 @@ final List<SyncedTable> kSyncRegistry = [
   // --- catalogue --------------------------------------------------------
   SyncedTable(
     name: 'categories',
+    // #472: CategoryData restores marketplace_category. No whitelist: the
+    // complete category row (including explicit null) is pushed unchanged.
     tenantScoped: true,
     restore: Restore.plain(
       (db) => db.categories,

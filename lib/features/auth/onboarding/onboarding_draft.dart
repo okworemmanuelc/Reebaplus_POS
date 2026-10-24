@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
+import 'package:reebaplus_pos/core/industry/industry.dart';
 
 /// Collected-but-uncommitted state for the new-business onboarding wizard.
 ///
@@ -40,6 +41,10 @@ class OnboardingDraft {
   // Onboarding opt-in: shown when businessType is crate-eligible. Default true
   // so crate businesses keep their features; non-crate types don't use this.
   bool tracksEmptyCrates = true;
+  // "We sell at one price" (#493): suggested ON for a Restaurant only (see
+  // [suggestsOnePriceAtSignUp]), OFF for every other type. The owner can
+  // change it any time in Business Info.
+  bool sellsOnePrice = false;
   String? businessPhone;
   String? businessEmail;
 
@@ -112,3 +117,9 @@ final onboardingDraftProvider =
     StateNotifierProvider<OnboardingDraftNotifier, OnboardingDraft?>(
       (ref) => OnboardingDraftNotifier(),
     );
+
+/// The sign-up suggestion for "We sell at one price" (#493): ON when [type]
+/// resolves to a Restaurant (via [industryOf], so a typed "restaurant" counts),
+/// OFF for every other type.
+bool suggestsOnePriceAtSignUp(String? type) =>
+    industryOf(type) == Industry.restaurant;

@@ -41,7 +41,7 @@ through Riverpod providers).
 | `lib/core/services/` | The Supabase client wrapper and the in-process `SupabaseSyncService` (outbox drainer, adaptive push chunker, paginated pull reconciler, cursor management, retry/backoff, LWW conflict resolution, hard-delete reconciliation, onboarding pull sequencer). | UI / widget code. |
 | `lib/core/permissions/` | Loads role and per-staff permission rows from Drift and exposes permission checks to the UI. Source of all gating decisions. | Hard-coded role logic. Permissions are data, read from tables. |
 | `lib/core/` (`providers`, `theme`, `settings`, `utils`, `widgets`, `data`, `diagnostics`) | Cross-cutting primitives: global providers, the crash handler, theme/palette system, money/currency helpers, ID generation, static data (e.g. `nigerian_lgas.dart`), and shared low-level widgets. | Feature-specific logic. |
-| `lib/shared/` | App-shell pieces shared across features: `main_layout.dart`, `navigation_service.dart`, shared models, utils, and widgets. | Feature-specific business logic. |
+| `lib/shared/` | App-shell pieces shared across features: `main_layout.dart`, `navigation_service.dart`, shared models, utils, and widgets. `lib/shared/scanner/` is the camera-scanner seam (#487 PR 0): the `BarcodeScanner` interface, `barcodeScannerProvider`, the `mobile_scanner` camera, the scan page and its permission sheet. POS (`barcode_scan_resolver`, `pos_barcode_scan_button`) and Inventory both use it; neither may import the other. | Feature-specific business logic. |
 | `lib/features/auth/` | Session lifecycle: sign-in via email+OTP or Google OAuth, JWT/refresh handling, onboarding, the lock screen, PIN set/verify, and auto-lock. `auth_service.dart` is the orchestrator. | Business/domain data access beyond the current identity. |
 
 **Sanctioned direct-Supabase exceptions** (outside the normal Drift→sync-queue
@@ -104,11 +104,21 @@ cloud table. See `docs/data/nigerian-areas.md`; migration 0189 is verified on th
 
 ## Storage Model
 
+**Online category reference (#472).** Public, service-written
+`marketplace_categories` is bundled as `core/data/marketplace_categories.dart`,
+with exact SQL-seed parity tests. It is not a tenant table or an outbox target.
+The optional `categories.marketplace_category` slug is ordinary tenant data:
+Drift schema87, full-row outbox and category snapshot restore carry it.
+No mapping means Other in Browse; selling at the till is unaffected.
+New category pre-mapping uses exact public child names (trimmed/case-insensitive),
+not Lexicon starter suggestions. General maps to Other; Accessories is resolved
+only for the phone/fashion industries. Other parent or unmatched names stay null.
+
 Four storage locations, with a strict rule for what lives where. Business data goes to Drift (and syncs); secrets and pointers go to secure storage (and never sync); sync engine state goes to Drift (and never syncs); operator audit records go to Supabase only (and never reach the client). Nothing durable lives only in memory.
 
 | What | Where | Why | Synced to cloud? |
 |---|---|---|---|
-| Products, categories, stock levels, expiry dates | Drift (SQLite) | Read on every POS interaction; must work fully offline. | Yes |
+| Products, categories, stock levels, expiry dates | Drift (SQLite) | Read on every POS interaction; must work fully offline. **`products.unit`** is stored raw (`Bottle`, `Crate`, … — `kProductUnits` + the CHECK); a stored `Bottle` is only *shown* as "Bottle Crate", and only in a shop where `businessTracksCrates` is true (`unitLabel(…, crates:)`, #487; every other shop shows "Bottle"), and every crate rule still keys on `unit == 'bottle'`. Plain `Crate` stays valid for existing rows but is not offered to new products. **`products.units_per_pack`** (nullable int > 0, Drift v84 / cloud 0187, #487) is "how many in one" (12 bottles in one crate) — **display only**, it never feeds stock, prices, crate counts or money. **`products.is_available = false` means archived** (#487): off sale (POS grid, scanner), hidden from the Inventory list and figure cards (an Archived card lists them) and from the Receive Stock grid; stock count, reports and history still include it. The one writer is `CatalogDao.setProductArchived`. | Yes |
 | Orders, order lines, payment records | Drift (SQLite) | Created offline at the till; converge across devices. | Yes |
 | Customer & supplier profiles | Drift (SQLite) | Attached to sales offline; shared business-wide. | Yes |
 | Wallet ledger rows (customer & supplier) | Drift (SQLite), **append-only** | Source of truth for balances. Balances are derived, never stored as a single mutable field. | Yes |

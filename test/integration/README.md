@@ -80,6 +80,21 @@ Supabase project. Don't point them at production.
 
 ## Running
 
+### Private Storage listing (#467)
+
+`rpcs/private_storage_listing_test.dart` requires migration 0191 and the business
+schema on the approved `reebaplus-dev` project. Set `TEST_SUPABASE_URL`,
+`TEST_SUPABASE_ANON_KEY`, `TEST_SUPABASE_SERVICE_ROLE_KEY`, and
+`TEST_STORAGE_ISOLATION_ALLOW_WRITES=1`. No existing user refresh token is needed.
+The suite creates and removes its own users, business and image objects, checks
+listing denial against populated buckets, and verifies owner replacements and
+anonymous public image retrieval. It refuses fixture writes to any other URL.
+
+```sh
+flutter test test/integration/rpcs/private_storage_listing_test.dart
+```
+
+
 ```sh
 # Tier 1 only (no env vars needed) — runs in <5s, every PR:
 flutter test test/sync/dispatch/

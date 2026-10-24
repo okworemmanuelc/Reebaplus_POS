@@ -28,6 +28,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 
 void main() {
+  test('#472 category mapping stays in tenant sync; public reference stays out', () {
+    expect(kSyncedTenantTables, contains('categories'));
+    expect(kSyncedTenantTables, isNot(contains('marketplace_categories')));
+    final row = CategoryData.fromJson({
+      'id': 'category', 'businessId': 'business', 'name': 'Phones',
+      'marketplaceCategory': 'phones', 'isDeleted': false,
+      'createdAt': DateTime.utc(2026).millisecondsSinceEpoch,
+      'lastUpdatedAt': DateTime.utc(2026).millisecondsSinceEpoch,
+    });
+    expect(row.marketplaceCategory, 'phones');
+  });
   // === FROZEN GOLDEN DATA =================================================
   // The literal values the six constructs held at the moment of collapse. Do
   // NOT "fix" these to match a registry change — a diff here means the registry
@@ -256,6 +267,7 @@ void main() {
       'owner_id',
       'onboarding_complete',
       'tracks_empty_crates',
+      'sells_one_price',
       'created_at',
       'last_updated_at',
     },
