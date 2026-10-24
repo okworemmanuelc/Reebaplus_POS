@@ -41,6 +41,13 @@ Branch `fix/467-storage-listing-privacy`, isolated worktree `work/reebaplus-467`
 - Real development verification: both tests first failed against the old policies because anonymous listing returned seeded objects. After applying only 0191 to the verified development project, **2 pass / 0 skipped**; public image bytes and owner writes both work. Fixtures cleaned. `flutter analyze --no-pub`: zero issues; existing photo cache / URL sync tests: **13 pass**. Full suite: **5225 pass / 295 skipped / 0 failures** (8m05s, `.dart_tool/issue-467-full-tests.log`). Standards and spec checked directly against `985e80be` (worker did not spawn further agents). Compatibility review against main `c019ea4f`: no change to the touched services, Storage policies or test harness; new migration 0187 does not collide with reserved 0191.
 - No production deployment. The issue's historical “dev and prod are the same project” deployment note is superseded by the owner's separate development-project decision.
 
+### #492 G2: Stop crate words leaking to non-drink shops (2026-10-24)
+Branch `feat/492-g2-crate-words`, worktree `../drinkPosApp-wt-492-g2`. Part of #492.
+- Orders Completed tab: "Crate Deposits" stat card is gated on `businessTracksCrates(business)` (hidden for Pharmacy and non-crate shops).
+- `CartService.addItem`: default unit "Bottle" fallback removed; unit is left null when none is set.
+- Rejected sale dialogs: confirmation message in `SyncIssuesScreen` and `NotificationCard` (`NotificationsModal`) conditioned on `tracksCrates`. Non-crate businesses see neutral wording without mention of "customer empties balance".
+- Tests: `test/industry/non_crate_shop_crate_words_test.dart` (CartService unit, Pharmacy vs Bar Orders stat card, Sync Issues neutral dialog, Notifications modal neutral dialog).
+
 ### #487 PR 6 / #465: scan a barcode on Add Product (2026-10-23)
 Branch `feat/465-scan-add-product`, worktree `../drinkPosApp-wt-487-6`. Scan button beside the barcode box (`barcodeScannerProvider`, camera closes after the first read; POS unchanged). `_onBarcodeChanged` now: own products first (`findProductsByBarcode`), then, factory codes only, the shared list via `lookupOutcome` (offline -> note, never blocks save). Own match offers Open it (Product Details; restock mode is gone) / Create a new product anyway. Edit mode: scan only fills the box. Tests in `add_product_catalogue_prefill_test.dart` (+1 in `add_product_form_test.dart`); Add Product goldens regenerated.
 
