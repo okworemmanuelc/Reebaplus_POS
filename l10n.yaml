@@ -1,0 +1,4 @@
+arb-dir: lib/l10n
+output-localization-file: area_localizations.dart
+output-class: AreaLocalizations
+template-arb-file: area_en.arb

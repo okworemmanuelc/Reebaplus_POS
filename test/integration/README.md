@@ -136,3 +136,12 @@ Use the existing files as templates. For `pos_record_sale_v2` and
 mid-flight rollback test — `pos_record_sale_v2` exercises insufficient
 stock partway through a multi-item sale; `pos_cancel_order` exercises a
 partial-state cancel where some items have already been refunded.
+
+## Nigeria area reference (#471)
+
+`flutter test test/integration/nigerian_areas_test.dart` needs only
+`TEST_SUPABASE_URL` and `TEST_SUPABASE_ANON_KEY`. Deploy `0189_nigerian_areas.sql`
+on that test backend first. This test is read-only, needs no tenant fixture or
+refresh token, and compares all 774 pairs through the public anonymous role
+with explicit pagination. A missing table or partial seed is a failure when
+configured; absent environment variables are a visible skip.
