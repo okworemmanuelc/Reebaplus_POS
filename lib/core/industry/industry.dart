@@ -36,11 +36,7 @@ enum Industry {
     selectable: true,
     aliases: {'beer distributor'},
   ),
-  pharmacy(
-    label: 'Pharmacy',
-    icon: AppIcons.localPharmacy,
-    selectable: true,
-  ),
+  pharmacy(label: 'Pharmacy', icon: AppIcons.localPharmacy, selectable: true),
   buildingMaterials(label: 'Building Materials', icon: AppIcons.foundation),
   boutique(label: 'Boutique', icon: AppIcons.checkroom),
 
@@ -61,7 +57,7 @@ enum Industry {
   /// offered in a picker (excluded from [catalogue]); it exists so [industryOf]
   /// is total and the interior falls back to neutral words and no
   /// industry-only features.
-  generic(label: 'Business', icon: AppIcons.storefront);
+  generic(label: 'Business', icon: AppIcons.storefront, selectable: false);
 
   const Industry({
     required this.label,
@@ -71,7 +67,7 @@ enum Industry {
     // ignore: unused_element_parameter
     this.comingSoon = false,
     this.crateEligible = false,
-    this.selectable = false,
+    this.selectable = true,
     this.aliases = const <String>{},
   });
 
@@ -93,11 +89,8 @@ enum Industry {
   final bool crateEligible;
 
   /// Whether this industry is offered in the onboarding + Settings pickers.
-  /// Only Beverage distributor, Pharmacy, and Frozen Foods & Grocery ship
-  /// selectable today (issue #112); the other trades stay in the registry so
-  /// existing tenants keep normalizing + their features, but appear in no
-  /// picker. New industries default to hidden — flip this deliberately once
-  /// their flow is ready. [generic] is never selectable.
+  /// All nine shop types from the registry are selectable (#492). [generic] is
+  /// never selectable.
   final bool selectable;
 
   /// Extra lowercase strings (besides the lowercased [label]) that resolve to
@@ -110,15 +103,17 @@ enum Industry {
   /// though the pickers now offer only [selectableCatalogue]: a tenant on a
   /// now-hidden trade must still resolve to its own profile and keep its
   /// features (no data migration, issue #112). Computed once.
-  static final List<Industry> catalogue =
-      values.where((i) => i != generic).toList(growable: false);
+  static final List<Industry> catalogue = values
+      .where((i) => i != generic)
+      .toList(growable: false);
 
-  /// The industries actually offered in the onboarding + Settings pickers — the
-  /// [selectable] subset of [catalogue], in plan order (issue #112). Onboarding
-  /// and Settings render from this so the two pickers can never diverge from the
-  /// registry or offer a hidden trade. Computed once (used inside `build`).
-  static final List<Industry> selectableCatalogue =
-      values.where((i) => i.selectable).toList(growable: false);
+  /// The industries actually offered in the onboarding + Settings pickers — all
+  /// nine shop types from [catalogue], in plan order (#492). Onboarding and
+  /// Settings render from this (plus an "Other" option with free-form input).
+  /// Computed once (used inside `build`).
+  static final List<Industry> selectableCatalogue = values
+      .where((i) => i.selectable)
+      .toList(growable: false);
 }
 
 /// Resolves a stored `businesses.type` string to its [Industry]. Total: known

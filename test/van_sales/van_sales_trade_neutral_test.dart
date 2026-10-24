@@ -173,12 +173,12 @@ Future<void> _pumpReconcile(
         currentBusinessProvider.overrideWith(
           (ref) => _business(type: businessType),
         ),
-        vanTripProvider('trip-1').overrideWith(
-          (ref) => Stream.value(_trip(status: status)),
-        ),
-        vanTripPositionProvider('trip-1').overrideWith(
-          (ref) => Stream.value(_position()),
-        ),
+        vanTripProvider(
+          'trip-1',
+        ).overrideWith((ref) => Stream.value(_trip(status: status))),
+        vanTripPositionProvider(
+          'trip-1',
+        ).overrideWith((ref) => Stream.value(_position())),
       ],
       child: MaterialApp(
         theme: AppTheme.light(),
@@ -202,21 +202,24 @@ void main() {
   // ── 1. The item noun ──────────────────────────────────────────────────────
 
   group('the item noun comes from the Lexicon, not the drinks trade', () {
-    testWidgets('a pharmacy reads its own word on every captioned figure',
-        (tester) async {
-      await _pumpReconcile(tester, businessType: 'Pharmacy');
+    testWidgets(
+      'a pharmacy reads the generic Product word on every captioned figure',
+      (tester) async {
+        await _pumpReconcile(tester, businessType: 'Pharmacy');
 
-      expect(find.text('Medicines unaccounted for'), findsOneWidget);
-      expect(find.text('Damaged medicines'), findsOneWidget);
-      expect(find.text('Medicines that never came back'), findsOneWidget);
-      expect(
-        find.textContaining('Record what those medicines cost you'),
-        findsOneWidget,
-      );
-    });
+        expect(find.text('Products unaccounted for'), findsOneWidget);
+        expect(find.text('Damaged products'), findsOneWidget);
+        expect(find.text('Products that never came back'), findsOneWidget);
+        expect(
+          find.textContaining('Record what those products cost you'),
+          findsOneWidget,
+        );
+      },
+    );
 
-    testWidgets('a bar reads the same word the rest of its app uses',
-        (tester) async {
+    testWidgets('a bar reads the same word the rest of its app uses', (
+      tester,
+    ) async {
       await _pumpReconcile(tester, businessType: 'Bar');
 
       // Beverage/Bar resolve to `item: 'Product'` — the ADR 0015 no-regression
@@ -226,19 +229,21 @@ void main() {
       expect(find.text('Products that never came back'), findsOneWidget);
     });
 
-    testWidgets('the closed-trip artifact is captioned in trade words too',
-        (tester) async {
+    testWidgets('the closed-trip artifact is captioned in trade words too', (
+      tester,
+    ) async {
       await _pumpReconcile(
         tester,
         businessType: 'Pharmacy',
         status: kVanTripStatusClosed,
       );
 
-      expect(find.text('Cost of the medicines gone'), findsOneWidget);
+      expect(find.text('Cost of the products gone'), findsOneWidget);
     });
 
-    testWidgets('no screen prints a drinks noun for a non-drinks trade',
-        (tester) async {
+    testWidgets('no screen prints a drinks noun for a non-drinks trade', (
+      tester,
+    ) async {
       await _pumpReconcile(tester, businessType: 'Phone & Gadgets');
 
       for (final banned in ['Drinks', 'drinks', 'Drink', 'drink']) {
@@ -248,17 +253,18 @@ void main() {
           reason: 'a phone shop must never be shown "$banned"',
         );
       }
-      // …and the trade's real word did render, so the assertion above is not
+      // …and the generic word did render, so the assertion above is not
       // passing merely because the screen is empty.
-      expect(find.text('Handsets unaccounted for'), findsOneWidget);
+      expect(find.text('Products unaccounted for'), findsOneWidget);
     });
   });
 
   // ── 2. The crate surfaces ─────────────────────────────────────────────────
 
   group('empty crates are gated, not translated', () {
-    testWidgets('a pharmacy is never asked about crates it does not deal in',
-        (tester) async {
+    testWidgets('a pharmacy is never asked about crates it does not deal in', (
+      tester,
+    ) async {
       await _pumpReconcile(tester, businessType: 'Pharmacy');
 
       expect(find.text('Empty crates'), findsNothing);
@@ -266,24 +272,27 @@ void main() {
       expect(find.textContaining('crate'), findsNothing);
     });
 
-    testWidgets('a bar still gets its shell memo — the gate hides, not deletes',
-        (tester) async {
-      await _pumpReconcile(tester, businessType: 'Bar');
+    testWidgets(
+      'a bar still gets its shell memo — the gate hides, not deletes',
+      (tester) async {
+        await _pumpReconcile(tester, businessType: 'Bar');
 
-      expect(find.text('Empty crates'), findsOneWidget);
-      expect(
-        find.textContaining('Loaded with 20 shells, 14 came back'),
-        findsOneWidget,
-      );
-      expect(
-        find.textContaining('6 not returned'),
-        findsOneWidget,
-        reason: 'the whole point of the memo: 20 out, 14 back, 6 unaccounted',
-      );
-    });
+        expect(find.text('Empty crates'), findsOneWidget);
+        expect(
+          find.textContaining('Loaded with 20 shells, 14 came back'),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('6 not returned'),
+          findsOneWidget,
+          reason: 'the whole point of the memo: 20 out, 14 back, 6 unaccounted',
+        );
+      },
+    );
 
-    testWidgets('a crate-eligible trade that opted OUT sees no crate surface',
-        (tester) async {
+    testWidgets('a crate-eligible trade that opted OUT sees no crate surface', (
+      tester,
+    ) async {
       // `businessTracksCrates` is BOTH halves — eligible type AND the opt-in.
       _useTallViewport(tester);
       await tester.pumpWidget(
@@ -311,12 +320,12 @@ void main() {
                 currentPeriodEnd: null,
               ),
             ),
-            vanTripProvider('trip-1').overrideWith(
-              (ref) => Stream.value(_trip()),
-            ),
-            vanTripPositionProvider('trip-1').overrideWith(
-              (ref) => Stream.value(_position()),
-            ),
+            vanTripProvider(
+              'trip-1',
+            ).overrideWith((ref) => Stream.value(_trip())),
+            vanTripPositionProvider(
+              'trip-1',
+            ).overrideWith((ref) => Stream.value(_position())),
           ],
           child: MaterialApp(
             theme: AppTheme.light(),
@@ -342,16 +351,15 @@ void main() {
     // Scope: the van sales feature plus the two core files that carry its
     // user-facing text. Comments are exempt — a comment saying "not drinks" is
     // documentation, not copy.
-    const roots = [
-      'lib/features/van_sales',
-      'lib/core/van_sales',
-    ];
+    const roots = ['lib/features/van_sales', 'lib/core/van_sales'];
     const extraFiles = ['lib/core/database/daos_van_sales.dart'];
 
     // Word-boundary so "drinking" or a product literally named in a fixture is
     // still caught, but `shrink`/`sprinkle` are not.
-    final bannedInString = RegExp(r'''(['"])[^'"]*\bdrinks?\b''',
-        caseSensitive: false);
+    final bannedInString = RegExp(
+      r'''(['"])[^'"]*\bdrinks?\b''',
+      caseSensitive: false,
+    );
 
     test('every user-visible string is trade-neutral or Lexicon-driven', () {
       final leaks = <String>[];

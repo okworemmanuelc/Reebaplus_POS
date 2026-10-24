@@ -13,12 +13,16 @@ export 'package:reebaplus_pos/core/industry/industry.dart' show isCrateBusiness;
 /// Derived from the registry so it cannot drift. DB stores the canonical
 /// 'Beer distributor' string for Beverage distributor tenants; the Business
 /// Info screen maps the display ↔ DB label at load/save time.
-final List<String> kBusinessTypes =
-    Industry.catalogue.map((i) => i.label).toList(growable: false);
+final List<String> kBusinessTypes = Industry.catalogue
+    .map((i) => i.label)
+    .toList(growable: false);
 
-/// The business-type labels OFFERED in the onboarding + Settings pickers — the
-/// [Industry.selectable] subset only (Beverage distributor, Pharmacy, Frozen
-/// Foods & Grocery), issue #112. Derived from [Industry.selectableCatalogue] so
-/// it can never drift from the registry.
-final List<String> kSelectableBusinessTypes =
-    Industry.selectableCatalogue.map((i) => i.label).toList(growable: false);
+/// Label for the free-typed "Other" business type option in pickers (#492).
+const String kOtherBusinessType = 'Other';
+
+/// The business-type labels OFFERED in the onboarding + Settings pickers — all
+/// nine shop types from the registry (#492). Derived from
+/// [Industry.selectableCatalogue] so it can never drift from the registry.
+final List<String> kSelectableBusinessTypes = Industry.selectableCatalogue
+    .map((i) => i.label)
+    .toList(growable: false);

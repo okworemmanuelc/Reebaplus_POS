@@ -212,7 +212,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   Timer? _catalogueDebounce;
   static const _catalogueDebounceDelay = Duration(milliseconds: 500);
 
-  List<String> _dynamicUnits = kProductUnits;
+  List<String> _dynamicUnits = kGenericUnits;
 
   /// The active industry's words + presets (#80). Read (not watched) in helpers
   /// called during build; the form is opened for one business so it is stable.

@@ -26,7 +26,7 @@ an individual medicine is prescription-only. Issue #479 must finish the
 restricted-goods policy and classification before online ordering launch;
 these metadata are not legal clearance.
 
-Schema85 adds only nullable text to SQLite; the cloud FK validates the canonical
+Schema86 adds only nullable text to SQLite; the cloud FK validates the canonical
 reference. Existing local rows remain valid and sellable without a mapping.
 No production migration was run.
 
@@ -34,8 +34,11 @@ Validation: all 46 SQL seed rows match the bundled reference, including metadata
 every public child name has a non-vacuous exact-match regression. Full suite on the
 original base passed 5233 tests (294 skipped). After integrating main c019ea4f,
 108 focused regressions and four visual baselines pass; analyzer is clean.
-The schema85 test reopens an actual v84 SQLite database and preserves its
+The schema86 test reopens an actual v85 SQLite database and preserves its
 categories. Tenant write tests verify foreign-business IDs cannot be mapped.
+Final integration on main9732ed17: Drift86,132focused tests pass, analyzer clean,
+and the full suite passes5424 tests (296 skipped, zero failures). The85→86
+fixture also preserves a Kg product and its category link. Drift was regenerated.
 
 Web parity follow-up:
 [reebaplus-web#138](https://github.com/okworemmanuelc/reebaplus-web/issues/138).

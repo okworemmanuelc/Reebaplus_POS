@@ -15,6 +15,9 @@
 /// saves the raw value.
 library;
 
+export 'package:reebaplus_pos/core/industry/lexicon.dart'
+    show kGenericUnits, kCrateOnlyUnits, kCrateUnits;
+
 /// The on-screen label for a stored [unit].
 ///
 /// With [crates] (a shop that counts empty crates) a `Bottle` (any case) reads
@@ -77,10 +80,19 @@ List<String> unitChoices(
 }) {
   final kept = {
     for (final k in keep)
-      if (k != null) k,
+      if (k != null && k.trim().isNotEmpty) k.trim(),
   };
-  return [
-    for (final u in units)
-      if (!isUnitHiddenForNewProducts(u) || kept.contains(u)) u,
-  ];
+  final result = <String>[];
+  for (final u in units) {
+    if (!isUnitHiddenForNewProducts(u) ||
+        kept.any((k) => k.toLowerCase() == u.toLowerCase())) {
+      result.add(u);
+    }
+  }
+  for (final k in kept) {
+    if (!result.any((u) => u.toLowerCase() == k.toLowerCase())) {
+      result.add(k);
+    }
+  }
+  return result;
 }
