@@ -10,6 +10,7 @@ import 'dart:typed_data';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
@@ -26,11 +27,12 @@ import 'package:reebaplus_pos/core/services/catalogue_lookup.dart';
 import 'package:reebaplus_pos/core/services/catalogue_report.dart';
 import 'package:reebaplus_pos/core/services/product_image_service.dart';
 import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
+import 'package:reebaplus_pos/shared/scanner/barcode_scan_page.dart';
+import 'package:reebaplus_pos/shared/scanner/scanner_providers.dart';
+import '../helpers/fake_barcode_scanner.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/catalogue_filled_note.dart';
-import 'package:reebaplus_pos/features/inventory/widgets/product_photo_field.dart';
-import 'package:reebaplus_pos/features/inventory/widgets/update_product_sheet.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/product_form_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
-import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 
 /// A real factory GTIN (EAN-13, Nigeria prefix 615) and a second one.
@@ -45,6 +47,9 @@ class _FakeCatalogue implements BarcodeCatalogueService {
   /// The includePhoto flag of each call, in order.
   final photoAsked = <bool>[];
   BarcodeSuggestion? answer;
+
+  /// True answers every lookup as "no internet" (#465).
+  bool offline = false;
   Completer<BarcodeSuggestion?>? pending;
 
   @override
@@ -62,7 +67,11 @@ class _FakeCatalogue implements BarcodeCatalogueService {
   Future<CatalogueLookup> lookupOutcome(
     String code, {
     bool includePhoto = true,
-  }) => throw UnimplementedError();
+  }) async {
+    if (offline) return const CatalogueUnreachable();
+    final s = await lookup(code, includePhoto: includePhoto);
+    return s == null ? const CatalogueNothingShared() : CatalogueFound(s);
+  }
 
   @override
   Future<CatalogueReportResult> report({
@@ -170,12 +179,14 @@ void main() {
 
   Future<ProviderContainer> pumpWidgetUnder(
     WidgetTester tester,
-    Widget home,
-  ) async {
+    Widget home, {
+    FakeBarcodeScanner? scanner,
+  }) async {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
         barcodeCatalogueServiceProvider.overrideWithValue(catalogue),
+        if (scanner != null) barcodeScannerProvider.overrideWithValue(scanner),
         productImageServiceProvider.overrideWithValue(images),
         currentUserPermissionsProvider.overrideWithValue({
           'products.edit_buying_price',
@@ -189,9 +200,7 @@ void main() {
     // Keeps the active business loaded, as MainLayout does in the app, so the
     // screen's crate-business check and lexicon see it.
     container.listen(currentBusinessProvider, (_, _) {});
-    container.read(authProvider).value = await db.storesDao.getUserById(
-      userId,
-    );
+    container.read(authProvider).value = await db.storesDao.getUserById(userId);
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
@@ -206,12 +215,16 @@ void main() {
     WidgetTester tester, {
     String? prefilledBarcode,
     bool receiveMode = false,
+    FakeBarcodeScanner? scanner,
+    ProductData? editProduct,
   }) => pumpWidgetUnder(
     tester,
     AddProductScreen(
       prefilledBarcode: prefilledBarcode,
       receiveMode: receiveMode,
+      editProduct: editProduct,
     ),
+    scanner: scanner,
   );
 
   Finder fieldFor(String labelPart) => find.descendant(
@@ -221,25 +234,32 @@ void main() {
     matching: find.byType(TextFormField),
   );
 
+  Finder quantityField() => find.descendant(
+    of: find.byKey(AddProductKeys.quantity),
+    matching: find.byType(TextFormField),
+  );
+
   String textOf(WidgetTester tester, String labelPart) =>
       tester.widget<TextFormField>(fieldFor(labelPart)).controller!.text;
 
-  AppDropdown<String?> unitDropdown(WidgetTester tester) =>
-      tester.widget<AppDropdown<String?>>(find.byType(AppDropdown<String?>));
+  // Add Product's unit chips (#487), by their saved values.
+  Iterable<ProductUnitChip> chips(WidgetTester tester) =>
+      tester.widgetList<ProductUnitChip>(find.byType(ProductUnitChip));
 
-  List<String?> unitOptions(WidgetTester tester) =>
-      unitDropdown(tester).items.map((i) => i.value).toList();
+  String chipUnit(ProductUnitChip chip) => (chip.key! as ValueKey<String>).value
+      .replaceFirst('add-product-unit-', '');
 
-  Future<void> openMoreDetails(WidgetTester tester) async {
-    if (fieldFor('Barcode').evaluate().isNotEmpty) return;
-    final header = find.text('More details');
-    await tester.ensureVisible(header);
-    await tester.tap(header);
-    await tester.pumpAndSettle();
-  }
+  List<String> chipUnits(WidgetTester tester) =>
+      chips(tester).map(chipUnit).toList();
+
+  String? selectedUnit(WidgetTester tester) =>
+      chips(tester).where((c) => c.selected).map(chipUnit).firstOrNull;
+
+  String chipLabel(WidgetTester tester, String unit) => tester
+      .widget<ProductUnitChip>(find.byKey(AddProductKeys.unitChip(unit)))
+      .label;
 
   Future<void> typeBarcode(WidgetTester tester, String code) async {
-    await openMoreDetails(tester);
     final field = fieldFor('Barcode');
     await tester.ensureVisible(field);
     await tester.enterText(field, code);
@@ -285,10 +305,9 @@ void main() {
       expect(catalogue.photoAsked, [true]);
       expect(textOf(tester, 'Product Name'), 'Peak Milk 400g');
       // 'Tin' is not a supermarket starter unit: it is added and selected.
-      expect(unitDropdown(tester).currentValue, 'Tin');
-      expect(unitOptions(tester), contains('Tin'));
+      expect(selectedUnit(tester), 'Tin');
+      expect(chipUnits(tester), contains('Tin'));
 
-      await openMoreDetails(tester);
       final photo = pendingPhoto(tester);
       expect(photo, isNotNull);
       // Processed exactly as a picked photo: resized to the 800 px cap.
@@ -315,34 +334,27 @@ void main() {
 
       expect(catalogue.calls, [_gtin]);
       expect(textOf(tester, 'Product Name'), 'Peak Milk 400g');
-      expect(unitDropdown(tester).currentValue, 'Tin');
+      expect(selectedUnit(tester), 'Tin');
       expect(pendingPhoto(tester), isNotNull);
       expect(notes(), findsNWidgets(3));
 
       await unmount(tester);
     });
 
-    testWidgets('a suggested photo opens "More details" so it can be seen', (
+    testWidgets('a suggested photo shows in the photo box beside the name', (
       tester,
     ) async {
       catalogue.answer = withPhoto(fullSuggestion);
       await pumpScreen(tester, prefilledBarcode: _gtin);
 
-      // No tap on the header: the photo box is already showing.
-      expect(fieldFor('Barcode'), findsOneWidget);
+      // No fold to open (#487): the photo is already on screen.
+      expect(
+        tester
+            .widget<ProductPhotoBox>(find.byType(ProductPhotoBox))
+            .pendingBytes,
+        isNotNull,
+      );
       expect(pendingPhoto(tester), isNotNull);
-
-      await unmount(tester);
-    });
-
-    testWidgets('without a suggested photo "More details" stays closed', (
-      tester,
-    ) async {
-      catalogue.answer = fullSuggestion;
-      await pumpScreen(tester, prefilledBarcode: _gtin);
-
-      expect(textOf(tester, 'Product Name'), 'Peak Milk 400g');
-      expect(fieldFor('Barcode'), findsNothing);
 
       await unmount(tester);
     });
@@ -350,7 +362,6 @@ void main() {
     testWidgets('a photo is only fetched while none is held', (tester) async {
       catalogue.answer = withPhoto(fullSuggestion);
       await pumpScreen(tester, prefilledBarcode: _gtin);
-      await openMoreDetails(tester);
       expect(pendingPhoto(tester), isNotNull);
 
       // A photo is now held: the next lookup must not download one.
@@ -361,15 +372,15 @@ void main() {
       await unmount(tester);
     });
 
-    testWidgets('Receive Stock (no photo box) never fetches the photo', (
-      tester,
-    ) async {
-      catalogue.answer = fullSuggestion;
+    testWidgets('Receive Stock\'s new product is the same form: it fills the '
+        'boxes and fetches the photo too (#487)', (tester) async {
+      catalogue.answer = withPhoto(fullSuggestion);
       await pumpScreen(tester, prefilledBarcode: _gtin, receiveMode: true);
 
       expect(catalogue.calls, [_gtin]);
-      expect(catalogue.photoAsked, [false]);
+      expect(catalogue.photoAsked, [true]);
       expect(textOf(tester, 'Product Name'), 'Peak Milk 400g');
+      expect(pendingPhoto(tester), isNotNull);
 
       await unmount(tester);
     });
@@ -384,7 +395,7 @@ void main() {
       await typeBarcode(tester, _gtin);
 
       expect(textOf(tester, 'Product Name'), 'My own name');
-      expect(unitDropdown(tester).currentValue, 'Tin');
+      expect(selectedUnit(tester), 'Tin');
       expect(pendingPhoto(tester), isNotNull);
       // Notes under unit and photo only.
       expect(notes(), findsNWidgets(2));
@@ -405,8 +416,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(textOf(tester, 'Product Name'), 'Typed while waiting');
-      expect(unitDropdown(tester).currentValue, 'Tin');
-      await openMoreDetails(tester);
+      expect(selectedUnit(tester), 'Tin');
       expect(pendingPhoto(tester), isNotNull);
       expect(notes(), findsNWidgets(2));
 
@@ -419,7 +429,6 @@ void main() {
       catalogue.pending = Completer<BarcodeSuggestion?>();
       await pumpScreen(tester, prefilledBarcode: _gtin);
 
-      await openMoreDetails(tester);
       await tester.enterText(fieldFor('Barcode'), 'SHOP-CODE-9');
       await tester.pumpAndSettle();
 
@@ -427,32 +436,35 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(textOf(tester, 'Product Name'), isEmpty);
-      expect(unitDropdown(tester).currentValue, isNull);
+      expect(selectedUnit(tester), isNull);
       expect(pendingPhoto(tester), isNull);
       expect(notes(), findsNothing);
 
       await unmount(tester);
     });
 
-    testWidgets('an answer for an earlier code is dropped when the box now holds '
-        'another factory code', (tester) async {
-      catalogue.pending = Completer<BarcodeSuggestion?>();
-      await pumpScreen(tester, prefilledBarcode: _gtin);
+    testWidgets(
+      'an answer for an earlier code is dropped when the box now holds '
+      'another factory code',
+      (tester) async {
+        catalogue.pending = Completer<BarcodeSuggestion?>();
+        await pumpScreen(tester, prefilledBarcode: _gtin);
 
-      final first = catalogue.pending!;
-      catalogue.pending = null;
-      catalogue.answer = null;
-      await typeBarcode(tester, _otherGtin);
-      expect(catalogue.calls, [_gtin, _otherGtin]);
+        final first = catalogue.pending!;
+        catalogue.pending = null;
+        catalogue.answer = null;
+        await typeBarcode(tester, _otherGtin);
+        expect(catalogue.calls, [_gtin, _otherGtin]);
 
-      first.complete(withPhoto(fullSuggestion));
-      await tester.pumpAndSettle();
+        first.complete(withPhoto(fullSuggestion));
+        await tester.pumpAndSettle();
 
-      expect(textOf(tester, 'Product Name'), isEmpty);
-      expect(notes(), findsNothing);
+        expect(textOf(tester, 'Product Name'), isEmpty);
+        expect(notes(), findsNothing);
 
-      await unmount(tester);
-    });
+        await unmount(tester);
+      },
+    );
 
     testWidgets('failure or timeout (null) leaves the boxes empty with no '
         'message', (tester) async {
@@ -461,8 +473,7 @@ void main() {
 
       expect(catalogue.calls, [_gtin]);
       expect(textOf(tester, 'Product Name'), isEmpty);
-      expect(unitDropdown(tester).currentValue, isNull);
-      await openMoreDetails(tester);
+      expect(selectedUnit(tester), isNull);
       expect(pendingPhoto(tester), isNull);
       expect(notes(), findsNothing);
       expect(find.byType(SnackBar), findsNothing);
@@ -483,41 +494,12 @@ void main() {
       await unmount(tester);
     });
 
-    testWidgets('restock mode (an existing product picked) never looks up', (
-      tester,
-    ) async {
-      catalogue.answer = withPhoto(fullSuggestion);
-      await pumpScreen(tester);
-
-      await tester.enterText(fieldFor('Product Name'), 'Cok');
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Coke 50cl'));
-      await tester.pumpAndSettle();
-      expect(find.text('Add Stock'), findsWidgets);
-
-      final field = fieldFor('Barcode');
-      await tester.ensureVisible(field);
-      await tester.enterText(field, _gtin);
-      await tester.pump(const Duration(milliseconds: 600));
-      await tester.pumpAndSettle();
-
-      expect(catalogue.calls, isEmpty);
-      expect(notes(), findsNothing);
-
-      await unmount(tester);
-    });
-
-    testWidgets('edit mode (Update Product) never looks up', (tester) async {
+    testWidgets('edit mode never looks up', (tester) async {
       catalogue.answer = withPhoto(fullSuggestion);
       final product = await (db.select(
         db.products,
       )..where((t) => t.id.equals('prod-coke'))).getSingle();
-      await pumpWidgetUnder(
-        tester,
-        Scaffold(
-          body: UpdateProductSheet(product: product, totalStock: 0),
-        ),
-      );
+      await pumpWidgetUnder(tester, AddProductScreen(editProduct: product));
 
       final field = fieldFor('Barcode');
       await tester.ensureVisible(field);
@@ -534,7 +516,6 @@ void main() {
     testWidgets('each note hides once that field is edited', (tester) async {
       catalogue.answer = withPhoto(fullSuggestion);
       await pumpScreen(tester, prefilledBarcode: _gtin);
-      await openMoreDetails(tester);
       expect(notes(), findsNWidgets(3));
 
       // Name edited.
@@ -544,15 +525,14 @@ void main() {
       expect(notes(), findsNWidgets(2));
 
       // Unit changed by hand.
-      unitDropdown(tester).onChanged('Pack');
+      await tester.ensureVisible(find.byKey(AddProductKeys.unitChip('Pack')));
+      await tester.tap(find.byKey(AddProductKeys.unitChip('Pack')));
       await tester.pumpAndSettle();
-      expect(unitDropdown(tester).currentValue, 'Pack');
+      expect(selectedUnit(tester), 'Pack');
       expect(notes(), findsNWidgets(1));
 
       // Photo removed (the photo box's remove action).
-      tester
-          .widget<ProductPhotoField>(find.byType(ProductPhotoField))
-          .onRemove!();
+      tester.widget<ProductPhotoBox>(find.byType(ProductPhotoBox)).onRemove!();
       await tester.pumpAndSettle();
       expect(pendingPhoto(tester), isNull);
       expect(notes(), findsNothing);
@@ -565,10 +545,10 @@ void main() {
       catalogue.answer = withPhoto(fullSuggestion);
       await pumpScreen(tester, prefilledBarcode: _gtin);
 
-      await tester.enterText(fieldFor('Selling Price'), '1500');
-      await tester.enterText(fieldFor('Quantity'), '3');
+      await tester.enterText(fieldFor('Retail Price'), '1500');
+      await tester.enterText(quantityField(), '3');
       await tester.pumpAndSettle();
-      final save = find.widgetWithText(AppButton, 'Add Product');
+      final save = find.widgetWithText(AppButton, 'Save Product');
       await tester.ensureVisible(save);
       await tester.tap(save);
       await tester.pumpAndSettle();
@@ -596,10 +576,10 @@ void main() {
       await pumpScreen(tester, prefilledBarcode: _gtin);
 
       await tester.enterText(fieldFor('Product Name'), 'Saved early');
-      await tester.enterText(fieldFor('Selling Price'), '900');
-      await tester.enterText(fieldFor('Quantity'), '1');
+      await tester.enterText(fieldFor('Retail Price'), '900');
+      await tester.enterText(quantityField(), '1');
       await tester.pumpAndSettle();
-      final save = find.widgetWithText(AppButton, 'Add Product');
+      final save = find.widgetWithText(AppButton, 'Save Product');
       await tester.ensureVisible(save);
       await tester.tap(save);
       await tester.pumpAndSettle();
@@ -621,25 +601,233 @@ void main() {
   group('bar (a crate business)', () {
     setUp(() => seed(type: 'bar'));
 
-    testWidgets('a suggested Bottle turns empties tracking on, as picking it by '
-        'hand does (crate business)', (tester) async {
-      catalogue.answer = const BarcodeSuggestion(name: 'Star 60cl', unit: 'bottle');
+    testWidgets(
+      'a suggested Bottle turns empties tracking on, as picking it by '
+      'hand does (crate business)',
+      (tester) async {
+        catalogue.answer = const BarcodeSuggestion(
+          name: 'Star 60cl',
+          unit: 'bottle',
+        );
+        await pumpScreen(tester, prefilledBarcode: _gtin);
+
+        // Matched to the chips' own spelling, not added twice.
+        expect(selectedUnit(tester), 'Bottle');
+        expect(
+          chipUnits(tester).where((u) => u.toLowerCase() == 'bottle'),
+          hasLength(1),
+        );
+        final track = find.byKey(AddProductKeys.trackEmpties);
+        await tester.ensureVisible(track);
+        expect(tester.widget<Switch>(track).value, isTrue);
+
+        await unmount(tester);
+      },
+    );
+
+    // #487: "Bottle" reads "Bottle Crate" (the saved value stays Bottle), and
+    // plain "Crate" is not offered to a new product.
+    Future<void> addCrateProduct() => db
+        .into(db.products)
+        .insert(
+          ProductsCompanion.insert(
+            id: const Value('prod-crate'),
+            businessId: businessId,
+            name: 'Old Crate Lager',
+            unit: const Value('Crate'),
+          ),
+        );
+
+    testWidgets('a new product is not offered plain Crate, even when another '
+        'product uses it; Bottle reads "Bottle Crate"', (tester) async {
+      await addCrateProduct();
+      await pumpScreen(tester);
+
+      expect(chipUnits(tester), isNot(contains('Crate')));
+      expect(chipUnits(tester), contains('Bottle'));
+      expect(chipLabel(tester, 'Bottle'), 'Bottle Crate');
+      expect(chipLabel(tester, 'Can'), 'Can');
+
+      await unmount(tester);
+    });
+
+    testWidgets('a suggested plain Crate is not filled in', (tester) async {
+      catalogue.answer = const BarcodeSuggestion(
+        name: 'Crate Lager',
+        unit: 'Crate',
+      );
       await pumpScreen(tester, prefilledBarcode: _gtin);
 
-      // Matched to the dropdown's own spelling, not added twice.
-      expect(unitDropdown(tester).currentValue, 'Bottle');
-      expect(
-        unitOptions(tester).where((u) => u?.toLowerCase() == 'bottle'),
-        hasLength(1),
-      );
-      await openMoreDetails(tester);
-      final track = find.widgetWithText(
-        CheckboxListTile,
-        'Track empty crate returns',
-      );
-      await tester.ensureVisible(track);
-      expect(tester.widget<CheckboxListTile>(track).value, isTrue);
+      expect(textOf(tester, 'Name'), 'Crate Lager');
+      expect(selectedUnit(tester), isNull);
+      expect(chipUnits(tester), isNot(contains('Crate')));
 
+      await unmount(tester);
+    });
+
+    testWidgets('Edit Product on a product saved as Crate still shows and '
+        'offers Crate', (tester) async {
+      await addCrateProduct();
+      final product = await (db.select(
+        db.products,
+      )..where((t) => t.id.equals('prod-crate'))).getSingle();
+      await pumpWidgetUnder(tester, AddProductScreen(editProduct: product));
+
+      expect(selectedUnit(tester), 'Crate');
+      expect(chipUnits(tester), contains('Crate'));
+
+      await unmount(tester);
+    });
+  });
+
+  // #465 / #487 PR 6: the scan button and the own-products check.
+  group('scan a barcode on Add Product', () {
+    setUp(seed);
+
+    Future<void> addOwn(String id, String name, String barcode) => db
+        .into(db.products)
+        .insert(
+          ProductsCompanion.insert(
+            id: Value(id),
+            businessId: businessId,
+            name: name,
+            barcode: Value(barcode),
+          ),
+        );
+
+    Future<void> scan(
+      WidgetTester tester,
+      FakeBarcodeScanner scanner,
+      String code,
+    ) async {
+      final button = find.byTooltip('Scan barcode');
+      await tester.ensureVisible(button);
+      await tester.pump();
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+      scanner.camera!.read(code);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('own product: "You already have", Open it, and the shared '
+        'list is not asked; the camera closes after the first read', (
+      tester,
+    ) async {
+      await addOwn('p-own', 'Own Cola', '9988');
+      final scanner = FakeBarcodeScanner();
+      await pumpScreen(tester, scanner: scanner);
+      await scan(tester, scanner, '9988');
+
+      expect(scanner.sessionCount, 1);
+      expect(find.byType(BarcodeScanPage), findsNothing);
+      expect(scanner.camera!.isDisposed, isTrue);
+      expect(textOf(tester, 'Barcode'), '9988');
+      expect(find.text('You already have Own Cola'), findsOneWidget);
+      expect(find.text('Create a new product anyway'), findsOneWidget);
+      expect(catalogue.calls, isEmpty);
+
+      await unmount(tester);
+    });
+
+    testWidgets('Create a new product anyway dismisses the card', (
+      tester,
+    ) async {
+      await addOwn('p-own', 'Own Cola', '9988');
+      final scanner = FakeBarcodeScanner();
+      await pumpScreen(tester, scanner: scanner);
+      await scan(tester, scanner, '9988');
+      await tester.tap(find.text('Create a new product anyway'));
+      await tester.pumpAndSettle();
+      expect(find.text('You already have Own Cola'), findsNothing);
+      await unmount(tester);
+    });
+
+    testWidgets('several matches are listed', (tester) async {
+      await addOwn('p-a', 'Cola One', '7766');
+      await addOwn('p-b', 'Cola Two', '7766');
+      final scanner = FakeBarcodeScanner();
+      await pumpScreen(tester, scanner: scanner);
+      await scan(tester, scanner, '7766');
+      expect(
+        find.text('You already have 2 products with this barcode'),
+        findsOneWidget,
+      );
+      expect(find.text('Cola One'), findsOneWidget);
+      expect(find.text('Cola Two'), findsOneWidget);
+      expect(find.text('Open it'), findsNWidgets(2));
+      await unmount(tester);
+    });
+
+    testWidgets('a shared-list hit fills only the empty boxes', (tester) async {
+      catalogue.answer = fullSuggestion;
+      final scanner = FakeBarcodeScanner();
+      await pumpScreen(tester, scanner: scanner);
+      await tester.enterText(fieldFor('Product Name'), 'Mine');
+      await tester.pump();
+      await scan(tester, scanner, _gtin);
+      expect(catalogue.calls, [_gtin]);
+      expect(textOf(tester, 'Product Name'), 'Mine');
+      expect(selectedUnit(tester), 'Tin');
+      expect(notes(), findsOneWidget); // the unit only
+      await unmount(tester);
+    });
+
+    testWidgets('a shop-made code never calls the shared list', (tester) async {
+      final scanner = FakeBarcodeScanner();
+      await pumpScreen(tester, scanner: scanner);
+      await scan(tester, scanner, '12345');
+      expect(catalogue.calls, isEmpty);
+      expect(find.text('New barcode — fill in the details'), findsOneWidget);
+      await unmount(tester);
+    });
+
+    testWidgets('offline: the own check still runs, the shared list is '
+        'skipped with a note, and saving is not blocked', (tester) async {
+      catalogue.offline = true;
+      await addOwn('p-own', 'Own Cola', '9988');
+      final scanner = FakeBarcodeScanner();
+      await pumpScreen(tester, scanner: scanner);
+      await scan(tester, scanner, '9988');
+      expect(find.text('You already have Own Cola'), findsOneWidget);
+      expect(find.textContaining('no internet'), findsNothing);
+
+      await tester.enterText(fieldFor('Barcode'), _gtin);
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      expect(
+        find.text("Couldn't check the shared list — no internet"),
+        findsOneWidget,
+      );
+      expect(
+        tester.widget<AppButton>(find.byType(AppButton).last).onPressed,
+        isNotNull,
+      );
+      await unmount(tester);
+    });
+
+    testWidgets('edit mode: the scan only drops the code into the box', (
+      tester,
+    ) async {
+      await addOwn('p-own', 'Own Cola', '9988');
+      await addOwn('p-other', 'Other', '5544');
+      final product = (await db.catalogDao.findById('p-own'))!;
+      final scanner = FakeBarcodeScanner();
+      await pumpScreen(tester, scanner: scanner, editProduct: product);
+      await scan(tester, scanner, _gtin);
+      expect(textOf(tester, 'Barcode'), _gtin);
+      expect(find.byType(ProductBarcodeMatchesCard), findsNothing);
+      expect(catalogue.calls, isEmpty);
+      await unmount(tester);
+    });
+
+    testWidgets('keyboard up: the barcode box stays reachable', (tester) async {
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      addTearDown(tester.view.resetViewInsets);
+      await pumpScreen(tester);
+      await tester.ensureVisible(fieldFor('Barcode'));
+      await tester.enterText(fieldFor('Barcode'), '555');
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
       await unmount(tester);
     });
   });

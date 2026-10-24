@@ -420,7 +420,7 @@ class StockHistoryPageState {
 
 class PaginatedStockHistoryNotifier extends StateNotifier<StockHistoryPageState> {
   final Ref _ref;
-  final ({String? storeId, String period}) _arg;
+  final ({String? storeId, String period, String? productId}) _arg;
 
   StreamSubscription<List<StockTransactionWithDetails>>? _headSubscription;
   List<StockTransactionWithDetails> _headTransactions = const [];
@@ -468,6 +468,7 @@ class PaginatedStockHistoryNotifier extends StateNotifier<StockHistoryPageState>
     final dates = _getDateRange();
     final headStream = _ref.read(databaseProvider).stockLedgerDao.watchTransactionsPage(
           storeId: _arg.storeId,
+          productId: _arg.productId,
           startDate: dates.$1,
           endDate: dates.$2,
           limit: 30,
@@ -533,6 +534,7 @@ class PaginatedStockHistoryNotifier extends StateNotifier<StockHistoryPageState>
 
       final nextPage = await _ref.read(databaseProvider).stockLedgerDao.getTransactionsPage(
             storeId: _arg.storeId,
+            productId: _arg.productId,
             startDate: dates.$1,
             endDate: dates.$2,
             cursor: cursor,
@@ -570,7 +572,7 @@ class PaginatedStockHistoryNotifier extends StateNotifier<StockHistoryPageState>
 final paginatedStockHistoryProvider = StateNotifierProvider.autoDispose.family<
     PaginatedStockHistoryNotifier,
     StockHistoryPageState,
-    ({String? storeId, String period})
+    ({String? storeId, String period, String? productId})
 >((ref, arg) {
   return PaginatedStockHistoryNotifier(ref, arg);
 });
@@ -1172,6 +1174,15 @@ final productsWithStockProvider =
   (ref, db, businessId, storeId) =>
       db.inventoryDao.watchProductsWithStock(storeId: storeId),
   whenAbsent: const [],
+);
+
+/// One product's quantity per store, keyed by store id — Product Details'
+/// Stock by Store card and hero total (#487). Business-scoped.
+final productStockByStoreProvider =
+    businessScopedStreamFamily<Map<String, int>, String>(
+  (ref, db, businessId, productId) =>
+      db.inventoryDao.watchStockByStoreForProduct(productId),
+  whenAbsent: const {},
 );
 
 // ── Categories ──────────────────────────────────────────────────────────────

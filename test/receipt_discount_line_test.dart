@@ -118,6 +118,7 @@ void main() {
                 total: total,
                 paymentMethod: 'Cash',
                 reprintDate: reprintDate,
+                tracksCrates: true,
               ),
             ),
           ),
@@ -217,6 +218,7 @@ void main() {
         crateDeposit: crateDeposit,
         total: total,
         paymentMethod: 'Cash',
+        tracksCrates: true,
       );
       return latin1.decode(bytes, allowInvalid: true);
     }

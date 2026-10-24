@@ -5,6 +5,8 @@
 // formatters it delegates to (formatItemLine / formatTwoColumnLine) plus the
 // ReceiptPaperSize enum that is their single source of truth.
 
+import 'dart:convert';
+
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_builder.dart';
@@ -144,6 +146,7 @@ void main() {
         total: 0,
         paymentMethod: 'Cash',
         paperSize: ReceiptPaperSize.mm58,
+        tracksCrates: false,
       );
       expect(bytes.length, greaterThanOrEqualTo(2));
       expect(bytes.sublist(0, 2), [0x1B, 0x40]);
@@ -158,9 +161,45 @@ void main() {
         total: 0,
         paymentMethod: 'Cash',
         paperSize: ReceiptPaperSize.mm80,
+        tracksCrates: false,
       );
       expect(bytes.length, greaterThanOrEqualTo(2));
       expect(bytes.sublist(0, 2), [0x1B, 0x40]);
+    });
+  });
+
+  // #487: "Bottle Crate" only on a receipt from a shop that counts empty
+  // crates; every other shop prints its Bottle product as "Bottle".
+  group('buildReceipt Bottle wording by shop', () {
+    setUpAll(() {
+      TestWidgetsFlutterBinding.ensureInitialized();
+    });
+
+    Future<String> printed({required bool tracksCrates}) async {
+      final bytes = await ThermalReceiptService.buildReceipt(
+        orderId: '103',
+        cart: [
+          {'name': 'Cough Syrup', 'unit': 'Bottle', 'qty': 1, 'price': 500.0},
+        ],
+        subtotal: 500,
+        crateDeposit: 0,
+        total: 500,
+        paymentMethod: 'Cash',
+        paperSize: ReceiptPaperSize.mm80,
+        tracksCrates: tracksCrates,
+      );
+      return latin1.decode(bytes, allowInvalid: true);
+    }
+
+    test('a shop that does not count crates prints "Bottle"', () async {
+      final text = await printed(tracksCrates: false);
+      expect(text, contains('Bottle Cough Syrup'));
+      expect(text, isNot(contains('Bottle Crate')));
+    });
+
+    test('a shop that counts crates prints "Bottle Crate"', () async {
+      final text = await printed(tracksCrates: true);
+      expect(text, contains('Bottle Crate Cough Syrup'));
     });
   });
 }

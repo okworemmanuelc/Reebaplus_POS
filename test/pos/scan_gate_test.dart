@@ -7,8 +7,8 @@
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:reebaplus_pos/features/pos/services/scan_gate.dart';
-import 'package:reebaplus_pos/features/pos/widgets/scan_cart_count.dart';
+import 'package:reebaplus_pos/shared/scanner/scan_gate.dart';
+import 'package:reebaplus_pos/shared/scanner/scan_cart_count.dart';
 
 void main() {
   late DateTime now;
