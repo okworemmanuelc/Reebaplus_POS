@@ -12,6 +12,7 @@ import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 import 'package:reebaplus_pos/core/settings/settings_page_parts.dart';
+import 'package:reebaplus_pos/core/utils/name_case.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/utils/avatar_helpers.dart';
@@ -80,7 +81,8 @@ class _EditProfileSheetState extends State<EditProfileSheet> {
   }
 
   Future<void> _save() async {
-    final name = _nameController.text.trim();
+    final name = toNameCase(_nameController.text);
+    _nameController.text = name;
     if (name.length < 2) {
       AppNotification.showError(context, 'Enter at least 2 characters.');
       return;

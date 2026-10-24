@@ -28,8 +28,11 @@ void main() {
   group('industryOf resolution', () {
     test('resolves every catalogue label to its own Industry', () {
       for (final ind in Industry.catalogue) {
-        expect(industryOf(ind.label), ind,
-            reason: 'canonical label "${ind.label}" must round-trip');
+        expect(
+          industryOf(ind.label),
+          ind,
+          reason: 'canonical label "${ind.label}" must round-trip',
+        );
       }
     });
 
@@ -39,27 +42,33 @@ void main() {
       expect(industryOf('beverage distributor'), Industry.beverage);
     });
 
-    test('maps the legacy "Beer distributor" DB value and casings to beverage',
-        () {
-      // The DB stores 'Beer distributor' for beverage tenants; older builds
-      // stored non-canonical casings. All must resolve to the beverage profile.
-      expect(industryOf('Beer distributor'), Industry.beverage);
-      expect(industryOf('Beer Distributor'), Industry.beverage);
-      expect(industryOf('beer distributor'), Industry.beverage);
-    });
+    test(
+      'maps the legacy "Beer distributor" DB value and casings to beverage',
+      () {
+        // The DB stores 'Beer distributor' for beverage tenants; older builds
+        // stored non-canonical casings. All must resolve to the beverage profile.
+        expect(industryOf('Beer distributor'), Industry.beverage);
+        expect(industryOf('Beer Distributor'), Industry.beverage);
+        expect(industryOf('beer distributor'), Industry.beverage);
+      },
+    );
 
-    test('unknown, empty, blank, and null all resolve to generic (no crash)',
-        () {
-      expect(industryOf(null), Industry.generic);
-      expect(industryOf(''), Industry.generic);
-      expect(industryOf('   '), Industry.generic);
-      expect(industryOf('Spaceship Repair'), Industry.generic);
-    });
+    test(
+      'unknown, empty, blank, and null all resolve to generic (no crash)',
+      () {
+        expect(industryOf(null), Industry.generic);
+        expect(industryOf(''), Industry.generic);
+        expect(industryOf('   '), Industry.generic);
+        expect(industryOf('Spaceship Repair'), Industry.generic);
+      },
+    );
 
     test('resolves the two industries added by the #79 unlock', () {
       expect(industryOf('Phone & Gadgets'), Industry.phoneAndGadgets);
       expect(
-          industryOf('Frozen Foods & Grocery'), Industry.frozenFoodsAndGrocery);
+        industryOf('Frozen Foods & Grocery'),
+        Industry.frozenFoodsAndGrocery,
+      );
     });
   });
 
@@ -67,20 +76,17 @@ void main() {
 
   group('registry membership', () {
     test('catalogue is the nine master-plan industries in plan order', () {
-      expect(
-        Industry.catalogue.map((i) => i.label).toList(),
-        const [
-          'Restaurant',
-          'Supermarket',
-          'Bar',
-          'Beverage distributor',
-          'Pharmacy',
-          'Building Materials',
-          'Boutique',
-          'Phone & Gadgets',
-          'Frozen Foods & Grocery',
-        ],
-      );
+      expect(Industry.catalogue.map((i) => i.label).toList(), const [
+        'Restaurant',
+        'Supermarket',
+        'Bar',
+        'Beverage distributor',
+        'Pharmacy',
+        'Building Materials',
+        'Boutique',
+        'Phone & Gadgets',
+        'Frozen Foods & Grocery',
+      ]);
     });
 
     test('generic is the fallback and is never offered in the catalogue', () {
@@ -89,8 +95,11 @@ void main() {
 
     test('catalogue labels are unique', () {
       final labels = Industry.catalogue.map((i) => i.label).toList();
-      expect(labels.toSet().length, labels.length,
-          reason: 'duplicate label in the catalogue: $labels');
+      expect(
+        labels.toSet().length,
+        labels.length,
+        reason: 'duplicate label in the catalogue: $labels',
+      );
     });
 
     test('no catalogue industry is coming-soon (#79 unlock)', () {
@@ -109,8 +118,9 @@ void main() {
 
   group('crate-eligibility', () {
     test('only Bar and Beverage are crate-eligible', () {
-      final eligible =
-          Industry.catalogue.where((i) => i.crateEligible).map((i) => i.label);
+      final eligible = Industry.catalogue
+          .where((i) => i.crateEligible)
+          .map((i) => i.label);
       expect(eligible, unorderedEquals(['Bar', 'Beverage distributor']));
       expect(Industry.generic.crateEligible, isFalse);
     });
@@ -155,8 +165,11 @@ void main() {
         'unknown',
         null,
       ]) {
-        expect(isCrateBusiness(t), industryOf(t).crateEligible,
-            reason: 'the shim must equal the registry flag for "$t"');
+        expect(
+          isCrateBusiness(t),
+          industryOf(t).crateEligible,
+          reason: 'the shim must equal the registry flag for "$t"',
+        );
       }
     });
   });
@@ -170,88 +183,73 @@ void main() {
     // flag changed: update this golden in the SAME commit, deliberately.
     // (label | icon codepoint | comingSoon | crateEligible | selectable)
     const golden = <String>[
-      'Restaurant|0xe56c|false|false|false',
-      'Supermarket|0xe8cc|false|false|false',
-      'Bar|0xe540|false|true|false',
+      'Restaurant|0xe56c|false|false|true',
+      'Supermarket|0xe8cc|false|false|true',
+      'Bar|0xe540|false|true|true',
       'Beverage distributor|0xf1f3|false|true|true',
       'Pharmacy|0xe550|false|false|true',
-      'Building Materials|0xf200|false|false|false',
-      'Boutique|0xf19e|false|false|false',
-      'Phone & Gadgets|0xe7ba|false|false|false',
+      'Building Materials|0xf200|false|false|true',
+      'Boutique|0xf19e|false|false|true',
+      'Phone & Gadgets|0xe7ba|false|false|true',
       'Frozen Foods & Grocery|0xeb3b|false|false|true',
     ];
 
     test('catalogue matches the frozen golden', () {
       final actual = Industry.catalogue
-          .map((i) =>
-              '${i.label}|0x${i.icon.codePoint.toRadixString(16)}|'
-              '${i.comingSoon}|${i.crateEligible}|${i.selectable}')
+          .map(
+            (i) =>
+                '${i.label}|0x${i.icon.codePoint.toRadixString(16)}|'
+                '${i.comingSoon}|${i.crateEligible}|${i.selectable}',
+          )
           .toList();
       expect(actual, golden);
     });
   });
 
-  // === (e) SELECTABLE — pickers offer only the three (#112) ==============
+  // === (e) SELECTABLE — pickers offer all nine plus Other (#492) ===========
 
   group('selectable industries', () {
-    test('selectableCatalogue is exactly the three, in plan order', () {
-      expect(
-        Industry.selectableCatalogue.map((i) => i.label).toList(),
-        const [
-          'Beverage distributor',
-          'Pharmacy',
-          'Frozen Foods & Grocery',
-        ],
-      );
+    test('selectableCatalogue is all nine, in plan order', () {
+      expect(Industry.selectableCatalogue.map((i) => i.label).toList(), const [
+        'Restaurant',
+        'Supermarket',
+        'Bar',
+        'Beverage distributor',
+        'Pharmacy',
+        'Building Materials',
+        'Boutique',
+        'Phone & Gadgets',
+        'Frozen Foods & Grocery',
+      ]);
     });
 
-    test('the other six trades + generic are not selectable', () {
-      final hidden =
-          Industry.values.where((i) => !i.selectable).map((i) => i.label);
-      expect(
-        hidden,
-        unorderedEquals(const [
-          'Restaurant',
-          'Supermarket',
-          'Bar',
-          'Building Materials',
-          'Boutique',
-          'Phone & Gadgets',
-          'Business', // generic
-        ]),
-      );
+    test('generic is not selectable', () {
       expect(Industry.generic.selectable, isFalse);
     });
 
-    test('selectableCatalogue is a strict subset of the full catalogue', () {
-      for (final ind in Industry.selectableCatalogue) {
-        expect(Industry.catalogue, contains(ind));
-      }
-      expect(
-        Industry.selectableCatalogue.length,
-        lessThan(Industry.catalogue.length),
-        reason: 'the registry must keep more than the offered three',
-      );
+    test('selectableCatalogue equals the full catalogue', () {
+      expect(Industry.selectableCatalogue, Industry.catalogue);
     });
 
-    test('a hidden-trade tenant still normalizes and keeps its features', () {
-      // The registry keeps all nine (#112): a tenant onboarded on a now-hidden
-      // trade must still resolve to its own profile (words + feature flags),
-      // never generic, with no data migration.
-      expect(industryOf('Boutique'), Industry.boutique);
-      expect(industryOf('Bar'), Industry.bar);
-      expect(Industry.boutique.selectable, isFalse);
-      // Bar keeps its crate features even though it is no longer offered.
-      expect(isCrateBusiness('Bar'), isTrue);
-    });
+    test(
+      'unknown or typed types resolve through industryOf to generic with no crate features',
+      () {
+        expect(industryOf('Bakery'), Industry.generic);
+        expect(industryOf('Other'), Industry.generic);
+        expect(isCrateBusiness('Bakery'), isFalse);
+        expect(isCrateBusiness('Other'), isFalse);
+      },
+    );
 
-    test('the legacy "beer distributor" alias resolves to selectable Beverage',
-        () {
-      final ind = industryOf('beer distributor');
-      expect(ind, Industry.beverage);
-      expect(ind.selectable, isTrue);
-      // No DB rewrite: the legacy canonical string still normalizes in code.
-      expect(industryOf('Beer distributor'), Industry.beverage);
-    });
+    test(
+      'the legacy "beer distributor" alias resolves to selectable Beverage',
+      () {
+        final ind = industryOf('beer distributor');
+        expect(ind, Industry.beverage);
+        expect(ind.selectable, isTrue);
+        // No DB rewrite: the legacy canonical string still normalizes in code.
+        expect(industryOf('Beer distributor'), Industry.beverage);
+      },
+    );
   });
 }

@@ -154,9 +154,7 @@ void main() {
           padding: padding,
           brightness: brightness,
         );
-        final first = Industry.selectableCatalogue.firstWhere(
-          (t) => !t.comingSoon,
-        );
+        const first = Industry.beverage;
         await tester.tap(find.text(first.label));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
