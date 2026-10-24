@@ -21,6 +21,10 @@ The human updates it when resolving open questions or making architectural decis
   Actual fresh onboarding and a member100-kobo Quick Sale succeed in rollback
   SQL; signed-in non-admin another-email probing is denied. Analyzer clean.
   Web full suite607passed. Production untouched.
+- Final integrated verification (main c019ea4f): full Flutter suite5384passed,
+  299skipped, zero failures; analyzer clean. Six development HTTP tests and both
+  rollback SQL compatibility probes pass. Stop after opening the two review PRs;
+  production remains gated by the owner's web-deployment/login checkpoints.
 - Legacy accept_invite_preview* already fail42P01 because invites/warehouses
   are absent in live metadata; documented rather than fabricated fixtures.
 

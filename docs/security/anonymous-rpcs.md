@@ -69,6 +69,11 @@ production's pre-migration list has nine entries, expected post-migration four.
 Companion web validation: three React login tests, production build and ESLint
 on both changed files pass. POS analyzer reports zero issues.
 
+After integrating main c019ea4f, the completed full Flutter suite passed
+5384 tests with299 skipped and zero failures (7m54s). Six dedicated development
+HTTP checks and both rollback SQL probes were rerun successfully on that
+integrated branch. The earlier interrupted suite is not counted as a pass.
+
 After0194 on development: six HTTP tests pass, including permission denials for
 all four regular RPC targets and successful invite lookup/trial-duration calls.
 The trigger rollback SQL passes as well. A second rollback SQL test creates a
