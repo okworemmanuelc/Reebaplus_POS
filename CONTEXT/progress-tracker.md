@@ -7,6 +7,23 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Signed-out RPC surface (#468, 2026-10-23)
+- Prepared0194: revoke five accidental anon RPC grants, retain four documented
+  pre-auth contracts, and explicitly preserve authenticated flows. No signature
+  changes. Read-only audit, six dedicated-dev HTTP tests and a rollback SQL
+  trigger-permission test added.
+- Found required web login dependency; companion branch removes pre-OTP email
+  admin probe and retains post-OTP membership enforcement. Web parity136.
+- 2026-10-24: fresh nine-function/27-role-check dev privileges exactly match
+  read-only production baseline before0194. No legitimate email-probe callers
+  remain; helper is service-role-only in POS0194 and canonical web setup.
+-0194 applied only to development: six HTTP tests + trigger rollback SQL pass.
+  Actual fresh onboarding and a member100-kobo Quick Sale succeed in rollback
+  SQL; signed-in non-admin another-email probing is denied. Analyzer clean.
+  Web full suite607passed. Production untouched.
+- Legacy accept_invite_preview* already fail42P01 because invites/warehouses
+  are absent in live metadata; documented rather than fabricated fixtures.
+
 ### Fast-Add: a shared-list photo opens "More details" (2026-10-23)
 Branch `feat/fast-add-open-details-on-catalogue-photo`, worktree `../drinkPosApp-wt-moredetails`. Owner approved the #332 follow-up.
 - `_applyCatalogueSuggestion` (add_product_screen.dart) sets `_showMoreDetails = true` when it fills the photo, because the photo box lives in the collapsed "More details" section and would otherwise be saved unseen. Name/unit-only fills leave it closed. Tests: `test/inventory/add_product_catalogue_prefill_test.dart` (+2).

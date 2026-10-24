@@ -60,7 +60,7 @@ BEGIN
     p_amount_paid_kobo => 100,
     p_payment_method => 'cash'
   );
-  IF (result->'order'->>'id')::uuid <> current_setting('test.order_id')::uuid
+  IF (result->'order'->>'id')::uuid IS DISTINCT FROM current_setting('test.order_id')::uuid
      OR NOT EXISTS (SELECT 1 FROM public.orders
           WHERE id = current_setting('test.order_id')::uuid
             AND total_amount_kobo = 100) THEN
