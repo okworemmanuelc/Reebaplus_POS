@@ -77,5 +77,9 @@ the connect message with Sell still reachable. Land behind a switch until Browse
 See [the #422 audit](../security/0422-shopper-isolation.md). A profile pointer is
 currently the RLS authority, not merely a cached membership. Test direct tenant
 access, attempts to forge that pointer, and definer RPC execution separately.
-The existing deletion-tombstone read contract requires an explicit owner decision;
-do not silently break remote wipe in order to claim zero access.
+On 2026-10-23 the owner approved one exception: a signed-in caller may ask
+whether a specific business UUID has been deleted and receive only a boolean.
+Deletion names, timestamps, records and enumeration remain inaccessible.
+Migration 0192 introduces that check; the transport uses it. Deploy the RPC,
+roll out the updated business client, then apply 0193 to withdraw legacy table
+reads. A deployment must not strand old devices on a denied table query.

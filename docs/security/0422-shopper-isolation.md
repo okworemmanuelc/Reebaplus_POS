@@ -1,7 +1,8 @@
 # Shopper isolation groundwork — #422
 
 Status: implementation prepared; owner approved the architecture rules in chat
-on 2026-10-23. Live verification and the tombstone decision remain outstanding. Parent #421 is still held for all later slices.
+on 2026-10-23. Seven development isolation checks passed on 2026-10-24.
+The owner authorized implementation of the remaining #421 slices on 2026-10-23.
 
 ## Evidence (read-only catalogue audit, 2026-10-23)
 
@@ -38,16 +39,20 @@ the audit. No remote schema or production data was changed.
 
 ## Deliberate exceptions and unresolved blockers
 
-1. **Deletion tombstones conflict with literal zero-tenant-row access.** Migration
+1. **Deletion tombstones: owner approved a minimal exception (2026-10-23).** Migration
    0114 intentionally grants every authenticated login SELECT on
    `deleted_businesses`, including business ID, name and deletion time. A former
    member has already lost membership when their offline phone needs that row
    to trigger a wipe. Silently switching the policy to active-member-only would
-   break that safety mechanism. Owner decision needed: explicitly sanction the
-   minimal deletion projection, or design an authenticated former-device lookup
-   before withdrawing enumeration. This branch preserves the existing contract
-   and excludes that table explicitly from the live-tenant zero-row assertion;
-   it does not claim the PRD's literal zero-row criterion is met.
+   break that safety mechanism. The owner approved a signed-in, specific-ID
+   boolean lookup. Migration 0192 adds `business_deletion_status(uuid)`;
+   SupabaseCloudTransport uses it. Migration 0193 removes table SELECT and the
+   broad policy. Deploy 0192 first, roll out updated business clients, and only
+   then deploy 0193; do not push the complete pending migration directory to
+   production in one step. Both migrations are required for final security
+   verification. Tests include a real tombstone positive control, absence check,
+   signed-out denial and denial of direct enumeration. The zero-row test no
+   longer excludes tombstones. No production migration has been applied.
 2. **#467 remains separate:** product-image and business-logo Storage listing
    policies expose object names. Keep public image display working while denying
    enumeration to non-members. This issue must land before Shopper launch.
@@ -57,7 +62,8 @@ the audit. No remote schema or production data was changed.
    browsing and some existing pre-auth flows intentionally need public access.
 4. **Owner sign-off recorded (2026-10-23):** ADRs 0030 and 0031 and invariants
    #9 and #1/#4/#5/#8 now record the approved identity and Shopper boundary. This
-   approval does not resolve the tombstone question or waive live verification.
+   approval does not waive development verification. The later deletion-status
+   exception is recorded separately above.
 
 ## Verification
 
@@ -75,6 +81,9 @@ the audit. No remote schema or production data was changed.
   authorization. Own-business profile insertion is a positive compatibility
   control. Fixtures use only new UUIDs and are removed in teardown.
 - Live tests require a dedicated test backend and an explicit write opt-in.
+  Fixture-writing probes additionally require the exact approved
+  `https://yngwzuinxhxhzdfagcbg.supabase.co` development URL before constructing
+  any client. An accidentally copied production environment fails closed.
   The existing shared dev/production backend was inspected read-only; migration
   deployment and fixture-writing live tests were not performed there.
 - After applying 0188 in that test backend, run the new suite and existing
@@ -85,6 +94,18 @@ the audit. No remote schema or production data was changed.
 
 ## Completion
 
+On 2026-10-24, all seven Tier-2 checks passed with no skips against
+reebaplus-dev after the pinned web schema snapshot and the read-only live
+function-privilege baseline were installed, then 0188/0192/0193 applied.
+This verifies the development deployment, not a production deployment. The
+baseline's effective grants for app roles were reconciled because the schema
+snapshot omitted ACLs. The run covers direct table access, profile pointer
+attacks, internal helpers, discovered business-ID RPCs and the deletion fact.
+The separate #467/#468 changes retain their own verification and rollout gates.
+Three direct HTTP-adapter tests and nine existing transport-seam tests also pass.
+The dedicated test URL guard prevents these fixture-writing probes running on
+production. See the dated progress entry for subsequent full-suite validation.
+
 Local verification: `flutter analyze --no-pub` clean; full `flutter test
 --no-pub --reporter expanded` finished with **5225 passed, 299 skipped, no
 failures**. The six new live tests are skipped without dedicated credentials.
@@ -92,6 +113,6 @@ The migration and audit SQL pass a PostgreSQL parser check. No remote policy
 semantics, onboarding compatibility or ACL change is claimed live-verified.
 
 Do not close #422 or enable Shopper access until #467/#468 are resolved,
-the tombstone decision is recorded, and live isolation
+the staged deletion-status rollout is verified, and isolation
 tests pass against the migrated schema. Screens, Shopper tables and storefront
 RPCs remain owned by later slices.

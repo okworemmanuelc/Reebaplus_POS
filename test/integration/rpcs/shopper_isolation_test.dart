@@ -1,4 +1,5 @@
 @Tags(['integration'])
+@Timeout(Duration(minutes: 3))
 library;
 
 import 'dart:convert';
@@ -33,6 +34,11 @@ _Json _resolveSchema(_Json value, _Json definitions) {
 Object _argument({required String name, required _Json property, required _Json ids}) {
   final id = ids[name];
   if (id != null) return id;
+  // The schema snapshot's PostgREST emits jsonb without a `type` field.
+  if (property['format'] == 'json' || property['format'] == 'jsonb') {
+    return name == 'p_items' || name == 'p_movements' || name == 'p_pairs'
+        ? <String>[] : <String, Object?>{};
+  }
   if (property['format'] == 'uuid') return UuidV7.generate();
   if (property['format'] == 'timestamp with time zone' ||
       property['format'] == 'date-time') {
@@ -85,6 +91,7 @@ Future<void> _denied(Future<Object?> Function() call) async {
     // is not proof of isolation. Require an actual authorization refusal.
     expect(
       error.code == '42501' ||
+          (error.code == 'P0002' && error.message == 'no_active_membership') ||
           (error.code == 'P0001' &&
               RegExp('forbidden|unauthenticated|not.authori[sz]ed|not.owner|no.business|tenant.mismatch',
                       caseSensitive: false)
@@ -114,14 +121,26 @@ void main() {
   final customerId = UuidV7.generate();
   final storeId = UuidV7.generate();
   var businessCreated = false;
+  var clientsCreated = false;
 
   setUpAll(() async {
     if (_skip != null) return;
     final url = _env['TEST_SUPABASE_URL']!;
+    // Fixture-writing security probes are authorized only on reebaplus-dev.
+    // Refuse a copied production environment before constructing any client.
+    final target = Uri.parse(url);
+    if (target.scheme != 'https' ||
+        target.host != 'yngwzuinxhxhzdfagcbg.supabase.co' ||
+        target.hasPort ||
+        (target.path.isNotEmpty && target.path != '/') ||
+        target.hasQuery || target.hasFragment || target.userInfo.isNotEmpty) {
+      throw StateError('Shopper isolation fixture writes require the approved reebaplus-dev URL.');
+    }
     final key = _env['TEST_SUPABASE_ANON_KEY']!;
     admin = SupabaseClient(url, _env['TEST_SUPABASE_SERVICE_ROLE_KEY']!);
     shopper = SupabaseClient(url, key);
     anon = SupabaseClient(url, key);
+    clientsCreated = true;
     schema = await _schema(url: url, key: _env['TEST_SUPABASE_SERVICE_ROLE_KEY']!);
 
     final email = 'shopper-isolation-${UuidV7.generate()}@example.com';
@@ -160,7 +179,7 @@ void main() {
   });
 
   tearDownAll(() async {
-    if (_skip != null) return;
+    if (_skip != null || !clientsCreated) return;
     try {
       if (authId != null) {
         await admin.from('profiles').delete().eq('id', authId!);
@@ -178,6 +197,29 @@ void main() {
   });
 
   group('Shopper tenant boundary (#422)', () {
+    test('deletion checks expose one boolean and never deletion records', () async {
+      final deletedId = UuidV7.generate();
+      try {
+        await admin.from('deleted_businesses').insert({
+          'business_id': deletedId, 'business_name': 'Private deleted name',
+        });
+        expect(await shopper.rpc('business_deletion_status', params: {
+          'p_business_id': deletedId,
+        }), isTrue);
+        expect(await shopper.rpc('business_deletion_status', params: {
+          'p_business_id': businessId,
+        }), isFalse);
+        await _denied(() => anon.rpc('business_deletion_status', params: {
+          'p_business_id': deletedId,
+        }));
+        for (final client in [anon, shopper]) {
+          await _denied(() => client.from('deleted_businesses').select());
+        }
+      } finally {
+        await admin.from('deleted_businesses').delete().eq('business_id', deletedId);
+      }
+    }, skip: _skip);
+
     test('anon and a real membership-less login see no live tenant table rows', () async {
       final definitions = _map(schema['definitions']);
       final tenantTables = <String>{'businesses'};
@@ -185,9 +227,6 @@ void main() {
         final properties = _map(_map(entry.value)['properties']);
         if (properties.containsKey('business_id')) tenantTables.add(entry.key);
       }
-      // Tombstones intentionally survive membership deletion (0114). Their
-      // broad read policy is an explicit unresolved blocker in the audit doc.
-      tenantTables.remove('deleted_businesses');
       expect(tenantTables, containsAll(['products', 'cost_batches', 'customers', 'profiles']));
       expect(tenantTables.length, greaterThan(50), reason: 'schema discovery must not be vacuous');
       // A positive control proves RLS, rather than an empty database, hides data.
@@ -300,6 +339,9 @@ void main() {
         if (!entry.key.startsWith('/rpc/')) continue;
         final name = entry.key.substring('/rpc/'.length);
         if (bootstrap.contains(name)) continue;
+        // Owner-approved boolean-only exception, tested separately above with
+        // a real tombstone, missing-ID control and signed-out denial.
+        if (name == 'business_deletion_status') continue;
         final post = _map(entry.value)['post'];
         if (post == null) continue;
         final parameters = _map(post)['parameters'] as List? ?? const [];
@@ -331,6 +373,6 @@ void main() {
       }
       expect(tested, containsAll(['pos_pull_snapshot', 'pos_record_sale_v2', 'checkout_order']));
       expect(tested.length, greaterThan(20), reason: 'RPC discovery must not be vacuous');
-    }, skip: _skip);
+    }, skip: _skip, timeout: const Timeout(Duration(minutes: 3)));
   });
 }

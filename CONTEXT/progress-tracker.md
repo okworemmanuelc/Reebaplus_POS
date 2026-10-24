@@ -7,10 +7,39 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #422: development isolation verified (2026-10-24)
+- All seven integration checks pass, zero skips, on the isolated development
+  schema after reconciling its omitted function ACLs to the read-only live
+  baseline and layering 0188/0192/0193. Production is unchanged.
+- The owner-approved deletion boolean is checked with present/missing IDs;
+  anonymous callers and direct deletion-record reads are denied. The transport
+  uses the RPC. Production rollout remains RPC, client update, then restriction.
+- Three direct adapter tests and nine seam tests pass. Full-suite verification
+  of the current change and main integration remain the next checks.
+- The resumed full suite encountered the unchanged random device-tag collision
+  test (1999 unique tags from 2000 random IDs). Its isolated rerun passed all six
+  order-number checks. Preserve the original full-suite failure in review
+  evidence; no order-number code or test changes belong in this issue.
+
 ### Issue #422: Shopper groundwork prepared (2026-10-23)
 Branch `feat/422-shopper-groundwork`, isolated worktree `../drinkPosApp-wt-422`,
-base `985e80be` (latest origin/main when started). Owner authorized #422 only;
-other #421 slices remain held.
+base `985e80be` (latest origin/main when started). Owner authorized the remaining
+#421 implementation on 2026-10-23, with selective agents on isolated issues.
+- Continued security work: fixture-writing isolation tests now reject every URL
+  except the approved reebaplus-dev project before constructing clients. Full
+  schema bootstrap is in progress separately; no live fixture writes authorized.
+- Owner approved the specific-ID deletion boolean exception. Prepared 0192 RPC,
+  transport switch, and separately gated 0193 withdrawal of direct record reads.
+  Deploy RPC, update business clients, then restrict records; tests now include
+  tombstone positive/negative controls and enumeration denial. This is prepared
+  locally, not yet verified against the full development schema or deployed.
+- Development verification now ran against the pinned schema snapshot: six
+  isolation checks passed, including tombstone access, table reads, pointer
+  forgery and targeted writes/helpers. The complete discovered-RPC sweep remains
+  in progress. Fixed schema discovery for typeless jsonb and explicit P0002
+  `no_active_membership` rejection; increased the network sweep timeout. Three
+  direct transport tests and nine existing transport seam tests pass; analysis
+  clean. Snapshot ACLs need reconciliation before claiming production parity.
 - Owner approved ADRs 0030/0031 in chat on 2026-10-23: identity versus membership,
   online-first storefront,
   eligibility and release gates. Glossary adds Shopper, Online Order, Send to
@@ -29,8 +58,7 @@ other #421 slices remain held.
   flutter analyze clean. The six new Tier-2 tests compile and skip without
   dedicated credentials; this is not a passing live security audit. SQL parsed
   with pglast; policy semantics still require the dedicated migrated backend.
-- Open: deletion-tombstone read contract versus literal
-  zero-tenant-row criterion; separate #467/#468;
+- Open: staged deletion-status rollout verification; separate #467/#468;
   live execution on a dedicated migrated test project. Do not close #422 yet.
 
 ### Fast-Add: a shared-list photo opens "More details" (2026-10-23)
