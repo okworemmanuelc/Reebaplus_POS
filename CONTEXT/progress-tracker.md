@@ -7,6 +7,54 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #424: Show online and listing permission (2026-10-24, ready for review)
+Current continuation:main1f3e3643 (#501 merged) integrated. Unit85, shop
+pricing86 and category87 remain intact; listing moves to88. Real87→88 and
+84→88 fixtures preserve defaults, archive state, units, shop pricing and category
+links. Drift regenerated, analyzer clean and77focused migration/restore tests
+pass. Listing switch and named permission are complete. Cloud0195 unchanged;
+deployment needs `--include-all` because0196/0197 are already on main.
+- Listing consumer added: independent `Gates.manageListing`, visible Online store
+  permission group, existing Manage Product card switch and fire-time check.
+  Core service returns typed errors; transactional DAO scopes by tenant and
+  excludes tombstones, preserves sale/archive state and queues explicit nulls.
+  Service/DAO tests cover denied/foreign/deleted writes, full payloads and
+  second-device off/on restore; widget tests cover stale grants/live updates.
+  Validation:173focused feature/permission/archive tests,77migration/restore
+  tests,42previous-failure-path checks and34golden cases pass. Analyzer clean.
+  Product phone/wide and permission visuals inspected; baselines updated only
+  for the listing control/permission addition. Final full suite ran once at
+  concurrency2:5459passed /298skipped /0failures (12m10s). PR511 targets main
+  for owner review; do not merge as part of this task. Web parity139 updated to
+  schema88 and the out-of-order0195 deployment note. No production deployment.
+The following notes record the earlier blocked draft and its prior test results.
+Branch `feat/424-show-online`, stacked on #472 (`d2e174ef`). Units stay85,
+category mapping86, listing87. Must land after #472; no version87 client may ship
+without those dependencies. Cloud0195 stays unchanged.
+- Cloud increment `0195_product_online_listing.sql` adds `products.show_online` (NOT NULL, default true) and `products.manage_listing` in the `Online store` permission group. Existing/new CEO and Manager defaults receive the key; the seed function's signature and current ACL are preserved. Storefront queries in #425 must require `show_online AND is_available AND NOT is_deleted` together.
+- Cloud applied only to approved development project: pre-existing fixture product became `show_online=true`; both existing CEO/Manager roles received the grant. Tier-2 `product_online_listing_test.dart`: **2 pass / 0 skipped**, checking new defaults, stored opt-out, availability/deletion query contract, new-business role grants and permission group. This pins the query contract; the actual public storefront boundary is #425. Fixtures cleaned. SQL parses as seven statements; analysis clean. Web parity: https://github.com/okworemmanuelc/reebaplus-web/issues/139.
+- Local increment: preserved the unfinished schema/fixture edits, moved listing
+  to87 and upgrade fixture86→87. The85 products rebuild defaults the new column
+  only when absent; an84→87 regression checks all three steps together.
+  Drift regenerated; analyzer clean and133focused tests pass (including the
+  actual86→87/84→87 upgrades and opt-out retention). Full suite exposed stale
+  permission counts and one JSON product fixture, corrected in place. Its
+  enforcement guard also requires the new inert permission to stay hidden until
+  the listing gate/switch ships; applied that existing repo convention.
+  Full suite ran once:5390passed /298skipped /36failed (30m38s). Failures
+  covered those stale fixtures/counts, eight role goldens, nine legacy restore
+  cases, and11timeout/cascade failures in Sync Issues access. Added the existing
+  restore-helper default for absent showOnline (explicit false preserved).
+  All10affected files rerun:82passed, including unchanged visual baselines,
+  legacy restore and the timed-out screen. No second full-suite run.
+  Dedicated listing write coverage/gate/UI remain unfinished;
+  publish as draft. No production deployment.
+- Final analyzer after corrections:clean. New merge blocker discovered at the
+  finish:main advanced to4b476c24 (#510/#493) and now reserves86 for
+  businesses.sells_one_price. This branch retains the owner's requested86/87
+  chain against9732ed17; do not merge/release. Both PRs must be reconciled with
+  the new main (recommended category87/listing88) in a subsequent pass.
+
 ### #472: shared online category reference (2026-10-24, ready for review)
 
 Branch feat/472-marketplace-categories, isolated workspace reebaplus-472.

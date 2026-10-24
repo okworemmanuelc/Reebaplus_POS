@@ -81,6 +81,83 @@ void main() {
     }
   });
 
+  test('v87 to v88 preserves archived products and defaults listing on', () async {
+    var db = await openAndInit();
+    final businessId = UuidV7.generate();
+    final productId = UuidV7.generate();
+    await db.into(db.businesses).insert(
+      BusinessesCompanion.insert(id: Value(businessId), name: 'Listing shop'));
+    await db.into(db.products).insert(ProductsCompanion.insert(
+      id: Value(productId), businessId: businessId, name: 'Archived listing',
+      isAvailable: const Value(false), unitsPerPack: const Value(12)));
+    await db.customStatement('ALTER TABLE products DROP COLUMN show_online');
+    await db.customStatement("DELETE FROM permissions WHERE key = 'products.manage_listing'");
+    expect(await columnsOf(db, 'products'), isNot(contains('show_online')));
+    await db.customStatement('PRAGMA user_version = 87');
+    await db.close();
+    db = await openAndInit();
+    try {
+      final product = await (db.select(db.products)
+        ..where((p) => p.id.equals(productId))).getSingle();
+      expect(product.showOnline, isTrue);
+      expect(product.isAvailable, isFalse);
+      expect(product.unitsPerPack, 12);
+      expect((await db.customSelect(
+        "SELECT category FROM permissions WHERE key = 'products.manage_listing'",
+      ).getSingle()).read<String>('category'), 'Online store');
+      await db.into(db.products).insert(ProductsCompanion.insert(
+        businessId: businessId, name: 'New listing'));
+      expect((await (db.select(db.products)..where((p) => p.name.equals('New listing')))
+        .getSingle()).showOnline, isTrue);
+      expect(await columnsOf(db, 'categories'), contains('marketplace_category'));
+      await (db.update(db.products)..where((p) => p.id.equals(productId)))
+        .write(const ProductsCompanion(showOnline: Value(false)));
+      await db.customStatement('PRAGMA user_version = 87');
+      await db.close();
+      db = await openAndInit();
+      expect((await (db.select(db.products)
+        ..where((p) => p.id.equals(productId))).getSingle()).showOnline, isFalse);
+    } finally { await db.close(); }
+  });
+
+
+  test('v84 to v88 carries products through unit, shop pricing, category and listing upgrades', () async {
+    var db = await openAndInit();
+    final businessId = UuidV7.generate();
+    final categoryId = UuidV7.generate();
+    final productId = UuidV7.generate();
+    await db.into(db.businesses).insert(
+      BusinessesCompanion.insert(id: Value(businessId), name: 'Older shop'));
+    await db.into(db.categories).insert(CategoriesCompanion.insert(
+      id: Value(categoryId), businessId: businessId, name: 'Water'));
+    await db.into(db.products).insert(ProductsCompanion.insert(
+      id: Value(productId), businessId: businessId, name: 'Older product',
+      categoryId: Value(categoryId), unit: const Value('Bottle'),
+      unitsPerPack: const Value(12), isAvailable: const Value(false)));
+    await db.customStatement('ALTER TABLE products DROP COLUMN show_online');
+    await db.customStatement('ALTER TABLE categories DROP COLUMN marketplace_category');
+    await db.customStatement('ALTER TABLE businesses DROP COLUMN sells_one_price');
+    await db.customStatement('PRAGMA user_version = 84');
+    await db.close();
+    db = await openAndInit();
+    try {
+      final product = await (db.select(db.products)
+        ..where((p) => p.id.equals(productId))).getSingle();
+      expect(product.showOnline, isTrue);
+      expect(product.isAvailable, isFalse);
+      expect(product.unit, 'Bottle');
+      expect(product.unitsPerPack, 12);
+      expect(product.categoryId, categoryId);
+      final category = await (db.select(db.categories)
+        ..where((c) => c.id.equals(categoryId))).getSingle();
+      expect(category.name, 'Water');
+      expect(category.marketplaceCategory, isNull);
+      expect((await (db.select(db.businesses)
+        ..where((b) => b.id.equals(businessId))).getSingle()).sellsOnePrice, isFalse);
+      await db.into(db.products).insert(ProductsCompanion.insert(
+        businessId: businessId, name: 'Oil', unit: const Value('Litre')));
+    } finally { await db.close(); }
+  });
 
   // Reverts the v20 (Funds Register) delta: drop the three funds tables (their
   // indexes + triggers drop with them). Shared by the scenarios below.

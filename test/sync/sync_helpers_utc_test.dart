@@ -224,6 +224,7 @@ void main() {
             wholesalerPriceKobo: 48000,
             buyingPriceKobo: 40000,
             isAvailable: true,
+            showOnline: true,
             isDeleted: false,
             lowStockThreshold: 10,
             avgDailySales: 5,

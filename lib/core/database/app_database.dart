@@ -727,6 +727,8 @@ class Products extends Table {
   IntColumn get iconCodePoint => integer().nullable()();
   TextColumn get colorHex => text().nullable()();
   BoolColumn get isAvailable => boolean().withDefault(const Constant(true))();
+  // Independent online listing preference (#424); archive still hides online.
+  BoolColumn get showOnline => boolean().withDefault(const Constant(true))();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
   IntColumn get lowStockThreshold => integer().withDefault(const Constant(5))();
   RealColumn get avgDailySales => real().withDefault(const Constant(0.0))();
@@ -2938,7 +2940,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 87;
+  int get schemaVersion => 88;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3781,6 +3783,7 @@ class AppDatabase extends _$AppDatabase {
             products,
             columnTransformer: {
               products.unitsPerPack: const Constant<int>(null),
+              products.showOnline: const Constant(true),
             },
           ),
         );
@@ -5166,6 +5169,7 @@ class AppDatabase extends _$AppDatabase {
             products,
             columnTransformer: {
               products.unitsPerPack: const Constant<int>(null),
+              products.showOnline: const Constant(true),
             },
           ),
         );
@@ -6430,7 +6434,12 @@ class AppDatabase extends _$AppDatabase {
         // Widens customConstraints on products to admit 'Kg' and 'Litre'
         // alongside the 13 legacy units. TableMigration rebuilds the table
         // to update the SQLite table-level CHECK constraint.
-        await m.alterTable(TableMigration(products));
+        final hasShowOnline = (await customSelect(
+          "SELECT 1 FROM pragma_table_info('products') WHERE name = 'show_online'",
+        ).get()).isNotEmpty;
+        await m.alterTable(TableMigration(products, columnTransformer: {
+          if (!hasShowOnline) products.showOnline: const Constant(true),
+        }));
       }
       if (from < 86) {
         // ── v86 — #493: businesses.sells_one_price ("We sell at one price") ──
@@ -6457,6 +6466,17 @@ class AppDatabase extends _$AppDatabase {
         if (exists.isEmpty) {
           await m.addColumn(categories, categories.marketplaceCategory);
         }
+      }
+      if (from < 88) {
+        // #424: old product rebuilds already include the current column.
+        final exists = await customSelect(
+          "SELECT 1 FROM pragma_table_info('products') WHERE name = 'show_online'",
+        ).get();
+        if (exists.isEmpty) await m.addColumn(products, products.showOnline);
+        await customStatement(
+          "INSERT OR IGNORE INTO permissions (key, description, category) VALUES "
+          "('products.manage_listing', 'Manage online product listings', 'Online store')",
+        );
       }
     },
     beforeOpen: (details) async {
@@ -6951,6 +6971,7 @@ const List<List<String>> _defaultPermissionRows = [
   // Products
   ['products.add', 'Add a new product', 'Products'],
   ['products.edit_price', 'Edit product', 'Products'],
+  ['products.manage_listing', 'Manage online product listings', 'Online store'],
   ['products.edit_buying_price', 'View buying price', 'Products'],
   ['products.delete', 'Delete a product', 'Products'],
   // Stock

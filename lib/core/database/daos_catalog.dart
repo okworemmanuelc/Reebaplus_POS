@@ -863,6 +863,27 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
+  /// Listing preference is independent of archive state and stock (#424).
+  /// One atomic tenant-scoped write plus full-row outbox entry keeps pending
+  /// details edits intact and carries explicit false through the normal sync.
+  Future<bool> setProductShowOnline({
+    required String productId,
+    required bool showOnline,
+  }) => transaction(() async {
+    final changed = await (update(products)..where((t) =>
+      t.id.equals(productId) & whereBusiness(t) & t.isDeleted.not()))
+      .write(ProductsCompanion(
+        showOnline: Value(showOnline),
+        lastUpdatedAt: Value(DateTime.now()),
+      ));
+    if (changed == 0) return false;
+    final row = await (select(products)..where((t) =>
+      t.id.equals(productId) & whereBusiness(t))).getSingle();
+    // Include nulls: a pending details edit may have cleared a category/photo.
+    await db.syncDao.enqueueUpsert('products', row.toCompanion(false));
+    return true;
+  });
+
   Future<void> updateProductPrices(
     String productId, {
     required int buyingPriceKobo,
