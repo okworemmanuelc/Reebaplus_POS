@@ -736,6 +736,8 @@ final List<SyncedTable> kSyncRegistry = [
       (db) => db.products,
       ProductData.fromJson,
       resilient: true,
+      // #424: older snapshots omit this column; preserve explicit opt-outs.
+      defaults: {'showOnline': true},
     ),
   ),
   SyncedTable(

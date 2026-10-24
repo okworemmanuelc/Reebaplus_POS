@@ -1,6 +1,17 @@
 # Industry is a configuration profile over one shared model, resolved by a normalizer
 
-**Status:** accepted (2026-07-06); rollout amended 2026-07-11 (see Amendment)
+**Status:** accepted (2026-07-06); rollout amended 2026-07-11 (see Amendment); amended 2026-10-23 (see Amendment)
+
+> **Amendment (2026-10-23) — unlock all nine industries plus "Other" in onboarding and settings (#492 G1).**
+> The temporary restriction from the 2026-07-11 amendment (narrowing the offered set to three)
+> is superseded. Onboarding (CEO sign-up) and Settings → Business Info now offer **all nine industries**
+> from the industry registry (Restaurant, Supermarket, Bar, Beverage distributor, Pharmacy,
+> Building Materials, Boutique, Phone & Gadgets, Frozen Foods & Grocery) plus **Other**.
+> When the owner picks "Other", a text box prompts for their custom business type, which is saved
+> directly in `businesses.type`. Any custom or non-catalogue type safely resolves through
+> `industryOf()` to the generic profile, with empty-crate features completely disabled.
+> Crate tracking remains strictly gated via `isCrateBusiness(type)` (only Bar and Beverage
+> distributor are crate-eligible), preventing crate surfaces from leaking to non-drink businesses.
 
 > **Amendment (2026-07-11) — narrow the *offered* set to three, keep the registry
 > whole.** The "unlock all nine now" rollout below is superseded for the current

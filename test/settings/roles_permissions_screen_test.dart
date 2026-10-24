@@ -122,7 +122,7 @@ void main() {
     expect(find.text('Cashier'), findsOneWidget);
     expect(find.text('Stock keeper'), findsOneWidget);
 
-    // 42 seeded keys − 3 hidden (#140 added van.manage + van.sell), less those
+    // 43 seeded keys − 4 hidden (listing awaits #424's consumer), less those
     // two van keys while Van Sales is switched off.
     final shown = isVanSalesEnabled() ? 39 : 37;
     expect(find.text('All $shown permissions'), findsOneWidget); // CEO, locked

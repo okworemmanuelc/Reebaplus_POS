@@ -156,7 +156,7 @@ void main() {
 
     final switches =
         tester.widgetList<SwitchListTile>(find.byType(SwitchListTile)).toList();
-    // 42 seeded keys − 3 hidden (#140 added van.manage + van.sell), less those
+    // 43 seeded keys − 4 hidden (listing awaits #424's consumer), less those
     // two van keys while Van Sales is switched off.
     final shown = isVanSalesEnabled() ? 39 : 37;
     expect(switches.length, shown, reason: 'all $shown permissions shown');

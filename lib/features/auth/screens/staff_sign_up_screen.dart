@@ -15,6 +15,7 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/core/utils/name_case.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
 import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
@@ -475,7 +476,8 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
   // ── Step 3: full name ────────────────────────────────────────────────────
 
   void _submitName() {
-    final name = _nameCtrl.text.trim();
+    final name = toNameCase(_nameCtrl.text);
+    _nameCtrl.text = name;
     if (name.isEmpty) {
       setState(() => _nameError = 'Please enter your full name.');
       return;
@@ -627,7 +629,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
         params: {
           'p_code': code,
           'p_user_id': mintedUserId,
-          'p_name': _nameCtrl.text.trim(),
+          'p_name': toNameCase(_nameCtrl.text),
           'p_phone': _draft.phone,
           'p_address': _draft.locationCombined,
         },

@@ -8,22 +8,55 @@ The human updates it when resolving open questions or making architectural decis
 
 ## Current Phase
 ### Issue #424: Show online and listing permission (2026-10-24, in progress)
-Branch `feat/424-show-online`, stacked on #472 (`e8b1626f`) so the reserved Drift 86 migration includes category schema 85. Must land after #472; no version-86 client may ship without that dependency.
+Branch `feat/424-show-online`, stacked on #472 (`d2e174ef`). Units stay85,
+category mapping86, listing87. Must land after #472; no version87 client may ship
+without those dependencies. Cloud0195 stays unchanged.
 - Cloud increment `0195_product_online_listing.sql` adds `products.show_online` (NOT NULL, default true) and `products.manage_listing` in the `Online store` permission group. Existing/new CEO and Manager defaults receive the key; the seed function's signature and current ACL are preserved. Storefront queries in #425 must require `show_online AND is_available AND NOT is_deleted` together.
 - Cloud applied only to approved development project: pre-existing fixture product became `show_online=true`; both existing CEO/Manager roles received the grant. Tier-2 `product_online_listing_test.dart`: **2 pass / 0 skipped**, checking new defaults, stored opt-out, availability/deletion query contract, new-business role grants and permission group. This pins the query contract; the actual public storefront boundary is #425. Fixtures cleaned. SQL parses as seven statements; analysis clean. Web parity: https://github.com/okworemmanuelc/reebaplus-web/issues/139.
-- Next increments: Drift 86 and sync tests, then the independently gated Product Details switch using existing cards/tokens. No production deployment.
+- Local increment: preserved the unfinished schema/fixture edits, moved listing
+  to87 and upgrade fixture86→87. The85 products rebuild defaults the new column
+  only when absent; an84→87 regression checks all three steps together.
+  Drift regenerated; analyzer clean and133focused tests pass (including the
+  actual86→87/84→87 upgrades and opt-out retention). Full suite exposed stale
+  permission counts and one JSON product fixture, corrected in place. Its
+  enforcement guard also requires the new inert permission to stay hidden until
+  the listing gate/switch ships; applied that existing repo convention.
+  Full suite ran once:5390passed /298skipped /36failed (30m38s). Failures
+  covered those stale fixtures/counts, eight role goldens, nine legacy restore
+  cases, and11timeout/cascade failures in Sync Issues access. Added the existing
+  restore-helper default for absent showOnline (explicit false preserved).
+  All10affected files rerun:82passed, including unchanged visual baselines,
+  legacy restore and the timed-out screen. No second full-suite run.
+  Dedicated listing write coverage/gate/UI remain unfinished;
+  publish as draft. No production deployment.
+- Final analyzer after corrections:clean. New merge blocker discovered at the
+  finish:main advanced to4b476c24 (#510/#493) and now reserves86 for
+  businesses.sells_one_price. This branch retains the owner's requested86/87
+  chain against9732ed17; do not merge/release. Both PRs must be reconciled with
+  the new main (recommended category87/listing88) in a subsequent pass.
 
 ### #472: shared online category reference (2026-10-24, ready for review)
 
 Branch feat/472-marketplace-categories, isolated workspace reebaplus-472.
 Migration0190 creates service-written marketplace_categories and nullable
-categories.marketplace_category FK. Schema85 mirrors nullable mapping locally.
-Bundled catalogue derives names from Lexicon starter categories, with distinct
-phone/fashion Accessories and Other fallback; custom names stay unmapped.
+categories.marketplace_category FK. Schema86 mirrors nullable mapping locally.
+Bundled catalogue is independent of Lexicon starter suggestions. New categories
+pre-map only by exact trimmed/case-insensitive public child names, with distinct
+phone/fashion Accessories and General → Other; unmatched names stay null.
 Category mapping uses an atomic full-row outbox write; selecting Other emits
 explicit null. Manage Categories uses existing theme/dropdown tokens and gates.
 Snapshot to_jsonb(t) already includes all categories columns. No production
 changes. Details docs/data/marketplace-categories.md.
+- Owner-review fix: removed the starter-list dependency; independent pure and
+  DAO regressions reproduce the old failure and verify Water/Beer/Phones for a
+  custom business, exact-child matching, no fuzzy matches and Accessories split.
+  Both regressions fail before the correction; all14focused tests now pass and
+  analyzer is clean. The final full-suite run waits for the prerequisite merges.
+- Integrated main9732ed17 after #505 → #503 merged: unit CHECK remains85;
+  category mapping is86 with a real85→86 upgrade test. Cloud0190 is unchanged.
+  Drift regenerated successfully; analyzer clean and132focused tests pass.
+  Final full suite:5424passed /296skipped /0failures (8m29s).
+  Regeneration produced no additional generated diff. No production changes.
 - Integrated main c019ea4f; preserved products.units_per_pack (schema84) and
   allocated schema85 to this mapping. Regenerated Drift, no hand edits.
 - Analyzer clean. Full suite on original base: 5233 pass / 294 skipped;
@@ -38,6 +71,53 @@ changes. Details docs/data/marketplace-categories.md.
   clearing. Both client roles can read; service_role can write. Fixtures rolled
   back. Root review fixes add standard permission-denied feedback and import
   ordering. No production DDL was run.
+### #507 PR 1: Name case helper and save-time casing in sign-up, profile, business info, stores (2026-10-24)
+Branch `feat/507-name-case`, worktree `../drinkPosApp-wt-507-1`.
+- **Helper:** Created `lib/core/utils/name_case.dart` with `toNameCase(String input)`.
+  - Trims, squashes repeated spaces into one.
+  - In each word, first letter is capitalized, rest lowercase ("sTAR" → "Star").
+  - Capitalizes after hyphens ("coca-cola" → "Coca-Cola") and opening brackets ("(big)" → "(Big)").
+  - Preserves lowercase after apostrophes ("mama's" → "Mama's", "MAMA'S" → "Mama's").
+  - Preserves words containing digits as typed ("50cl", "1.5L", "7UP", "A14").
+  - Empty input gives empty output (""). Never null. Idempotent.
+- **Save-time casing & TextCapitalization:**
+  - CEO sign-up: business name, full name, and typed "Other" business type run through `toNameCase`.
+  - Staff sign-up: staff name runs through `toNameCase`.
+  - Edit profile sheet: name runs through `toNameCase`.
+  - Business Info: business name and typed "Other" business type run through `toNameCase`.
+  - Stores settings & Stores screen: store/van creation and update run through `toNameCase`. Store name input has `textCapitalization: TextCapitalization.words`.
+- **Tests:** `test/utils/name_case_test.dart` (8 test groups), plus save-time tests in `test/settings/stores_settings_screen_test.dart` and `test/settings/business_info_shop_types_test.dart`.
+
+### #492 G1: Sign-up and Business Info offer every shop type plus "Other" (2026-10-23)
+Branch `feat/492-g1-shop-types`, worktree `../drinkPosApp-wt-492-g1`.
+- **Registry:** All nine industries in `Industry.catalogue` have `selectable = true`; `selectableCatalogue` exposes all nine.
+- **CEO sign-up:** Shows all nine industry cards plus "Other" (10th card). When "Other" is selected, an input field asks to specify the business type. Continue button is enabled only after typing a non-empty name. Saves typed type directly in `businesses.type`.
+- **Settings → Business Info:** Dropdown lists all nine catalogue types plus "Other". Custom types load as "Other" with text pre-filled. When "Other" is selected, shows `AppInput` to specify business type. Validates on save.
+- **Crate safety:** Crate switch and crate features are strictly gated via `isCrateBusiness(effectiveType)`. Non-drink shops and custom "Other" types normalize safely to `Industry.generic` without crate UI.
+- **Docs & ADR:** Added 2026-10-23 amendment to ADR 0015 and updated `CONTEXT/project-overview.md`.
+- **Tests & Goldens:** `test/industry/industry_registry_test.dart` (18 tests), `test/auth/ceo_sign_up_shop_types_test.dart` (4 tests), `test/settings/business_info_shop_types_test.dart` (4 tests), `test/redesign/ceo_sign_up_golden_test.dart` (107 tests with updated goldens).
+
+### Issue #467: private Storage listings (2026-10-23)
+Branch `fix/467-storage-listing-privacy`, isolated worktree `work/reebaplus-467`.
+- Migration `0191_private_storage_listing.sql` replaces the public metadata SELECT policies with authenticated business-member policies. Product ownership comes from the first folder; logos use the root `<businessId>.jpg|png` filename. Bucket public flags and existing write policies are unchanged, preserving public image display and member upsert.
+- Caller audit: POS `lib/` and web `master` at the time of implementation have no Storage `.list()` callers for these buckets. Both POS image services use upsert and public URLs. No web code change or table/column/status/money change, so no parity issue is required by #467's conditional criterion.
+- Tier-2 `private_storage_listing_test.dart` uses fresh auth/business/object fixtures and refuses writes outside the approved `reebaplus-dev` project. It checks populated-bucket listing denial for anonymous/nonmember users, positive owner listing/new upload/replacement, and anonymous public HTTP bytes. Explicit opt-in: `TEST_STORAGE_ISOLATION_ALLOW_WRITES=1` plus the three `TEST_SUPABASE_*` credentials.
+- Real development verification: both tests first failed against the old policies because anonymous listing returned seeded objects. After applying only 0191 to the verified development project, **2 pass / 0 skipped**; public image bytes and owner writes both work. Fixtures cleaned. `flutter analyze --no-pub`: zero issues; existing photo cache / URL sync tests: **13 pass**. Full suite: **5225 pass / 295 skipped / 0 failures** (8m05s, `.dart_tool/issue-467-full-tests.log`). Standards and spec checked directly against `985e80be` (worker did not spawn further agents). Compatibility review against main `c019ea4f`: no change to the touched services, Storage policies or test harness; new migration 0187 does not collide with reserved 0191.
+- No production deployment. The issue's historical “dev and prod are the same project” deployment note is superseded by the owner's separate development-project decision.
+
+### #492 G2: Stop crate words leaking to non-drink shops (2026-10-24)
+Branch `feat/492-g2-crate-words`, worktree `../drinkPosApp-wt-492-g2`. Part of #492.
+- Orders Completed tab: "Crate Deposits" stat card is gated on `businessTracksCrates(business)` (hidden for Pharmacy and non-crate shops).
+- `CartService.addItem`: default unit "Bottle" fallback removed; unit is left null when none is set.
+- Rejected sale dialogs: confirmation message in `SyncIssuesScreen` and `NotificationCard` (`NotificationsModal`) conditioned on `tracksCrates`. Non-crate businesses see neutral wording without mention of "customer empties balance".
+- Tests: `test/industry/non_crate_shop_crate_words_test.dart` (CartService unit, Pharmacy vs Bar Orders stat card, Sync Issues neutral dialog, Notifications modal neutral dialog).
+
+### #490 / #492 G4: products.unit CHECK admits Kg and Litre (2026-10-24)
+Branch `feat/490-g4-unit-check`, worktree `../drinkPosApp-wt-490-g4`. Widens `products.unit` in Drift (`kProductUnits` and `Products.customConstraints`) and PostgreSQL to include `Kg` and `Litre` (15 units total). Bumps Drift `schemaVersion` from 84 to 85 with `TableMigration(products)` rebuild (preserving all columns and `units_per_pack`). Created cloud migration `supabase/migrations/0196_products_unit_kg_litre.sql` (drops old unit constraints while carefully excluding `units_per_pack`). Added migration upgrade and CHECK constraint tests in `test/database/migration_upgrade_test.dart`.
+
+### #492 G3: one generic Lexicon for every shop (2026-10-24)
+Branch `feat/492-g3-lexicon`, worktree `../drinkPosApp-wt-492-g3`. Every trade gets generic nouns ("Product", "Category"), plain example hints ("e.g. Product name", "e.g. Short description"), no starter categories, and no unit filled in by default. Units: `kGenericUnits` (Piece, Pack, Box, Carton, Bag, Bottle, Can, Kg, Litre, Other) offered to all shops; crate-tracking shops (Bar and Beverage distributor) also get PET and Keg (`kCrateUnits`). Saved units (Sachet, Tin, Crate, …) stay valid and keep showing via `unitChoices(units, keep: [...])` in `product_unit.dart`. Updated `lexicon_test.dart`, `product_unit_test.dart`, `van_sales_trade_neutral_test.dart` and regenerated Add Product goldens.
+
 ### #487 PR 6 / #465: scan a barcode on Add Product (2026-10-23)
 Branch `feat/465-scan-add-product`, worktree `../drinkPosApp-wt-487-6`. Scan button beside the barcode box (`barcodeScannerProvider`, camera closes after the first read; POS unchanged). `_onBarcodeChanged` now: own products first (`findProductsByBarcode`), then, factory codes only, the shared list via `lookupOutcome` (offline -> note, never blocks save). Own match offers Open it (Product Details; restock mode is gone) / Create a new product anyway. Edit mode: scan only fills the box. Tests in `add_product_catalogue_prefill_test.dart` (+1 in `add_product_form_test.dart`); Add Product goldens regenerated.
 

@@ -1,5 +1,4 @@
 import 'package:reebaplus_pos/core/industry/industry.dart';
-import 'package:reebaplus_pos/core/industry/lexicon.dart';
 
 /// Public category reference shared by every shop (#472). No tenant data.
 class MarketplaceCategory {
@@ -66,17 +65,21 @@ MarketplaceCategory marketplaceCategoryFor(String? slug) =>
     marketplaceCategories.firstWhere((c) => c.slug == slug,
         orElse: () => marketplaceCategories.first);
 
-/// Only exact Lexicon suggestions are pre-mapped; custom names stay unmapped.
+/// Initial mappings use exact public child names, independent of UI suggestions.
 String? starterMarketplaceCategory({required Industry industry, required String name}) {
   final normalized = name.trim().toLowerCase();
-  if (!lexiconFor(industry).starterCategories
-      .any((s) => s.toLowerCase() == normalized)) {
-    return null;
-  }
   if (normalized == 'general') return 'other';
   if (normalized == 'accessories') {
-    return industry == Industry.phoneAndGadgets
-        ? 'phone-accessories' : 'fashion-accessories';
+    return switch (industry) {
+      Industry.phoneAndGadgets => 'phone-accessories',
+      Industry.boutique => 'fashion-accessories',
+      _ => null,
+    };
   }
-  return normalized.replaceAll(' ', '-');
+  for (final category in marketplaceCategories) {
+    if (category.parentSlug != null && category.name.toLowerCase() == normalized) {
+      return category.slug;
+    }
+  }
+  return null;
 }

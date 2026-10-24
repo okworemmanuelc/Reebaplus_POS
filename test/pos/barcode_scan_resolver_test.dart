@@ -34,6 +34,7 @@ ProductData _product({
     safetyStockQty: 0,
     monthlyTargetUnits: 0,
     isAvailable: isAvailable,
+    showOnline: true,
     isDeleted: false,
     trackEmpties: false,
     allowFractionalSales: false,

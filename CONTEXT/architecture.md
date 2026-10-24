@@ -97,10 +97,23 @@ All ordinary business writes still go to Drift first and drain through the
 `marketplace_categories` is bundled as `core/data/marketplace_categories.dart`,
 with exact SQL-seed parity tests. It is not a tenant table or an outbox target.
 The optional `categories.marketplace_category` slug is ordinary tenant data:
-Drift schema85, full-row outbox and category snapshot restore carry it.
+Drift schema86, full-row outbox and category snapshot restore carry it.
 No mapping means Other in Browse; selling at the till is unaffected.
+New category pre-mapping uses exact public child names (trimmed/case-insensitive),
+not Lexicon starter suggestions. General maps to Other; Accessories is resolved
+only for the phone/fashion industries. Other parent or unmatched names stay null.
 
 Four storage locations, with a strict rule for what lives where. Business data goes to Drift (and syncs); secrets and pointers go to secure storage (and never sync); sync engine state goes to Drift (and never syncs); operator audit records go to Supabase only (and never reach the client). Nothing durable lives only in memory.
+
+**Online listing groundwork (#424, incomplete).** Cloud0195 and Drift87 add
+`products.show_online` defaulting true independently of archive state. Local
+upgrades retain units85 and category mapping86; older product rebuilds supply
+the new default when the column is absent. Listing permission is seeded as
+`products.manage_listing` under Online store, hidden from editors until its
+consumer ships (the existing inert-permission convention). Product restore uses
+the shared helper's default for older rows missing showOnline, preserving an
+explicit false. The UI gate and dedicated listing write path are subsequent
+increments; this schema draft does not expose a listing switch.
 
 | What | Where | Why | Synced to cloud? |
 |---|---|---|---|

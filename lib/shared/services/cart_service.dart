@@ -163,9 +163,7 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
             ? product.buyingPriceKobo
             : (product['buyingPriceKobo'] ?? 0),
         'size': product is ProductData ? product.size : product['size'],
-        'unit': product is ProductData
-            ? product.unit
-            : (product['unit'] ?? 'Bottle'),
+        'unit': product is ProductData ? product.unit : product['unit'],
         'trackEmpties': product is ProductData
             ? product.trackEmpties
             : (product['trackEmpties'] ?? false),
@@ -242,7 +240,7 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
     final current = List<Map<String, dynamic>>.from(_userCarts[_cartKey] ?? []);
     final index = current.indexWhere((item) => item['name'] == productName);
     if (index == -1) return;
-    
+
     final lineTotalKobo = _lineTotalKobo(current[index]);
     int capKobo = lineTotalKobo;
 
@@ -252,7 +250,10 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
           (current[index]['unitPriceKobo'] as num).toInt();
       final floorKobo = (catalogKobo * (100 - maxPercent) / 100.0).round();
       final unitPriceKobo = current[index]['unitPriceKobo'] as int;
-      final maxLineDiscountKobo = ((unitPriceKobo - floorKobo) * (current[index]['qty'] as num).toDouble()).round();
+      final maxLineDiscountKobo =
+          ((unitPriceKobo - floorKobo) *
+                  (current[index]['qty'] as num).toDouble())
+              .round();
       capKobo = maxLineDiscountKobo.clamp(0, lineTotalKobo);
     }
 
@@ -291,7 +292,9 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
       current[index]['price'] = catalogKobo / 100.0;
     } else {
       final floorKobo = (catalogKobo * (100 - maxPercent) / 100.0).round();
-      final clampedCustomKobo = customPriceKobo < floorKobo ? floorKobo : customPriceKobo;
+      final clampedCustomKobo = customPriceKobo < floorKobo
+          ? floorKobo
+          : customPriceKobo;
       current[index]['customPriceKobo'] = clampedCustomKobo;
       current[index]['unitPriceKobo'] = clampedCustomKobo;
       current[index]['price'] = clampedCustomKobo / 100.0;
@@ -305,7 +308,7 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
       final floorKobo = (catalogKobo * (100 - maxPercent) / 100.0).round();
       final maxLineDiscountKobo = ((unitPriceKobo - floorKobo) * qty).round();
       final lineTotalKobo = _lineTotalKobo(current[index]);
-      
+
       final capKobo = maxLineDiscountKobo.clamp(0, lineTotalKobo);
       if (existingDiscount > capKobo) {
         current[index]['discountKobo'] = capKobo;
@@ -366,10 +369,14 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
             ..['emptyCrateValueKobo'] = emptyCrateValueKobo;
           // A custom-priced line keeps its hand-set price; only refresh the
           // catalog reference (§13.4). A normal line tracks the new price.
-          if (unitPriceKobo != null) cart[i]['catalogPriceKobo'] = unitPriceKobo;
+          if (unitPriceKobo != null) {
+            cart[i]['catalogPriceKobo'] = unitPriceKobo;
+          }
           if (!isCustomPriced) {
             cart[i]['price'] = price;
-            if (unitPriceKobo != null) cart[i]['unitPriceKobo'] = unitPriceKobo;
+            if (unitPriceKobo != null) {
+              cart[i]['unitPriceKobo'] = unitPriceKobo;
+            }
           }
           if (version != null) cart[i]['version'] = version;
           anyChanged = true;

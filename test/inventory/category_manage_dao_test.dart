@@ -49,12 +49,16 @@ void main() {
 
   // ─── Rename ────────────────────────────────────────────────────────────────
 
-  test('creating a Lexicon starter pre-maps it for the business industry', () async {
+  test('creating an exact marketplace child pre-maps it without starter suggestions', () async {
     await (db.update(db.businesses)..where((b) => b.id.equals(businessId)))
-        .write(const BusinessesCompanion(type: Value('Beverage distributor')));
+        .write(const BusinessesCompanion(type: Value('Custom shop')));
     final water = await newCategory('Water');
+    final beer = await newCategory(' beer ');
+    final phones = await newCategory('PHONES');
     final custom = await newCategory('Seasonal');
     expect((await categoryById(water)).marketplaceCategory, 'water');
+    expect((await categoryById(beer)).marketplaceCategory, 'beer');
+    expect((await categoryById(phones)).marketplaceCategory, 'phones');
     expect((await categoryById(custom)).marketplaceCategory, isNull);
     final payload = (await getPendingQueue(db))
         .where((r) => r.actionType == 'categories:upsert')

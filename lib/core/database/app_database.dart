@@ -683,6 +683,8 @@ const List<String> kProductUnits = [
   'Box',
   'Tin',
   'Other',
+  'Kg',
+  'Litre',
 ];
 
 @DataClassName('ProductData')
@@ -717,6 +719,8 @@ class Products extends Table {
   IntColumn get iconCodePoint => integer().nullable()();
   TextColumn get colorHex => text().nullable()();
   BoolColumn get isAvailable => boolean().withDefault(const Constant(true))();
+  // Independent online listing preference (#424); archive still hides online.
+  BoolColumn get showOnline => boolean().withDefault(const Constant(true))();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
   IntColumn get lowStockThreshold => integer().withDefault(const Constant(5))();
   RealColumn get avgDailySales => real().withDefault(const Constant(0.0))();
@@ -765,7 +769,7 @@ class Products extends Table {
     "CHECK (size IS NULL OR size IN ('big','medium','small'))",
     // Keep in lock-step with [kProductUnits] above. NULL allowed (#108): a
     // product may have no unit.
-    "CHECK (unit IS NULL OR unit IN ('Bottle','Can','PET','Sachet','Keg','Crate','Pack','Carton','Piece','Bag','Box','Tin','Other'))",
+    "CHECK (unit IS NULL OR unit IN ('Bottle','Can','PET','Sachet','Keg','Crate','Pack','Carton','Piece','Bag','Box','Tin','Other','Kg','Litre'))",
   ];
 }
 
@@ -2928,7 +2932,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 85;
+  int get schemaVersion => 87;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3771,6 +3775,7 @@ class AppDatabase extends _$AppDatabase {
             products,
             columnTransformer: {
               products.unitsPerPack: const Constant<int>(null),
+              products.showOnline: const Constant(true),
             },
           ),
         );
@@ -5156,6 +5161,7 @@ class AppDatabase extends _$AppDatabase {
             products,
             columnTransformer: {
               products.unitsPerPack: const Constant<int>(null),
+              products.showOnline: const Constant(true),
             },
           ),
         );
@@ -6414,6 +6420,20 @@ class AppDatabase extends _$AppDatabase {
         }
       }
       if (from < 85) {
+        // ── v85 — #490 / #492 G4: products.unit CHECK admits Kg and Litre ────
+        //
+        // Mirrors supabase/migrations/0196_products_unit_kg_litre.sql.
+        // Widens customConstraints on products to admit 'Kg' and 'Litre'
+        // alongside the 13 legacy units. TableMigration rebuilds the table
+        // to update the SQLite table-level CHECK constraint.
+        final hasShowOnline = (await customSelect(
+          "SELECT 1 FROM pragma_table_info('products') WHERE name = 'show_online'",
+        ).get()).isNotEmpty;
+        await m.alterTable(TableMigration(products, columnTransformer: {
+          if (!hasShowOnline) products.showOnline: const Constant(true),
+        }));
+      }
+      if (from < 86) {
         // #472: existing shop categories stay sellable with no online mapping.
         final exists = await customSelect(
           "SELECT 1 FROM pragma_table_info('categories') "
@@ -6422,6 +6442,17 @@ class AppDatabase extends _$AppDatabase {
         if (exists.isEmpty) {
           await m.addColumn(categories, categories.marketplaceCategory);
         }
+      }
+      if (from < 87) {
+        // #424: old product rebuilds already include the current column.
+        final exists = await customSelect(
+          "SELECT 1 FROM pragma_table_info('products') WHERE name = 'show_online'",
+        ).get();
+        if (exists.isEmpty) await m.addColumn(products, products.showOnline);
+        await customStatement(
+          "INSERT OR IGNORE INTO permissions (key, description, category) VALUES "
+          "('products.manage_listing', 'Manage online product listings', 'Online store')",
+        );
       }
     },
     beforeOpen: (details) async {
@@ -6916,6 +6947,7 @@ const List<List<String>> _defaultPermissionRows = [
   // Products
   ['products.add', 'Add a new product', 'Products'],
   ['products.edit_price', 'Edit product', 'Products'],
+  ['products.manage_listing', 'Manage online product listings', 'Online store'],
   ['products.edit_buying_price', 'View buying price', 'Products'],
   ['products.delete', 'Delete a product', 'Products'],
   // Stock
