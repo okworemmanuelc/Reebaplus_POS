@@ -7,6 +7,12 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #424: Show online and listing permission (2026-10-24, in progress)
+Branch `feat/424-show-online`, stacked on #472 (`e8b1626f`) so the reserved Drift 86 migration includes category schema 85. Must land after #472; no version-86 client may ship without that dependency.
+- Cloud increment `0195_product_online_listing.sql` adds `products.show_online` (NOT NULL, default true) and `products.manage_listing` in the `Online store` permission group. Existing/new CEO and Manager defaults receive the key; the seed function's signature and current ACL are preserved. Storefront queries in #425 must require `show_online AND is_available AND NOT is_deleted` together.
+- Cloud applied only to approved development project: pre-existing fixture product became `show_online=true`; both existing CEO/Manager roles received the grant. Tier-2 `product_online_listing_test.dart`: **2 pass / 0 skipped**, checking new defaults, stored opt-out, availability/deletion query contract, new-business role grants and permission group. This pins the query contract; the actual public storefront boundary is #425. Fixtures cleaned. SQL parses as seven statements; analysis clean. Web parity: https://github.com/okworemmanuelc/reebaplus-web/issues/139.
+- Next increments: Drift 86 and sync tests, then the independently gated Product Details switch using existing cards/tokens. No production deployment.
+
 ### #472: shared online category reference (2026-10-24, ready for review)
 
 Branch feat/472-marketplace-categories, isolated workspace reebaplus-472.
