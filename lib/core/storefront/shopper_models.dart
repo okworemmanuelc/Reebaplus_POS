@@ -2,7 +2,11 @@ import 'package:reebaplus_pos/core/storefront/storefront_models.dart';
 
 /// One saved Shopper phone (#426). Cloud-only, via the shopper_* RPCs.
 class ShopperPhone {
-  const ShopperPhone({required this.id, required this.phone, this.isDefault = false});
+  const ShopperPhone({
+    required this.id,
+    required this.phone,
+    this.isDefault = false,
+  });
 
   final String id;
   final String phone;
@@ -120,8 +124,11 @@ enum OnlineOrderStatus {
   const OnlineOrderStatus(this.wire);
   final String wire;
 
-  static OnlineOrderStatus fromWire(Object? value) => OnlineOrderStatus.values
-      .firstWhere((s) => s.wire == value, orElse: () => OnlineOrderStatus.placed);
+  static OnlineOrderStatus fromWire(Object? value) =>
+      OnlineOrderStatus.values.firstWhere(
+        (s) => s.wire == value,
+        orElse: () => OnlineOrderStatus.placed,
+      );
 }
 
 /// One line of a Shopper's order, as placed.
@@ -242,8 +249,11 @@ enum PlaceOrderFailure {
   const PlaceOrderFailure(this.wire);
   final String wire;
 
-  static PlaceOrderFailure fromWire(Object? value) => PlaceOrderFailure.values
-      .firstWhere((f) => f.wire == value, orElse: () => PlaceOrderFailure.invalid);
+  static PlaceOrderFailure fromWire(Object? value) =>
+      PlaceOrderFailure.values.firstWhere(
+        (f) => f.wire == value,
+        orElse: () => PlaceOrderFailure.invalid,
+      );
 }
 
 /// The outcome for one shop after Place order.

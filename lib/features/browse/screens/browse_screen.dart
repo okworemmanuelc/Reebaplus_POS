@@ -10,8 +10,11 @@ import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/auth/screens/welcome_screen.dart';
+import 'package:reebaplus_pos/features/browse/screens/shopper_account_screen.dart';
 import 'package:reebaplus_pos/features/browse/screens/storefront_store_screen.dart';
 import 'package:reebaplus_pos/features/browse/widgets/browse_parts.dart';
+import 'package:reebaplus_pos/features/browse/widgets/shopper_cart_button.dart';
+import 'package:reebaplus_pos/features/browse/widgets/shopper_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/area_picker.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
@@ -25,7 +28,8 @@ import 'package:reebaplus_pos/shared/widgets/smooth_route.dart';
 /// Online only: every read goes through the storefront RPCs
 /// ([storefrontServiceProvider]); offline shows "Connect to the internet to
 /// browse". **Sell on Reebaplus** pushes today's [WelcomeScreen] unchanged
-/// and stays tappable offline. Nothing here adds to a cart (#426).
+/// and stays tappable offline. The cart and account buttons open the
+/// Shopper's cart and orders (#426).
 class BrowseScreen extends ConsumerStatefulWidget {
   const BrowseScreen({super.key});
 
@@ -100,7 +104,20 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
             icon: AppIcons.storefront,
             title: 'Browse',
             subtitle: area?.label,
-            actions: [SellOnReebaplusButton(onPressed: _openWelcome)],
+            actions: [
+              ShopperBarButton(
+                key: const Key('browse-account'),
+                icon: AppIcons.user,
+                tooltip: 'Your account and orders',
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const ShopperAccountScreen(),
+                  ),
+                ),
+              ),
+              const ShopperCartButton(),
+              SellOnReebaplusButton(onPressed: _openWelcome),
+            ],
           ),
         ),
         body: switch (areaAsync) {

@@ -12,7 +12,9 @@ import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
+import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/browse/widgets/add_to_cart_box.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
@@ -365,8 +367,8 @@ class BrowseMessage extends StatelessWidget {
 
 /// One product card (#425): photo, 18+ mark, name, unit, price in the store's
 /// currency, stock label, crate-deposit note, "Business · LGA" (opens the
-/// store page) and the stale-stock note. Out of stock is greyed; nothing on
-/// the card adds to a cart in this slice (ordering is #426).
+/// store page) and the stale-stock note. Out of stock is greyed. Tapping
+/// opens the product sheet, where the Shopper adds it to the cart (#426).
 class StorefrontCardTile extends StatelessWidget {
   const StorefrontCardTile({super.key, required this.card, this.onOpenStore});
 
@@ -527,7 +529,6 @@ class StorefrontCardTile extends StatelessWidget {
           type: MaterialType.transparency,
           child: InkWell(
             borderRadius: BorderRadius.circular(AppSpacing.borderRadiusXL),
-            // Details only — nothing is added to a cart in this slice (#426).
             onTap: () => showStorefrontProductSheet(
               context,
               card: card,
@@ -714,7 +715,7 @@ List<Widget> browseListSlivers(
 
 /// Product details (#425 + #473 listing content): photo, brand, name, the
 /// shop's online description, unit, price, stock, deposit and the order
-/// quantity rule. Read-only — ordering arrives in #426.
+/// quantity rule, plus quantity + Add to cart (#426).
 Future<void> showStorefrontProductSheet(
   BuildContext context, {
   required StorefrontCard card,
@@ -851,6 +852,16 @@ class _ProductSheet extends StatelessWidget {
                   key: const Key('browse-product-description'),
                   style: context.regularStyle(14)
                       .copyWith(color: t.colorScheme.onSurface)),
+            ],
+            if (card.orderable) ...[
+              SizedBox(height: context.getRSize(16)),
+              AddToCartBox(
+                card: card,
+                onAdded: () {
+                  AppNotification.showSuccess(context, 'Added to your cart');
+                  Navigator.of(context).pop();
+                },
+              ),
             ],
             if (onOpenStore != null) ...[
               SizedBox(height: context.getRSize(16)),

@@ -90,15 +90,13 @@ class ShopperService {
       _call('shopper_save_phone', {'p_phone': phone.trim()});
 
   /// Keeps another address for later orders.
-  Future<void> saveAddress(ShopperAddress address) => _call(
-    'shopper_save_address',
-    {
-      'p_country': address.country,
-      'p_state': address.state,
-      'p_lga': address.lga,
-      'p_street': address.street.trim(),
-    },
-  );
+  Future<void> saveAddress(ShopperAddress address) =>
+      _call('shopper_save_address', {
+        'p_country': address.country,
+        'p_state': address.state,
+        'p_lga': address.lga,
+        'p_street': address.street.trim(),
+      });
 
   /// Places one Online Order per shop group. [orderIds] maps store id → the
   /// client-generated order id (reused on a retry, so a retry never doubles

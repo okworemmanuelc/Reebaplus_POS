@@ -48,8 +48,7 @@ class SupabaseShopperAuthPort implements ShopperAuthPort {
       .timeout(const Duration(seconds: 25));
 
   @override
-  Future<void> signOut() =>
-      _client.auth.signOut(scope: SignOutScope.local);
+  Future<void> signOut() => _client.auth.signOut(scope: SignOutScope.local);
 }
 
 final shopperAuthPortProvider = Provider<ShopperAuthPort>(
@@ -123,13 +122,19 @@ class ShopperSessionNotifier extends Notifier<ShopperSessionState> {
     } on AuthException {
       return 'That code is wrong or has expired. Check it or send a new one.';
     } catch (e) {
-      return _message(e, fallback: "Couldn't check the code. Please try again.");
+      return _message(
+        e,
+        fallback: "Couldn't check the code. Please try again.",
+      );
     }
     state = ShopperSessionState(email: _port.currentEmail);
     unawaited(
-      ref.read(pushNotificationServiceProvider).onShopperSignedIn().catchError(
-        (Object e) => debugPrint('[ShopperSession] push register: $e'),
-      ),
+      ref
+          .read(pushNotificationServiceProvider)
+          .onShopperSignedIn()
+          .catchError(
+            (Object e) => debugPrint('[ShopperSession] push register: $e'),
+          ),
     );
     return null;
   }

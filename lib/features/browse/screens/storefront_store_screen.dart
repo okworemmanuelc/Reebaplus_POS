@@ -13,6 +13,7 @@ import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/browse/widgets/browse_parts.dart';
+import 'package:reebaplus_pos/features/browse/widgets/shopper_cart_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
@@ -168,6 +169,7 @@ class _StorefrontStoreScreenState extends ConsumerState<StorefrontStoreScreen> {
             icon: AppIcons.store,
             title: store?.businessName ?? 'Store',
             subtitle: store == null ? null : _areaLine(store),
+            actions: const [ShopperCartButton()],
           ),
         ),
         body: body,
