@@ -4,6 +4,21 @@
 
 Reebaplus POS is an offline-first, mobile point-of-sale app for small and medium retail businesses — supporting all retail business types (Restaurant, Supermarket, Bar, Beverage distributor, Pharmacy, Building Materials, Boutique, Phone & Gadgets, Frozen Foods & Grocery, or custom "Other") — that run on a single shared till handled by several staff across a shift. One CEO owns a business and adds staff in four data-driven roles (CEO, Manager, Cashier, Stock keeper); the app runs offline-first with live cloud sync, so a sale, price edit, or stock change made on one device appears on the others in the same business without a manual refresh. It covers the full retail loop — selling, cart and checkout with cash/transfer/credit payment, inventory and stock counts, customer credit balances and debt, orders, expenses with approvals, supplier ledgers, activity logs, and role-aware reports — with every action gated by permissions stored in the database rather than in code, so a CEO tunes what each role can do with a toggle. It solves the problem of running an entire retail operation — money, stock, staff, and customer credit — on one shared device that often works offline.
 
+## Planned expansion: online ordering (#421)
+
+The approved product direction adds Browse without sign-up, a multi-shop cart,
+email-OTP Shopper accounts and one Online Order per store. Shops accept requests,
+print slips and Send to till for normal Checkout; the Sale occurs at Checkout.
+Reebaplus neither collects order payments nor manages delivery in v1. Business
+phones retain PIN/till entry and offline operation. Browse-first stays behind a
+switch until the full ordering loop works, and screen slices await owner designs.
+
+Groundwork #422 is authorized in its own workspace. Other slices remain on hold.
+The owner approved the architecture exceptions and identity wording in ADRs
+0030/0031 on 2026-10-23; the existing flows described below remain implemented
+behaviour until their later runtime slices land. See [the audit](../docs/security/0422-shopper-isolation.md) for launch
+security prerequisites, including the separate #467 and #468 fixes.
+
 ## Goals
 
 1. A signed-in cashier can complete a full sale (add products, apply allowed discounts, take payment, print or share a receipt) on a shared till while fully offline, and the order syncs to the cloud once a connection returns.

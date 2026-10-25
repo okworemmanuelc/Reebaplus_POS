@@ -575,7 +575,8 @@ abstract final class Gates {
   );
 
   /// Refund a pending order (§19.7, `sales.cancel`, CEO + Manager by default) —
-  /// the Orders Pending-tab Refund action, gated at render.
+  /// the Orders Pending-tab Refund action, gated at render and re-checked by
+  /// the screen and OrderCommands.cancel before any reversal writes (#466).
   static const NamedGate refundOrder = NamedGate(
     name: 'refundOrder',
     action: 'Refund Order',

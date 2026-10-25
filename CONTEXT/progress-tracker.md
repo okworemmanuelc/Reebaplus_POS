@@ -28,6 +28,69 @@ parts. Deploy 0199 before the app. Open: storefront reads (#425) must require
 `settings.manage`-gated, so a non-CEO granted the key reaches the page via Store
 Details only. Pre-existing gap noticed: `crate_shortfall_writeoffs` (0175) is
 not in `pos_pull_snapshot` (fast incremental pulls skip it).
+### Issue #422: ready for review (2026-10-24)
+- Merged current main (0341e1aa); cloud numbers stay 0188/0192/0193, no Drift
+  bump. 0188 re-checked against main: helper signatures unchanged (0195's
+  `seed_default_roles_for_business` replace keeps its ACL); web console and
+  web-pos only read profiles and reach the helpers through definer RPCs.
+  0191 Storage policies use `current_user_business_ids()`, which 0188 does not
+  change. Deploy: 0188 + 0192 any time (`--include-all`); 0193 only after the
+  RPC client build is on business phones.
+
+### Issue #422: development isolation verified (2026-10-24)
+- All seven integration checks pass, zero skips, on the isolated development
+  schema after reconciling its omitted function ACLs to the read-only live
+  baseline and layering 0188/0192/0193. Production is unchanged.
+- The owner-approved deletion boolean is checked with present/missing IDs;
+  anonymous callers and direct deletion-record reads are denied. The transport
+  uses the RPC. Production rollout remains RPC, client update, then restriction.
+- Three direct adapter tests and nine seam tests pass. Full-suite verification
+  of the current change and main integration remain the next checks.
+- The resumed full suite encountered the unchanged random device-tag collision
+  test (1999 unique tags from 2000 random IDs). Its isolated rerun passed all six
+  order-number checks. Preserve the original full-suite failure in review
+  evidence; no order-number code or test changes belong in this issue.
+
+### Issue #422: Shopper groundwork prepared (2026-10-23)
+Branch `feat/422-shopper-groundwork`, isolated worktree `../drinkPosApp-wt-422`,
+base `985e80be` (latest origin/main when started). Owner authorized the remaining
+#421 implementation on 2026-10-23, with selective agents on isolated issues.
+- Continued security work: fixture-writing isolation tests now reject every URL
+  except the approved reebaplus-dev project before constructing clients. Full
+  schema bootstrap is in progress separately; no live fixture writes authorized.
+- Owner approved the specific-ID deletion boolean exception. Prepared 0192 RPC,
+  transport switch, and separately gated 0193 withdrawal of direct record reads.
+  Deploy RPC, update business clients, then restrict records; tests now include
+  tombstone positive/negative controls and enumeration denial. This is prepared
+  locally, not yet verified against the full development schema or deployed.
+- Development verification now ran against the pinned schema snapshot: six
+  isolation checks passed, including tombstone access, table reads, pointer
+  forgery and targeted writes/helpers. The complete discovered-RPC sweep remains
+  in progress. Fixed schema discovery for typeless jsonb and explicit P0002
+  `no_active_membership` rejection; increased the network sweep timeout. Three
+  direct transport tests and nine existing transport seam tests pass; analysis
+  clean. Snapshot ACLs need reconciliation before claiming production parity.
+- Owner approved ADRs 0030/0031 in chat on 2026-10-23: identity versus membership,
+  online-first storefront,
+  eligibility and release gates. Glossary adds Shopper, Online Order, Send to
+  till, Pay on delivery, Browse, Sponsored and Listing. Invariants #1/#4/#5/#8/#9
+  now record the approved scope; no runtime or deployment change.
+- Read-only live catalogue audit: 69 business_id tables; deployed through 0186.
+  RLS authority is the writable profiles pointer, not an independent membership
+  check. Prepared 0188 to constrain direct profile binding, revoke five
+  internal definer helpers from clients, and conditionally restrict the web
+  baseline's unused email-ownership probe; web handoff already occupies 0187.
+  No deployment and no live fixture writes.
+- Added repeatable catalogue audit and opt-in Tier-2 isolation tests (real
+  throwaway login, schema-discovered tables/RPCs, pointer attacks, internal
+  helper denial and direct write denial). See docs/security/0422-shopper-isolation.md.
+- Verification: full Flutter suite 5225 passed / 299 skipped / 0 failures;
+  flutter analyze clean. The six new Tier-2 tests compile and skip without
+  dedicated credentials; this is not a passing live security audit. SQL parsed
+  with pglast; policy semantics still require the dedicated migrated backend.
+- Open: staged deletion-status rollout verification; separate #467/#468;
+  live execution on a dedicated migrated test project. Do not close #422 yet.
+
 ### Issue #424: Show online and listing permission (2026-10-24, ready for review)
 Current continuation:main1f3e3643 (#501 merged) integrated. Unit85, shop
 pricing86 and category87 remain intact; listing moves to88. Real87→88 and
@@ -193,6 +256,19 @@ Branch `feat/507-name-case`, worktree `../drinkPosApp-wt-507-1`.
   - Business Info: business name and typed "Other" business type run through `toNameCase`.
   - Stores settings & Stores screen: store/van creation and update run through `toNameCase`. Store name input has `textCapitalization: TextCapitalization.words`.
 - **Tests:** `test/utils/name_case_test.dart` (8 test groups), plus save-time tests in `test/settings/stores_settings_screen_test.dart` and `test/settings/business_info_shop_types_test.dart`.
+### #466: refund permission rechecked at execution (2026-10-24)
+Branch `fix/466-refund-fire-time-gate`, worktree `../drinkPosApp-wt-466`, base668f49bf.
+- Refund confirmation now requires Gates.refundOrder and uses standard denial
+  feedback. OrderService.markAsCancelled / OrderCommands.cancel also require
+  a freshly read GateContext and reject before any DAO call; no optional bypass.
+- Regression starts a real sale with stock, payments, credits, a paid deposit
+  and crate debt, revokes permission while its confirmation is open, and compares
+  every database table (including outbox) before/after. Direct command denial
+  is checked separately. Authorized refunds preserve existing reversal results.
+- Test-first screen regression reproduced the missing denial before the fix;
+  the final focused order/refund/permission suite passes87tests. Full suite:
+  5396passed/293skipped/0failures (7m19s); analyzer clean. Independent Standards
+  and Spec reviews found no issues. No database/schema/web changes.
 
 ### #492 G1: Sign-up and Business Info offer every shop type plus "Other" (2026-10-23)
 Branch `feat/492-g1-shop-types`, worktree `../drinkPosApp-wt-492-g1`.
