@@ -7,6 +7,9 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #433: Staff push for new Online Orders (2026-10-25, ready for review)
+- Cloud 0215 (NOT deployed): AFTER INSERT trigger on online_orders -> pg_net -> `send-push` with explicit `user_ids` (store-assigned/CEO/manager-all-stores holding online_orders.answer, role->store->user layering); `send-push` accepts `online_order` records (deploy after the migration, --no-verify-jwt); app tap opens the order if local else the Online tab. No Drift change.
+
 ### Issue #435: Expire unanswered Online Orders (2026-10-25, ready for review)
 - Cloud 0213: `expire_stale_online_orders()` (service_role only) + hourly pg_cron (guarded); no Drift change, no guard change. NOT deployed.
 ### Issue #478: Report a listing + admin takedown (2026-10-25, ready for review)

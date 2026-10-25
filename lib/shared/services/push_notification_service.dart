@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
 
 import 'package:reebaplus_pos/core/services/push_messaging_port.dart';
 import 'package:reebaplus_pos/shared/services/device_registry_service.dart';
@@ -36,6 +37,9 @@ class PushNotificationService {
   // Shopper push taps (#476); bound by the Shopper surface (#434). Null until
   // then, so a Shopper tap is a no-op rather than opening the business bell.
   void Function(PushMessage message)? _openShopperPush;
+
+  // New-online-order push taps (#433); bound by the app shell.
+  void Function(String? onlineOrderId)? _openOnlineOrder;
 
   StreamSubscription<PushMessage>? _foregroundSub;
   StreamSubscription<PushMessage>? _tapSub;
@@ -87,6 +91,14 @@ class PushNotificationService {
   }) {
     _openNotifications = openNotifications;
     _markRead = markRead;
+  }
+
+  /// Bind what a "New online order" tap opens (#433): the order's detail when
+  /// it is already in Drift, else the Online tab. Null until the shell binds.
+  void bindOnlineOrderTapAction(
+    void Function(String? onlineOrderId) openOnlineOrder,
+  ) {
+    _openOnlineOrder = openOnlineOrder;
   }
 
   /// Bind what a Shopper push tap opens (#434's Shopper surface). Until bound,
@@ -200,6 +212,15 @@ class PushNotificationService {
   void handleTap(PushMessage message) {
     if (message.isShopperPush) {
       _openShopperPush?.call(message);
+      return;
+    }
+    if (message.isOnlineOrder) {
+      if (_currentBusinessId == null) return; // not signed in — ignore.
+      try {
+        _openOnlineOrder?.call(message.onlineOrderId);
+      } catch (e) {
+        debugPrint('[Push] online order tap failed: $e');
+      }
       return;
     }
     if (!message.isConsoleBroadcast) return;

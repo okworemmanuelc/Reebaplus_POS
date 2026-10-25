@@ -31,6 +31,16 @@ class OnlineOrdersDao extends DatabaseAccessor<AppDatabase>
         .watchSingleOrNull();
   }
 
+  /// Whether the order is already in Drift (a push tap, #433, must never wait
+  /// on a pull — it opens the detail only when this is true).
+  Future<bool> existsById(String id) async {
+    final row = await (select(onlineOrders)
+          ..where((t) => t.id.equals(id) & whereBusiness(t))
+          ..limit(1))
+        .getSingleOrNull();
+    return row != null;
+  }
+
   /// The order's lines in placement order (name as a stable tiebreak).
   Stream<List<OnlineOrderLineData>> watchLines(String onlineOrderId) {
     return (select(onlineOrderLines)
