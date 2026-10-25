@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/storefront/shopper_service.dart';
 import 'package:reebaplus_pos/core/storefront/storefront_models.dart';
 import 'package:reebaplus_pos/core/storefront/storefront_providers.dart';
 import 'package:reebaplus_pos/core/storefront/storefront_service.dart';
@@ -13,7 +14,9 @@ import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/browse/widgets/browse_parts.dart';
+import 'package:reebaplus_pos/features/browse/widgets/report_listing_dialog.dart';
 import 'package:reebaplus_pos/features/browse/widgets/shopper_cart_button.dart';
+import 'package:reebaplus_pos/features/browse/widgets/shopper_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
@@ -169,7 +172,20 @@ class _StorefrontStoreScreenState extends ConsumerState<StorefrontStoreScreen> {
             icon: AppIcons.store,
             title: store?.businessName ?? 'Store',
             subtitle: store == null ? null : _areaLine(store),
-            actions: const [ShopperCartButton()],
+            actions: [
+              ShopperBarButton(
+                key: const Key('browse-report-store'),
+                icon: AppIcons.flag,
+                tooltip: 'Report this store',
+                onPressed: () => reportListing(
+                  context,
+                  ref,
+                  target: ReportTarget.store,
+                  targetId: widget.storeId,
+                ),
+              ),
+              const ShopperCartButton(),
+            ],
           ),
         ),
         body: body,

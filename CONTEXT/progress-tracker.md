@@ -12,7 +12,11 @@ The human updates it when resolving open questions or making architectural decis
 
 ### Issue #435: Expire unanswered Online Orders (2026-10-25, ready for review)
 - Cloud 0213: `expire_stale_online_orders()` (service_role only) + hourly pg_cron (guarded); no Drift change, no guard change. NOT deployed.
+### Issue #478: Report a listing + admin takedown (2026-10-25, ready for review)
+- Cloud 0214 (NOT deployed): `listing_reports` + `storefront_blocks` (cloud-only, service_role), `shopper_report_listing` (10/h, one open per target); `_storefront_stores`/`_storefront_cards`/`storefront_product_photos` re-issued with the block filter. App: Report on product sheet + store page. Console review screen + pos-parity filed in reebaplus-web.
 
+### Issue #431: Send to till (2026-10-25, ready for review)
+- App-only: NO Drift change (stays v93), NO cloud migration (0205/0208 guard already allows accepted -> fulfilled with linked_order_id). Online order detail: Send to till (accepted + `sales.make` + a store you work in) -> `OnlineOrdersDao.tillLoad` -> `CartService.loadOnlineOrder` (order's store, agreed price as charged, catalogue kept as `catalogPriceKobo`, linked Customer, qty lowered to stock). Tag = `onlineOrderId` + `agreedPriceKobo` keys on each cart line, so saved carts keep it and Clear drops it. Checkout passes `CartService.onlineOrderIdOf(cart)` -> `OrdersDao.createOrder(onlineOrderId)` -> `markFulfilled` in the sale txn (v2: held by the order; rejected sale reopens it). pos-parity issue filed in reebaplus-web.
 ### Issue #429: Linked customers see their tier price (2026-10-25, ready for review)
 - Cloud 0211 (NOT deployed): server-only `_shopper_price_tier(business)` (wholesaler only when auth.uid() links a live Wholesaler customer and the shop does not sell one price; anon = retailer); `_storefront_cards` (0202) + `shopper_place_orders` (0207) re-issued verbatim, same signatures; lines snapshot `price_tier`. No app change (cart price is an estimate; placement re-prices). Tier-2 test `test/integration/sql/shopper_tier_price.sql` (not run).
 ### Issue #477: Shopper data rights (2026-10-25, ready for review)

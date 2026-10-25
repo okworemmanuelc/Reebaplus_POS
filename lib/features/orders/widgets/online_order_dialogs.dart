@@ -186,6 +186,43 @@ class _CancelAcceptedDialogState extends State<_CancelAcceptedDialog> {
   }
 }
 
+/// Send to till (#431) when the store's Cart already holds items: replace
+/// them with the order? True to replace; null/false keeps the Cart.
+Future<bool?> showReplaceCartDialog(BuildContext context) {
+  return showDialog<bool>(
+    context: context,
+    builder: (ctx) {
+      final t = Theme.of(ctx);
+      return AlertDialog(
+        scrollable: true,
+        title: Text(
+          'Replace the cart?',
+          style: ctx.screenTitleStyle.copyWith(color: t.colorScheme.onSurface),
+        ),
+        content: Text(
+          "This store's cart already has items. Sending this order to the "
+          'till replaces them. Save the cart first to keep them.',
+          style: t.textTheme.bodyMedium,
+        ),
+        actions: [
+          AppButton(
+            text: 'Keep cart',
+            variant: AppButtonVariant.ghost,
+            isFullWidth: false,
+            onPressed: () => Navigator.pop(ctx, false),
+          ),
+          AppButton(
+            key: OnlineOrderKeys.replaceCartConfirm,
+            text: 'Replace',
+            isFullWidth: false,
+            onPressed: () => Navigator.pop(ctx, true),
+          ),
+        ],
+      );
+    },
+  );
+}
+
 /// Asks, on a Shopper's first order here, whether they are a Customer the
 /// shop already has. [suggestions] come first (phone match, then name);
 /// [search] looks through every not-yet-linked Customer. Returns null when
