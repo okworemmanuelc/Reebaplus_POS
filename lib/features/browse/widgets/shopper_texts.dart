@@ -24,6 +24,8 @@ String shopperFailureText(ShopperFailure failure) => switch (failure) {
   ShopperFailure.profileRequired => 'Add your details first.',
   ShopperFailure.notCancellable =>
     'The shop has already answered this order. Call the shop to change it.',
+  ShopperFailure.rateLimited =>
+    "You've sent a lot of reports — please wait a little",
   ShopperFailure.failed => 'Something went wrong. Please try again.',
 };
 

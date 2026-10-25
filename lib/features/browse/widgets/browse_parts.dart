@@ -15,7 +15,9 @@ import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/core/storefront/shopper_service.dart';
 import 'package:reebaplus_pos/features/browse/widgets/add_to_cart_box.dart';
+import 'package:reebaplus_pos/features/browse/widgets/report_listing_dialog.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/product_photo_gallery.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
@@ -881,6 +883,19 @@ class _ProductSheet extends ConsumerWidget {
                 onPressed: onOpenStore,
               ),
             ],
+            SizedBox(height: context.getRSize(8)),
+            AppButton(
+              key: const Key('browse-report-product'),
+              text: 'Report this product',
+              icon: AppIcons.flag,
+              variant: AppButtonVariant.ghost,
+              onPressed: () => reportListing(
+                context,
+                ref,
+                target: ReportTarget.product,
+                targetId: card.productId,
+              ),
+            ),
           ],
         ),
       ),

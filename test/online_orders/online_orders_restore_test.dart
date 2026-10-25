@@ -115,4 +115,15 @@ void main() {
         [order('declined', at.add(const Duration(minutes: 1)))]);
     expect(await statusOf(), 'declined');
   });
+
+  test('an expired row restores, and a stale `new` cannot revive it', () async {
+    final at = DateTime.utc(2026, 10, 25, 9);
+    await sync.restoreTableDataForTesting('online_orders', [order('new', at)]);
+    await sync.restoreTableDataForTesting('online_orders',
+        [order('expired', at.add(const Duration(hours: 48)))]);
+    expect(await statusOf(), 'expired');
+    await sync.restoreTableDataForTesting('online_orders',
+        [order('new', at.add(const Duration(hours: 49)))]);
+    expect(await statusOf(), 'expired');
+  });
 }

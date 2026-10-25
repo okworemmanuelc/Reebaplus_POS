@@ -67,6 +67,17 @@ void main() {
     await disposeScreen(tester);
   });
 
+  testWidgets('an expired order is not counted as New', (tester) async {
+    await env.db.customStatement(
+        "UPDATE online_orders SET status = 'expired' WHERE id = ?", [orderId]);
+    await pump(tester, const OrdersScreen(initialIndex: 1), grants: _view);
+    final badge = tester.widget<Badge>(find.byKey(OnlineOrderKeys.tabBadge));
+    expect(badge.isLabelVisible, isFalse);
+    expect(find.byKey(OnlineOrderKeys.card(orderId)), findsOneWidget);
+    expect(find.text('EXPIRED'), findsOneWidget);
+    await disposeScreen(tester);
+  });
+
   testWidgets('detail shows the order; actions hidden without answer',
       (tester) async {
     await pump(
