@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
+import 'package:reebaplus_pos/core/listings/listing_content.dart';
 import 'package:reebaplus_pos/core/permissions/gate.dart';
 import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
 import 'package:reebaplus_pos/core/services/product_listing_service.dart';
@@ -122,5 +123,81 @@ void main() {
       expect(restored.showOnline, value);
       expect(restored.isAvailable, isFalse);
     }
+  });
+
+  group('listing content (#473)', () {
+    const content = ListingContent(onlineDescription: 'Long grain', brand: 'Mama Gold',
+      minOrderQty: 2, orderStep: 2, maxOrderQty: 20);
+
+    test('saves offline and queues the full row, clears included', () async {
+      final id = await seed();
+      expect((await service.saveContent(productId: id, content: content,
+        gateContext: allowed)).isOk, isTrue);
+      final p = await row(id);
+      expect((p.onlineDescription, p.brand, p.minOrderQty, p.orderStep, p.maxOrderQty),
+        ('Long grain', 'Mama Gold', 2, 2, 20));
+      expect(p.isAvailable, isTrue);
+      expect((await service.saveContent(productId: id,
+        content: const ListingContent(), gateContext: allowed)).isOk, isTrue);
+      final payload = SupabaseSyncService.scrubForTesting('products',
+        (await getPendingQueue(db)).where((q) => q.actionType == 'products:upsert')
+          .map(decodePayload).last);
+      expect(payload.containsKey('online_description'), isTrue);
+      expect(payload['online_description'], isNull);
+      expect(payload.containsKey('max_order_qty'), isTrue);
+      expect(payload['max_order_qty'], isNull);
+      expect((payload['min_order_qty'], payload['order_step']), (1, 1));
+    });
+
+    test('denied grant, invalid limits and foreign rows write nothing', () async {
+      final id = await seed();
+      final other = UuidV7.generate();
+      await db.into(db.businesses).insert(
+        BusinessesCompanion.insert(id: Value(other), name: 'Other shop'));
+      final foreign = await seed(tenant: other);
+      expect((await service.saveContent(productId: id, content: content,
+        gateContext: priceOnly)).isErr, isTrue);
+      expect((await service.saveContent(productId: id,
+        content: const ListingContent(minOrderQty: 5, maxOrderQty: 4),
+        gateContext: allowed)).isErr, isTrue);
+      expect((await service.saveContent(productId: foreign, content: content,
+        gateContext: allowed)).isErr, isTrue);
+      expect((await row(id)).minOrderQty, 1);
+      expect(await getPendingQueue(db), isEmpty);
+    });
+
+    test('the database refuses limits that break the CHECKs', () async {
+      final id = await seed();
+      for (final bad in [
+        const ProductsCompanion(minOrderQty: Value(0)),
+        const ProductsCompanion(orderStep: Value(0)),
+        const ProductsCompanion(maxOrderQty: Value(0)),
+        ProductsCompanion(brand: Value('x' * 61)),
+        ProductsCompanion(onlineDescription: Value('x' * 2001)),
+      ]) {
+        await expectLater((db.update(db.products)..where((p) => p.id.equals(id)))
+          .write(bad), throwsA(anything));
+      }
+    });
+
+    test('round-trips to a second device', () async {
+      final id = await seed();
+      final peer = AppDatabase.forTesting(NativeDatabase.memory());
+      peer.businessIdResolver = () => businessId;
+      await peer.into(peer.businesses).insert(
+        BusinessesCompanion.insert(id: Value(businessId), name: 'Peer shop'));
+      final transport = InMemoryCloudTransport();
+      final sync = SupabaseSyncService(peer, transport);
+      addTearDown(() async { await transport.dispose(); await peer.close(); });
+      await service.saveContent(productId: id, content: content, gateContext: allowed);
+      final payload = (await getPendingQueue(db)).where((q) =>
+        q.actionType == 'products:upsert').map(decodePayload).last;
+      await transport.upsertRows('products',
+        [SupabaseSyncService.scrubForTesting('products', payload)]);
+      await sync.restoreTableDataForTesting('products', transport.rowsOf('products'));
+      final restored = await (peer.select(peer.products)
+        ..where((p) => p.id.equals(id))).getSingle();
+      expect(ListingContent.of(restored), content);
+    });
   });
 }

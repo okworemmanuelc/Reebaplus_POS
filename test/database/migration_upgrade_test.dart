@@ -121,6 +121,56 @@ void main() {
     } finally { await db.close(); }
   });
 
+  test('v89 to v90 adds listing content with defaults, keeping product data', () async {
+    var db = await openAndInit();
+    final businessId = UuidV7.generate();
+    final productId = UuidV7.generate();
+    await db.into(db.businesses).insert(
+      BusinessesCompanion.insert(id: Value(businessId), name: 'Listing shop'));
+    await db.into(db.products).insert(ProductsCompanion.insert(
+      id: Value(productId), businessId: businessId, name: 'Older product',
+      isAvailable: const Value(false), showOnline: const Value(false),
+      unitsPerPack: const Value(12)));
+    // max_order_qty's CHECK reads min_order_qty, so it goes first.
+    for (final c in ['max_order_qty', 'order_step', 'min_order_qty', 'brand',
+      'online_description']) {
+      await db.customStatement('ALTER TABLE products DROP COLUMN $c');
+    }
+    await db.customStatement('PRAGMA user_version = 89');
+    await db.close();
+    db = await openAndInit();
+    try {
+      final p = await (db.select(db.products)
+        ..where((x) => x.id.equals(productId))).getSingle();
+      expect((p.onlineDescription, p.brand, p.minOrderQty, p.orderStep, p.maxOrderQty),
+        (null, null, 1, 1, null));
+      expect((p.isAvailable, p.showOnline, p.unitsPerPack), (false, false, 12));
+      await expectLater((db.update(db.products)..where((x) => x.id.equals(productId)))
+        .write(const ProductsCompanion(minOrderQty: Value(5), maxOrderQty: Value(4))),
+        throwsA(anything));
+    } finally { await db.close(); }
+  });
+
+  test('v84 to v90 rebuild keeps set listing values and defaults absent ones', () async {
+    var db = await openAndInit();
+    final businessId = UuidV7.generate();
+    final productId = UuidV7.generate();
+    await db.into(db.businesses).insert(
+      BusinessesCompanion.insert(id: Value(businessId), name: 'Older shop'));
+    await db.into(db.products).insert(ProductsCompanion.insert(
+      id: Value(productId), businessId: businessId, name: 'Older product',
+      brand: const Value('Kept'), orderStep: const Value(12)));
+    await db.customStatement('PRAGMA user_version = 84');
+    await db.close();
+    db = await openAndInit();
+    try {
+      final p = await (db.select(db.products)
+        ..where((x) => x.id.equals(productId))).getSingle();
+      expect((p.brand, p.orderStep, p.minOrderQty, p.onlineDescription),
+        ('Kept', 12, 1, null));
+    } finally { await db.close(); }
+  });
+
   test('v87 to v88 preserves archived products and defaults listing on', () async {
     var db = await openAndInit();
     final businessId = UuidV7.generate();

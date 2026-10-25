@@ -808,6 +808,31 @@ class Products extends Table {
   IntColumn get unitsPerPack => integer().nullable().check(
     const CustomExpression<bool>('units_per_pack > 0'),
   )();
+  // Online listing content (schema v90, #473). The shop's own words for its
+  // online store — never shared through the barcode catalogue. Column CHECKs
+  // mirror supabase/migrations/0201_product_listing_content.sql and ride the
+  // plain ADD COLUMN of the v90 step (no rebuild). Order quantities are whole
+  // units: at least [minOrderQty], a multiple of [orderStep] (12 = whole crates
+  // only), and at most [maxOrderQty] when set. See OrderQuantityRule.
+  TextColumn get onlineDescription => text().nullable().check(
+    const CustomExpression<bool>(
+      'online_description IS NULL OR length(online_description) <= 2000',
+    ),
+  )();
+  TextColumn get brand => text().nullable().check(
+    const CustomExpression<bool>('brand IS NULL OR length(brand) <= 60'),
+  )();
+  IntColumn get minOrderQty => integer()
+      .withDefault(const Constant(1))
+      .check(const CustomExpression<bool>('min_order_qty >= 1'))();
+  IntColumn get orderStep => integer()
+      .withDefault(const Constant(1))
+      .check(const CustomExpression<bool>('order_step >= 1'))();
+  IntColumn get maxOrderQty => integer().nullable().check(
+    const CustomExpression<bool>(
+      'max_order_qty IS NULL OR max_order_qty >= min_order_qty',
+    ),
+  )();
   IntColumn get version => integer().withDefault(const Constant(1))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
@@ -2985,7 +3010,19 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 89;
+  int get schemaVersion => 90;
+
+  /// The v90 (#473) listing columns, pinned to their defaults in every older
+  /// products rebuild: TableMigration copies from the CURRENT schema, so a
+  /// column the old table lacks would otherwise be copied as its own name
+  /// (the stale-column trap).
+  Map<GeneratedColumn, Expression> get _listingContentPins => {
+    products.onlineDescription: const Constant<String>(null),
+    products.brand: const Constant<String>(null),
+    products.minOrderQty: const Constant(1),
+    products.orderStep: const Constant(1),
+    products.maxOrderQty: const Constant<int>(null),
+  };
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3829,6 +3866,7 @@ class AppDatabase extends _$AppDatabase {
             columnTransformer: {
               products.unitsPerPack: const Constant<int>(null),
               products.showOnline: const Constant(true),
+              ..._listingContentPins, // v90, #473
             },
           ),
         );
@@ -5215,6 +5253,7 @@ class AppDatabase extends _$AppDatabase {
             columnTransformer: {
               products.unitsPerPack: const Constant<int>(null),
               products.showOnline: const Constant(true),
+              ..._listingContentPins, // v90, #473
             },
           ),
         );
@@ -6482,8 +6521,13 @@ class AppDatabase extends _$AppDatabase {
         final hasShowOnline = (await customSelect(
           "SELECT 1 FROM pragma_table_info('products') WHERE name = 'show_online'",
         ).get()).isNotEmpty;
+        // #473: v90 listing columns did not exist at v85 either.
+        final hasListing = (await customSelect(
+          "SELECT 1 FROM pragma_table_info('products') WHERE name = 'min_order_qty'",
+        ).get()).isNotEmpty;
         await m.alterTable(TableMigration(products, columnTransformer: {
           if (!hasShowOnline) products.showOnline: const Constant(true),
+          if (!hasListing) ..._listingContentPins,
         }));
       }
       if (from < 86) {
@@ -6553,6 +6597,32 @@ class AppDatabase extends _$AppDatabase {
           "('stores.online_ordering', 'Switch a store''s online ordering on/off', "
           "'Online store')",
         );
+      }
+      if (from < 90) {
+        // ── v90 — #473: products online listing content ──────────────────
+        //
+        // Mirrors supabase/migrations/0201_product_listing_content.sql. Five
+        // columns whose CHECKs are column constraints, so plain ADD COLUMNs
+        // carry them (no rebuild). Added in order — max_order_qty's CHECK reads
+        // min_order_qty. Guarded per column, because a DB that came through an
+        // older products rebuild already has them (each pins the defaults).
+        final existing = {
+          for (final r in await customSelect(
+            "SELECT name FROM pragma_table_info('products')",
+          ).get())
+            r.read<String>('name'),
+        };
+        for (final column in <GeneratedColumn>[
+          products.onlineDescription,
+          products.brand,
+          products.minOrderQty,
+          products.orderStep,
+          products.maxOrderQty,
+        ]) {
+          if (!existing.contains(column.name)) {
+            await m.addColumn(products, column);
+          }
+        }
       }
     },
     beforeOpen: (details) async {

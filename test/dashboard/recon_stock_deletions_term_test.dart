@@ -63,6 +63,8 @@ ProductData _product({required int buyingPriceKobo}) => ProductData(
   wholesalerPriceKobo: 1100000,
   isAvailable: true,
   showOnline: true,
+  minOrderQty: 1,
+  orderStep: 1,
   isDeleted: false,
   lowStockThreshold: 0,
   avgDailySales: 0,
