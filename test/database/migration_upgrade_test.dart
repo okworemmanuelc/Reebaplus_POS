@@ -4296,4 +4296,26 @@ void main() {
       expect(row.sellsOnePrice, isTrue);
     });
   });
+
+  test('v90 to v92 creates the Online Orders tables (#426), idempotently',
+      () async {
+    var db = await openAndInit();
+    await db.customStatement('DROP TABLE online_order_lines');
+    await db.customStatement('DROP TABLE online_orders');
+    await db.customStatement('PRAGMA user_version = 90');
+    await db.close();
+    db = await openAndInit();
+    try {
+      expect(await columnsOf(db, 'online_orders'),
+          containsAll(['status', 'reference', 'shopper_account_id',
+              'estimated_total_kobo', 'delivery_lga', 'linked_order_id']));
+      expect(await columnsOf(db, 'online_order_lines'),
+          containsAll(['online_order_id', 'unit_price_kobo', 'requested_qty',
+              'accepted_qty', 'price_tier']));
+      await db.customStatement('PRAGMA user_version = 90');
+      await db.close();
+      db = await openAndInit();
+      expect(await db.select(db.onlineOrders).get(), isEmpty);
+    } finally { await db.close(); }
+  });
 }
