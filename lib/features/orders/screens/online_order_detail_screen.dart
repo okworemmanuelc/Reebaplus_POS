@@ -61,36 +61,49 @@ class _OnlineOrderDetailScreenState
     }
   }
 
-  Future<void> _accept(OnlineOrderData order) => _run(() async {
+  /// Accept: a Shopper's first order here asks staff to choose the Customer
+  /// (the pop-up opens with no spinner behind it; only writes show busy).
+  Future<void> _accept(OnlineOrderData order) async {
+    if (_busy) return;
     final dao = ref.read(databaseProvider).onlineOrdersDao;
-    var outcome = await dao.accept(onlineOrderId: order.id);
-    if (outcome == OnlineOrderAnswerOutcome.needsCustomerChoice) {
-      final suggestions = await dao.suggestCustomers(
-        phone: order.deliveryPhone,
-        name: order.shopperName,
-      );
-      if (!mounted) return;
-      final choice = await showLinkCustomerDialog(
-        context,
-        shopperName: order.shopperName,
-        suggestions: suggestions,
-        search: dao.searchLinkableCustomers,
-      );
-      if (choice == null) return;
-      outcome = await dao.accept(onlineOrderId: order.id, link: choice);
+    OnlineOrderAnswerOutcome? outcome;
+    await _run(() async {
+      outcome = await dao.accept(onlineOrderId: order.id);
+    }, 'orders.online.accept');
+    if (outcome != OnlineOrderAnswerOutcome.needsCustomerChoice) {
+      if (outcome != null) _report(outcome!, 'Order accepted');
+      return;
     }
-    _report(outcome, 'Order accepted');
-  }, 'orders.online.accept');
+    final suggestions = await dao.suggestCustomers(
+      phone: order.deliveryPhone,
+      name: order.shopperName,
+    );
+    if (!mounted) return;
+    final choice = await showLinkCustomerDialog(
+      context,
+      shopperName: order.shopperName,
+      suggestions: suggestions,
+      search: dao.searchLinkableCustomers,
+    );
+    if (choice == null) return;
+    await _run(() async {
+      final linked = await dao.accept(onlineOrderId: order.id, link: choice);
+      _report(linked, 'Order accepted');
+    }, 'orders.online.accept');
+  }
 
-  Future<void> _decline(OnlineOrderData order) => _run(() async {
+  Future<void> _decline(OnlineOrderData order) async {
+    if (_busy) return;
     final reason = await showDeclineReasonDialog(context);
     if (reason == null) return;
-    final outcome = await ref
-        .read(databaseProvider)
-        .onlineOrdersDao
-        .decline(onlineOrderId: order.id, reason: reason);
-    _report(outcome, 'Order declined');
-  }, 'orders.online.decline');
+    await _run(() async {
+      final outcome = await ref
+          .read(databaseProvider)
+          .onlineOrdersDao
+          .decline(onlineOrderId: order.id, reason: reason);
+      _report(outcome, 'Order declined');
+    }, 'orders.online.decline');
+  }
 
   @override
   Widget build(BuildContext context) {

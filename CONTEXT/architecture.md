@@ -194,6 +194,16 @@ sign-out is a local `signOut` with no wipe gate. On a phone with a business
 user the Shopper side shops with the business session: no Shopper OTP, no
 Shopper sign-out (ADR 0030).
 
+**Answering Online Orders (#427).** Cloud 0208 / Drift 93. Shop phones accept
+or decline only `new` orders (`OnlineOrdersDao`, Drift + outbox; gates
+`Gates.viewOnlineOrders` / `Gates.answerOnlineOrders` plus a store the user
+works in; the cloud guard re-checks the key). A refused answer (P0001
+`online_order_transition_rejected`) is settled by the push path — answer
+dropped, cloud row restored over LWW — never orphaned. The first accepted order
+from a Shopper links a Customer by staff choice (`customers.shopper_account_id`,
+one live Customer per Shopper per business); later orders attach automatically;
+never by phone match.
+
 **Online store setup (#423).** Cloud0199 / Drift89. Each `stores` row carries
 its own area (`country`, `state`, `lga` — Nigeria values from the bundled lists
 that match `ng_areas`, free text elsewhere), a public `phone` (falls back to the

@@ -7,6 +7,26 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #427: Shop sees and answers Online Orders (2026-10-25, ready for review)
+- Branch `feat/427-online-tab`, worktree `../drinkPosApp-wt-427`. Cloud
+  `0208_online_order_answer.sql` + Drift 93: `customers.shopper_account_id`
+  (partial unique per business, live rows), keys `online_orders.view` /
+  `online_orders.answer` (CEO/Manager/Cashier; seed re-issued from 0195 +
+  backfill), `_online_orders_guard` re-issued from 0205 + answer-permission
+  check. No snapshot change (0205 already carries both tables).
+- App: `OnlineOrdersDao` (accept / decline / link, Drift + outbox),
+  `lib/core/providers/online_order_providers.dart`, Orders tabs Pending · Online
+  · Completed · Cancelled (Online only with the view key), New badge on the tab
+  and the drawer's Orders row, `OnlineOrderDetailScreen`, decline + link
+  pop-ups. Accept also needs a store the user works in.
+- Customer-cancelled-first: the sync push settles a P0001
+  `online_order_transition_rejected` per row (drop the answer, re-read the
+  cloud row, overwrite past LWW, notify the answerer), never a Sync Issues
+  orphan. `online_orders` / `online_order_lines` now have push whitelists so
+  cloud-owned timestamps never cross the wire.
+- Not built: lowering accepted quantities, Send to till (#431), linked tier
+  price (#429). Deploy 0208 after 0205 and BEFORE the app (every customer push
+  carries `shopper_account_id`); never with 0193.
 ### Issue #426: Place orders (2026-10-25, ready for review)
 - Branch `feat/426-place-orders`, worktree `../drinkPosApp-wt-426`. Cloud
   `0205_online_orders.sql` + Drift 92 (after #474's 91). Shopper
