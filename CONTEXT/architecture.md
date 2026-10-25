@@ -2,7 +2,22 @@
 
 ## Overview
 
-Reebaplus POS is an offline-first Flutter application backed by Supabase. The device is the source of truth for the active session: every read and write hits a local Drift (SQLite) database first, and a background sync engine reconciles that local state with Postgres on Supabase. The app is built so that a cashier can run the entire selling loop — cart, checkout, receipt, wallet update — with no network at all, and have it converge with every other device in the same business once a connection returns. This document defines the technology stack, the folder-level boundaries, the storage model, the auth and access model, the sync (background task) model, and the invariants the codebase must never violate.
+Reebaplus POS is an offline-first Flutter application backed by Supabase. The device is the source of truth for the active business session: every business read and write hits a local Drift (SQLite) database first, and a background sync engine reconciles that local state with Postgres on Supabase. The app is built so that a cashier can run the entire selling loop — cart, checkout, receipt, wallet update — with no network at all, and have it converge with every other device in the same business once a connection returns. This document defines the technology stack, the folder-level boundaries, the storage model, the auth and access model, the sync (background task) model, and the invariants the codebase must never violate.
+
+## Approved Shopper boundary — #422 (2026-10-23)
+
+Online ordering adds a Shopper surface alongside the offline-first business till.
+The owner-approved decisions are [ADR 0030: identity](../docs/adr/0030-shopper-identity.md)
+and [ADR 0031: storefront boundary](../docs/adr/0031-shopper-storefront-boundary.md).
+They record the approved invariant wording/scope, eligibility rules and release
+gate. The Invariants below include these scoped exceptions;
+#422 introduces no Shopper screens, routing or storefront RPCs.
+
+The [Shopper isolation audit](../docs/security/0422-shopper-isolation.md) records
+the deployed access paths, migration and outstanding release blockers. In
+particular, current_user_business_ids() currently reads profiles.business_id;
+a membership-less identity must not be able to forge that pointer. Treat
+authenticated identity and business membership as separate checks.
 
 ## Stack
 
@@ -406,23 +421,23 @@ This is an **alert channel only** — it never carries or persists business data
 
 These are rules, not guidelines. Code that breaks one of these is wrong even if it compiles and the feature appears to work.
 
-1. **The local database is the source of truth for the running app.** Every screen reads from Drift and every user write commits to Drift first. No widget, view model, or repository method may block the UI on a network call or read live data directly from Supabase to render a screen.
+1. **The local database is the source of truth for the running business till.** Every business screen reads from Drift and every business write commits to Drift first. No widget, view model, or repository method may block the UI on a network call or read live data directly from Supabase to render a screen. **Shopper exception (ADR 0031, owner-approved 2026-10-23):** the online-only Shopper surface uses restricted storefront RPCs and a device-local cart, never tenant Drift tables. The business till remains offline-first.
 
 2. **PINs never leave the device.** A PIN (or its hash) is written only to `flutter_secure_storage`. It must never be placed in Drift, in an outbox row, in a network request, in a log line, or in Postgres. Identity and recovery run only through Supabase Auth (email + OTP or Google OAuth) — never through the PIN.
 
 3. **Wallet and supplier ledgers are append-only.** A balance is always derived by summing ledger rows, never stored as a single mutable number and never edited in place. Corrections are new compensating rows. This is what makes "the wallet is the source of truth" true and conflict-free under sync.
 
-4. **Every cloud write goes through the outbox.** A repository that needs to change cloud state writes to Drift and enqueues an outbox entry; it must not call Supabase directly. This guarantees offline durability, ordered delivery, idempotent retries, and adaptive batching through one and only one write path.
+4. **Every business cloud write goes through the outbox.** A repository that needs to change cloud state writes to Drift and enqueues an outbox entry; it must not call Supabase directly. This guarantees offline durability, ordered delivery, idempotent retries, and adaptive batching through one and only one write path. **Shopper exception (ADR 0031):** Shopper commands call restricted storefront RPCs directly; identity comes from auth.uid() and validation is server-side. Business writes still use Drift + outbox.
 
-5. **Cross-business data access is impossible, and is enforced on the server.** Every business-scoped row carries a `business_id`, and Postgres Row-Level Security is the authority — the client is never trusted to scope its own queries. No code path may read or write a row outside the caller's `business_id`. **Exception (ADR 0029, #322):** the shared barcode catalogue. One read-only definer RPC (`barcode_suggestion`) returns a consensus name, unit and photo for a factory barcode, computed across businesses, with no business identity; Add Product reads it through `BarcodeCatalogueService` (#332). No row of another business ever becomes readable.
+5. **Cross-business data access is impossible, and is enforced on the server.** Every business-scoped row carries a `business_id`, and Postgres Row-Level Security is the authority — the client is never trusted to scope its own queries. No code path may read or write a row outside the caller's `business_id`. **Exception (ADR 0029, #322):** the shared barcode catalogue. One read-only definer RPC (`barcode_suggestion`) returns a consensus name, unit and photo for a factory barcode, computed across businesses, with no business identity; Add Product reads it through `BarcodeCatalogueService` (#332). No row of another business ever becomes readable. **Storefront exception (ADR 0031):** approved public listing projections may cross businesses through restricted RPCs. Shoppers cannot read base tenant rows, buying prices, cost batches or other customers' data.
 
 6. **Permissions are read from data, never hard-coded.** Gating decisions come exclusively from role and override rows via `lib/core/permissions/`. No feature may branch on a hard-coded role name (e.g. `if (role == 'Cashier')`); it must ask `can(action)`.
 
 7. **A caught error never destroys in-progress work or shows a raw error screen.** The global handler shows a calm fallback, preserves the current cart and any uncommitted local state, and queues a crash log. A red/blank framework error screen reaching the user is a defect.
 
-8. **Layer dependencies point one direction only.** `lib/features/<feature>` depends on `lib/core/` (database/DAOs, services, permissions, providers) and `lib/shared/`, never the reverse. Features must not reach into another feature's internal widgets; cross-feature data flows through core/shared providers and DAOs. `lib/core/services/` (the sync service) must not import widget/UI code. Ordinary business writes go through Drift DAOs and the `sync_queue`, not direct Supabase calls — the only sanctioned exceptions are the `redeem_invite_code` RPC (auth bootstrap) and the Sync Issues diagnostic screen. A cycle or an upward import is an architecture violation.
+8. **Layer dependencies point one direction only.** `lib/features/<feature>` depends on `lib/core/` (database/DAOs, services, permissions, providers) and `lib/shared/`, never the reverse. Features must not reach into another feature's internal widgets; cross-feature data flows through core/shared providers and DAOs. `lib/core/services/` (the sync service) must not import widget/UI code. Ordinary business writes go through Drift DAOs and the `sync_queue`, not direct Supabase calls — the only sanctioned exceptions are the `redeem_invite_code` RPC (auth bootstrap) and the Sync Issues diagnostic screen. A cycle or an upward import is an architecture violation. **Shopper exception (ADR 0031):** core/shared storefront services may call the restricted cloud RPCs directly; feature widgets consume that service contract and one-way dependencies remain unchanged.
 
-9. **One email is one identity is one business.** The resolved email — not the auth provider — is the identity key: signing in by email OTP or by Google with the same address must map to the same user, never create a second account. An email is bound to exactly one business; "Create a new business" with an already-registered email (including any staff member's email) must be rejected, not silently allowed to create a duplicate or orphan tenant.
+9. **One email is one identity with at most one business membership.** Email OTP and Google with the same resolved email identify the same login. A Shopper is not a business membership and may create or join their first business with that email. A login already linked to a business, including a staff login, cannot create or join a second business. Shopping never changes that restriction. (ADR 0030, owner-approved 2026-10-23.)
 
 10. **The pull cursor never advances past an uncommitted page.** The cursor stored in `sync_meta` is updated only after a pull page is fully reconciled into Drift and the transaction commits successfully. A failed or partial reconciliation must retry that page before the cursor moves. This rule is what makes both regular pulls and onboarding pulls resumable after an app kill.
 

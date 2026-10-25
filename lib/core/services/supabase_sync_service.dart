@@ -3322,8 +3322,9 @@ class SupabaseSyncService {
   /// Returns true ONLY on a confirmed tombstone row. Any error (offline, RLS
   /// hiccup, transient permission-denied) returns false so an ambiguous failure
   /// can NEVER wipe a staff device. The staff JWT survives the cascade (only the
-  /// CEO's auth.users row is deleted), and the tombstone is readable by any
-  /// authenticated caller, so this succeeds even after membership is gone.
+  /// CEO's auth.users row is deleted), and any signed-in caller may ask the
+  /// boolean `business_deletion_status` RPC (0192, #422) about one business id,
+  /// so this succeeds even after membership is gone.
   Future<bool> _confirmBusinessDeleted(String businessId) async {
     try {
       return await _transport.businessDeletedTombstoneExists(businessId);

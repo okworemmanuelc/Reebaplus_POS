@@ -1,5 +1,28 @@
 # Tier-2 integration tests
 
+## Shopper isolation (#422)
+
+`rpcs/shopper_isolation_test.dart` discovers tenant tables and business-ID RPCs
+from the service-role OpenAPI schema, then uses a new, membership-less login
+and a separate signed-out client. It also tests profile-pointer forgery and
+internal-helper execution. The migration must be deployed on a **dedicated test
+project** first. The shared live dev/production project is not a test fixture.
+
+This suite needs `TEST_SUPABASE_URL`, `TEST_SUPABASE_ANON_KEY`,
+`TEST_SUPABASE_SERVICE_ROLE_KEY`, and the explicit opt-in
+`TEST_SHOPPER_ISOLATION_ALLOW_WRITES=1`. It does not need the existing test
+user's refresh token. Without these it compiles and skips, which is **not** a
+passing live security audit. It creates only its own login and throwaway tenant
+and deletes them on teardown. A failed run interrupted before teardown may
+require removing its `shopper-isolation-…@example.com` login and test business.
+
+```sh
+flutter test test/integration/rpcs/shopper_isolation_test.dart --reporter expanded
+```
+
+See `docs/security/0422-shopper-isolation.md` for the deliberate tombstone
+exception, standalone #467/#468 prerequisites, and outstanding owner decisions.
+
 Hits real dev Supabase. Verifies the v2 domain RPCs end-to-end:
 round-trip (response ↔ cloud row), idempotent replay, and atomicity
 (tenant guard + validation).

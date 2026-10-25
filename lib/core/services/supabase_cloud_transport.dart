@@ -169,12 +169,11 @@ class SupabaseCloudTransport implements CloudTransport {
 
   @override
   Future<bool> businessDeletedTombstoneExists(String businessId) async {
-    final rows = await _client
-        .from('deleted_businesses')
-        .select('business_id')
-        .eq('business_id', businessId)
-        .limit(1);
-    return rows.isNotEmpty;
+    final deleted = await _client.rpc(
+      'business_deletion_status',
+      params: {'p_business_id': businessId},
+    );
+    return deleted as bool;
   }
 
   // ── REALTIME ───────────────────────────────────────────────────────────────
