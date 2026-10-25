@@ -6,11 +6,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/industry/lexicon.dart';
+import 'package:reebaplus_pos/core/listings/listing_content.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/result.dart';
 import 'package:reebaplus_pos/core/services/barcode_suggestion.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
+import 'package:reebaplus_pos/core/services/product_listing_service.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
@@ -28,6 +30,7 @@ import 'package:reebaplus_pos/features/inventory/models/fast_add_product_model.d
 import 'package:reebaplus_pos/features/inventory/models/product_form_rules.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/catalogue_filled_note.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/inventory_parts.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/listing_content_fields.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/product_details_route.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/product_form_parts.dart';
 import 'package:reebaplus_pos/features/payments/widgets/supplier_form_sheet.dart';
@@ -44,6 +47,7 @@ abstract final class AddProductKeys {
   static const category = ValueKey('add-product-category');
   static const manufacturer = ValueKey('add-product-manufacturer');
   static const unitsPerPack = ValueKey('add-product-units-per-pack');
+  static const listingCard = ValueKey('add-product-listing');
   static const cost = ValueKey('add-product-cost');
   static const retail = ValueKey('add-product-retail');
   static const wholesale = ValueKey('add-product-wholesale');
@@ -141,6 +145,12 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   final _initialStockCtrl = TextEditingController(text: '0');
   final _barcodeCtrl = TextEditingController();
   final _unitsPerPackCtrl = TextEditingController();
+  // Online listing boxes (#473), shown only with `products.manage_listing`.
+  final _listing = ListingControllers();
+  final _listingKeys = {for (final f in ListingField.values) f: GlobalKey()};
+  // The brand last filled in from a manufacturer, so picking another
+  // manufacturer replaces it but never a brand the user typed.
+  String? _autoBrand;
   final _nameFocus = FocusNode();
 
   /// The boxes a validation error scrolls to.
@@ -267,6 +277,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     _emptyCrateValueCtrl.text = money(p.emptyCrateValueKobo);
     _lowStockCtrl.text = p.lowStockThreshold.toString();
     _unitsPerPackCtrl.text = p.unitsPerPack?.toString() ?? '';
+    _listing.seed(ListingContent.of(p));
     _unit = p.unit;
     _trackEmpties = p.trackEmpties;
     _allowFractionalSales = p.allowFractionalSales;
@@ -316,6 +327,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         _selectedManufacturer = manufacturers
             .where((m) => m.id == edit.manufacturerId)
             .firstOrNull;
+        _prefillBrand(_selectedManufacturer?.name);
         _selectedSupplier = suppliers
             .where((s) => s.id == edit.supplierId)
             .firstOrNull;
@@ -381,6 +393,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     ]) {
       c.dispose();
     }
+    _listing.dispose();
     _nameFocus.dispose();
     _catalogueDebounce?.cancel();
     super.dispose();
@@ -595,6 +608,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     setState(() {
       _selectedManufacturer = manufacturer;
       _newManufacturerName = null;
+      _prefillBrand(manufacturer.name);
       // Crate value is shared at the manufacturer level — autofill it from the
       // chosen manufacturer (§16.5). The user can still override the field.
       if (manufacturer.depositAmountKobo > 0) {
@@ -660,6 +674,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
           setState(() {
             _selectedManufacturer = null;
             _newManufacturerName = name;
+            _prefillBrand(name);
           });
         }
       case ProductPickerAddFull():
@@ -821,6 +836,40 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   /// Save Product ([andNew] false: save and close) or Save & New ([andNew]
   /// true: save, then clear the form for the next product). Validates and
   /// shapes through the pure Fast-Add form model (Seam 1, ADR 0006).
+  /// Drink shops start the online brand from the manufacturer (#473). Only an
+  /// empty box, or one still holding the last auto-filled name, is replaced.
+  void _prefillBrand(String? manufacturerName) {
+    if (!_isCrateBusiness || manufacturerName == null) return;
+    final current = _listing.brand.text.trim();
+    if (current.isNotEmpty && current != _autoBrand) return;
+    final brand = manufacturerName.length > kBrandMaxLength
+        ? manufacturerName.substring(0, kBrandMaxLength)
+        : manufacturerName;
+    _listing.brand.text = brand;
+    _autoBrand = brand;
+  }
+
+  bool get _showsListing => Gates.manageListing.allows(ref);
+
+  /// Saves the listing boxes after the product row exists (#473), only when
+  /// they changed. The product itself is already saved, so a failure here is
+  /// reported without undoing it.
+  Future<void> _saveListing(String productId, ListingContent before) async {
+    if (!Gates.manageListing.allowsNow(ref)) return;
+    final content = _listing.parse().content;
+    if (content == null || content == before) return;
+    final result = await ProductListingService(
+      ref.read(databaseProvider).catalogDao,
+    ).saveContent(
+      productId: productId,
+      content: content,
+      gateContext: ref.read(gateContextProvider),
+    );
+    if (result case Err(:final error) when mounted) {
+      AppNotification.showError(context, error.message);
+    }
+  }
+
   Future<void> _save({required bool andNew}) async {
     if (_isSaving) return;
     final businessId = ref.read(authProvider).currentUser?.businessId;
@@ -867,6 +916,16 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         existingWholesalerPriceKobo: widget.editProduct?.wholesalerPriceKobo,
       ),
     );
+
+    if (result is FastAddIntent && Gates.manageListing.allowsNow(ref)) {
+      final listing = _listing.parse();
+      if (!listing.isValid) {
+        final box = _listingKeys[listing.field]!.currentContext;
+        if (box != null) Scrollable.ensureVisible(box, alignment: 0.15);
+        AppNotification.showError(context, listing.message!);
+        return;
+      }
+    }
 
     switch (result) {
       case FastAddInvalid(:final field, :final message):
@@ -996,6 +1055,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
           await db.catalogDao.setProductImageUrl(productId, value);
         }
       }
+
+      await _saveListing(productId, const ListingContent());
 
       final newProduct = (await db.catalogDao.findById(productId))!;
       final userName = auth.currentUser?.name ?? 'Unknown';
@@ -1156,6 +1217,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         clearedCategory: old.categoryId != null && _selectedCategory == null,
       );
 
+      // 3b. Online listing (#473): its own gated write, only when changed.
+      await _saveListing(old.id, ListingContent.of(old));
+
       // 4. Log the update.
       await ref
           .read(activityLogProvider)
@@ -1268,6 +1332,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     ]) {
       c.clear();
     }
+    _listing.seed(const ListingContent());
+    _autoBrand = null;
     _lowStockCtrl.text = '5';
     _initialStockCtrl.text = '0';
     setState(() {
@@ -1508,6 +1574,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     required bool sideBySide,
   }) => [
     _pricingCard(canEditBuying),
+    if (_showsListing) _listingCard(),
     _stockCard(allowSideBySide: sideBySide),
     if (_showsCrateCard) _cratesCard(),
     _moreDetailsCard(),
@@ -1748,6 +1815,26 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           ),
         ],
+      ],
+    );
+  }
+
+  /// Online listing (#473), after Pricing — mirrors the Product Details card.
+  Widget _listingCard() {
+    return ProductFormSection(
+      key: AddProductKeys.listingCard,
+      icon: AppIcons.storefront,
+      title: 'Online listing',
+      subtitle: 'What shoppers see in your online store.',
+      children: [
+        ListingContentFields(controllers: _listing, fieldKeys: _listingKeys),
+        SizedBox(height: context.getRSize(8)),
+        Text(
+          'Leave the order boxes blank to let shoppers order any amount.',
+          style: context.regularStyle(13).copyWith(
+            color: Theme.of(context).textTheme.bodySmall?.color,
+          ),
+        ),
       ],
     );
   }

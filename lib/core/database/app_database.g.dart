@@ -11688,6 +11688,72 @@ class $ProductsTable extends Products
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _onlineDescriptionMeta = const VerificationMeta(
+    'onlineDescription',
+  );
+  @override
+  late final GeneratedColumn<String> onlineDescription =
+      GeneratedColumn<String>(
+        'online_description',
+        aliasedName,
+        true,
+        check: () => const CustomExpression<bool>(
+          'online_description IS NULL OR length(online_description) <= 2000',
+        ),
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _brandMeta = const VerificationMeta('brand');
+  @override
+  late final GeneratedColumn<String> brand = GeneratedColumn<String>(
+    'brand',
+    aliasedName,
+    true,
+    check: () =>
+        const CustomExpression<bool>('brand IS NULL OR length(brand) <= 60'),
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _minOrderQtyMeta = const VerificationMeta(
+    'minOrderQty',
+  );
+  @override
+  late final GeneratedColumn<int> minOrderQty = GeneratedColumn<int>(
+    'min_order_qty',
+    aliasedName,
+    false,
+    check: () => const CustomExpression<bool>('min_order_qty >= 1'),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _orderStepMeta = const VerificationMeta(
+    'orderStep',
+  );
+  @override
+  late final GeneratedColumn<int> orderStep = GeneratedColumn<int>(
+    'order_step',
+    aliasedName,
+    false,
+    check: () => const CustomExpression<bool>('order_step >= 1'),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _maxOrderQtyMeta = const VerificationMeta(
+    'maxOrderQty',
+  );
+  @override
+  late final GeneratedColumn<int> maxOrderQty = GeneratedColumn<int>(
+    'max_order_qty',
+    aliasedName,
+    true,
+    check: () => const CustomExpression<bool>(
+      'max_order_qty IS NULL OR max_order_qty >= min_order_qty',
+    ),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _versionMeta = const VerificationMeta(
     'version',
   );
@@ -11759,6 +11825,11 @@ class $ProductsTable extends Products
     imagePath,
     imageUrl,
     unitsPerPack,
+    onlineDescription,
+    brand,
+    minOrderQty,
+    orderStep,
+    maxOrderQty,
     version,
     createdAt,
     lastUpdatedAt,
@@ -12016,6 +12087,45 @@ class $ProductsTable extends Products
         ),
       );
     }
+    if (data.containsKey('online_description')) {
+      context.handle(
+        _onlineDescriptionMeta,
+        onlineDescription.isAcceptableOrUnknown(
+          data['online_description']!,
+          _onlineDescriptionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('brand')) {
+      context.handle(
+        _brandMeta,
+        brand.isAcceptableOrUnknown(data['brand']!, _brandMeta),
+      );
+    }
+    if (data.containsKey('min_order_qty')) {
+      context.handle(
+        _minOrderQtyMeta,
+        minOrderQty.isAcceptableOrUnknown(
+          data['min_order_qty']!,
+          _minOrderQtyMeta,
+        ),
+      );
+    }
+    if (data.containsKey('order_step')) {
+      context.handle(
+        _orderStepMeta,
+        orderStep.isAcceptableOrUnknown(data['order_step']!, _orderStepMeta),
+      );
+    }
+    if (data.containsKey('max_order_qty')) {
+      context.handle(
+        _maxOrderQtyMeta,
+        maxOrderQty.isAcceptableOrUnknown(
+          data['max_order_qty']!,
+          _maxOrderQtyMeta,
+        ),
+      );
+    }
     if (data.containsKey('version')) {
       context.handle(
         _versionMeta,
@@ -12174,6 +12284,26 @@ class $ProductsTable extends Products
         DriftSqlType.int,
         data['${effectivePrefix}units_per_pack'],
       ),
+      onlineDescription: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}online_description'],
+      ),
+      brand: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}brand'],
+      ),
+      minOrderQty: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}min_order_qty'],
+      )!,
+      orderStep: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}order_step'],
+      )!,
+      maxOrderQty: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}max_order_qty'],
+      ),
       version: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}version'],
@@ -12228,6 +12358,11 @@ class ProductData extends DataClass implements Insertable<ProductData> {
   final String? imagePath;
   final String? imageUrl;
   final int? unitsPerPack;
+  final String? onlineDescription;
+  final String? brand;
+  final int minOrderQty;
+  final int orderStep;
+  final int? maxOrderQty;
   final int version;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
@@ -12264,6 +12399,11 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     this.imagePath,
     this.imageUrl,
     this.unitsPerPack,
+    this.onlineDescription,
+    this.brand,
+    required this.minOrderQty,
+    required this.orderStep,
+    this.maxOrderQty,
     required this.version,
     required this.createdAt,
     required this.lastUpdatedAt,
@@ -12333,6 +12473,17 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     if (!nullToAbsent || unitsPerPack != null) {
       map['units_per_pack'] = Variable<int>(unitsPerPack);
     }
+    if (!nullToAbsent || onlineDescription != null) {
+      map['online_description'] = Variable<String>(onlineDescription);
+    }
+    if (!nullToAbsent || brand != null) {
+      map['brand'] = Variable<String>(brand);
+    }
+    map['min_order_qty'] = Variable<int>(minOrderQty);
+    map['order_step'] = Variable<int>(orderStep);
+    if (!nullToAbsent || maxOrderQty != null) {
+      map['max_order_qty'] = Variable<int>(maxOrderQty);
+    }
     map['version'] = Variable<int>(version);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
@@ -12397,6 +12548,17 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       unitsPerPack: unitsPerPack == null && nullToAbsent
           ? const Value.absent()
           : Value(unitsPerPack),
+      onlineDescription: onlineDescription == null && nullToAbsent
+          ? const Value.absent()
+          : Value(onlineDescription),
+      brand: brand == null && nullToAbsent
+          ? const Value.absent()
+          : Value(brand),
+      minOrderQty: Value(minOrderQty),
+      orderStep: Value(orderStep),
+      maxOrderQty: maxOrderQty == null && nullToAbsent
+          ? const Value.absent()
+          : Value(maxOrderQty),
       version: Value(version),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
@@ -12447,6 +12609,13 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       imagePath: serializer.fromJson<String?>(json['imagePath']),
       imageUrl: serializer.fromJson<String?>(json['imageUrl']),
       unitsPerPack: serializer.fromJson<int?>(json['unitsPerPack']),
+      onlineDescription: serializer.fromJson<String?>(
+        json['onlineDescription'],
+      ),
+      brand: serializer.fromJson<String?>(json['brand']),
+      minOrderQty: serializer.fromJson<int>(json['minOrderQty']),
+      orderStep: serializer.fromJson<int>(json['orderStep']),
+      maxOrderQty: serializer.fromJson<int?>(json['maxOrderQty']),
       version: serializer.fromJson<int>(json['version']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
@@ -12488,6 +12657,11 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       'imagePath': serializer.toJson<String?>(imagePath),
       'imageUrl': serializer.toJson<String?>(imageUrl),
       'unitsPerPack': serializer.toJson<int?>(unitsPerPack),
+      'onlineDescription': serializer.toJson<String?>(onlineDescription),
+      'brand': serializer.toJson<String?>(brand),
+      'minOrderQty': serializer.toJson<int>(minOrderQty),
+      'orderStep': serializer.toJson<int>(orderStep),
+      'maxOrderQty': serializer.toJson<int?>(maxOrderQty),
       'version': serializer.toJson<int>(version),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
@@ -12527,6 +12701,11 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     Value<String?> imagePath = const Value.absent(),
     Value<String?> imageUrl = const Value.absent(),
     Value<int?> unitsPerPack = const Value.absent(),
+    Value<String?> onlineDescription = const Value.absent(),
+    Value<String?> brand = const Value.absent(),
+    int? minOrderQty,
+    int? orderStep,
+    Value<int?> maxOrderQty = const Value.absent(),
     int? version,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
@@ -12569,6 +12748,13 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     imagePath: imagePath.present ? imagePath.value : this.imagePath,
     imageUrl: imageUrl.present ? imageUrl.value : this.imageUrl,
     unitsPerPack: unitsPerPack.present ? unitsPerPack.value : this.unitsPerPack,
+    onlineDescription: onlineDescription.present
+        ? onlineDescription.value
+        : this.onlineDescription,
+    brand: brand.present ? brand.value : this.brand,
+    minOrderQty: minOrderQty ?? this.minOrderQty,
+    orderStep: orderStep ?? this.orderStep,
+    maxOrderQty: maxOrderQty.present ? maxOrderQty.value : this.maxOrderQty,
     version: version ?? this.version,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -12649,6 +12835,17 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       unitsPerPack: data.unitsPerPack.present
           ? data.unitsPerPack.value
           : this.unitsPerPack,
+      onlineDescription: data.onlineDescription.present
+          ? data.onlineDescription.value
+          : this.onlineDescription,
+      brand: data.brand.present ? data.brand.value : this.brand,
+      minOrderQty: data.minOrderQty.present
+          ? data.minOrderQty.value
+          : this.minOrderQty,
+      orderStep: data.orderStep.present ? data.orderStep.value : this.orderStep,
+      maxOrderQty: data.maxOrderQty.present
+          ? data.maxOrderQty.value
+          : this.maxOrderQty,
       version: data.version.present ? data.version.value : this.version,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       lastUpdatedAt: data.lastUpdatedAt.present
@@ -12692,6 +12889,11 @@ class ProductData extends DataClass implements Insertable<ProductData> {
           ..write('imagePath: $imagePath, ')
           ..write('imageUrl: $imageUrl, ')
           ..write('unitsPerPack: $unitsPerPack, ')
+          ..write('onlineDescription: $onlineDescription, ')
+          ..write('brand: $brand, ')
+          ..write('minOrderQty: $minOrderQty, ')
+          ..write('orderStep: $orderStep, ')
+          ..write('maxOrderQty: $maxOrderQty, ')
           ..write('version: $version, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
@@ -12733,6 +12935,11 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     imagePath,
     imageUrl,
     unitsPerPack,
+    onlineDescription,
+    brand,
+    minOrderQty,
+    orderStep,
+    maxOrderQty,
     version,
     createdAt,
     lastUpdatedAt,
@@ -12773,6 +12980,11 @@ class ProductData extends DataClass implements Insertable<ProductData> {
           other.imagePath == this.imagePath &&
           other.imageUrl == this.imageUrl &&
           other.unitsPerPack == this.unitsPerPack &&
+          other.onlineDescription == this.onlineDescription &&
+          other.brand == this.brand &&
+          other.minOrderQty == this.minOrderQty &&
+          other.orderStep == this.orderStep &&
+          other.maxOrderQty == this.maxOrderQty &&
           other.version == this.version &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
@@ -12811,6 +13023,11 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
   final Value<String?> imagePath;
   final Value<String?> imageUrl;
   final Value<int?> unitsPerPack;
+  final Value<String?> onlineDescription;
+  final Value<String?> brand;
+  final Value<int> minOrderQty;
+  final Value<int> orderStep;
+  final Value<int?> maxOrderQty;
   final Value<int> version;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
@@ -12848,6 +13065,11 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     this.imagePath = const Value.absent(),
     this.imageUrl = const Value.absent(),
     this.unitsPerPack = const Value.absent(),
+    this.onlineDescription = const Value.absent(),
+    this.brand = const Value.absent(),
+    this.minOrderQty = const Value.absent(),
+    this.orderStep = const Value.absent(),
+    this.maxOrderQty = const Value.absent(),
     this.version = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -12886,6 +13108,11 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     this.imagePath = const Value.absent(),
     this.imageUrl = const Value.absent(),
     this.unitsPerPack = const Value.absent(),
+    this.onlineDescription = const Value.absent(),
+    this.brand = const Value.absent(),
+    this.minOrderQty = const Value.absent(),
+    this.orderStep = const Value.absent(),
+    this.maxOrderQty = const Value.absent(),
     this.version = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -12925,6 +13152,11 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     Expression<String>? imagePath,
     Expression<String>? imageUrl,
     Expression<int>? unitsPerPack,
+    Expression<String>? onlineDescription,
+    Expression<String>? brand,
+    Expression<int>? minOrderQty,
+    Expression<int>? orderStep,
+    Expression<int>? maxOrderQty,
     Expression<int>? version,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
@@ -12967,6 +13199,11 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
       if (imagePath != null) 'image_path': imagePath,
       if (imageUrl != null) 'image_url': imageUrl,
       if (unitsPerPack != null) 'units_per_pack': unitsPerPack,
+      if (onlineDescription != null) 'online_description': onlineDescription,
+      if (brand != null) 'brand': brand,
+      if (minOrderQty != null) 'min_order_qty': minOrderQty,
+      if (orderStep != null) 'order_step': orderStep,
+      if (maxOrderQty != null) 'max_order_qty': maxOrderQty,
       if (version != null) 'version': version,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
@@ -13007,6 +13244,11 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     Value<String?>? imagePath,
     Value<String?>? imageUrl,
     Value<int?>? unitsPerPack,
+    Value<String?>? onlineDescription,
+    Value<String?>? brand,
+    Value<int>? minOrderQty,
+    Value<int>? orderStep,
+    Value<int?>? maxOrderQty,
     Value<int>? version,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
@@ -13045,6 +13287,11 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
       imagePath: imagePath ?? this.imagePath,
       imageUrl: imageUrl ?? this.imageUrl,
       unitsPerPack: unitsPerPack ?? this.unitsPerPack,
+      onlineDescription: onlineDescription ?? this.onlineDescription,
+      brand: brand ?? this.brand,
+      minOrderQty: minOrderQty ?? this.minOrderQty,
+      orderStep: orderStep ?? this.orderStep,
+      maxOrderQty: maxOrderQty ?? this.maxOrderQty,
       version: version ?? this.version,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -13153,6 +13400,21 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     if (unitsPerPack.present) {
       map['units_per_pack'] = Variable<int>(unitsPerPack.value);
     }
+    if (onlineDescription.present) {
+      map['online_description'] = Variable<String>(onlineDescription.value);
+    }
+    if (brand.present) {
+      map['brand'] = Variable<String>(brand.value);
+    }
+    if (minOrderQty.present) {
+      map['min_order_qty'] = Variable<int>(minOrderQty.value);
+    }
+    if (orderStep.present) {
+      map['order_step'] = Variable<int>(orderStep.value);
+    }
+    if (maxOrderQty.present) {
+      map['max_order_qty'] = Variable<int>(maxOrderQty.value);
+    }
     if (version.present) {
       map['version'] = Variable<int>(version.value);
     }
@@ -13203,6 +13465,11 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
           ..write('imagePath: $imagePath, ')
           ..write('imageUrl: $imageUrl, ')
           ..write('unitsPerPack: $unitsPerPack, ')
+          ..write('onlineDescription: $onlineDescription, ')
+          ..write('brand: $brand, ')
+          ..write('minOrderQty: $minOrderQty, ')
+          ..write('orderStep: $orderStep, ')
+          ..write('maxOrderQty: $maxOrderQty, ')
           ..write('version: $version, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
@@ -72340,6 +72607,11 @@ typedef $$ProductsTableCreateCompanionBuilder =
       Value<String?> imagePath,
       Value<String?> imageUrl,
       Value<int?> unitsPerPack,
+      Value<String?> onlineDescription,
+      Value<String?> brand,
+      Value<int> minOrderQty,
+      Value<int> orderStep,
+      Value<int?> maxOrderQty,
       Value<int> version,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -72379,6 +72651,11 @@ typedef $$ProductsTableUpdateCompanionBuilder =
       Value<String?> imagePath,
       Value<String?> imageUrl,
       Value<int?> unitsPerPack,
+      Value<String?> onlineDescription,
+      Value<String?> brand,
+      Value<int> minOrderQty,
+      Value<int> orderStep,
+      Value<int?> maxOrderQty,
       Value<int> version,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -72859,6 +73136,31 @@ class $$ProductsTableFilterComposer
 
   ColumnFilters<int> get unitsPerPack => $composableBuilder(
     column: $table.unitsPerPack,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get onlineDescription => $composableBuilder(
+    column: $table.onlineDescription,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get brand => $composableBuilder(
+    column: $table.brand,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get minOrderQty => $composableBuilder(
+    column: $table.minOrderQty,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get orderStep => $composableBuilder(
+    column: $table.orderStep,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get maxOrderQty => $composableBuilder(
+    column: $table.maxOrderQty,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -73413,6 +73715,31 @@ class $$ProductsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get onlineDescription => $composableBuilder(
+    column: $table.onlineDescription,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get brand => $composableBuilder(
+    column: $table.brand,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get minOrderQty => $composableBuilder(
+    column: $table.minOrderQty,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get orderStep => $composableBuilder(
+    column: $table.orderStep,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get maxOrderQty => $composableBuilder(
+    column: $table.maxOrderQty,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get version => $composableBuilder(
     column: $table.version,
     builder: (column) => ColumnOrderings(column),
@@ -73663,6 +73990,27 @@ class $$ProductsTableAnnotationComposer
 
   GeneratedColumn<int> get unitsPerPack => $composableBuilder(
     column: $table.unitsPerPack,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get onlineDescription => $composableBuilder(
+    column: $table.onlineDescription,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get brand =>
+      $composableBuilder(column: $table.brand, builder: (column) => column);
+
+  GeneratedColumn<int> get minOrderQty => $composableBuilder(
+    column: $table.minOrderQty,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get orderStep =>
+      $composableBuilder(column: $table.orderStep, builder: (column) => column);
+
+  GeneratedColumn<int> get maxOrderQty => $composableBuilder(
+    column: $table.maxOrderQty,
     builder: (column) => column,
   );
 
@@ -74148,6 +74496,11 @@ class $$ProductsTableTableManager
                 Value<String?> imagePath = const Value.absent(),
                 Value<String?> imageUrl = const Value.absent(),
                 Value<int?> unitsPerPack = const Value.absent(),
+                Value<String?> onlineDescription = const Value.absent(),
+                Value<String?> brand = const Value.absent(),
+                Value<int> minOrderQty = const Value.absent(),
+                Value<int> orderStep = const Value.absent(),
+                Value<int?> maxOrderQty = const Value.absent(),
                 Value<int> version = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -74185,6 +74538,11 @@ class $$ProductsTableTableManager
                 imagePath: imagePath,
                 imageUrl: imageUrl,
                 unitsPerPack: unitsPerPack,
+                onlineDescription: onlineDescription,
+                brand: brand,
+                minOrderQty: minOrderQty,
+                orderStep: orderStep,
+                maxOrderQty: maxOrderQty,
                 version: version,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -74224,6 +74582,11 @@ class $$ProductsTableTableManager
                 Value<String?> imagePath = const Value.absent(),
                 Value<String?> imageUrl = const Value.absent(),
                 Value<int?> unitsPerPack = const Value.absent(),
+                Value<String?> onlineDescription = const Value.absent(),
+                Value<String?> brand = const Value.absent(),
+                Value<int> minOrderQty = const Value.absent(),
+                Value<int> orderStep = const Value.absent(),
+                Value<int?> maxOrderQty = const Value.absent(),
                 Value<int> version = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -74261,6 +74624,11 @@ class $$ProductsTableTableManager
                 imagePath: imagePath,
                 imageUrl: imageUrl,
                 unitsPerPack: unitsPerPack,
+                onlineDescription: onlineDescription,
+                brand: brand,
+                minOrderQty: minOrderQty,
+                orderStep: orderStep,
+                maxOrderQty: maxOrderQty,
                 version: version,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,

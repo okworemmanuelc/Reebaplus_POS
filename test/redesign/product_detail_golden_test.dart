@@ -179,6 +179,7 @@ void main() {
     Set<String> grants = ceoKeys,
     String roleSlug = 'ceo',
     int roleRank = GateTier.ceo,
+    Future<void> Function(WidgetTester tester)? before,
   }) async {
     tester.view.padding = insets;
     tester.view.viewPadding = insets;
@@ -209,6 +210,7 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 250));
     }
+    if (before != null) await before(tester);
     expect(tester.takeException(), isNull);
     await expectLater(
       find.byType(MaterialApp),
@@ -261,4 +263,29 @@ void main() {
       roleRank: GateTier.cashier,
     );
   });
+
+  // #473: the Online listing pop-up, phone and sideways.
+  for (final (sizeName, size, insets) in const [
+    ('390x844', Size(390, 844), FakeViewPadding(top: 24, bottom: 24)),
+    ('844x390', Size(844, 390), FakeViewPadding(top: 24, right: 48)),
+  ]) {
+    testWidgets('product detail, online listing pop-up, $sizeName light', (
+      tester,
+    ) async {
+      await seedDetailSample(env, sample);
+      await shoot(
+        tester,
+        name: 'listing_dialog_${sizeName}_light',
+        size: size,
+        insets: insets,
+        brightness: Brightness.light,
+        before: (tester) async {
+          await tester.ensureVisible(find.byTooltip('Edit online listing'));
+          await tester.pump();
+          await tester.tap(find.byTooltip('Edit online listing'));
+          await tester.pumpAndSettle();
+        },
+      );
+    });
+  }
 }

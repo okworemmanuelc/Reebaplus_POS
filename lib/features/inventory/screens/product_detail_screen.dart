@@ -32,6 +32,7 @@ import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/core/services/product_listing_service.dart';
+import 'package:reebaplus_pos/core/listings/listing_content.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
@@ -398,6 +399,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       onEdit: _canEdit ? _editDescription : null,
     );
     final prices = _buildPrices(context);
+    final listing = _buildListing();
     final stock = ProductStockByStoreCard(
       rows: rows,
       alertAt: _alertAt,
@@ -434,11 +436,11 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     final Widget body = switch (columns) {
       3 => cols([
         [hero, description, manage],
-        [prices, stock, target],
+        [prices, listing, stock, target],
         [salesCard, history],
       ]),
       2 => cols([
-        [hero, description, prices, manage],
+        [hero, description, prices, listing, manage],
         [stock, target, salesCard, history],
       ]),
       _ => Column(
@@ -447,6 +449,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
           hero,
           description,
           prices,
+          listing,
           stock,
           target,
           salesCard,
@@ -533,6 +536,49 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       costKobo: canSeeCost ? costKobo : null,
       showProfit: canSeeCost && costKobo > 0,
       showWholesale: hasWholesale,
+    );
+  }
+
+  /// Online listing (#473), after Pricing. Only a viewer holding
+  /// `products.manage_listing` sees it (like the Show online switch).
+  Widget? _buildListing() {
+    final p = _productData;
+    if (p == null || !Gates.manageListing.allowsNow(ref)) return null;
+    return ProductListingCard(
+      content: ListingContent.of(p),
+      onEdit: _editListing,
+    );
+  }
+
+  Future<void> _editListing() async {
+    if (!Gates.manageListing.allowsNow(ref)) {
+      showGateDenied(context, Gates.manageListing);
+      return;
+    }
+    final p = _productData;
+    if (p == null) return;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => ProductListingDialog(
+        initial: ListingContent.of(p),
+        onSave: (content) async {
+          final service = ProductListingService(
+            ref.read(databaseProvider).catalogDao,
+          );
+          final result = await service.saveContent(
+            productId: widget.item.id,
+            content: content,
+            gateContext: ref.read(gateContextProvider),
+          );
+          if (result case Err(:final error)) return error.message;
+          final fresh = await ref
+              .read(databaseProvider)
+              .catalogDao
+              .findById(widget.item.id);
+          if (mounted && fresh != null) setState(() => _productData = fresh);
+          return null;
+        },
+      ),
     );
   }
 

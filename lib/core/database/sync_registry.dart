@@ -755,7 +755,9 @@ final List<SyncedTable> kSyncRegistry = [
       ProductData.fromJson,
       resilient: true,
       // #424: older snapshots omit this column; preserve explicit opt-outs.
-      defaults: {'showOnline': true},
+      // #473: listing content defaults for snapshots older than cloud 0201
+      // (nullable text/max columns simply restore as null).
+      defaults: {'showOnline': true, 'minOrderQty': 1, 'orderStep': 1},
     ),
   ),
   SyncedTable(

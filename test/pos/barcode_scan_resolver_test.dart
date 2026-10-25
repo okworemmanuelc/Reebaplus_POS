@@ -35,6 +35,8 @@ ProductData _product({
     monthlyTargetUnits: 0,
     isAvailable: isAvailable,
     showOnline: true,
+    minOrderQty: 1,
+    orderStep: 1,
     isDeleted: false,
     trackEmpties: false,
     allowFractionalSales: false,

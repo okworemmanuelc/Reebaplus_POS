@@ -157,6 +157,16 @@ switched on; vans never. Writes go through `StoreOnlineService` (fire-time
 Storefront reads (#425) must require `online_ordering_enabled`; switching off
 hides the store at once, while placed online orders are separate rows.
 
+**Listing content (#473).** Cloud 0201 and Drift 90 add `products.online_description`
+(≤2000), `brand` (≤60), `min_order_qty`, `order_step` (both default 1) and
+`max_order_qty` (null = no limit, ≥ min), with CHECKs mirrored on both sides.
+There is no separate listing record: a listing is the product plus these columns.
+Only `Gates.manageListing` holders edit them, through
+`ProductListingService.saveContent`. They are never shared through the barcode
+catalogue. An online order quantity must obey `OrderQuantityRule` (≥ min, a
+multiple of step, ≤ max). The cloud twin is `order_quantity_allowed()`, which the
+storefront cart and the place-order RPC (#425/#426) must enforce.
+
 | What | Where | Why | Synced to cloud? |
 |---|---|---|---|
 | Products, categories, stock levels, expiry dates | Drift (SQLite) | Read on every POS interaction; must work fully offline. **`products.unit`** is stored raw (`Bottle`, `Crate`, … — `kProductUnits` + the CHECK); a stored `Bottle` is only *shown* as "Bottle Crate", and only in a shop where `businessTracksCrates` is true (`unitLabel(…, crates:)`, #487; every other shop shows "Bottle"), and every crate rule still keys on `unit == 'bottle'`. Plain `Crate` stays valid for existing rows but is not offered to new products. **`products.units_per_pack`** (nullable int > 0, Drift v84 / cloud 0187, #487) is "how many in one" (12 bottles in one crate) — **display only**, it never feeds stock, prices, crate counts or money. **`products.is_available = false` means archived** (#487): off sale (POS grid, scanner), hidden from the Inventory list and figure cards (an Archived card lists them) and from the Receive Stock grid; stock count, reports and history still include it. The one writer is `CatalogDao.setProductArchived`. | Yes |

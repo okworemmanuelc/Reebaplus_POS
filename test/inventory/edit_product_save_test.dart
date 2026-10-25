@@ -14,6 +14,7 @@ import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/permissions/gate.dart';
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/listing_content_fields.dart';
 
 import '../helpers/dispatch_test_utils.dart';
 import '../helpers/inventory_seed.dart';
@@ -68,7 +69,8 @@ void main() {
     env.db.products,
   )..where((p) => p.id.equals(id))).getSingle();
 
-  Future<void> open(WidgetTester tester, String id) async {
+  Future<void> open(WidgetTester tester, String id,
+      {Set<String> grants = _grants}) async {
     final product = await row(id);
     const insets = FakeViewPadding(top: 24, bottom: 24);
     tester.view.padding = insets;
@@ -81,7 +83,7 @@ void main() {
       size: const Size(390, 844),
       screen: AddProductScreen(editProduct: product),
       followView: true,
-      grantedKeys: _grants,
+      grantedKeys: grants,
       roleRank: GateTier.ceo,
       overrides: [
         firstRunSurfaceStateProvider.overrideWithValue(
@@ -212,4 +214,49 @@ void main() {
       await disposeScreen(tester);
     },
   );
+
+  group('Online listing section (#473)', () {
+    const listingGrants = {..._grants, 'products.manage_listing'};
+
+    testWidgets('hidden without the listing grant', (tester) async {
+      await open(tester, idOf('Coca-Cola'));
+      expect(find.byKey(AddProductKeys.listingCard), findsNothing);
+      await disposeScreen(tester);
+    });
+
+    testWidgets('drink shop brand starts from the manufacturer; save writes the listing', (
+      tester,
+    ) async {
+      final id = idOf('Coca-Cola');
+      await open(tester, id, grants: listingGrants);
+      expect(find.byKey(AddProductKeys.listingCard), findsOneWidget);
+      final brand = find.descendant(of: find.byKey(ListingFieldKeys.brand),
+        matching: find.byType(EditableText));
+      await tester.ensureVisible(brand);
+      expect(tester.widget<EditableText>(brand).controller.text, 'Coca-Cola HBC');
+      await type(tester, ListingFieldKeys.description, 'Chilled 50cl bottles');
+      await type(tester, ListingFieldKeys.orderStep, '12');
+      await save(tester);
+      final saved = await row(id);
+      expect(saved.onlineDescription, 'Chilled 50cl bottles');
+      expect(saved.brand, 'Coca-Cola HBC');
+      expect((saved.minOrderQty, saved.orderStep, saved.maxOrderQty), (1, 12, null));
+      final payload = await pendingProduct(id);
+      expect(payload['order_step'], 12);
+      await disposeScreen(tester);
+    });
+
+    testWidgets('an impossible order range stops the save', (tester) async {
+      final id = idOf('Coca-Cola');
+      await open(tester, id, grants: listingGrants);
+      await type(tester, AddProductKeys.name, 'Coca-Cola Zero');
+      await type(tester, ListingFieldKeys.minOrder, '10');
+      await type(tester, ListingFieldKeys.maxOrder, '5');
+      await save(tester);
+      final saved = await row(id);
+      expect(saved.name, 'Coca-Cola');
+      expect(saved.minOrderQty, 1);
+      await disposeScreen(tester);
+    });
+  });
 }

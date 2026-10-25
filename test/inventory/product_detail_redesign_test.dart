@@ -199,6 +199,86 @@ void main() {
     });
   });
 
+  group('Online listing (#473)', () {
+    final card = find.byKey(const ValueKey('product-listing-card'));
+
+    Future<void> openListing(WidgetTester tester) async {
+      await tester.ensureVisible(find.byTooltip('Edit online listing'));
+      await tester.pump();
+      await tester.tap(find.byTooltip('Edit online listing'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('shown after Prices only with the listing grant', (tester) async {
+      await pump(tester, grants: const {'products.edit_price'});
+      expect(card, findsNothing);
+      await disposeScreen(tester);
+    });
+
+    testWidgets('edits description, brand and order limits', (tester) async {
+      await pump(tester, grants: const {'products.manage_listing'},
+        roleSlug: 'cashier', roleRank: GateTier.cashier);
+      expect(find.text('No online description yet'), findsOneWidget);
+      expect(find.text('Any amount'), findsOneWidget);
+      await openListing(tester);
+      await tester.enterText(find.byKey(const ValueKey('listing-description')),
+        'Cold lager in returnable bottles');
+      await tester.enterText(find.byKey(const ValueKey('listing-brand')), 'Gulder');
+      await tester.enterText(find.byKey(const ValueKey('listing-min-order')), '12');
+      await tester.enterText(find.byKey(const ValueKey('listing-order-step')), '12');
+      await tester.enterText(find.byKey(const ValueKey('listing-max-order')), '48');
+      await tester.tap(find.byKey(const ValueKey('listing-save')));
+      await deliver(tester);
+      final p = await product();
+      expect(p.onlineDescription, 'Cold lager in returnable bottles');
+      expect(p.brand, 'Gulder');
+      expect((p.minOrderQty, p.orderStep, p.maxOrderQty), (12, 12, 48));
+      expect(p.isAvailable, isTrue);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.text('At least 12 · In steps of 12 · Up to 48'), findsOneWidget);
+      await disposeScreen(tester);
+    });
+
+    testWidgets('a largest order under the smallest is refused, nothing saved', (tester) async {
+      await pump(tester);
+      final before = (await env.db.select(env.db.syncQueue).get()).length;
+      await openListing(tester);
+      await tester.enterText(find.byKey(const ValueKey('listing-min-order')), '10');
+      await tester.enterText(find.byKey(const ValueKey('listing-max-order')), '5');
+      await tester.tap(find.byKey(const ValueKey('listing-save')));
+      await deliver(tester);
+      expect(find.byKey(const ValueKey('listing-error')), findsOneWidget);
+      expect((await product()).minOrderQty, 1);
+      expect((await env.db.select(env.db.syncQueue).get()).length, before);
+      await disposeScreen(tester);
+    });
+
+    for (final (name, size, insets, keyboard)
+        in <(String, Size, FakeViewPadding, double)>[
+          ('390x844', const Size(390, 844), _gesture, 300.0),
+          ('844x390 sideways', const Size(844, 390), _sideways, 180.0),
+        ]) {
+      testWidgets('pop-up at $name scrolls with the keyboard up', (tester) async {
+        await pump(tester, size: size, insets: insets);
+        await openListing(tester);
+        expect(tester.widget<AlertDialog>(find.byType(AlertDialog)).scrollable,
+          isTrue);
+        tester.view.viewInsets = FakeViewPadding(bottom: keyboard);
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(tester.getRect(find.byKey(const ValueKey('listing-description'))).top,
+          lessThan(size.height - keyboard));
+        await tester.drag(find.byType(SingleChildScrollView).last,
+          const Offset(0, -600));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(tester.getRect(find.byKey(const ValueKey('listing-save'))).bottom,
+          lessThanOrEqualTo(size.height - keyboard));
+        await disposeScreen(tester);
+      });
+    }
+  });
+
   group('renders its cards', () {
     testWidgets('top bar, hero, and every card in the phone order', (
       tester,
@@ -221,6 +301,7 @@ void main() {
       final titles = [
         'Description',
         'Prices & Profit',
+        'Online listing',
         'Stock by Store',
         'Sales Target',
         'Sales',

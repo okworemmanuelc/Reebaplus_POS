@@ -15,6 +15,8 @@ ProductData _product(String id) => ProductData.fromJson({
   'buyingPriceKobo': 0,
   'isAvailable': true,
   'showOnline': true,
+  'minOrderQty': 1,
+  'orderStep': 1,
   'isDeleted': false,
   'lowStockThreshold': 5,
   'avgDailySales': 0.0,

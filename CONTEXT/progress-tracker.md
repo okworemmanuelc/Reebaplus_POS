@@ -7,6 +7,29 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #473: Listing content (2026-10-25, ready for review)
+- Branch `feat/473-listing-content`, worktree `../drinkPosApp-wt-473`. Cloud
+  `0201_product_listing_content.sql` + Drift schema 90 (after #423's 89).
+  `products` gains `online_description` (≤2000), `brand` (≤60),
+  `min_order_qty` (default 1), `order_step` (default 1) and `max_order_qty`
+  (null = no limit, ≥ min). The CHECKs are mirrored in Drift and the cloud.
+  Restore defaults are min/step 1. Older products rebuilds pin all five
+  (`_listingContentPins`).
+- Rule: `OrderQuantityRule` (`lib/core/listings/listing_content.dart`) allows a
+  quantity when it is ≥ min, a multiple of step and ≤ max. Its cloud twin is
+  `order_quantity_allowed()`. Writes go through
+  `ProductListingService.saveContent` → `CatalogDao.setProductListingContent`
+  (gated by `Gates.manageListing`, full-row outbox).
+- UI: an Online listing card after Prices on Product Details (only with the
+  grant; edit pop-up) and an Online listing section after Pricing on Add/Edit
+  Product. The brand is pre-filled from the manufacturer in drink shops.
+- Not built here: the storefront (#425) and the cart/place-order (#426) must read
+  these columns and call the rule. The tier-2 cloud test
+  `test/integration/rpcs/product_listing_content_test.dart` has not been run
+  live. Parity: reebaplus-web#146. No owner Claude Design files were in the
+  repo, so the UI follows ui-context tokens and the existing Product Details
+  cards.
+
 ### Issue #476: Shopper push tokens (2026-10-25, ready for review)
 - Branch `feat/476-shopper-push-tokens`, worktree `../drinkPosApp-wt-476`.
   Cloud 0200 only, no Drift bump. `devices.business_id` nullable,
