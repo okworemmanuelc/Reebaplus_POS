@@ -100,6 +100,11 @@ class FakeShopperBackend {
             ],
           };
           return profile;
+        case 'shopper_export':
+          return {'profile': profile, 'orders': orders};
+        case 'shopper_set_marketing_opt_in':
+          profile = {...?profile, 'marketing_opt_in': params['p_opt_in']};
+          return params['p_opt_in'];
         case 'shopper_save_phone':
         case 'shopper_save_address':
           return 'id';
@@ -190,6 +195,7 @@ Future<void> pumpShopper(
   ShopperAgeService? age,
   String? cartJson,
   String? deviceUserId,
+  List<Override> extraOverrides = const [],
   Size size = const Size(390, 844),
   Brightness brightness = Brightness.light,
   EdgeInsets padding = EdgeInsets.zero,
@@ -225,6 +231,7 @@ Future<void> pumpShopper(
         pushNotificationServiceProvider.overrideWithValue(push ?? FakePush()),
         deviceUserIdProvider
             .overrideWith((ref) => ValueNotifier<String?>(deviceUserId)),
+        ...extraOverrides,
       ],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,

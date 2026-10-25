@@ -7,6 +7,12 @@ const String kShopperSharingNotice =
     'Your name, phone and address are shared with the shops you order from, '
     'so they can reach you and deliver.';
 
+/// Privacy note on the Shopper account (#477). Owner reviews the wording.
+const String kShopperPrivacyNotice =
+    'Shops you order from receive your name, phone and address, and become '
+    'responsible for them. Shops keep their order records for their own '
+    'accounts. You can download everything we hold about you at any time.';
+
 /// "You've placed a lot of orders — please wait a little" (#426 spam limit).
 const String kRateLimitedMessage =
     "You've placed a lot of orders — please wait a little";

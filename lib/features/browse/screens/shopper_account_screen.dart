@@ -21,6 +21,35 @@ import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 class ShopperAccountScreen extends ConsumerWidget {
   const ShopperAccountScreen({super.key});
 
+  void _toast(BuildContext context, String text) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+
+  Future<void> _download(BuildContext context, WidgetRef ref) async {
+    try {
+      final data = await ref.read(shopperServiceProvider).exportData();
+      await ref.read(shopperExportSharerProvider)(data);
+    } catch (_) {
+      if (context.mounted) {
+        _toast(context, "Couldn't get your data. Check your connection.");
+      }
+    }
+  }
+
+  Future<void> _setMarketing(
+    BuildContext context,
+    WidgetRef ref,
+    bool value,
+  ) async {
+    try {
+      await ref.read(shopperServiceProvider).setMarketingOptIn(value);
+      ref.invalidate(shopperProfileProvider);
+    } catch (_) {
+      if (context.mounted) {
+        _toast(context, "Couldn't save that. Check your connection.");
+      }
+    }
+  }
+
   Future<void> _signOut(BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -121,6 +150,43 @@ class ShopperAccountScreen extends ConsumerWidget {
                       builder: (_) => ShopperDetailsScreen(initial: details),
                     ),
                   ),
+                ),
+              ],
+            ),
+          ),
+          ShopperSection(
+            title: 'Privacy',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  kShopperPrivacyNotice,
+                  key: const Key('shopper-privacy-notice'),
+                  style: context.regularStyle(12).copyWith(color: muted),
+                ),
+                if (details != null)
+                  SwitchListTile(
+                    key: const Key('shopper-marketing-switch'),
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      'Offers and news from Reebaplus',
+                      style: context.regularStyle(14),
+                    ),
+                    subtitle: Text(
+                      'Off unless you turn it on. Order updates always come '
+                      'through.',
+                      style: context.regularStyle(12).copyWith(color: muted),
+                    ),
+                    value: details.marketingOptIn,
+                    onChanged: (v) => _setMarketing(context, ref, v),
+                  ),
+                SizedBox(height: context.getRSize(8)),
+                AppButton(
+                  key: const Key('shopper-download-data'),
+                  text: 'Download my data',
+                  icon: AppIcons.download,
+                  variant: AppButtonVariant.outline,
+                  onPressed: () => _download(context, ref),
                 ),
               ],
             ),

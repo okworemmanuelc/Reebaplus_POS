@@ -78,9 +78,13 @@ class ShopperProfile {
     required this.name,
     this.phones = const [],
     this.addresses = const [],
+    this.marketingOptIn = false,
   });
 
   final String name;
+
+  /// Marketing consent (#477). Off unless the Shopper turned it on.
+  final bool marketingOptIn;
   final List<ShopperPhone> phones;
   final List<ShopperAddress> addresses;
 
@@ -100,6 +104,7 @@ class ShopperProfile {
 
   static ShopperProfile fromJson(Map<String, Object?> json) => ShopperProfile(
     name: '${json['name'] ?? ''}',
+    marketingOptIn: json['marketing_opt_in'] == true,
     phones: [
       for (final r in (json['phones'] as List?) ?? const [])
         if (r is Map) ShopperPhone.fromRow(r.cast<String, Object?>()),
