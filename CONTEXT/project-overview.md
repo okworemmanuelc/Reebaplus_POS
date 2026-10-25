@@ -156,3 +156,13 @@ security prerequisites, including the separate #467 and #468 fixes.
 11. A supplier payment or invoice recorded in Supplier Accounts is reflected in that supplier's running ledger balance, confirming the supplier ledger is the source of truth for what the business owes or has paid each supplier.
 12. Attempting to create a second business with an email already registered returns an error, confirming the one-email-one-business constraint is enforced at sign-up.
 13. On the business type selection screen, all nine industry types plus "Other" are selectable, allowing onboarding for any shop type.
+
+
+### Online ordering prerequisite #471 (2026-10-23)
+
+Owner authorised the verified Nigeria reference and reusable area picker,
+including agent-designed UI. This is shared groundwork for #423/#425/#426;
+none of those screens or navigation flows is enabled by this slice. The
+bundled 774-area list works offline; the matching cloud-only public reference
+contains no business or personal data. The broader #421 hold stays in place
+outside separately authorised issues.

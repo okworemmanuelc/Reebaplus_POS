@@ -117,6 +117,63 @@ without those dependencies. Cloud0195 stays unchanged.
   businesses.sells_one_price. This branch retains the owner's requested86/87
   chain against9732ed17; do not merge/release. Both PRs must be reconciled with
   the new main (recommended category87/listing88) in a subsequent pass.
+### #470: broadcast trigger gap (2026-10-24, ready for review)
+
+Branch fix/470-broadcast-trigger-gap (worktree drinkPosApp-wt-470). Migration
+0198 attaches zz_broadcast_sync_signal (0147 rule, same timing/events) only where
+missing — by migrations: daily_closings, van_trips, van_trip_lots,
+driver_ledger_entries, van_return_events, supplier_crate_deposit_requests,
+supplier_crate_deposits, crate_shortfall_writeoffs, barcode_catalogue_reports.
+Adds service_role-only helper broadcast_trigger_missing_tables(text[]); tier-2
+guard test/integration/rpcs/broadcast_trigger_coverage_test.dart (skips without
+env). architecture.md wording fixed + new-table checklist line. Not deployed:
+owner applies 0198 with `supabase db push --include-all`. No Drift change.
+### Issue #471: Nigeria area reference + shared picker (2026-10-23, development database verified)
+- Owner selected #471 before #423 and authorised agent-designed picker UI after
+  providing Browse/product-detail references. This authorisation covers #471;
+  consumer issues remain held until separately authorised.
+- Branch `feat/471-nigeria-area-picker`, isolated workspace under the current
+  chat's `work/reebaplus-471`, base `985e80be` (fresh origin/main).
+- Verified constitution First Schedule (FAO legal archive) and INEC counts;
+  count regression failed on the old Katsina list (32 vs 34).
+- Corrected missing entries, spurious names and clear typos; recognised historic
+  aliases stay stable. Two data tests pass: per-state counts/uniqueness (774)
+  and exact migration-seed parity. After owner approval, deployed 0189 to the
+  fresh development project and passed the previously skipped tier-2 comparison.
+- Prepared migration 0189 (0187 web and 0188 #422 reserved). POS parity issue:
+  https://github.com/okworemmanuelc/reebaplus-web/issues/135.
+- Shared UI implemented with search, caller-controlled whole-state selection,
+  free-text foreign regions, cancellation and ARB-generated strings. Eleven
+  widget checks and twelve portrait/landscape light/dark goldens pass;
+  keyboard-open cases include 360×640, 390×844 and 844×390 at 1.3 text scale.
+  Flutter analysis is clean. Full suite: **5250 passed / 294 skipped / 0 failed**
+  (6m50s), including the one unconfigured live area-reference comparison.
+- `/code-review` against starting commit `985e80be`: Standards **0 findings**;
+  Spec **0 findings** (independent reviewers). PostgreSQL parser accepts all
+  ten migration statements; this is syntax checking, not a live ACL/deploy test.
+- Re-fetched origin/main (unchanged); checked web master and its 0187 handoff;
+  no current 0189 collision. Recheck numbering before deployment.
+- Local implementation commits: `300aa17d` (reference/cloud) and `bc352a08`
+  (picker/localisation/tests). No branch push or production migration performed.
+- **Development database verification (owner approved creation):** created fresh
+  Supabase project `reebaplus-dev` (`yngwzuinxhxhzdfagcbg`, eu-west-1). Public
+  schema was empty before deployment; copied no business records. A separate
+  scratch CLI workspace is linked only to this project. Dry run listed only
+  0189; migration applied successfully and history contains only `0189`.
+- Real tier-2 test: **1 passed / 0 skipped / 0 failed**, using the development
+  URL and anon key. All 774 pairs match exactly; 37 state/FCT keys; RLS enabled.
+  Six rollback-wrapped SQL probes confirmed anon/authenticated cannot INSERT,
+  UPDATE or DELETE. Catalogue checks confirm both roles can SELECT and only
+  service_role has write grants among client/service roles.
+- The live business project `ewwyofbvfjyqqirrcaou` and the app's connection
+  settings are unchanged. Development currently has only the area reference,
+  not the full app schema. Credentials/logs stay outside this repository in the
+  private task scratch directory; no secrets committed.
+- Remaining: submit this branch for review; production rollout is separate.
+  Store setup, Browse routing, shopper addresses and delivery-area persistence
+  are subsequent issues, not enabled by this shared component.
+- Added Flutter SDK ARB/localisation support for the new picker only; existing
+  screens are outside scope. No #423/#425/#426 screen is wired yet.
 
 ### #472: shared online category reference (2026-10-24, ready for review)
 
