@@ -10,6 +10,7 @@ mixin _$CatalogDaoMixin on DatabaseAccessor<AppDatabase> {
   $CategoriesTable get categories => attachedDatabase.categories;
   $ManufacturersTable get manufacturers => attachedDatabase.manufacturers;
   $ProductsTable get products => attachedDatabase.products;
+  $ProductPhotosTable get productPhotos => attachedDatabase.productPhotos;
   $StoresTable get stores => attachedDatabase.stores;
   CatalogDaoManager get managers => CatalogDaoManager(this);
 }
@@ -32,6 +33,8 @@ class CatalogDaoManager {
       $$ManufacturersTableTableManager(_db.attachedDatabase, _db.manufacturers);
   $$ProductsTableTableManager get products =>
       $$ProductsTableTableManager(_db.attachedDatabase, _db.products);
+  $$ProductPhotosTableTableManager get productPhotos =>
+      $$ProductPhotosTableTableManager(_db.attachedDatabase, _db.productPhotos);
   $$StoresTableTableManager get stores =>
       $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
 }

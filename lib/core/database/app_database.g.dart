@@ -13479,6 +13479,528 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
   }
 }
 
+class $ProductPhotosTable extends ProductPhotos
+    with TableInfo<$ProductPhotosTable, ProductPhotoData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ProductPhotosTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: () => UuidV7.generate(),
+  );
+  static const VerificationMeta _businessIdMeta = const VerificationMeta(
+    'businessId',
+  );
+  @override
+  late final GeneratedColumn<String> businessId = GeneratedColumn<String>(
+    'business_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES businesses (id)',
+    ),
+  );
+  static const VerificationMeta _productIdMeta = const VerificationMeta(
+    'productId',
+  );
+  @override
+  late final GeneratedColumn<String> productId = GeneratedColumn<String>(
+    'product_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES products (id)',
+    ),
+  );
+  static const VerificationMeta _positionMeta = const VerificationMeta(
+    'position',
+  );
+  @override
+  late final GeneratedColumn<int> position = GeneratedColumn<int>(
+    'position',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _imageUrlMeta = const VerificationMeta(
+    'imageUrl',
+  );
+  @override
+  late final GeneratedColumn<String> imageUrl = GeneratedColumn<String>(
+    'image_url',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _isDeletedMeta = const VerificationMeta(
+    'isDeleted',
+  );
+  @override
+  late final GeneratedColumn<bool> isDeleted = GeneratedColumn<bool>(
+    'is_deleted',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_deleted" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _lastUpdatedAtMeta = const VerificationMeta(
+    'lastUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'last_updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    businessId,
+    productId,
+    position,
+    imageUrl,
+    isDeleted,
+    createdAt,
+    lastUpdatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'product_photos';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ProductPhotoData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('business_id')) {
+      context.handle(
+        _businessIdMeta,
+        businessId.isAcceptableOrUnknown(data['business_id']!, _businessIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_businessIdMeta);
+    }
+    if (data.containsKey('product_id')) {
+      context.handle(
+        _productIdMeta,
+        productId.isAcceptableOrUnknown(data['product_id']!, _productIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_productIdMeta);
+    }
+    if (data.containsKey('position')) {
+      context.handle(
+        _positionMeta,
+        position.isAcceptableOrUnknown(data['position']!, _positionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_positionMeta);
+    }
+    if (data.containsKey('image_url')) {
+      context.handle(
+        _imageUrlMeta,
+        imageUrl.isAcceptableOrUnknown(data['image_url']!, _imageUrlMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_imageUrlMeta);
+    }
+    if (data.containsKey('is_deleted')) {
+      context.handle(
+        _isDeletedMeta,
+        isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('last_updated_at')) {
+      context.handle(
+        _lastUpdatedAtMeta,
+        lastUpdatedAt.isAcceptableOrUnknown(
+          data['last_updated_at']!,
+          _lastUpdatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ProductPhotoData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ProductPhotoData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      businessId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}business_id'],
+      )!,
+      productId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}product_id'],
+      )!,
+      position: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}position'],
+      )!,
+      imageUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}image_url'],
+      )!,
+      isDeleted: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_deleted'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $ProductPhotosTable createAlias(String alias) {
+    return $ProductPhotosTable(attachedDatabase, alias);
+  }
+}
+
+class ProductPhotoData extends DataClass
+    implements Insertable<ProductPhotoData> {
+  final String id;
+  final String businessId;
+  final String productId;
+  final int position;
+  final String imageUrl;
+  final bool isDeleted;
+  final DateTime createdAt;
+  final DateTime lastUpdatedAt;
+  const ProductPhotoData({
+    required this.id,
+    required this.businessId,
+    required this.productId,
+    required this.position,
+    required this.imageUrl,
+    required this.isDeleted,
+    required this.createdAt,
+    required this.lastUpdatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['business_id'] = Variable<String>(businessId);
+    map['product_id'] = Variable<String>(productId);
+    map['position'] = Variable<int>(position);
+    map['image_url'] = Variable<String>(imageUrl);
+    map['is_deleted'] = Variable<bool>(isDeleted);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    return map;
+  }
+
+  ProductPhotosCompanion toCompanion(bool nullToAbsent) {
+    return ProductPhotosCompanion(
+      id: Value(id),
+      businessId: Value(businessId),
+      productId: Value(productId),
+      position: Value(position),
+      imageUrl: Value(imageUrl),
+      isDeleted: Value(isDeleted),
+      createdAt: Value(createdAt),
+      lastUpdatedAt: Value(lastUpdatedAt),
+    );
+  }
+
+  factory ProductPhotoData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ProductPhotoData(
+      id: serializer.fromJson<String>(json['id']),
+      businessId: serializer.fromJson<String>(json['businessId']),
+      productId: serializer.fromJson<String>(json['productId']),
+      position: serializer.fromJson<int>(json['position']),
+      imageUrl: serializer.fromJson<String>(json['imageUrl']),
+      isDeleted: serializer.fromJson<bool>(json['isDeleted']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'businessId': serializer.toJson<String>(businessId),
+      'productId': serializer.toJson<String>(productId),
+      'position': serializer.toJson<int>(position),
+      'imageUrl': serializer.toJson<String>(imageUrl),
+      'isDeleted': serializer.toJson<bool>(isDeleted),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+    };
+  }
+
+  ProductPhotoData copyWith({
+    String? id,
+    String? businessId,
+    String? productId,
+    int? position,
+    String? imageUrl,
+    bool? isDeleted,
+    DateTime? createdAt,
+    DateTime? lastUpdatedAt,
+  }) => ProductPhotoData(
+    id: id ?? this.id,
+    businessId: businessId ?? this.businessId,
+    productId: productId ?? this.productId,
+    position: position ?? this.position,
+    imageUrl: imageUrl ?? this.imageUrl,
+    isDeleted: isDeleted ?? this.isDeleted,
+    createdAt: createdAt ?? this.createdAt,
+    lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+  );
+  ProductPhotoData copyWithCompanion(ProductPhotosCompanion data) {
+    return ProductPhotoData(
+      id: data.id.present ? data.id.value : this.id,
+      businessId: data.businessId.present
+          ? data.businessId.value
+          : this.businessId,
+      productId: data.productId.present ? data.productId.value : this.productId,
+      position: data.position.present ? data.position.value : this.position,
+      imageUrl: data.imageUrl.present ? data.imageUrl.value : this.imageUrl,
+      isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastUpdatedAt: data.lastUpdatedAt.present
+          ? data.lastUpdatedAt.value
+          : this.lastUpdatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ProductPhotoData(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('productId: $productId, ')
+          ..write('position: $position, ')
+          ..write('imageUrl: $imageUrl, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    businessId,
+    productId,
+    position,
+    imageUrl,
+    isDeleted,
+    createdAt,
+    lastUpdatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ProductPhotoData &&
+          other.id == this.id &&
+          other.businessId == this.businessId &&
+          other.productId == this.productId &&
+          other.position == this.position &&
+          other.imageUrl == this.imageUrl &&
+          other.isDeleted == this.isDeleted &&
+          other.createdAt == this.createdAt &&
+          other.lastUpdatedAt == this.lastUpdatedAt);
+}
+
+class ProductPhotosCompanion extends UpdateCompanion<ProductPhotoData> {
+  final Value<String> id;
+  final Value<String> businessId;
+  final Value<String> productId;
+  final Value<int> position;
+  final Value<String> imageUrl;
+  final Value<bool> isDeleted;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> lastUpdatedAt;
+  final Value<int> rowid;
+  const ProductPhotosCompanion({
+    this.id = const Value.absent(),
+    this.businessId = const Value.absent(),
+    this.productId = const Value.absent(),
+    this.position = const Value.absent(),
+    this.imageUrl = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ProductPhotosCompanion.insert({
+    this.id = const Value.absent(),
+    required String businessId,
+    required String productId,
+    required int position,
+    required String imageUrl,
+    this.isDeleted = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : businessId = Value(businessId),
+       productId = Value(productId),
+       position = Value(position),
+       imageUrl = Value(imageUrl);
+  static Insertable<ProductPhotoData> custom({
+    Expression<String>? id,
+    Expression<String>? businessId,
+    Expression<String>? productId,
+    Expression<int>? position,
+    Expression<String>? imageUrl,
+    Expression<bool>? isDeleted,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastUpdatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (businessId != null) 'business_id': businessId,
+      if (productId != null) 'product_id': productId,
+      if (position != null) 'position': position,
+      if (imageUrl != null) 'image_url': imageUrl,
+      if (isDeleted != null) 'is_deleted': isDeleted,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ProductPhotosCompanion copyWith({
+    Value<String>? id,
+    Value<String>? businessId,
+    Value<String>? productId,
+    Value<int>? position,
+    Value<String>? imageUrl,
+    Value<bool>? isDeleted,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? lastUpdatedAt,
+    Value<int>? rowid,
+  }) {
+    return ProductPhotosCompanion(
+      id: id ?? this.id,
+      businessId: businessId ?? this.businessId,
+      productId: productId ?? this.productId,
+      position: position ?? this.position,
+      imageUrl: imageUrl ?? this.imageUrl,
+      isDeleted: isDeleted ?? this.isDeleted,
+      createdAt: createdAt ?? this.createdAt,
+      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (businessId.present) {
+      map['business_id'] = Variable<String>(businessId.value);
+    }
+    if (productId.present) {
+      map['product_id'] = Variable<String>(productId.value);
+    }
+    if (position.present) {
+      map['position'] = Variable<int>(position.value);
+    }
+    if (imageUrl.present) {
+      map['image_url'] = Variable<String>(imageUrl.value);
+    }
+    if (isDeleted.present) {
+      map['is_deleted'] = Variable<bool>(isDeleted.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lastUpdatedAt.present) {
+      map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ProductPhotosCompanion(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('productId: $productId, ')
+          ..write('position: $position, ')
+          ..write('imageUrl: $imageUrl, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $PriceListsTable extends PriceLists
     with TableInfo<$PriceListsTable, PriceListData> {
   @override
@@ -49794,6 +50316,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $CrateShortfallWriteoffsTable crateShortfallWriteoffs =
       $CrateShortfallWriteoffsTable(this);
   late final $ProductsTable products = $ProductsTable(this);
+  late final $ProductPhotosTable productPhotos = $ProductPhotosTable(this);
   late final $PriceListsTable priceLists = $PriceListsTable(this);
   late final $CustomersTable customers = $CustomersTable(this);
   late final $CustomerWalletsTable customerWallets = $CustomerWalletsTable(
@@ -49993,6 +50516,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     supplierCrateDeposits,
     crateShortfallWriteoffs,
     products,
+    productPhotos,
     priceLists,
     customers,
     customerWallets,
@@ -50420,6 +50944,27 @@ final class $$BusinessesTableReferences
     ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_productsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$ProductPhotosTable, List<ProductPhotoData>>
+  _productPhotosRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.productPhotos,
+    aliasName: $_aliasNameGenerator(
+      db.businesses.id,
+      db.productPhotos.businessId,
+    ),
+  );
+
+  $$ProductPhotosTableProcessedTableManager get productPhotosRefs {
+    final manager = $$ProductPhotosTableTableManager(
+      $_db,
+      $_db.productPhotos,
+    ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_productPhotosRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -51924,6 +52469,31 @@ class $$BusinessesTableFilterComposer
           }) => $$ProductsTableFilterComposer(
             $db: $db,
             $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> productPhotosRefs(
+    Expression<bool> Function($$ProductPhotosTableFilterComposer f) f,
+  ) {
+    final $$ProductPhotosTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.productPhotos,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductPhotosTableFilterComposer(
+            $db: $db,
+            $table: $db.productPhotos,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -53671,6 +54241,31 @@ class $$BusinessesTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> productPhotosRefs<T extends Object>(
+    Expression<T> Function($$ProductPhotosTableAnnotationComposer a) f,
+  ) {
+    final $$ProductPhotosTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.productPhotos,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductPhotosTableAnnotationComposer(
+            $db: $db,
+            $table: $db.productPhotos,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> priceListsRefs<T extends Object>(
     Expression<T> Function($$PriceListsTableAnnotationComposer a) f,
   ) {
@@ -54916,6 +55511,7 @@ class $$BusinessesTableTableManager
             bool supplierCrateDepositsRefs,
             bool crateShortfallWriteoffsRefs,
             bool productsRefs,
+            bool productPhotosRefs,
             bool priceListsRefs,
             bool customersRefs,
             bool customerWalletsRefs,
@@ -55081,6 +55677,7 @@ class $$BusinessesTableTableManager
                 supplierCrateDepositsRefs = false,
                 crateShortfallWriteoffsRefs = false,
                 productsRefs = false,
+                productPhotosRefs = false,
                 priceListsRefs = false,
                 customersRefs = false,
                 customerWalletsRefs = false,
@@ -55148,6 +55745,7 @@ class $$BusinessesTableTableManager
                     if (supplierCrateDepositsRefs) db.supplierCrateDeposits,
                     if (crateShortfallWriteoffsRefs) db.crateShortfallWriteoffs,
                     if (productsRefs) db.products,
+                    if (productPhotosRefs) db.productPhotos,
                     if (priceListsRefs) db.priceLists,
                     if (customersRefs) db.customers,
                     if (customerWalletsRefs) db.customerWallets,
@@ -55489,6 +56087,27 @@ class $$BusinessesTableTableManager
                                 table,
                                 p0,
                               ).productsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.businessId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (productPhotosRefs)
+                        await $_getPrefetchedData<
+                          BusinessData,
+                          $BusinessesTable,
+                          ProductPhotoData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$BusinessesTableReferences
+                              ._productPhotosRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$BusinessesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).productPhotosRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.businessId == item.id,
@@ -56538,6 +57157,7 @@ typedef $$BusinessesTableProcessedTableManager =
         bool supplierCrateDepositsRefs,
         bool crateShortfallWriteoffsRefs,
         bool productsRefs,
+        bool productPhotosRefs,
         bool priceListsRefs,
         bool customersRefs,
         bool customerWalletsRefs,
@@ -72764,6 +73384,24 @@ final class $$ProductsTableReferences
     );
   }
 
+  static MultiTypedResultKey<$ProductPhotosTable, List<ProductPhotoData>>
+  _productPhotosRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.productPhotos,
+    aliasName: $_aliasNameGenerator(db.products.id, db.productPhotos.productId),
+  );
+
+  $$ProductPhotosTableProcessedTableManager get productPhotosRefs {
+    final manager = $$ProductPhotosTableTableManager(
+      $_db,
+      $_db.productPhotos,
+    ).filter((f) => f.productId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_productPhotosRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<$PriceListsTable, List<PriceListData>>
   _priceListsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.priceLists,
@@ -73292,6 +73930,31 @@ class $$ProductsTableFilterComposer
           ),
     );
     return composer;
+  }
+
+  Expression<bool> productPhotosRefs(
+    Expression<bool> Function($$ProductPhotosTableFilterComposer f) f,
+  ) {
+    final $$ProductPhotosTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.productPhotos,
+      getReferencedColumn: (t) => t.productId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductPhotosTableFilterComposer(
+            $db: $db,
+            $table: $db.productPhotos,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
   }
 
   Expression<bool> priceListsRefs(
@@ -74140,6 +74803,31 @@ class $$ProductsTableAnnotationComposer
     return composer;
   }
 
+  Expression<T> productPhotosRefs<T extends Object>(
+    Expression<T> Function($$ProductPhotosTableAnnotationComposer a) f,
+  ) {
+    final $$ProductPhotosTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.productPhotos,
+      getReferencedColumn: (t) => t.productId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductPhotosTableAnnotationComposer(
+            $db: $db,
+            $table: $db.productPhotos,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> priceListsRefs<T extends Object>(
     Expression<T> Function($$PriceListsTableAnnotationComposer a) f,
   ) {
@@ -74438,6 +75126,7 @@ class $$ProductsTableTableManager
             bool crateSizeGroupId,
             bool supplierId,
             bool manufacturerId,
+            bool productPhotosRefs,
             bool priceListsRefs,
             bool inventoryRefs,
             bool costBatchesRefs,
@@ -74649,6 +75338,7 @@ class $$ProductsTableTableManager
                 crateSizeGroupId = false,
                 supplierId = false,
                 manufacturerId = false,
+                productPhotosRefs = false,
                 priceListsRefs = false,
                 inventoryRefs = false,
                 costBatchesRefs = false,
@@ -74664,6 +75354,7 @@ class $$ProductsTableTableManager
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
+                    if (productPhotosRefs) db.productPhotos,
                     if (priceListsRefs) db.priceLists,
                     if (inventoryRefs) db.inventory,
                     if (costBatchesRefs) db.costBatches,
@@ -74762,6 +75453,27 @@ class $$ProductsTableTableManager
                       },
                   getPrefetchedDataCallback: (items) async {
                     return [
+                      if (productPhotosRefs)
+                        await $_getPrefetchedData<
+                          ProductData,
+                          $ProductsTable,
+                          ProductPhotoData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ProductsTableReferences
+                              ._productPhotosRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ProductsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).productPhotosRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.productId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (priceListsRefs)
                         await $_getPrefetchedData<
                           ProductData,
@@ -75019,6 +75731,7 @@ typedef $$ProductsTableProcessedTableManager =
         bool crateSizeGroupId,
         bool supplierId,
         bool manufacturerId,
+        bool productPhotosRefs,
         bool priceListsRefs,
         bool inventoryRefs,
         bool costBatchesRefs,
@@ -75031,6 +75744,477 @@ typedef $$ProductsTableProcessedTableManager =
         bool vanTripLotsRefs,
         bool vanReturnEventsRefs,
       })
+    >;
+typedef $$ProductPhotosTableCreateCompanionBuilder =
+    ProductPhotosCompanion Function({
+      Value<String> id,
+      required String businessId,
+      required String productId,
+      required int position,
+      required String imageUrl,
+      Value<bool> isDeleted,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+typedef $$ProductPhotosTableUpdateCompanionBuilder =
+    ProductPhotosCompanion Function({
+      Value<String> id,
+      Value<String> businessId,
+      Value<String> productId,
+      Value<int> position,
+      Value<String> imageUrl,
+      Value<bool> isDeleted,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+
+final class $$ProductPhotosTableReferences
+    extends
+        BaseReferences<_$AppDatabase, $ProductPhotosTable, ProductPhotoData> {
+  $$ProductPhotosTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $BusinessesTable _businessIdTable(_$AppDatabase db) =>
+      db.businesses.createAlias(
+        $_aliasNameGenerator(db.productPhotos.businessId, db.businesses.id),
+      );
+
+  $$BusinessesTableProcessedTableManager get businessId {
+    final $_column = $_itemColumn<String>('business_id')!;
+
+    final manager = $$BusinessesTableTableManager(
+      $_db,
+      $_db.businesses,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $ProductsTable _productIdTable(_$AppDatabase db) =>
+      db.products.createAlias(
+        $_aliasNameGenerator(db.productPhotos.productId, db.products.id),
+      );
+
+  $$ProductsTableProcessedTableManager get productId {
+    final $_column = $_itemColumn<String>('product_id')!;
+
+    final manager = $$ProductsTableTableManager(
+      $_db,
+      $_db.products,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_productIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$ProductPhotosTableFilterComposer
+    extends Composer<_$AppDatabase, $ProductPhotosTable> {
+  $$ProductPhotosTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get imageUrl => $composableBuilder(
+    column: $table.imageUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isDeleted => $composableBuilder(
+    column: $table.isDeleted,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$BusinessesTableFilterComposer get businessId {
+    final $$BusinessesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableFilterComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductsTableFilterComposer get productId {
+    final $$ProductsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableFilterComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ProductPhotosTableOrderingComposer
+    extends Composer<_$AppDatabase, $ProductPhotosTable> {
+  $$ProductPhotosTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get imageUrl => $composableBuilder(
+    column: $table.imageUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isDeleted => $composableBuilder(
+    column: $table.isDeleted,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$BusinessesTableOrderingComposer get businessId {
+    final $$BusinessesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableOrderingComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductsTableOrderingComposer get productId {
+    final $$ProductsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableOrderingComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ProductPhotosTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ProductPhotosTable> {
+  $$ProductPhotosTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get position =>
+      $composableBuilder(column: $table.position, builder: (column) => column);
+
+  GeneratedColumn<String> get imageUrl =>
+      $composableBuilder(column: $table.imageUrl, builder: (column) => column);
+
+  GeneratedColumn<bool> get isDeleted =>
+      $composableBuilder(column: $table.isDeleted, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => column,
+  );
+
+  $$BusinessesTableAnnotationComposer get businessId {
+    final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductsTableAnnotationComposer get productId {
+    final $$ProductsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ProductPhotosTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ProductPhotosTable,
+          ProductPhotoData,
+          $$ProductPhotosTableFilterComposer,
+          $$ProductPhotosTableOrderingComposer,
+          $$ProductPhotosTableAnnotationComposer,
+          $$ProductPhotosTableCreateCompanionBuilder,
+          $$ProductPhotosTableUpdateCompanionBuilder,
+          (ProductPhotoData, $$ProductPhotosTableReferences),
+          ProductPhotoData,
+          PrefetchHooks Function({bool businessId, bool productId})
+        > {
+  $$ProductPhotosTableTableManager(_$AppDatabase db, $ProductPhotosTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ProductPhotosTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ProductPhotosTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ProductPhotosTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> businessId = const Value.absent(),
+                Value<String> productId = const Value.absent(),
+                Value<int> position = const Value.absent(),
+                Value<String> imageUrl = const Value.absent(),
+                Value<bool> isDeleted = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ProductPhotosCompanion(
+                id: id,
+                businessId: businessId,
+                productId: productId,
+                position: position,
+                imageUrl: imageUrl,
+                isDeleted: isDeleted,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String businessId,
+                required String productId,
+                required int position,
+                required String imageUrl,
+                Value<bool> isDeleted = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ProductPhotosCompanion.insert(
+                id: id,
+                businessId: businessId,
+                productId: productId,
+                position: position,
+                imageUrl: imageUrl,
+                isDeleted: isDeleted,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$ProductPhotosTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({businessId = false, productId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (businessId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.businessId,
+                                referencedTable: $$ProductPhotosTableReferences
+                                    ._businessIdTable(db),
+                                referencedColumn: $$ProductPhotosTableReferences
+                                    ._businessIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+                    if (productId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.productId,
+                                referencedTable: $$ProductPhotosTableReferences
+                                    ._productIdTable(db),
+                                referencedColumn: $$ProductPhotosTableReferences
+                                    ._productIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$ProductPhotosTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ProductPhotosTable,
+      ProductPhotoData,
+      $$ProductPhotosTableFilterComposer,
+      $$ProductPhotosTableOrderingComposer,
+      $$ProductPhotosTableAnnotationComposer,
+      $$ProductPhotosTableCreateCompanionBuilder,
+      $$ProductPhotosTableUpdateCompanionBuilder,
+      (ProductPhotoData, $$ProductPhotosTableReferences),
+      ProductPhotoData,
+      PrefetchHooks Function({bool businessId, bool productId})
     >;
 typedef $$PriceListsTableCreateCompanionBuilder =
     PriceListsCompanion Function({
@@ -113332,6 +114516,8 @@ class $AppDatabaseManager {
       );
   $$ProductsTableTableManager get products =>
       $$ProductsTableTableManager(_db, _db.products);
+  $$ProductPhotosTableTableManager get productPhotos =>
+      $$ProductPhotosTableTableManager(_db, _db.productPhotos);
   $$PriceListsTableTableManager get priceLists =>
       $$PriceListsTableTableManager(_db, _db.priceLists);
   $$CustomersTableTableManager get customers =>

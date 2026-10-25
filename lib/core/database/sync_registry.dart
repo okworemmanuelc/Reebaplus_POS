@@ -760,6 +760,20 @@ final List<SyncedTable> kSyncRegistry = [
       defaults: {'showOnline': true, 'minOrderQty': 1, 'orderStep': 1},
     ),
   ),
+  // #474: product gallery photos (positions 2–5; the cover stays in
+  // products.image_url). Deterministic slot ids per (product, position);
+  // soft-deleted, never hard-deleted, so no hard-delete reconcile. FK →
+  // products, so a RESILIENT restore (a slot can land before its product).
+  SyncedTable(
+    name: 'product_photos',
+    tenantScoped: true,
+    restore: Restore.plain(
+      (db) => db.productPhotos,
+      ProductPhotoData.fromJson,
+      resilient: true,
+      defaults: {'isDeleted': false},
+    ),
+  ),
   SyncedTable(
     name: 'inventory',
     isCache: true,

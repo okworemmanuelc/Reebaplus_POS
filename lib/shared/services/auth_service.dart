@@ -1144,7 +1144,9 @@ class AuthService extends ValueNotifier<UserData?> {
       // Raw count of waiting photo copies (not the live-product filter, which
       // reads the signed-in business and may not be [businessId]).
       final photos =
-          (await LocalPhotoFiles.pendingUploadProductIds(businessId)).length;
+          (await LocalPhotoFiles.pendingUploadProductIds(businessId)).length +
+          // #474: gallery photos wait in their own list.
+          (await LocalPhotoFiles.pendingGalleryUploads(businessId)).length;
       if (pending + orphans + photos == 0) return;
       final entry =
           '${DateTime.now().toUtc().toIso8601String()} $reason '

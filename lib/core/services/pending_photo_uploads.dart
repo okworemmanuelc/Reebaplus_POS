@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import 'package:reebaplus_pos/core/database/daos.dart';
 import 'package:reebaplus_pos/core/services/local_photo_files.dart';
+import 'package:reebaplus_pos/core/services/product_gallery_images.dart';
 import 'package:reebaplus_pos/core/services/product_image_service.dart';
 
 /// Product photos saved on this phone that have not reached the cloud yet
@@ -15,17 +16,23 @@ import 'package:reebaplus_pos/core/services/product_image_service.dart';
 /// belongs to the business, its device copy is still there, and its product
 /// still exists. A photo that fails any of those can never upload, so it never
 /// holds up a logout.
+///
+/// Gallery photos (#474, [gallery]) count and upload by the same rule; they
+/// wait in their own list (`ProductGalleryImages`).
 class PendingPhotoUploads {
   PendingPhotoUploads({
     required ProductImageService images,
     required CatalogDao catalog,
+    ProductGalleryImages? gallery,
     @visibleForTesting Directory? documents,
   })  : _images = images,
         _catalog = catalog,
+        _gallery = gallery,
         _documents = documents;
 
   final ProductImageService _images;
   final CatalogDao _catalog;
+  final ProductGalleryImages? _gallery;
   final Directory? _documents;
 
   /// How many of [businessId]'s photos are still waiting to upload.
@@ -38,15 +45,30 @@ class PendingPhotoUploads {
     for (final id in ids) {
       if (await _catalog.productIsLive(id)) live++;
     }
+    final gallery = _gallery;
+    if (gallery != null) {
+      live += await gallery.pendingCount(
+        businessId,
+        isLiveProduct: _catalog.productIsLive,
+        documents: _documents,
+      );
+    }
     return live;
   }
 
   /// Uploads [businessId]'s waiting photos and writes each url onto its
   /// product (which queues the product row for sync). Photos that fail stay
   /// waiting for the next try.
-  Future<void> upload(String businessId) => _images.flushPending(
-        businessId,
-        _catalog.setProductImageUrl,
-        isLiveProduct: _catalog.productIsLive,
-      );
+  Future<void> upload(String businessId) async {
+    await _images.flushPending(
+      businessId,
+      _catalog.setProductImageUrl,
+      isLiveProduct: _catalog.productIsLive,
+    );
+    // Gallery rows already carry their url; only the bytes are uploaded.
+    await _gallery?.flushPending(
+      businessId,
+      isLiveProduct: _catalog.productIsLive,
+    );
+  }
 }

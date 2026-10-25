@@ -97,6 +97,8 @@ class FakeStorefront {
   List<Map<String, Object?>> search = kSearchRows;
   List<Map<String, Object?>> store = [kStoreRow];
   List<Map<String, Object?>> storeProducts = kSearchRows;
+  // #474: a product's gallery; empty = the sheet shows the card's cover.
+  List<Map<String, Object?>> productPhotos = const [];
 
   late final service = StorefrontService.withRpc(
     isOnline: () async => online,
@@ -107,6 +109,7 @@ class FakeStorefront {
         'storefront_search' => search,
         'storefront_store' => store,
         'storefront_store_products' => storeProducts,
+        'storefront_product_photos' => productPhotos,
         _ => throw StateError('unexpected $fn'),
       };
     },

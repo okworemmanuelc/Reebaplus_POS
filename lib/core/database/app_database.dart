@@ -850,6 +850,41 @@ class Products extends Table {
   ];
 }
 
+/// Most photos one product shows (#474): the cover plus four gallery photos.
+const int kMaxProductPhotos = 5;
+
+/// Gallery photos of a product, positions 2–5 (#474; cloud 0204). Position 1
+/// is the cover and stays in `products.image_url`, so nothing that reads the
+/// cover changes. Each (product, position) is a slot with a deterministic id
+/// ([productPhotoSlotId]); a reorder or removal moves [imageUrl] between slots
+/// and soft-deletes the leftovers — a row's position never changes. Synced;
+/// soft-deleted via [isDeleted], never hard-deleted.
+@DataClassName('ProductPhotoData')
+class ProductPhotos extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get productId => text().references(Products, #id)();
+  IntColumn get position => integer()();
+  TextColumn get imageUrl => text()();
+  BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    'CHECK (position BETWEEN 2 AND 5)',
+  ];
+}
+
+/// The deterministic id of a product's gallery slot (#474): the same
+/// (product, position) is always the same row on every phone.
+String productPhotoSlotId(String productId, int position) =>
+    UuidV7.deterministic('product_photo:$productId:$position');
+
 @DataClassName('PriceListData')
 class PriceLists extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
@@ -2875,6 +2910,7 @@ class MigrationEvents extends Table {
     SupplierCrateDeposits,
     CrateShortfallWriteoffs,
     Products,
+    ProductPhotos,
     PriceLists,
     Customers,
     CustomerWallets,
@@ -3010,7 +3046,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 90;
+  int get schemaVersion => 91;
 
   /// The v90 (#473) listing columns, pinned to their defaults in every older
   /// products rebuild: TableMigration copies from the CURRENT schema, so a
@@ -6624,6 +6660,22 @@ class AppDatabase extends _$AppDatabase {
           }
         }
       }
+      if (from < 91) {
+        // ── v91 — #474: product gallery photos ───────────────────────────
+        //
+        // Mirrors supabase/migrations/0204_product_photos.sql. A new table
+        // only (no products column, so no TableMigration pins). Guarded so a
+        // re-upgrade is idempotent; the sync-index, bump trigger and live-slot
+        // unique index match what onCreate builds for a fresh install.
+        final hasPhotos = (await customSelect(
+          "SELECT 1 FROM sqlite_master WHERE type = 'table' "
+          "AND name = 'product_photos'",
+        ).get()).isNotEmpty;
+        if (!hasPhotos) await m.createTable(productPhotos);
+        for (final stmt in _productPhotoUpgradeStatements) {
+          await customStatement(stmt);
+        }
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -7514,6 +7566,29 @@ const List<String> _crateDepositIndexStatements = [
 /// it would try to create the same index twice on a fresh install. The v80
 /// upgrade step creates it explicitly instead, exactly as v79 does for the
 /// Placed Deposit ledger.
+/// One live gallery photo per (product, position) (#474; cloud 0204's
+/// `uq_product_photos_live_position`). Slot ids are deterministic, so this
+/// only guards against a hand-written row.
+const String _productPhotoLivePositionIndex =
+    'CREATE UNIQUE INDEX IF NOT EXISTS uq_product_photos_live_position '
+    'ON product_photos (product_id, position) WHERE is_deleted = 0';
+
+/// The v91 upgrade's extras for `product_photos` — the same sync index and
+/// bump trigger the onCreate loops build for every synced tenant table, plus
+/// the live-slot index. All IF NOT EXISTS (re-upgrade safe).
+const List<String> _productPhotoUpgradeStatements = [
+  'CREATE INDEX IF NOT EXISTS idx_product_photos_business_lua '
+      'ON product_photos (business_id, last_updated_at)',
+  'CREATE TRIGGER IF NOT EXISTS bump_product_photos_last_updated_at '
+      'AFTER UPDATE ON product_photos '
+      'FOR EACH ROW '
+      'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+      'BEGIN '
+      "UPDATE product_photos SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+      'END',
+  _productPhotoLivePositionIndex,
+];
+
 const List<String> _crateShortfallIndexStatements = [
   // The two reads there are: the brand's net written-off COUNT (which nets out
   // of the derived shortfall on the card) and the period's booked LOSS (which
@@ -7602,6 +7677,8 @@ List<String> get _postCreateStatements {
     ..._crateDepositPaymentIndexStatements,
     // v80 (#216 PRD #203) — the Crate Shortfall write-off ledger.
     ..._crateShortfallIndexStatements,
+    // v91 (#474) — one live gallery photo per (product, position).
+    _productPhotoLivePositionIndex,
     // v31 (Expenses budget) — one live goal per (business, store-or-null).
     'CREATE UNIQUE INDEX uq_expense_budgets_business ON expense_budgets '
         '(business_id) WHERE store_id IS NULL AND is_deleted = 0',

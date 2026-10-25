@@ -20,6 +20,7 @@ import 'package:reebaplus_pos/core/providers/mirror_notifier.dart';
 import 'package:reebaplus_pos/core/services/biometric_service.dart';
 import 'package:reebaplus_pos/core/services/business_logo_service.dart';
 import 'package:reebaplus_pos/core/services/barcode_catalogue_service.dart';
+import 'package:reebaplus_pos/core/services/product_gallery_images.dart';
 import 'package:reebaplus_pos/core/services/product_image_service.dart';
 import 'package:reebaplus_pos/core/services/pending_photo_uploads.dart';
 import 'package:reebaplus_pos/core/theme/theme_notifier.dart';
@@ -615,8 +616,29 @@ final pendingPhotoUploadsProvider = Provider<PendingPhotoUploads>((ref) {
   return PendingPhotoUploads(
     images: ref.read(productImageServiceProvider),
     catalog: ref.read(databaseProvider).catalogDao,
+    gallery: ref.read(productGalleryImagesProvider),
   );
 });
+
+/// Storage side of a product's gallery photos (#474). Widget tests override it
+/// with a fake.
+final productGalleryImagesProvider = Provider<ProductGalleryImages>((ref) {
+  return ProductGalleryImages.supabase(ref.read(supabaseClientProvider));
+});
+
+/// A device path that shows one gallery photo (#474): its copy on this phone,
+/// downloaded once when missing. Null = nothing to show (offline, no copy).
+final galleryPhotoPathProvider =
+    FutureProvider.autoDispose.family<String?, String>(
+  (ref, url) => ref.read(productGalleryImagesProvider).ensureCached(url),
+);
+
+/// Live gallery photos (positions 2–5) of one product (#474).
+final productPhotosProvider =
+    businessScopedStreamAutoDisposeFamily<List<ProductPhotoData>, String>(
+  (ref, db, businessId, id) => db.catalogDao.watchProductPhotos(id),
+  whenAbsent: const [],
+);
 
 // ── Shared barcode catalogue (#332, ADR 0029) ───────────────────────────────
 
