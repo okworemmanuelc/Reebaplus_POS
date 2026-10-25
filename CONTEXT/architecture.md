@@ -125,6 +125,13 @@ path):
   phone with a device user the PIN screen always, otherwise Browse (switch on)
   or Welcome. "Sell on Reebaplus" pushes the unchanged Welcome; sign-in
   regenerates the navigator, so nothing of Browse survives into the till.
+  The same switch shows **Shop** in the till's side menu (#437): it pushes
+  `BrowseScreen(fromTill: true)` on the root navigator with the business's
+  own Supabase session as the Shopper login, and leaving it runs `lockApp()`,
+  so the PIN screen guards the way back. "Your store" (owner only) is decided
+  on the phone (`ownStoreIdsProvider`: the business's local store ids when
+  `businesses.owner_id` is the signed-in login) — no storefront RPC exposes a
+  business id; the cloud's `own_business` refusal remains the authority.
 
 All ordinary business writes still go to Drift first and drain through the
 `sync_queue`.

@@ -7,6 +7,8 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #437: Business users can shop (2026-10-26, ready for review)
+- App only (no SQL, no Drift): side-menu **Shop** (behind `kBrowseFirstEnabled`, every role) opens Browse with the business sign-in; back locks the till → PIN. Owner sees "Your store" (card pill, product sheet note, store page note), no Add to cart/report; staff order normally; clearer `own_business` text. Sign-up verified unchanged (Shopper login → Create business; linked login → existing account). Gate test `test/shopper/shopper_boundary_test.dart`.
 ### Issue #435: Expire unanswered Online Orders (2026-10-25, ready for review)
 - Cloud 0213: `expire_stale_online_orders()` (service_role only) + hourly pg_cron (guarded); no Drift change, no guard change. NOT deployed.
 ### Issue #478: Report a listing + admin takedown (2026-10-25, ready for review)
