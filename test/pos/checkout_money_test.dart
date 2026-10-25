@@ -53,8 +53,10 @@ class _RecordingOrderService extends OrderService {
     String paymentSubType = 'cash',
     int walletBalanceKobo = 0,
     Map<String, int> crateDepositPaidByManufacturer = const {},
+    String? onlineOrderId,
   }) async {
     calls.add({
+      if (onlineOrderId != null) 'onlineOrderId': onlineOrderId,
       'customerId': customerId,
       'lines': cart.length,
       'totalAmountKobo': totalAmountKobo,
@@ -129,6 +131,7 @@ void main() {
     WidgetTester tester, {
     Customer? customer,
     int creditKobo = 0,
+    String? onlineOrderId,
   }) async {
     final starId = env.manufacturers[0].id;
     final heroId = env.manufacturers[1].id;
@@ -177,6 +180,13 @@ void main() {
             discountKobo: 50000,
           );
           if (customer != null) cart.setActiveCustomer(customer);
+          // #431 — a Cart sent to the till from an Online Order.
+          if (onlineOrderId != null) {
+            cart.loadCart([
+              for (final l in cart.value)
+                {...l, CartService.kOnlineOrderIdKey: onlineOrderId},
+            ], customer);
+          }
         },
         builder: (c) => CartScreen(
           cart: const [],
@@ -421,6 +431,15 @@ void main() {
     expect(orders.calls.single['paymentSubType'], 'cash');
     expect(orders.calls.single['amountPaidKobo'], 0);
     expect(orders.calls.single['crateDepositPaidKobo'], 0);
+    await finish(tester);
+  });
+
+  testWidgets('a Cart sent to the till hands its Online Order to Checkout '
+      '(#431)', (tester) async {
+    await openCheckout(tester, onlineOrderId: 'online-1');
+    await tapButton(tester, 'Confirm Payment');
+    expect(orders.calls.single['onlineOrderId'], 'online-1');
+    expect(orders.calls.single['totalAmountKobo'], 3250000);
     await finish(tester);
   });
 

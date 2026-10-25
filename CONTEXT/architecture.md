@@ -204,6 +204,15 @@ from a Shopper links a Customer by staff choice (`customers.shopper_account_id`,
 one live Customer per Shopper per business); later orders attach automatically;
 never by phone match.
 
+**Send to till (#431).** No schema change. An accepted order's lines
+(accepted_qty > 0) load into the Cart of the order's store at the agreed
+`unit_price_kobo` (charged) with the catalogue price kept for the
+catalogue-vs-charged capture, the linked Customer attached, and each line
+tagged with the online order id (the tag travels in `saved_carts.cart_data`).
+Checkout of a tagged Cart marks the order `fulfilled` + `linked_order_id`
+inside `OrdersDao.createOrder`'s transaction (Drift + outbox; held by the
+order on the v2 envelope path). Stock, money and crates are a till sale's.
+
 **Online store setup (#423).** Cloud0199 / Drift89. Each `stores` row carries
 its own area (`country`, `state`, `lga` — Nigeria values from the bundled lists
 that match `ng_areas`, free text elsewhere), a public `phone` (falls back to the
