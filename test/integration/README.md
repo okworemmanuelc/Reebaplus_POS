@@ -32,6 +32,13 @@ three `TEST_SUPABASE_*` variables and `TEST_STOREFRONT_ALLOW_WRITES=1`; any URL
 but reebaplus-dev fails closed. `sql/storefront_browse.sql` (rollback-only)
 checks EXECUTE boundaries and records `EXPLAIN ANALYZE` for feed and search.
 
+## Restricted goods (#479)
+
+`sql/restricted_goods.sql` (rollback-only, reebaplus-dev after 0202 + 0204 +
+0206): EXECUTE boundaries, the classification and 18+ placement rule, that no
+storefront RPC returns a prescription item (child or parent category), and a
+signed-in Shopper's idempotent age confirmation.
+
 Hits real dev Supabase. Verifies the v2 domain RPCs end-to-end:
 round-trip (response ↔ cloud row), idempotent replay, and atomicity
 (tenant guard + validation).

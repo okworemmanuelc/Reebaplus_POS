@@ -22,9 +22,12 @@ catalogue itself is compiled into the client, not tenant-synced or writable
 through the outbox. Its absence from the tenant registry is intentional.
 
 Beer, spirits and wine are age_18. Broad health groups do not establish whether
-an individual medicine is prescription-only. Issue #479 must finish the
-restricted-goods policy and classification before online ordering launch;
-these metadata are not legal clearance.
+an individual medicine is prescription-only, so #479 (migration 0206) adds a
+dedicated child, Health / Prescription medicines (`prescription-medicines`,
+restricted 'prescription'), that a pharmacy maps its prescription-only stock
+to; those products are never listed online. Mapping is the shop's choice:
+unmapped (Other) and Antibiotics products remain listable — an open owner
+question. These metadata are not legal clearance.
 
 Schema87 adds only nullable text to SQLite; the cloud FK validates the canonical
 reference. Existing local rows remain valid and sellable without a mapping.

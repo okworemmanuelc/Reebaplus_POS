@@ -11,6 +11,7 @@ import 'package:reebaplus_pos/features/browse/screens/place_order_screen.dart';
 import 'package:reebaplus_pos/features/browse/screens/shopper_cart_screen.dart';
 import 'package:reebaplus_pos/features/browse/screens/shopper_details_screen.dart';
 import 'package:reebaplus_pos/features/browse/screens/shopper_sign_in_screen.dart';
+import 'package:reebaplus_pos/core/storefront/shopper_age_confirmation.dart';
 import 'package:reebaplus_pos/core/storefront/shopper_models.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 
@@ -48,7 +49,8 @@ void main() {
         auth: auth, push: push,
         storefront: FakeStorefront()..store = [_delivers]);
 
-    await addFromSheet(tester, 'Star Lager'); // store-1, starts at 2
+    await addFromSheet(tester, 'Star Lager'); // 18+: asks first (#479)
+    await tapKey(tester, const ValueKey('age-confirm')); // store-1, starts at 2
     await addFromSheet(tester, 'Eva Water 75cl'); // store-2
     await tapKey(tester, const Key('browse-cart'));
     expect(find.byType(ShopperCartScreen), findsOneWidget);
@@ -134,6 +136,28 @@ void main() {
     await tester.tap(find.byKey(const Key('shopper-place-orders')));
     await tester.pumpAndSettle();
     expect(backend.calls.where((c) => c.$1 == 'shopper_place_orders'), isEmpty);
+  });
+
+  testWidgets('an 18+ line syncs the age confirmation before placing (#479)',
+      (tester) async {
+    final order = <String>[];
+    final backend = FakeShopperBackend()..profile = Map.of(kProfileJson);
+    final age = ShopperAgeService.withRpc(
+      isSignedIn: () => true,
+      rpc: (fn, params) async {
+        order.add(fn);
+        return '2026-10-25T00:00:00Z';
+      },
+    );
+    await pumpShopper(tester, size: const Size(390, 1600),
+        screen: PlaceOrderScreen(profile: ShopperProfile.fromJson(kProfileJson)),
+        backend: backend, age: age,
+        storefront: FakeStorefront()..store = [_delivers],
+        auth: FakeShopperAuth(email: 'ada@example.com'),
+        cartJson: twoShopCartJson());
+    await tapKey(tester, const Key('shopper-place-orders'));
+    expect(order, ['shopper_age_confirmed_at']);
+    expect(backend.calls.any((c) => c.$1 == 'shopper_place_orders'), isTrue);
   });
 
   testWidgets('cancel only while Placed', (tester) async {

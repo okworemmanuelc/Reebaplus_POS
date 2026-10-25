@@ -37,6 +37,8 @@ String placeOrderFailureText(PlaceOrderFailure failure, {String? productName}) {
     PlaceOrderFailure.quantityRule =>
       "${item}that quantity isn't allowed for this product.",
     PlaceOrderFailure.notEnoughStock => '$item$kStoreCannotSupplyMessage.',
+    PlaceOrderFailure.ageConfirmationRequired =>
+      '${item}Confirm you are 18 or older to order this',
     PlaceOrderFailure.invalid =>
       'Something went wrong with this order. '
           'Please try again.',

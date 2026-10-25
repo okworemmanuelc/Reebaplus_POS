@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show AuthException;
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/storefront/shopper_age_confirmation.dart';
 import 'package:reebaplus_pos/core/storefront/shopper_cart.dart';
 import 'package:reebaplus_pos/core/storefront/shopper_providers.dart';
 import 'package:reebaplus_pos/core/storefront/shopper_service.dart';
@@ -186,6 +187,7 @@ Future<void> pumpShopper(
   FakeShopperBackend? backend,
   FakeShopperAuth? auth,
   FakePush? push,
+  ShopperAgeService? age,
   String? cartJson,
   String? deviceUserId,
   Size size = const Size(390, 844),
@@ -212,6 +214,13 @@ Future<void> pumpShopper(
             .overrideWithValue((storefront ?? FakeStorefront()).service),
         shopperServiceProvider
             .overrideWithValue((backend ?? FakeShopperBackend()).service),
+        shopperAgeServiceProvider.overrideWithValue(
+          age ??
+              ShopperAgeService.withRpc(
+                isSignedIn: () => false,
+                rpc: (fn, params) async => null,
+              ),
+        ),
         shopperAuthPortProvider.overrideWithValue(auth ?? FakeShopperAuth()),
         pushNotificationServiceProvider.overrideWithValue(push ?? FakePush()),
         deviceUserIdProvider
