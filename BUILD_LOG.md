@@ -16,6 +16,7 @@ New entries: add a compact bullet at the top of the current month, same format �
 
 ---
 
+- **2026-10-25** — **Expire unanswered Online Orders (#435, cloud 0213, no Drift change)**: `expire_stale_online_orders()` moves `new` older than 48 h to `expired` (advances last_updated_at; 0208 guard already allows system-only new→expired); hourly pg_cron only if the extension exists. App needed no change (shopper text, EXPIRED pill, New badge, monotonic restore already handled `expired`); tests added.
 - **2026-10-25** — **Storefront tier price (#429, cloud 0211)**: the Shopper's tier comes only from `_shopper_price_tier(business)` (mirrors the till: customers.price_tier='wholesaler' AND NOT businesses.sells_one_price, raw wholesaler_price_kobo with no retail fallback); `_storefront_cards` is the single price source for feed/search/store page (wrappers not re-issued); `shopper_place_orders` snapshots the tier in online_order_lines.price_tier.
 - **2026-10-25** — **`crate_shortfall_writeoffs` was missing from `pos_pull_snapshot` (#517)**: 0203 re-issues the RPC (body verbatim from 0199) with the table added; `test/sync/snapshot_covers_tenant_tables_test.dart` now fails if any registry tenant table is absent from the newest snapshot migration, so the next new table can't be missed. Next snapshot change must copy from 0203.
 
