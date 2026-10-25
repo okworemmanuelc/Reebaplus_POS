@@ -91,8 +91,13 @@ class ListingContent {
       other.maxOrderQty == maxOrderQty;
 
   @override
-  int get hashCode =>
-      Object.hash(onlineDescription, brand, minOrderQty, orderStep, maxOrderQty);
+  int get hashCode => Object.hash(
+    onlineDescription,
+    brand,
+    minOrderQty,
+    orderStep,
+    maxOrderQty,
+  );
 }
 
 /// Result of [parseListingContent]: either [content] or an error on [field].
