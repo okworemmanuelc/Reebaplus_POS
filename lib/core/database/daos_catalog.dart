@@ -884,6 +884,35 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     return true;
   });
 
+  /// Online listing content (#473): description, brand and order limits. Same
+  /// shape as [setProductShowOnline] — one tenant-scoped write plus a full-row
+  /// outbox entry, so a cleared description or maximum reaches the cloud as an
+  /// explicit null. Stock, prices and archive state are untouched.
+  Future<bool> setProductListingContent({
+    required String productId,
+    required String? onlineDescription,
+    required String? brand,
+    required int minOrderQty,
+    required int orderStep,
+    required int? maxOrderQty,
+  }) => transaction(() async {
+    final changed = await (update(products)..where((t) =>
+      t.id.equals(productId) & whereBusiness(t) & t.isDeleted.not()))
+      .write(ProductsCompanion(
+        onlineDescription: Value(onlineDescription),
+        brand: Value(brand),
+        minOrderQty: Value(minOrderQty),
+        orderStep: Value(orderStep),
+        maxOrderQty: Value(maxOrderQty),
+        lastUpdatedAt: Value(DateTime.now()),
+      ));
+    if (changed == 0) return false;
+    final row = await (select(products)..where((t) =>
+      t.id.equals(productId) & whereBusiness(t))).getSingle();
+    await db.syncDao.enqueueUpsert('products', row.toCompanion(false));
+    return true;
+  });
+
   Future<void> updateProductPrices(
     String productId, {
     required int buyingPriceKobo,
