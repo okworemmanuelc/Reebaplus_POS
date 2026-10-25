@@ -454,10 +454,18 @@ class StoresDao extends DatabaseAccessor<AppDatabase>
       lastUpdatedAt: Value(now),
     ));
     await _enqueueStore(storeId);
+    // Only stamp a user that exists in this business (activity_logs.user_id
+    // is an FK); an unbound session logs without one.
+    final uid = currentUserId;
+    final actor = uid == null
+        ? null
+        : await (select(users)
+              ..where((u) => u.id.equals(uid) & u.businessId.equals(store.businessId)))
+            .getSingleOrNull();
     final log = ActivityLogsCompanion.insert(
       id: Value(UuidV7.generate()),
       businessId: store.businessId,
-      userId: Value(currentUserId),
+      userId: Value(actor?.id),
       action: enabled ? 'store.online_on' : 'store.online_off',
       description: enabled
           ? 'Switched online ordering on for "${store.name}"'

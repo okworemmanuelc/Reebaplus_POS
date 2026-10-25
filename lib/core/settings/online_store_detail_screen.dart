@@ -324,7 +324,9 @@ class _OnlineSwitchCard extends StatelessWidget {
     final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     return DecoratedBox(
       decoration: AppDecorations.card(context),
-      child: Padding(
+      child: Material(
+        type: MaterialType.transparency,
+        child: Padding(
         padding: EdgeInsets.all(context.getRSize(12)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -354,6 +356,7 @@ class _OnlineSwitchCard extends StatelessWidget {
             ],
           ],
         ),
+        ),
       ),
     );
   }
@@ -372,7 +375,11 @@ class _DeliveryAreaTile extends StatelessWidget {
       padding: EdgeInsets.only(bottom: context.getRSize(8)),
       child: DecoratedBox(
         decoration: AppDecorations.card(context),
-        child: ListTile(
+        // ListTile paints on the nearest Material; a transparent one keeps the
+        // card's own fill visible.
+        child: Material(
+          type: MaterialType.transparency,
+          child: ListTile(
           minTileHeight: kMinInteractiveDimension,
           leading: const Icon(AppIcons.map),
           title: Text(label,
@@ -381,6 +388,7 @@ class _DeliveryAreaTile extends StatelessWidget {
             tooltip: 'Remove $label',
             icon: const Icon(AppIcons.removeCircle),
             onPressed: onRemove,
+          ),
           ),
         ),
       ),
