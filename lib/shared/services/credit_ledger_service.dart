@@ -33,12 +33,18 @@ class CreditLedgerService {
   /// is held off in Phase 1; closing this needs a migration that adds
   /// `p_store_id` AND drops the old signature (an added param makes an
   /// overload, not a replacement — PGRST203).
+  ///
+  /// [orderId] (#432 Mark as paid) links the wallet credit to the Pay on
+  /// delivery order it settles; the payment row keeps its one parent, the
+  /// wallet row. A linked collection always takes the direct-upsert path: the
+  /// v2 `pos_wallet_topup` RPC predates the link and would drop it.
   Future<void> topup({
     required String customerId,
     required int amountKobo,
     required String method, // 'cash' or 'transfer'
     required String staffId,
     String? storeId,
+    String? orderId,
   }) async {
     final businessId = _walletTxDao.requireBusinessId();
     final wallet = await _customerWalletsDao.getByCustomerId(customerId);
@@ -50,7 +56,8 @@ class CreditLedgerService {
     final flagValue = await _db.systemConfigDao.get(
       'feature.domain_rpcs_v2.wallet_topup',
     );
-    final useDomainRpc = flagValue == 'true' || flagValue == '"true"';
+    final useDomainRpc =
+        orderId == null && (flagValue == 'true' || flagValue == '"true"');
 
     final referenceType = method == 'cash' ? 'topup_cash' : 'topup_transfer';
 
@@ -67,6 +74,7 @@ class CreditLedgerService {
         amountKobo: amountKobo,
         signedAmountKobo: amountKobo,
         referenceType: referenceType,
+        orderId: Value(orderId),
         performedBy: Value(staffId),
         lastUpdatedAt: Value(DateTime.now()),
       );

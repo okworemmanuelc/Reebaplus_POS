@@ -1941,6 +1941,11 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
                       'crate_deposit_refunded',
                       'crate_deposit_forfeited',
                       'crate_refund',
+                      // #432 — a Mark as paid collection is money the customer
+                      // really handed over, not a sale leg: it stays as their
+                      // credit when the sale is reversed.
+                      'topup_cash',
+                      'topup_transfer',
                     ]),
               ))
               .get();
@@ -2058,7 +2063,13 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
                 (t) =>
                     whereBusiness(t) &
                     t.orderId.equals(orderId) &
-                    t.referenceType.isNotIn(const ['refund', 'void']),
+                    // #432 — never reverse a Mark as paid collection.
+                    t.referenceType.isNotIn(const [
+                      'refund',
+                      'void',
+                      'topup_cash',
+                      'topup_transfer',
+                    ]),
               ))
               .get();
       for (final leg in saleWalletLegs) {

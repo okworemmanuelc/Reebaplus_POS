@@ -36,6 +36,9 @@ AppFixedColors _fx(ThemeData t) =>
 /// Daily Reconciliation's "Write off missing crates" button (#296).
 const String kReconCrateWriteOffButtonKey = 'recon_crate_write_off_button';
 
+/// #432 — the report-only "Pay on delivery not yet collected" line.
+const String kReconPayOnDeliveryLineKey = 'recon_pay_on_delivery_line';
+
 class DailyReconciliationDetailScreen extends ConsumerStatefulWidget {
   const DailyReconciliationDetailScreen({
     super.key,
@@ -1328,6 +1331,18 @@ class _DailyReconciliationDetailScreenState
           formatCurrency(d.totalOwedKobo / 100.0),
           danger: d.totalOwedKobo > 0,
         ),
+        // #432 — report-only: already inside the debt above, never a cash
+        // figure (no cash balance, Hard Rule #8).
+        if (d.payOnDeliveryUncollectedKobo != 0)
+          KeyedSubtree(
+            key: const ValueKey(kReconPayOnDeliveryLineKey),
+            child: _line(
+              context,
+              theme,
+              'Pay on delivery not yet collected',
+              formatCurrency(d.payOnDeliveryUncollectedKobo / 100.0),
+            ),
+          ),
         _line(
           context,
           theme,
@@ -2113,6 +2128,11 @@ class _DailyReconciliationDetailScreenState
       ],
       ['Expenses recorded', money(d.expensesKobo)],
       ['Outstanding customer debt', money(d.totalOwedKobo)],
+      if (d.payOnDeliveryUncollectedKobo != 0)
+        [
+          'Pay on delivery not yet collected',
+          money(d.payOnDeliveryUncollectedKobo),
+        ],
       if (d.showCrates) ['Empty crates held (units)', '${d.crateUnits}'],
     ];
     final name = isCeo ? 'business_statement' : 'store_reconciliation';

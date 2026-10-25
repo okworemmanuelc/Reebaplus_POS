@@ -444,6 +444,57 @@ class OnlineOrdersDao extends DatabaseAccessor<AppDatabase>
     }
   }
 
+  // ── Pay on delivery (#432) ────────────────────────────────────────────────
+  //
+  // A Pay on delivery order is a `credit` order an Online Order is linked to.
+  // What it has collected is the sum of the live Record Payment credits
+  // (`topup_cash` / `topup_transfer`) that carry its id (Mark as paid).
+  static const String _payOnDeliverySql =
+      'SELECT o.id AS order_id, oo.id AS online_order_id, o.store_id, '
+      'o.customer_id, o.status, '
+      '(o.net_amount_kobo - o.amount_paid_kobo) AS due_kobo, '
+      'COALESCE((SELECT SUM(w.amount_kobo) FROM wallet_transactions w '
+      "WHERE w.business_id = o.business_id AND w.order_id = o.id "
+      "AND w.type = 'credit' "
+      "AND w.reference_type IN ('topup_cash', 'topup_transfer') "
+      'AND w.voided_at IS NULL), 0) AS collected_kobo '
+      'FROM online_orders oo '
+      'JOIN orders o ON o.id = oo.linked_order_id '
+      'AND o.business_id = oo.business_id '
+      "WHERE oo.business_id = ? AND o.payment_type = 'credit'";
+
+  PayOnDeliveryOrder _payOnDeliveryFrom(QueryRow r) => PayOnDeliveryOrder(
+    orderId: r.read<String>('order_id'),
+    onlineOrderId: r.read<String>('online_order_id'),
+    storeId: r.readNullable<String>('store_id'),
+    customerId: r.readNullable<String>('customer_id'),
+    status: r.read<String>('status'),
+    dueKobo: r.read<int>('due_kobo'),
+    collectedKobo: r.read<int>('collected_kobo'),
+  );
+
+  /// Every Pay on delivery order of the business (any status).
+  Stream<List<PayOnDeliveryOrder>> watchPayOnDelivery() {
+    return customSelect(
+      _payOnDeliverySql,
+      variables: [Variable<String>(requireBusinessId())],
+      readsFrom: {onlineOrders, db.orders, db.walletTransactions},
+    ).watch().map((rows) => rows.map(_payOnDeliveryFrom).toList());
+  }
+
+  /// The Pay on delivery state of [orderId], or null when it is not one.
+  Future<PayOnDeliveryOrder?> payOnDeliveryFor(String orderId) async {
+    final rows = await customSelect(
+      '$_payOnDeliverySql AND o.id = ? LIMIT 1',
+      variables: [
+        Variable<String>(requireBusinessId()),
+        Variable<String>(orderId),
+      ],
+      readsFrom: {onlineOrders, db.orders, db.walletTransactions},
+    ).get();
+    return rows.isEmpty ? null : _payOnDeliveryFrom(rows.first);
+  }
+
   Future<OnlineOrderData?> _openOrder(String id) async {
     final order =
         await (select(onlineOrders)
