@@ -42,7 +42,7 @@
 --        shopper_my_orders(limit, before)           own orders, newest first
 --   5. Live sync: zz_broadcast_sync_signal on both order tables (0198 guard),
 --      realtime publication, and pos_pull_snapshot re-issued VERBATIM from
---      0203 plus the two tables after their parents.
+--      0204 plus the two tables after their parents.
 --
 -- PLACE ORDER (one store at a time, each in its own sub-transaction):
 --   * identity from auth.uid(); a shopper_profiles row is required;
@@ -64,9 +64,9 @@
 --   A store that fails is reported back (code + product id); the others are
 --   still placed.
 --
--- DEPLOY: before the app build that calls these RPCs / carries Drift 92.
--- Never together with 0193. If #474's 0204 also re-issues pos_pull_snapshot,
--- re-base section 6 on 0204 before deploying (keep both tables lists).
+-- DEPLOY: AFTER 0204 (#474 — section 6 keeps its product_photos entry, and
+-- the snapshot errors if that table is missing) and before the app build
+-- that calls these RPCs / carries Drift 92. Never together with 0193.
 
 BEGIN;
 
@@ -988,9 +988,9 @@ COMMENT ON FUNCTION public.shopper_my_orders(integer, timestamptz) IS
 
 -- =========================================================================
 -- 6. pos_pull_snapshot — add online_orders + online_order_lines
---    Body copied verbatim from 0203 (latest definition); the only change is
---    the two list entries marked "0205 (#426)", after their parents
---    (businesses, stores, customers, products, orders).
+--    Body copied verbatim from 0204 (#474, which re-issued it from 0203 with
+--    product_photos); the only change is the two list entries marked
+--    "0205 (#426)", after their parents (stores, customers, products, orders).
 -- =========================================================================
 CREATE OR REPLACE FUNCTION public.pos_pull_snapshot(
   p_business_id uuid,
@@ -1012,7 +1012,10 @@ DECLARE
     -- 0199 (#423): per-store delivery areas; parent stores is just above.
     'store_delivery_areas',
     'manufacturers','crate_size_groups',
-    'categories','products','inventory',
+    'categories','products',
+    -- 0204 (#474): gallery photos; parent products is just above.
+    'product_photos',
+    'inventory',
     'cost_batches',
     'customers','suppliers',
     'supplier_ledger_entries',
