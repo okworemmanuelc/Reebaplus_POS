@@ -197,5 +197,20 @@ void main() {
       expect((await row(hiddenId)).showOnline, isFalse);
       expect((await row(hiddenId)).isAvailable, isFalse);
     });
+      test('#473 listing content restores defaults for older cloud rows', () async {
+      final legacyId = UuidV7.generate();
+      final setId = UuidV7.generate();
+      await sync.restoreTableDataForTesting('products', [
+        cloudRow(legacyId),
+        {...cloudRow(setId), 'online_description': 'Cold', 'brand': 'Gulder',
+          'min_order_qty': 12, 'order_step': 12, 'max_order_qty': 48},
+      ]);
+      final legacy = await row(legacyId);
+      expect((legacy.onlineDescription, legacy.brand, legacy.minOrderQty,
+        legacy.orderStep, legacy.maxOrderQty), (null, null, 1, 1, null));
+      final set = await row(setId);
+      expect((set.onlineDescription, set.brand, set.minOrderQty, set.orderStep,
+        set.maxOrderQty), ('Cold', 'Gulder', 12, 12, 48));
+    });
   });
 }

@@ -182,6 +182,8 @@ void main() {
         monthlyTargetUnits: 0,
         isAvailable: true,
         showOnline: true,
+        minOrderQty: 1,
+        orderStep: 1,
         isDeleted: false,
         version: 1,
         createdAt: DateTime.now(),

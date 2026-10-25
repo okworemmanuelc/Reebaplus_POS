@@ -23,10 +23,12 @@ import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart
 import '../helpers/inventory_seed.dart';
 import '../helpers/screen_harness.dart';
 
-/// The sample grants plus the buying price (Add Product shows it to the CEO).
+/// The sample grants plus the buying price and the online listing (Add
+/// Product shows both to the CEO; #473 adds the Online listing section).
 const kAddProductGrants = {
   ...kInventorySampleGrants,
   'products.edit_buying_price',
+  'products.manage_listing',
 };
 
 void main() {
