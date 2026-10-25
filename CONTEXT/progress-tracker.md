@@ -19,6 +19,27 @@ The human updates it when resolving open questions or making architectural decis
   run live (dev run declined this session). Parity: reebaplus-web#144.
 - Open: Shopper data deletion (#438) should delete business-less `devices` rows.
 
+### Issue #423: A store can go online (2026-10-25, ready for review)
+Cloud `0199_store_online_ordering.sql` + Drift schema89. `stores` gains
+country/state/lga, public phone, online note (≤280) and
+`online_ordering_enabled` (default off; cloud CHECK: kind=store + state + LGA).
+New synced `store_delivery_areas` (lga null = whole state; soft-delete;
+deterministic id per store/country/state/lga; RLS `current_user_business_ids()`,
+`zz_broadcast_sync_signal`, added to `pos_pull_snapshot`). Permission
+`stores.online_ordering` (Online store group, CEO default; backfilled to existing
+CEO roles) → `Gates.manageOnlineStore`. `StoresDao` online methods +
+`StoreOnlineService` (fire-time gate, Nigeria pairs validated against the bundled
+lists, foreign free text). UI: Settings → Online store hub (every store, never
+vans, Online/Offline, "Business · LGA"), per-store page (area, switch disabled with
+a prompt until state+LGA and ≥1 delivery area, delivery areas via the #471
+picker, phone + note), Store Details online card + Manage link, first-run New
+Store sheet requires state+LGA (its LGA pre-fills the delivery list). No Claude
+Design files were in the repo: built from ui-context tokens and Stores/Settings
+parts. Deploy 0199 before the app. Open: storefront reads (#425) must require
+`online_ordering_enabled` + delivery-area match; the Settings menu is still
+`settings.manage`-gated, so a non-CEO granted the key reaches the page via Store
+Details only. Pre-existing gap noticed: `crate_shortfall_writeoffs` (0175) is
+not in `pos_pull_snapshot` (fast incremental pulls skip it).
 ### Issue #422: ready for review (2026-10-24)
 - Merged current main (0341e1aa); cloud numbers stay 0188/0192/0193, no Drift
   bump. 0188 re-checked against main: helper signatures unchanged (0195's

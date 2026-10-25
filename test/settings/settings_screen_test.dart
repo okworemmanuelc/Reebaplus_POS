@@ -35,6 +35,12 @@ const _rows = <(String group, String title, String subtitle, IconTileTone)>[
   ),
   ('Business', 'Stores', 'Your store locations', IconTileTone.green),
   (
+    'Business',
+    'Online store',
+    'Online ordering, areas and delivery',
+    IconTileTone.info,
+  ),
+  (
     'Access & Security',
     'Security',
     'Auto-lock and biometric login',
@@ -444,8 +450,12 @@ void main() {
             find.descendant(of: list, matching: find.byType(Scrollable)).first,
           )
           .position;
-      position.jumpTo(position.maxScrollExtent);
-      await tester.pump();
+      // A lazy list re-estimates its extent as rows build: jump until the
+      // end stops moving (#423 added a row, so the first jump fell short).
+      for (var i = 0; i < 3; i++) {
+        position.jumpTo(position.maxScrollExtent);
+        await tester.pump();
+      }
       final r = tester.getRect(
         find.byKey(const Key('settings-delete-business')),
       );

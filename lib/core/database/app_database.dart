@@ -193,6 +193,50 @@ class Stores extends Table {
   /// parent of most of the schema. The client only ever writes the two
   /// [kStoreKinds] constants (`StoresDao.createStore`).
   TextColumn get kind => text().withDefault(const Constant(kStoreKindStore))();
+
+  /// The store's own area (#423): Nigeria from the bundled state/LGA lists
+  /// (matching cloud `ng_areas`), free text elsewhere. Required before the
+  /// store can go online.
+  TextColumn get country => text().nullable()();
+  TextColumn get state => text().nullable()();
+  TextColumn get lga => text().nullable()();
+
+  /// Public store phone for order slips / accepted orders (#423). Null falls
+  /// back to the business phone.
+  TextColumn get phone => text().nullable()();
+
+  /// Short note shown to shoppers, at most [kStoreOnlineNoteMaxLength]
+  /// characters (delivery fee, pickup/delivery days as plain text, #423).
+  TextColumn get onlineNote => text().nullable()();
+
+  /// Online ordering switch (#423), default off. Only `kind = 'store'` rows
+  /// with state + LGA may be on (cloud CHECK in 0199 is the backstop).
+  BoolColumn get onlineOrderingEnabled =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Longest online note a store may show shoppers (#423; cloud CHECK in 0199).
+const int kStoreOnlineNoteMaxLength = 280;
+
+/// The states / LGAs one store delivers to (#423). A null [lga] covers the
+/// whole state. Synced; soft-deleted via [isDeleted], never hard-deleted. Ids
+/// are deterministic per (store, country, state, lga) so re-adding an area
+/// revives the same row and two devices converge on it.
+@DataClassName('StoreDeliveryAreaData')
+class StoreDeliveryAreas extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get storeId => text().references(Stores, #id)();
+  TextColumn get country => text().withDefault(const Constant('Nigeria'))();
+  TextColumn get state => text()();
+  TextColumn get lga => text().nullable()();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
@@ -2820,6 +2864,7 @@ class MigrationEvents extends Table {
     CrateSizeGroups,
     Manufacturers,
     Stores,
+    StoreDeliveryAreas,
     Users,
     Categories,
     Suppliers,
@@ -6522,6 +6567,37 @@ class AppDatabase extends _$AppDatabase {
           "('products.manage_listing', 'Manage online product listings', 'Online store')",
         );
       }
+      if (from < 89) {
+        // #423: store area + online fields, the delivery-area table and the
+        // online-ordering permission key. Cloud 0199 must deploy first.
+        // No older step rebuilds `stores` (no TableMigration(stores)), so the
+        // stale-column trap does not apply; guards keep re-upgrades idempotent.
+        final storeCols = (await customSelect(
+          "SELECT name FROM pragma_table_info('stores')",
+        ).get()).map((r) => r.read<String>('name')).toSet();
+        if (!storeCols.contains('country')) {
+          await m.addColumn(stores, stores.country);
+        }
+        if (!storeCols.contains('state')) await m.addColumn(stores, stores.state);
+        if (!storeCols.contains('lga')) await m.addColumn(stores, stores.lga);
+        if (!storeCols.contains('phone')) await m.addColumn(stores, stores.phone);
+        if (!storeCols.contains('online_note')) {
+          await m.addColumn(stores, stores.onlineNote);
+        }
+        if (!storeCols.contains('online_ordering_enabled')) {
+          await m.addColumn(stores, stores.onlineOrderingEnabled);
+        }
+        final hasAreas = (await customSelect(
+          "SELECT 1 FROM sqlite_master WHERE type = 'table' "
+          "AND name = 'store_delivery_areas'",
+        ).get()).isNotEmpty;
+        if (!hasAreas) await m.createTable(storeDeliveryAreas);
+        await customStatement(
+          "INSERT OR IGNORE INTO permissions (key, description, category) VALUES "
+          "('stores.online_ordering', 'Switch a store''s online ordering on/off', "
+          "'Online store')",
+        );
+      }
       if (from < 90) {
         // ── v90 — #473: products online listing content ──────────────────
         //
@@ -7016,6 +7092,7 @@ const List<String> _v13HotPathIndexStatements = [
 const List<List<String>> _defaultPermissionRows = [
   // Stores — rendered first on the role page (§10.2). CEO-only by default.
   ['stores.manage', 'Add, edit, and remove stores', 'Stores'],
+  ['stores.online_ordering', "Switch a store's online ordering on/off", 'Online store'],
   [
     'stores.receive_transfer',
     'Confirm receipt of incoming stock transfers',

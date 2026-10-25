@@ -34,7 +34,7 @@ GateContext _ctx({
   );
 }
 
-StoreData _store(String id) => StoreData(
+StoreData _store(String id) => StoreData(onlineOrderingEnabled: false, 
       id: id,
       businessId: 'biz',
       name: 'Store $id',

@@ -46,7 +46,7 @@ const _warehouse = 'wh';
 const _van = 'van';
 final _day = DateTime(2026, 7, 26, 10);
 
-StoreData _store(String id, {String kind = kStoreKindStore}) => StoreData(
+StoreData _store(String id, {String kind = kStoreKindStore}) => StoreData(onlineOrderingEnabled: false, 
   id: id,
   businessId: _biz,
   name: 'Location $id',

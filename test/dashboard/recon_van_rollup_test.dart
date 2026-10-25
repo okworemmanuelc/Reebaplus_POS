@@ -47,7 +47,7 @@ final _julStart = DateTime(2026, 7, 1);
 final _augStart = DateTime(2026, 8, 1);
 final _sepStart = DateTime(2026, 9, 1);
 
-StoreData _store(String id, {String kind = kStoreKindStore}) => StoreData(
+StoreData _store(String id, {String kind = kStoreKindStore}) => StoreData(onlineOrderingEnabled: false, 
   id: id,
   businessId: _biz,
   name: 'Location $id',

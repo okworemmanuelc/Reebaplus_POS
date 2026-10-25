@@ -48,7 +48,7 @@ final _dayEnd = DateTime(2026, 7, 27);
 const _price = 1000000; // ₦10,000
 const _cost = 600000; // ₦6,000
 
-StoreData _storeRow(String id, {String kind = kStoreKindStore}) => StoreData(
+StoreData _storeRow(String id, {String kind = kStoreKindStore}) => StoreData(onlineOrderingEnabled: false, 
   id: id,
   businessId: _biz,
   name: 'Location $id',
