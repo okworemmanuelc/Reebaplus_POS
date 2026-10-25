@@ -215,6 +215,11 @@ class ShopperOrderCard extends StatelessWidget {
     OnlineOrderStatus.cancelled => TagPillTone.neutral,
   };
 
+  /// After acceptance the Shopper cannot change or cancel: they call the store.
+  bool get _showPhone =>
+      order.status == OnlineOrderStatus.accepted &&
+      (order.storePhone ?? '').trim().isNotEmpty;
+
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
@@ -265,13 +270,21 @@ class ShopperOrderCard extends StatelessWidget {
               style: context.regularStyle(13).copyWith(color: muted),
             ),
           ],
+          if (_showPhone) ...[
+            SizedBox(height: context.getRSize(6)),
+            Text(
+              key: ValueKey('my-order-phone-${order.id}'),
+              'To change or cancel, call the store: ${order.storePhone}',
+              style: context.regularStyle(13).copyWith(color: muted),
+            ),
+          ],
           SizedBox(height: context.getRSize(8)),
           Row(
             children: [
               Expanded(
                 child: Text(
                   'Estimated total '
-                  '${formatCurrencyIn(order.totalKobo / 100, order.currency)}',
+                  '${formatCurrencyIn(order.displayTotalKobo / 100, order.currency)}',
                   style: context
                       .semiBoldStyle(14)
                       .copyWith(color: t.colorScheme.onSurface),

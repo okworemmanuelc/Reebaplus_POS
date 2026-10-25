@@ -7,6 +7,9 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #428: Change before accepting, price flag, cancel accepted (2026-10-25, ready for review)
+- `accept(acceptedQtys)` lowers/removes lines (never raises) and writes accepted_qty on every line + outbox; `cancelAccepted(reason)`; price flag from local retail price; shopper sees store phone. Cloud `0210` = `shopper_my_orders` + `store_phone` only; NO Drift change (stays v93). pos-parity issue filed in reebaplus-web.
+
 ### Issue #436: Order again (2026-10-25, ready for review)
 - Order again button on every My Orders card; re-adds lines at today's price/stock via `storefront_store_products` (no by-id RPC), skips unavailable with one note, 18+ gate, qty clamp. App-only. Logic in `lib/core/storefront/order_again.dart`.
 

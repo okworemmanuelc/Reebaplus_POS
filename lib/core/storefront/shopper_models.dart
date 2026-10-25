@@ -174,6 +174,7 @@ class ShopperOrder {
     required this.totalKobo,
     required this.placedAt,
     this.storeLga,
+    this.storePhone,
     this.declineReason,
     this.cancelReason,
     this.lines = const [],
@@ -183,6 +184,10 @@ class ShopperOrder {
   final String storeId;
   final String businessName;
   final String? storeLga;
+
+  /// The store's public phone (#428), so a Shopper can call about an accepted
+  /// order. Null when the cloud has none.
+  final String? storePhone;
   final String reference;
   final OnlineOrderStatus status;
   final String currency;
@@ -200,6 +205,22 @@ class ShopperOrder {
 
   /// Only an order the shop has not answered can be cancelled (story 33).
   bool get canCancel => status == OnlineOrderStatus.placed;
+
+  /// What the shop will actually supply: the accepted quantities once it has
+  /// answered (lowered or removed lines count less), else the estimate.
+  int get displayTotalKobo {
+    if (status != OnlineOrderStatus.accepted &&
+        status != OnlineOrderStatus.sentOut) {
+      return totalKobo;
+    }
+    if (lines.isEmpty || lines.every((l) => l.acceptedQty == null)) {
+      return totalKobo;
+    }
+    return lines.fold<int>(
+      0,
+      (sum, l) => sum + l.unitPriceKobo * (l.acceptedQty ?? l.requestedQty),
+    );
+  }
 
   /// Plain-word status (story 32). An accepted order with lowered or removed
   /// lines reads "Changed".
@@ -219,6 +240,7 @@ class ShopperOrder {
     storeId: '${row['store_id']}',
     businessName: '${row['business_name'] ?? ''}',
     storeLga: row['store_lga'] as String?,
+    storePhone: row['store_phone'] as String?,
     reference: '${row['reference'] ?? ''}',
     status: OnlineOrderStatus.fromWire(row['status']),
     currency: (row['currency'] as String?) ?? 'NGN',
