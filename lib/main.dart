@@ -38,6 +38,9 @@ import 'package:reebaplus_pos/shared/widgets/force_update_wrapper.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/services/push_notification_service.dart';
 import 'package:reebaplus_pos/shared/widgets/notifications_modal.dart';
+import 'package:reebaplus_pos/features/orders/screens/online_order_detail_screen.dart';
+import 'package:reebaplus_pos/features/orders/screens/orders_screen.dart';
+import 'package:reebaplus_pos/shared/services/online_order_push_route.dart';
 import 'package:reebaplus_pos/features/auth/membership_status_reaction.dart';
 import 'package:reebaplus_pos/features/sync/widgets/resolve_unsynced_data_dialog.dart';
 import 'package:reebaplus_pos/features/auth/screens/success_dashboard_entry_screen.dart';
@@ -363,6 +366,27 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
         unawaited(ref.read(notificationProvider).markAsRead(id));
       },
     );
+    // #433: a "New online order" tap opens that order if it is already local,
+    // else the Online tab. Never waits on a pull and never throws.
+    _pushService.bindOnlineOrderTapAction((onlineOrderId) {
+      if (_auth.currentUser == null) return;
+      unawaited(routeOnlineOrderTap(
+        onlineOrderId: onlineOrderId,
+        isLocal: (id) => ref.read(databaseProvider).onlineOrdersDao.existsById(id),
+        openDetail: (id) {
+          final nav = _navigatorKey.currentState;
+          nav?.push(MaterialPageRoute<void>(
+            builder: (_) => OnlineOrderDetailScreen(onlineOrderId: id),
+          ));
+        },
+        openOnlineTab: () {
+          final nav = _navigatorKey.currentState;
+          nav?.push(MaterialPageRoute<void>(
+            builder: (_) => const OrdersScreen(initialIndex: 1),
+          ));
+        },
+      ));
+    });
     await supabaseReady;
     if (!mounted) return;
     await _pushService.start();

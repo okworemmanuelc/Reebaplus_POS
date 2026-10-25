@@ -140,3 +140,45 @@ Deno.test("buildFcmMessages: audience tags a shared phone's two roles", () => {
     "Reebaplus",
   );
 });
+
+Deno.test("resolveRecipient: online_order routes by explicit user_ids (#433)", () => {
+  const r = {
+    id: "oo-1",
+    type: "online_order",
+    message: "ON-1 from Ada",
+    severity: "info",
+    title: "New online order",
+    business_id: "biz-1",
+    user_ids: ["u1", "u2", "u1"],
+    data: { online_order_id: "oo-1", store_id: "s-1" },
+  };
+  assertEquals(resolveRecipient(r), {
+    audience: "staff",
+    businessId: "biz-1",
+    userIds: ["u1", "u2"],
+  });
+  assertEquals(resolveRecipient({ ...r, user_ids: [] }), null);
+  assertEquals(resolveRecipient({ ...r, business_id: null }), null);
+  // Never the whole business: no user_ids means skipped, not broadcast.
+  assertEquals(resolveRecipient({ ...r, user_ids: undefined }), null);
+});
+
+Deno.test("online_order message: own title + data, token filter has users", () => {
+  const r: PushRecord = {
+    id: "oo-1",
+    type: "online_order",
+    message: "ON-1 from Ada",
+    severity: "info",
+    title: "New online order",
+    business_id: "biz-1",
+    user_ids: ["u1"],
+    data: { online_order_id: "oo-1", store_id: "s-1", type: "evil" },
+  };
+  const rec = resolveRecipient(r)!;
+  assertEquals(tokenFilterFor(rec).userIds, ["u1"]);
+  const [m] = buildFcmMessages(r, ["tok"], rec.audience);
+  assertEquals(m.message.notification.title, "New online order");
+  assertEquals(m.message.data.online_order_id, "oo-1");
+  assertEquals(m.message.data.store_id, "s-1");
+  assertEquals(m.message.data.type, "online_order"); // not overridable
+});
