@@ -22,8 +22,33 @@ enum ShopperFailure {
   /// Cancel came after the shop answered.
   notCancellable,
 
+  /// Too many reports in the last hour (#478).
+  rateLimited,
+
   /// Anything else the server refused.
   failed,
+}
+
+/// What a Shopper can report (#478).
+enum ReportTarget {
+  product('product'),
+  store('store');
+
+  const ReportTarget(this.wire);
+  final String wire;
+}
+
+/// Why a Shopper reports a listing (#478); `wire` is the cloud value.
+enum ReportReason {
+  wrongItem('wrong_item', 'Wrong item'),
+  offensive('offensive', 'Offensive'),
+  illegalOrRestricted('illegal_or_restricted', 'Illegal or restricted'),
+  scam('scam', 'Scam'),
+  other('other', 'Other');
+
+  const ReportReason(this.wire, this.label);
+  final String wire;
+  final String label;
 }
 
 class ShopperException implements Exception {
@@ -160,6 +185,29 @@ class ShopperService {
       'p_opt_in': optIn,
     });
     return result == true;
+  }
+
+  /// Reports a product or a store (#478). Cloud-only; the server rate-limits
+  /// (10 an hour) and keeps one open report per Shopper per target. Throws
+  /// [ShopperException] (`rateLimited`, `signedOut`, ...) on failure.
+  Future<void> reportListing({
+    required ReportTarget target,
+    required String targetId,
+    required ReportReason reason,
+    String? details,
+  }) async {
+    final trimmed = details?.trim();
+    final result = await _call('shopper_report_listing', {
+      'p_target_type': target.wire,
+      'p_target_id': targetId,
+      'p_reason': reason.wire,
+      'p_details': trimmed == null || trimmed.isEmpty ? null : trimmed,
+    });
+    if (result is Map && result['ok'] == true) return;
+    if (result is Map && result['code'] == 'rate_limited') {
+      throw ShopperException(ShopperFailure.rateLimited, result);
+    }
+    throw ShopperException(ShopperFailure.failed, result);
   }
 
   Future<Object?> _call(String fn, Map<String, Object?> params) async {
