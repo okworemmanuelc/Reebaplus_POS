@@ -42,16 +42,16 @@ INSERT INTO public.roles (id, business_id, name, slug) VALUES
 INSERT INTO public.role_permissions (business_id, role_id, permission_key)
 VALUES (current_setting('t.biz')::uuid, current_setting('t.r_cash')::uuid, 'online_orders.answer');
 
--- users (role is NOT NULL; adjust if later migrations changed users constraints)
-INSERT INTO public.users (id, business_id, name, role, is_deleted) VALUES
-  (current_setting('t.u_ceo')::uuid,   current_setting('t.biz')::uuid, 'ceo', 'staff', false),
-  (current_setting('t.u_cash1')::uuid, current_setting('t.biz')::uuid, 'cash1', 'staff', false),
-  (current_setting('t.u_cash2')::uuid, current_setting('t.biz')::uuid, 'cash2', 'staff', false),
-  (current_setting('t.u_sk')::uuid,    current_setting('t.biz')::uuid, 'sk', 'staff', false),
-  (current_setting('t.u_grant')::uuid, current_setting('t.biz')::uuid, 'grant', 'staff', false),
-  (current_setting('t.u_revoke')::uuid,current_setting('t.biz')::uuid, 'revoke', 'staff', false),
-  (current_setting('t.u_susp')::uuid,  current_setting('t.biz')::uuid, 'susp', 'staff', false),
-  (current_setting('t.u_del')::uuid,   current_setting('t.biz')::uuid, 'del', 'staff', true);
+-- users (no role / soft-delete columns; removal lives on user_businesses.status)
+INSERT INTO public.users (id, business_id, name) VALUES
+  (current_setting('t.u_ceo')::uuid,   current_setting('t.biz')::uuid, 'ceo'),
+  (current_setting('t.u_cash1')::uuid, current_setting('t.biz')::uuid, 'cash1'),
+  (current_setting('t.u_cash2')::uuid, current_setting('t.biz')::uuid, 'cash2'),
+  (current_setting('t.u_sk')::uuid,    current_setting('t.biz')::uuid, 'sk'),
+  (current_setting('t.u_grant')::uuid, current_setting('t.biz')::uuid, 'grant'),
+  (current_setting('t.u_revoke')::uuid,current_setting('t.biz')::uuid, 'revoke'),
+  (current_setting('t.u_susp')::uuid,  current_setting('t.biz')::uuid, 'susp'),
+  (current_setting('t.u_del')::uuid,   current_setting('t.biz')::uuid, 'del');
 
 INSERT INTO public.user_businesses (business_id, user_id, role_id, status) VALUES
   (current_setting('t.biz')::uuid, current_setting('t.u_ceo')::uuid,   current_setting('t.r_ceo')::uuid,  'active'),
@@ -61,7 +61,7 @@ INSERT INTO public.user_businesses (business_id, user_id, role_id, status) VALUE
   (current_setting('t.biz')::uuid, current_setting('t.u_grant')::uuid, current_setting('t.r_sk')::uuid,   'active'),
   (current_setting('t.biz')::uuid, current_setting('t.u_revoke')::uuid,current_setting('t.r_cash')::uuid, 'active'),
   (current_setting('t.biz')::uuid, current_setting('t.u_susp')::uuid,  current_setting('t.r_cash')::uuid, 'suspended'),
-  (current_setting('t.biz')::uuid, current_setting('t.u_del')::uuid,   current_setting('t.r_cash')::uuid, 'active');
+  (current_setting('t.biz')::uuid, current_setting('t.u_del')::uuid,   current_setting('t.r_cash')::uuid, 'removed');
 
 -- Store assignments: everyone except cash2 works at S1; cash2 works at S2 only.
 INSERT INTO public.user_stores (business_id, user_id, store_id)
@@ -89,7 +89,7 @@ BEGIN
   IF current_setting('t.u_sk')::uuid     = ANY(r) THEN RAISE EXCEPTION 'stock keeper without permission must NOT be alerted'; END IF;
   IF current_setting('t.u_revoke')::uuid = ANY(r) THEN RAISE EXCEPTION 'force-revoked cashier must NOT be alerted'; END IF;
   IF current_setting('t.u_susp')::uuid   = ANY(r) THEN RAISE EXCEPTION 'suspended member must NOT be alerted'; END IF;
-  IF current_setting('t.u_del')::uuid    = ANY(r) THEN RAISE EXCEPTION 'deleted user must NOT be alerted'; END IF;
+  IF current_setting('t.u_del')::uuid    = ANY(r) THEN RAISE EXCEPTION 'removed member must NOT be alerted'; END IF;
 
   -- Store S2: only cash2 (assigned there, role grant) + the CEO.
   r := public._online_order_push_recipients(
