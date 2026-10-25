@@ -20,7 +20,7 @@ RoleData _role(String slug) => RoleData(
       lastUpdatedAt: DateTime.utc(2026, 1, 1),
     );
 
-StoreData _store(String id) => StoreData(
+StoreData _store(String id) => StoreData(onlineOrderingEnabled: false, 
       id: id,
       businessId: 'biz',
       name: 'Store $id',

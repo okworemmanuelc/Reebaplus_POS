@@ -10,6 +10,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/core/settings/online_store_detail_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
@@ -185,6 +186,26 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
           ),
           SizedBox(height: context.getRSize(16)),
         ],
+        StoreOnlineCard(
+          key: StoresKeys.onlineCard,
+          online: _store.onlineOrderingEnabled,
+          area: (_store.state ?? '').trim().isEmpty
+              ? null
+              : describeArea(state: _store.state!, lga: _store.lga),
+          phone: (_store.phone ?? '').trim().isNotEmpty
+              ? _store.phone!.trim()
+              : ref.watch(currentBusinessProvider)?.phone,
+          note: _store.onlineNote,
+          onManage: Gates.manageOnlineStore.allows(ref)
+              ? () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => OnlineStoreDetailScreen(storeId: widget.store.id),
+                    ),
+                  )
+              : null,
+        ),
+        SizedBox(height: context.getRSize(16)),
         _buildQuickActions(),
         SizedBox(height: context.getRSize(24)),
         KeyedSubtree(

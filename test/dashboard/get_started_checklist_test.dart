@@ -63,7 +63,7 @@ class _StubDismissal extends GetStartedDismissalNotifier {
   GetStartedDismissal build() => _value;
 }
 
-StoreData _store(String id) => StoreData(
+StoreData _store(String id) => StoreData(onlineOrderingEnabled: false, 
       id: id,
       businessId: 'biz1',
       name: 'Store $id',

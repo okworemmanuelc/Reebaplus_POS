@@ -25,7 +25,7 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/stores/van_store.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/recon_data.dart';
 
-StoreData _store(String id, {String kind = kStoreKindStore}) => StoreData(
+StoreData _store(String id, {String kind = kStoreKindStore}) => StoreData(onlineOrderingEnabled: false, 
       id: id,
       businessId: 'biz',
       name: 'Location $id',

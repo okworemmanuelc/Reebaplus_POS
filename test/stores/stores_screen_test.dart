@@ -159,11 +159,24 @@ void main() {
       );
       await tester.enterText(fields.at(0), 'Kano Depot');
       await tester.enterText(fields.at(1), '9 Zoo Road');
+      // #423: the store's state + LGA is required.
+      await tester.tap(find.byKey(const ValueKey<String>('new-store-area')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const ValueKey('area-search-state')), 'Kano');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('area-option-Kano')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const ValueKey('area-search-lga')), 'Dala');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('area-option-Dala')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Save Store'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Save Store'));
       await tester.pumpAndSettle();
       await deliver(tester);
       final all = await env.db.storesDao.getActiveStores();
-      expect(all.any((s) => s.name == 'Kano Depot'), isTrue);
+      expect(all.any((s) => s.name == 'Kano Depot' && s.lga == 'Dala'), isTrue);
       await disposeScreen(tester);
     });
 

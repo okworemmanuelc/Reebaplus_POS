@@ -81,6 +81,46 @@ void main() {
     }
   });
 
+  test('v88 to v89 adds store online fields off, the delivery table and the key',
+      () async {
+    var db = await openAndInit();
+    final businessId = UuidV7.generate();
+    final storeId = UuidV7.generate();
+    await db.into(db.businesses).insert(
+      BusinessesCompanion.insert(id: Value(businessId), name: 'Online shop'));
+    await db.into(db.stores).insert(StoresCompanion.insert(
+      id: Value(storeId), businessId: businessId, name: 'Main',
+      location: const Value('1 Road, Nigeria')));
+    for (final col in ['country', 'state', 'lga', 'phone', 'online_note',
+        'online_ordering_enabled']) {
+      await db.customStatement('ALTER TABLE stores DROP COLUMN $col');
+    }
+    await db.customStatement('DROP TABLE store_delivery_areas');
+    await db.customStatement(
+        "DELETE FROM permissions WHERE key = 'stores.online_ordering'");
+    await db.customStatement('PRAGMA user_version = 88');
+    await db.close();
+    db = await openAndInit();
+    try {
+      final store = await (db.select(db.stores)
+        ..where((s) => s.id.equals(storeId))).getSingle();
+      expect(store.onlineOrderingEnabled, isFalse);
+      expect(store.state, isNull);
+      expect(store.lga, isNull);
+      expect(store.location, '1 Road, Nigeria');
+      expect(await columnsOf(db, 'store_delivery_areas'),
+          containsAll(['store_id', 'state', 'lga', 'is_deleted']));
+      expect((await db.customSelect(
+        "SELECT category FROM permissions WHERE key = 'stores.online_ordering'",
+      ).getSingle()).read<String>('category'), 'Online store');
+      // Re-running the step is idempotent.
+      await db.customStatement('PRAGMA user_version = 88');
+      await db.close();
+      db = await openAndInit();
+      expect((await db.select(db.stores).get()).single.id, storeId);
+    } finally { await db.close(); }
+  });
+
   test('v87 to v88 preserves archived products and defaults listing on', () async {
     var db = await openAndInit();
     final businessId = UuidV7.generate();
