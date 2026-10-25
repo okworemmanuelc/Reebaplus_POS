@@ -146,6 +146,22 @@ class ShopperService {
     ];
   }
 
+  /// Everything held about the Shopper (#477): profile, phones, addresses and
+  /// own Online Orders, as the server's JSON.
+  Future<Map<String, Object?>> exportData() async {
+    final result = await _call('shopper_export', const {});
+    if (result is! Map) throw ShopperException(ShopperFailure.failed, result);
+    return result.cast<String, Object?>();
+  }
+
+  /// Marketing consent (#477); returns the stored value.
+  Future<bool> setMarketingOptIn(bool optIn) async {
+    final result = await _call('shopper_set_marketing_opt_in', {
+      'p_opt_in': optIn,
+    });
+    return result == true;
+  }
+
   Future<Object?> _call(String fn, Map<String, Object?> params) async {
     try {
       return await _rpc(fn, params).timeout(timeout);

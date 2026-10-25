@@ -7,6 +7,8 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #477: Shopper data rights (2026-10-25, ready for review)
+- Cloud 0209 (marketing_opt_in + consent_at, `shopper_export`, `shopper_set_marketing_opt_in`, get_profile re-issued with the flag; NOT deployed) + Shopper account: Download my data, marketing switch (off), privacy note. Owner reviews the privacy wording.
 ### Issue #436: Order again (2026-10-25, ready for review)
 - Order again button on every My Orders card; re-adds lines at today's price/stock via `storefront_store_products` (no by-id RPC), skips unavailable with one note, 18+ gate, qty clamp. App-only. Logic in `lib/core/storefront/order_again.dart`.
 
