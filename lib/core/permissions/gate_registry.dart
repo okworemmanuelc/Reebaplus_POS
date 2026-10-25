@@ -316,6 +316,16 @@ abstract final class Gates {
     rule: Gate.key('stores.manage'),
   );
 
+  /// Settings → Online store hub and each store's online page (#423): store
+  /// area, delivery areas, the Online ordering switch, public phone and note.
+  /// Its own key (CEO by default, cloud 0199), not `settings.manage` or the
+  /// unfinished `stores.manage`.
+  static const NamedGate manageOnlineStore = NamedGate(
+    name: 'manageOnlineStore',
+    action: 'Manage online store',
+    rule: Gate.key('stores.online_ordering'),
+  );
+
   /// Request a stock transfer from another store (§16.8.2) — store details,
   /// and one leg of the Stores screen's browse composite.
   static const NamedGate requestStoreTransfer = NamedGate(
@@ -760,6 +770,7 @@ abstract final class Gates {
     viewInventory,
     dailyStockCount,
     manageStores,
+    manageOnlineStore,
     requestStoreTransfer,
     dispatchStoreTransfer,
     receiveStoreTransfer,

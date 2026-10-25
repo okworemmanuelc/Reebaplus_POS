@@ -558,7 +558,22 @@ final List<SyncedTable> kSyncRegistry = [
       // supabase/migrations/0161 is applied, and what any legacy/web/RPC-
       // authored row that omits the column would produce afterwards. Defaulting
       // to a normal store is both the right value and the deploy-order fuse.
-      defaults: {'kind': kStoreKindStore},
+      // #423: older snapshots (pre-0199) omit the online switch, which is
+      // NOT NULL locally; absent means off. Nullable area/phone/note columns
+      // need no default.
+      defaults: {'kind': kStoreKindStore, 'onlineOrderingEnabled': false},
+    ),
+  ),
+  // #423: per-store delivery areas, after their parent `stores`. Soft-deleted
+  // (is_deleted) and never hard-deleted, so no hard-delete reconcile.
+  SyncedTable(
+    name: 'store_delivery_areas',
+    tenantScoped: true,
+    restore: Restore.plain(
+      (db) => db.storeDeliveryAreas,
+      StoreDeliveryAreaData.fromJson,
+      resilient: true,
+      defaults: {'country': 'Nigeria', 'isDeleted': false},
     ),
   ),
   const SyncedTable(

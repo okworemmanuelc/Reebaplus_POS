@@ -44,6 +44,37 @@ class StoreDeleteBlockedException implements Exception {
   String toString() => message;
 }
 
+/// Why a store cannot go (or stay) online (#423).
+enum StoreOnlineBlockedReason { notFound, isVan, needsArea, needsDeliveryArea }
+
+extension StoreOnlineBlockedReasonMessage on StoreOnlineBlockedReason {
+  String get message {
+    switch (this) {
+      case StoreOnlineBlockedReason.notFound:
+        return 'This store is no longer available.';
+      case StoreOnlineBlockedReason.isVan:
+        return 'Vans cannot take online orders.';
+      case StoreOnlineBlockedReason.needsArea:
+        return 'Set the store\'s state and local government area first.';
+      case StoreOnlineBlockedReason.needsDeliveryArea:
+        return 'Add at least one delivery area first.';
+    }
+  }
+}
+
+/// Deterministic delivery-area id (#423): the same (store, country, state,
+/// lga) always maps to the same row, so re-adding revives it and two devices
+/// adding the same area converge instead of duplicating.
+String storeDeliveryAreaId({
+  required String storeId,
+  required String country,
+  required String state,
+  String? lga,
+}) => UuidV7.deterministic(
+  'store_delivery_area:$storeId:${country.trim().toLowerCase()}:'
+  '${state.trim().toLowerCase()}:${(lga ?? '*').trim().toLowerCase()}',
+);
+
 @DriftAccessor(tables: [Users, Stores])
 class StoresDao extends DatabaseAccessor<AppDatabase>
     with _$StoresDaoMixin, BusinessScopedDao<AppDatabase> {
@@ -98,12 +129,16 @@ class StoresDao extends DatabaseAccessor<AppDatabase>
     String? location,
     String kind = kStoreKindStore,
     String? userId,
+    String? country,
+    String? state,
+    String? lga,
   }) async {
     assert(kStoreKinds.contains(kind), 'unknown store kind: $kind');
     final storeId = UuidV7.generate();
     final now = DateTime.now();
     final businessId = requireBusinessId();
     final targetUserId = userId ?? currentUserId;
+    final hasArea = _filled(state) && _filled(lga);
 
     await transaction(() async {
       final storeRow = StoresCompanion.insert(
@@ -112,10 +147,26 @@ class StoresDao extends DatabaseAccessor<AppDatabase>
         name: name,
         location: Value(location == null || location.isEmpty ? null : location),
         kind: Value(kind),
+        country: Value(hasArea ? (country ?? 'Nigeria').trim() : null),
+        state: Value(hasArea ? state!.trim() : null),
+        lga: Value(hasArea ? lga!.trim() : null),
+        onlineOrderingEnabled: const Value(false),
         lastUpdatedAt: Value(now),
       );
       await into(stores).insert(storeRow);
       await db.syncDao.enqueueUpsert('stores', storeRow);
+      // #423: a store created with its area starts with that LGA as its
+      // delivery area, so it is ready to switch online.
+      if (hasArea && kind == kStoreKindStore) {
+        await _upsertDeliveryArea(
+          businessId: businessId,
+          storeId: storeId,
+          country: (country ?? 'Nigeria').trim(),
+          state: state!.trim(),
+          lga: lga!.trim(),
+          now: now,
+        );
+      }
 
       if (targetUserId != null) {
         final user = await (select(users)
@@ -208,6 +259,229 @@ class StoresDao extends DatabaseAccessor<AppDatabase>
       stores,
     )..where((t) => t.id.equals(id))).getSingle();
     await db.syncDao.enqueueUpsert('stores', row);
+  }
+
+  // ── Online store (#423) ────────────────────────────────────────────────────
+
+  static bool _filled(String? v) => v != null && v.trim().isNotEmpty;
+
+  Future<StoreData?> _activeStore(String storeId) => (select(stores)
+        ..where((t) => t.id.equals(storeId) & whereBusiness(t) & t.isDeleted.not()))
+      .getSingleOrNull();
+
+  Future<void> _enqueueStore(String storeId) async {
+    final row = await (select(stores)
+          ..where((t) => t.id.equals(storeId) & whereBusiness(t)))
+        .getSingle();
+    // Full row, including cleared (null) phone / note.
+    await db.syncDao.enqueueUpsert('stores', row.toCompanion(false));
+  }
+
+  Future<void> _upsertDeliveryArea({
+    required String businessId,
+    required String storeId,
+    required String country,
+    required String state,
+    String? lga,
+    required DateTime now,
+  }) async {
+    final id = storeDeliveryAreaId(
+      storeId: storeId, country: country, state: state, lga: lga);
+    final row = StoreDeliveryAreasCompanion(
+      id: Value(id),
+      businessId: Value(businessId),
+      storeId: Value(storeId),
+      country: Value(country),
+      state: Value(state),
+      lga: Value(lga),
+      isDeleted: const Value(false),
+      createdAt: Value(now),
+      lastUpdatedAt: Value(now),
+    );
+    final existing = await (select(db.storeDeliveryAreas)
+          ..where((t) => t.id.equals(id) & whereBusiness(t)))
+        .getSingleOrNull();
+    if (existing == null) {
+      await into(db.storeDeliveryAreas).insert(row);
+      await db.syncDao.enqueueUpsert('store_delivery_areas', row);
+      return;
+    }
+    // Revive a removed area; keep its original created_at.
+    final revived = existing.copyWith(isDeleted: false, lastUpdatedAt: now);
+    await update(db.storeDeliveryAreas).replace(revived);
+    await db.syncDao.enqueueUpsert(
+      'store_delivery_areas', revived.toCompanion(false));
+  }
+
+  /// Live delivery areas of one store, states first then LGAs, by name.
+  Stream<List<StoreDeliveryAreaData>> watchDeliveryAreas(String storeId) =>
+      (select(db.storeDeliveryAreas)
+            ..where((t) =>
+                t.storeId.equals(storeId) & whereBusiness(t) & t.isDeleted.not())
+            ..orderBy([
+              (t) => OrderingTerm(expression: t.state),
+              (t) => OrderingTerm(expression: t.lga, nulls: NullsOrder.first),
+            ]))
+          .watch();
+
+  Future<List<StoreDeliveryAreaData>> getDeliveryAreas(String storeId) =>
+      (select(db.storeDeliveryAreas)
+            ..where((t) =>
+                t.storeId.equals(storeId) & whereBusiness(t) & t.isDeleted.not()))
+          .get();
+
+  /// Every live delivery area of the current business (Online store hub).
+  Stream<List<StoreDeliveryAreaData>> watchAllDeliveryAreas() =>
+      (select(db.storeDeliveryAreas)
+            ..where((t) => whereBusiness(t) & t.isDeleted.not()))
+          .watch();
+
+  /// Set a store's own area. When the store has no delivery area yet, its own
+  /// LGA becomes the first one (the "pre-filled" default). Vans have no area.
+  Future<StoreOnlineBlockedReason?> setStoreArea({
+    required String storeId,
+    required String country,
+    required String state,
+    required String lga,
+  }) => transaction(() async {
+    final store = await _activeStore(storeId);
+    if (store == null) return StoreOnlineBlockedReason.notFound;
+    if (store.kind != kStoreKindStore) return StoreOnlineBlockedReason.isVan;
+    if (!_filled(state) || !_filled(lga)) return StoreOnlineBlockedReason.needsArea;
+    final now = DateTime.now();
+    await (update(stores)..where((t) => t.id.equals(storeId) & whereBusiness(t)))
+        .write(StoresCompanion(
+      country: Value(country.trim()),
+      state: Value(state.trim()),
+      lga: Value(lga.trim()),
+      lastUpdatedAt: Value(now),
+    ));
+    await _enqueueStore(storeId);
+    if ((await getDeliveryAreas(storeId)).isEmpty) {
+      await _upsertDeliveryArea(
+        businessId: store.businessId,
+        storeId: storeId,
+        country: country.trim(),
+        state: state.trim(),
+        lga: lga.trim(),
+        now: now,
+      );
+    }
+    return null;
+  });
+
+  /// Public phone + shopper note. Empty clears either (phone falls back to the
+  /// business phone). Callers validate the note length.
+  Future<StoreOnlineBlockedReason?> setStoreContact({
+    required String storeId,
+    required String phone,
+    required String onlineNote,
+  }) => transaction(() async {
+    final store = await _activeStore(storeId);
+    if (store == null) return StoreOnlineBlockedReason.notFound;
+    if (store.kind != kStoreKindStore) return StoreOnlineBlockedReason.isVan;
+    await (update(stores)..where((t) => t.id.equals(storeId) & whereBusiness(t)))
+        .write(StoresCompanion(
+      phone: Value(_filled(phone) ? phone.trim() : null),
+      onlineNote: Value(_filled(onlineNote) ? onlineNote.trim() : null),
+      lastUpdatedAt: Value(DateTime.now()),
+    ));
+    await _enqueueStore(storeId);
+    return null;
+  });
+
+  /// Add (or revive) a delivery area. A null [lga] covers the whole state.
+  Future<StoreOnlineBlockedReason?> addDeliveryArea({
+    required String storeId,
+    required String country,
+    required String state,
+    String? lga,
+  }) => transaction(() async {
+    final store = await _activeStore(storeId);
+    if (store == null) return StoreOnlineBlockedReason.notFound;
+    if (store.kind != kStoreKindStore) return StoreOnlineBlockedReason.isVan;
+    if (!_filled(state)) return StoreOnlineBlockedReason.needsArea;
+    await _upsertDeliveryArea(
+      businessId: store.businessId,
+      storeId: storeId,
+      country: country.trim(),
+      state: state.trim(),
+      lga: _filled(lga) ? lga!.trim() : null,
+      now: DateTime.now(),
+    );
+    return null;
+  });
+
+  /// Remove a delivery area (soft delete). An online store must keep at least
+  /// one, so removing its last area is refused.
+  Future<StoreOnlineBlockedReason?> removeDeliveryArea({
+    required String storeId,
+    required String areaId,
+  }) => transaction(() async {
+    final store = await _activeStore(storeId);
+    if (store == null) return StoreOnlineBlockedReason.notFound;
+    final areas = await getDeliveryAreas(storeId);
+    final area = areas.where((a) => a.id == areaId).firstOrNull;
+    if (area == null) return StoreOnlineBlockedReason.notFound;
+    if (store.onlineOrderingEnabled && areas.length <= 1) {
+      return StoreOnlineBlockedReason.needsDeliveryArea;
+    }
+    final removed = area.copyWith(isDeleted: true, lastUpdatedAt: DateTime.now());
+    await update(db.storeDeliveryAreas).replace(removed);
+    await db.syncDao.enqueueUpsert(
+      'store_delivery_areas', removed.toCompanion(false));
+    return null;
+  });
+
+  /// Switch online ordering. Turning on needs a normal store (never a van),
+  /// its state + LGA and at least one delivery area. Turning off always works
+  /// and hides the store at once; existing online orders are separate rows.
+  Future<StoreOnlineBlockedReason?> setOnlineOrdering({
+    required String storeId,
+    required bool enabled,
+  }) => transaction(() async {
+    final store = await _activeStore(storeId);
+    if (store == null) return StoreOnlineBlockedReason.notFound;
+    if (enabled) {
+      final blocker = await onlineBlocker(store);
+      if (blocker != null) return blocker;
+    }
+    if (store.onlineOrderingEnabled == enabled) return null;
+    final now = DateTime.now();
+    await (update(stores)..where((t) => t.id.equals(storeId) & whereBusiness(t)))
+        .write(StoresCompanion(
+      onlineOrderingEnabled: Value(enabled),
+      lastUpdatedAt: Value(now),
+    ));
+    await _enqueueStore(storeId);
+    final log = ActivityLogsCompanion.insert(
+      id: Value(UuidV7.generate()),
+      businessId: store.businessId,
+      userId: Value(currentUserId),
+      action: enabled ? 'store.online_on' : 'store.online_off',
+      description: enabled
+          ? 'Switched online ordering on for "${store.name}"'
+          : 'Switched online ordering off for "${store.name}"',
+      entityType: const Value('store'),
+      entityId: Value(storeId),
+      storeId: Value(storeId),
+      lastUpdatedAt: Value(now),
+    );
+    await into(db.activityLogs).insert(log);
+    await db.syncDao.enqueueUpsert('activity_logs', log);
+    return null;
+  });
+
+  /// What stops [store] going online right now, or null when it can.
+  Future<StoreOnlineBlockedReason?> onlineBlocker(StoreData store) async {
+    if (store.kind != kStoreKindStore) return StoreOnlineBlockedReason.isVan;
+    if (!_filled(store.state) || !_filled(store.lga)) {
+      return StoreOnlineBlockedReason.needsArea;
+    }
+    if ((await getDeliveryAreas(store.id)).isEmpty) {
+      return StoreOnlineBlockedReason.needsDeliveryArea;
+    }
+    return null;
   }
 
   /// Check whether deleting [storeId] is blocked by any safety invariant (#456):

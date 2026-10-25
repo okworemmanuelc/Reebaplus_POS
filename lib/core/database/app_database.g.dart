@@ -2223,6 +2223,70 @@ class $StoresTable extends Stores with TableInfo<$StoresTable, StoreData> {
     requiredDuringInsert: false,
     defaultValue: const Constant(kStoreKindStore),
   );
+  static const VerificationMeta _countryMeta = const VerificationMeta(
+    'country',
+  );
+  @override
+  late final GeneratedColumn<String> country = GeneratedColumn<String>(
+    'country',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _stateMeta = const VerificationMeta('state');
+  @override
+  late final GeneratedColumn<String> state = GeneratedColumn<String>(
+    'state',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lgaMeta = const VerificationMeta('lga');
+  @override
+  late final GeneratedColumn<String> lga = GeneratedColumn<String>(
+    'lga',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _phoneMeta = const VerificationMeta('phone');
+  @override
+  late final GeneratedColumn<String> phone = GeneratedColumn<String>(
+    'phone',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _onlineNoteMeta = const VerificationMeta(
+    'onlineNote',
+  );
+  @override
+  late final GeneratedColumn<String> onlineNote = GeneratedColumn<String>(
+    'online_note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _onlineOrderingEnabledMeta =
+      const VerificationMeta('onlineOrderingEnabled');
+  @override
+  late final GeneratedColumn<bool> onlineOrderingEnabled =
+      GeneratedColumn<bool>(
+        'online_ordering_enabled',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("online_ordering_enabled" IN (0, 1))',
+        ),
+        defaultValue: const Constant(false),
+      );
   static const VerificationMeta _isDeletedMeta = const VerificationMeta(
     'isDeleted',
   );
@@ -2270,6 +2334,12 @@ class $StoresTable extends Stores with TableInfo<$StoresTable, StoreData> {
     name,
     location,
     kind,
+    country,
+    state,
+    lga,
+    phone,
+    onlineNote,
+    onlineOrderingEnabled,
     isDeleted,
     createdAt,
     lastUpdatedAt,
@@ -2315,6 +2385,45 @@ class $StoresTable extends Stores with TableInfo<$StoresTable, StoreData> {
       context.handle(
         _kindMeta,
         kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    }
+    if (data.containsKey('country')) {
+      context.handle(
+        _countryMeta,
+        country.isAcceptableOrUnknown(data['country']!, _countryMeta),
+      );
+    }
+    if (data.containsKey('state')) {
+      context.handle(
+        _stateMeta,
+        state.isAcceptableOrUnknown(data['state']!, _stateMeta),
+      );
+    }
+    if (data.containsKey('lga')) {
+      context.handle(
+        _lgaMeta,
+        lga.isAcceptableOrUnknown(data['lga']!, _lgaMeta),
+      );
+    }
+    if (data.containsKey('phone')) {
+      context.handle(
+        _phoneMeta,
+        phone.isAcceptableOrUnknown(data['phone']!, _phoneMeta),
+      );
+    }
+    if (data.containsKey('online_note')) {
+      context.handle(
+        _onlineNoteMeta,
+        onlineNote.isAcceptableOrUnknown(data['online_note']!, _onlineNoteMeta),
+      );
+    }
+    if (data.containsKey('online_ordering_enabled')) {
+      context.handle(
+        _onlineOrderingEnabledMeta,
+        onlineOrderingEnabled.isAcceptableOrUnknown(
+          data['online_ordering_enabled']!,
+          _onlineOrderingEnabledMeta,
+        ),
       );
     }
     if (data.containsKey('is_deleted')) {
@@ -2367,6 +2476,30 @@ class $StoresTable extends Stores with TableInfo<$StoresTable, StoreData> {
         DriftSqlType.string,
         data['${effectivePrefix}kind'],
       )!,
+      country: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}country'],
+      ),
+      state: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}state'],
+      ),
+      lga: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}lga'],
+      ),
+      phone: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}phone'],
+      ),
+      onlineNote: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}online_note'],
+      ),
+      onlineOrderingEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}online_ordering_enabled'],
+      )!,
       isDeleted: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_deleted'],
@@ -2402,6 +2535,25 @@ class StoreData extends DataClass implements Insertable<StoreData> {
   /// parent of most of the schema. The client only ever writes the two
   /// [kStoreKinds] constants (`StoresDao.createStore`).
   final String kind;
+
+  /// The store's own area (#423): Nigeria from the bundled state/LGA lists
+  /// (matching cloud `ng_areas`), free text elsewhere. Required before the
+  /// store can go online.
+  final String? country;
+  final String? state;
+  final String? lga;
+
+  /// Public store phone for order slips / accepted orders (#423). Null falls
+  /// back to the business phone.
+  final String? phone;
+
+  /// Short note shown to shoppers, at most [kStoreOnlineNoteMaxLength]
+  /// characters (delivery fee, pickup/delivery days as plain text, #423).
+  final String? onlineNote;
+
+  /// Online ordering switch (#423), default off. Only `kind = 'store'` rows
+  /// with state + LGA may be on (cloud CHECK in 0199 is the backstop).
+  final bool onlineOrderingEnabled;
   final bool isDeleted;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
@@ -2411,6 +2563,12 @@ class StoreData extends DataClass implements Insertable<StoreData> {
     required this.name,
     this.location,
     required this.kind,
+    this.country,
+    this.state,
+    this.lga,
+    this.phone,
+    this.onlineNote,
+    required this.onlineOrderingEnabled,
     required this.isDeleted,
     required this.createdAt,
     required this.lastUpdatedAt,
@@ -2425,6 +2583,22 @@ class StoreData extends DataClass implements Insertable<StoreData> {
       map['location'] = Variable<String>(location);
     }
     map['kind'] = Variable<String>(kind);
+    if (!nullToAbsent || country != null) {
+      map['country'] = Variable<String>(country);
+    }
+    if (!nullToAbsent || state != null) {
+      map['state'] = Variable<String>(state);
+    }
+    if (!nullToAbsent || lga != null) {
+      map['lga'] = Variable<String>(lga);
+    }
+    if (!nullToAbsent || phone != null) {
+      map['phone'] = Variable<String>(phone);
+    }
+    if (!nullToAbsent || onlineNote != null) {
+      map['online_note'] = Variable<String>(onlineNote);
+    }
+    map['online_ordering_enabled'] = Variable<bool>(onlineOrderingEnabled);
     map['is_deleted'] = Variable<bool>(isDeleted);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
@@ -2440,6 +2614,20 @@ class StoreData extends DataClass implements Insertable<StoreData> {
           ? const Value.absent()
           : Value(location),
       kind: Value(kind),
+      country: country == null && nullToAbsent
+          ? const Value.absent()
+          : Value(country),
+      state: state == null && nullToAbsent
+          ? const Value.absent()
+          : Value(state),
+      lga: lga == null && nullToAbsent ? const Value.absent() : Value(lga),
+      phone: phone == null && nullToAbsent
+          ? const Value.absent()
+          : Value(phone),
+      onlineNote: onlineNote == null && nullToAbsent
+          ? const Value.absent()
+          : Value(onlineNote),
+      onlineOrderingEnabled: Value(onlineOrderingEnabled),
       isDeleted: Value(isDeleted),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
@@ -2457,6 +2645,14 @@ class StoreData extends DataClass implements Insertable<StoreData> {
       name: serializer.fromJson<String>(json['name']),
       location: serializer.fromJson<String?>(json['location']),
       kind: serializer.fromJson<String>(json['kind']),
+      country: serializer.fromJson<String?>(json['country']),
+      state: serializer.fromJson<String?>(json['state']),
+      lga: serializer.fromJson<String?>(json['lga']),
+      phone: serializer.fromJson<String?>(json['phone']),
+      onlineNote: serializer.fromJson<String?>(json['onlineNote']),
+      onlineOrderingEnabled: serializer.fromJson<bool>(
+        json['onlineOrderingEnabled'],
+      ),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
@@ -2471,6 +2667,12 @@ class StoreData extends DataClass implements Insertable<StoreData> {
       'name': serializer.toJson<String>(name),
       'location': serializer.toJson<String?>(location),
       'kind': serializer.toJson<String>(kind),
+      'country': serializer.toJson<String?>(country),
+      'state': serializer.toJson<String?>(state),
+      'lga': serializer.toJson<String?>(lga),
+      'phone': serializer.toJson<String?>(phone),
+      'onlineNote': serializer.toJson<String?>(onlineNote),
+      'onlineOrderingEnabled': serializer.toJson<bool>(onlineOrderingEnabled),
       'isDeleted': serializer.toJson<bool>(isDeleted),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
@@ -2483,6 +2685,12 @@ class StoreData extends DataClass implements Insertable<StoreData> {
     String? name,
     Value<String?> location = const Value.absent(),
     String? kind,
+    Value<String?> country = const Value.absent(),
+    Value<String?> state = const Value.absent(),
+    Value<String?> lga = const Value.absent(),
+    Value<String?> phone = const Value.absent(),
+    Value<String?> onlineNote = const Value.absent(),
+    bool? onlineOrderingEnabled,
     bool? isDeleted,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
@@ -2492,6 +2700,12 @@ class StoreData extends DataClass implements Insertable<StoreData> {
     name: name ?? this.name,
     location: location.present ? location.value : this.location,
     kind: kind ?? this.kind,
+    country: country.present ? country.value : this.country,
+    state: state.present ? state.value : this.state,
+    lga: lga.present ? lga.value : this.lga,
+    phone: phone.present ? phone.value : this.phone,
+    onlineNote: onlineNote.present ? onlineNote.value : this.onlineNote,
+    onlineOrderingEnabled: onlineOrderingEnabled ?? this.onlineOrderingEnabled,
     isDeleted: isDeleted ?? this.isDeleted,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -2505,6 +2719,16 @@ class StoreData extends DataClass implements Insertable<StoreData> {
       name: data.name.present ? data.name.value : this.name,
       location: data.location.present ? data.location.value : this.location,
       kind: data.kind.present ? data.kind.value : this.kind,
+      country: data.country.present ? data.country.value : this.country,
+      state: data.state.present ? data.state.value : this.state,
+      lga: data.lga.present ? data.lga.value : this.lga,
+      phone: data.phone.present ? data.phone.value : this.phone,
+      onlineNote: data.onlineNote.present
+          ? data.onlineNote.value
+          : this.onlineNote,
+      onlineOrderingEnabled: data.onlineOrderingEnabled.present
+          ? data.onlineOrderingEnabled.value
+          : this.onlineOrderingEnabled,
       isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       lastUpdatedAt: data.lastUpdatedAt.present
@@ -2521,6 +2745,12 @@ class StoreData extends DataClass implements Insertable<StoreData> {
           ..write('name: $name, ')
           ..write('location: $location, ')
           ..write('kind: $kind, ')
+          ..write('country: $country, ')
+          ..write('state: $state, ')
+          ..write('lga: $lga, ')
+          ..write('phone: $phone, ')
+          ..write('onlineNote: $onlineNote, ')
+          ..write('onlineOrderingEnabled: $onlineOrderingEnabled, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
@@ -2535,6 +2765,12 @@ class StoreData extends DataClass implements Insertable<StoreData> {
     name,
     location,
     kind,
+    country,
+    state,
+    lga,
+    phone,
+    onlineNote,
+    onlineOrderingEnabled,
     isDeleted,
     createdAt,
     lastUpdatedAt,
@@ -2548,6 +2784,12 @@ class StoreData extends DataClass implements Insertable<StoreData> {
           other.name == this.name &&
           other.location == this.location &&
           other.kind == this.kind &&
+          other.country == this.country &&
+          other.state == this.state &&
+          other.lga == this.lga &&
+          other.phone == this.phone &&
+          other.onlineNote == this.onlineNote &&
+          other.onlineOrderingEnabled == this.onlineOrderingEnabled &&
           other.isDeleted == this.isDeleted &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
@@ -2559,6 +2801,12 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
   final Value<String> name;
   final Value<String?> location;
   final Value<String> kind;
+  final Value<String?> country;
+  final Value<String?> state;
+  final Value<String?> lga;
+  final Value<String?> phone;
+  final Value<String?> onlineNote;
+  final Value<bool> onlineOrderingEnabled;
   final Value<bool> isDeleted;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
@@ -2569,6 +2817,12 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
     this.name = const Value.absent(),
     this.location = const Value.absent(),
     this.kind = const Value.absent(),
+    this.country = const Value.absent(),
+    this.state = const Value.absent(),
+    this.lga = const Value.absent(),
+    this.phone = const Value.absent(),
+    this.onlineNote = const Value.absent(),
+    this.onlineOrderingEnabled = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -2580,6 +2834,12 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
     required String name,
     this.location = const Value.absent(),
     this.kind = const Value.absent(),
+    this.country = const Value.absent(),
+    this.state = const Value.absent(),
+    this.lga = const Value.absent(),
+    this.phone = const Value.absent(),
+    this.onlineNote = const Value.absent(),
+    this.onlineOrderingEnabled = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -2592,6 +2852,12 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
     Expression<String>? name,
     Expression<String>? location,
     Expression<String>? kind,
+    Expression<String>? country,
+    Expression<String>? state,
+    Expression<String>? lga,
+    Expression<String>? phone,
+    Expression<String>? onlineNote,
+    Expression<bool>? onlineOrderingEnabled,
     Expression<bool>? isDeleted,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
@@ -2603,6 +2869,13 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
       if (name != null) 'name': name,
       if (location != null) 'location': location,
       if (kind != null) 'kind': kind,
+      if (country != null) 'country': country,
+      if (state != null) 'state': state,
+      if (lga != null) 'lga': lga,
+      if (phone != null) 'phone': phone,
+      if (onlineNote != null) 'online_note': onlineNote,
+      if (onlineOrderingEnabled != null)
+        'online_ordering_enabled': onlineOrderingEnabled,
       if (isDeleted != null) 'is_deleted': isDeleted,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
@@ -2616,6 +2889,12 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
     Value<String>? name,
     Value<String?>? location,
     Value<String>? kind,
+    Value<String?>? country,
+    Value<String?>? state,
+    Value<String?>? lga,
+    Value<String?>? phone,
+    Value<String?>? onlineNote,
+    Value<bool>? onlineOrderingEnabled,
     Value<bool>? isDeleted,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
@@ -2627,6 +2906,13 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
       name: name ?? this.name,
       location: location ?? this.location,
       kind: kind ?? this.kind,
+      country: country ?? this.country,
+      state: state ?? this.state,
+      lga: lga ?? this.lga,
+      phone: phone ?? this.phone,
+      onlineNote: onlineNote ?? this.onlineNote,
+      onlineOrderingEnabled:
+          onlineOrderingEnabled ?? this.onlineOrderingEnabled,
       isDeleted: isDeleted ?? this.isDeleted,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -2652,6 +2938,26 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
     if (kind.present) {
       map['kind'] = Variable<String>(kind.value);
     }
+    if (country.present) {
+      map['country'] = Variable<String>(country.value);
+    }
+    if (state.present) {
+      map['state'] = Variable<String>(state.value);
+    }
+    if (lga.present) {
+      map['lga'] = Variable<String>(lga.value);
+    }
+    if (phone.present) {
+      map['phone'] = Variable<String>(phone.value);
+    }
+    if (onlineNote.present) {
+      map['online_note'] = Variable<String>(onlineNote.value);
+    }
+    if (onlineOrderingEnabled.present) {
+      map['online_ordering_enabled'] = Variable<bool>(
+        onlineOrderingEnabled.value,
+      );
+    }
     if (isDeleted.present) {
       map['is_deleted'] = Variable<bool>(isDeleted.value);
     }
@@ -2675,6 +2981,576 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
           ..write('name: $name, ')
           ..write('location: $location, ')
           ..write('kind: $kind, ')
+          ..write('country: $country, ')
+          ..write('state: $state, ')
+          ..write('lga: $lga, ')
+          ..write('phone: $phone, ')
+          ..write('onlineNote: $onlineNote, ')
+          ..write('onlineOrderingEnabled: $onlineOrderingEnabled, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $StoreDeliveryAreasTable extends StoreDeliveryAreas
+    with TableInfo<$StoreDeliveryAreasTable, StoreDeliveryAreaData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $StoreDeliveryAreasTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: () => UuidV7.generate(),
+  );
+  static const VerificationMeta _businessIdMeta = const VerificationMeta(
+    'businessId',
+  );
+  @override
+  late final GeneratedColumn<String> businessId = GeneratedColumn<String>(
+    'business_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES businesses (id)',
+    ),
+  );
+  static const VerificationMeta _storeIdMeta = const VerificationMeta(
+    'storeId',
+  );
+  @override
+  late final GeneratedColumn<String> storeId = GeneratedColumn<String>(
+    'store_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES stores (id)',
+    ),
+  );
+  static const VerificationMeta _countryMeta = const VerificationMeta(
+    'country',
+  );
+  @override
+  late final GeneratedColumn<String> country = GeneratedColumn<String>(
+    'country',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('Nigeria'),
+  );
+  static const VerificationMeta _stateMeta = const VerificationMeta('state');
+  @override
+  late final GeneratedColumn<String> state = GeneratedColumn<String>(
+    'state',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _lgaMeta = const VerificationMeta('lga');
+  @override
+  late final GeneratedColumn<String> lga = GeneratedColumn<String>(
+    'lga',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _isDeletedMeta = const VerificationMeta(
+    'isDeleted',
+  );
+  @override
+  late final GeneratedColumn<bool> isDeleted = GeneratedColumn<bool>(
+    'is_deleted',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_deleted" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _lastUpdatedAtMeta = const VerificationMeta(
+    'lastUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'last_updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    businessId,
+    storeId,
+    country,
+    state,
+    lga,
+    isDeleted,
+    createdAt,
+    lastUpdatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'store_delivery_areas';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<StoreDeliveryAreaData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('business_id')) {
+      context.handle(
+        _businessIdMeta,
+        businessId.isAcceptableOrUnknown(data['business_id']!, _businessIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_businessIdMeta);
+    }
+    if (data.containsKey('store_id')) {
+      context.handle(
+        _storeIdMeta,
+        storeId.isAcceptableOrUnknown(data['store_id']!, _storeIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_storeIdMeta);
+    }
+    if (data.containsKey('country')) {
+      context.handle(
+        _countryMeta,
+        country.isAcceptableOrUnknown(data['country']!, _countryMeta),
+      );
+    }
+    if (data.containsKey('state')) {
+      context.handle(
+        _stateMeta,
+        state.isAcceptableOrUnknown(data['state']!, _stateMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_stateMeta);
+    }
+    if (data.containsKey('lga')) {
+      context.handle(
+        _lgaMeta,
+        lga.isAcceptableOrUnknown(data['lga']!, _lgaMeta),
+      );
+    }
+    if (data.containsKey('is_deleted')) {
+      context.handle(
+        _isDeletedMeta,
+        isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('last_updated_at')) {
+      context.handle(
+        _lastUpdatedAtMeta,
+        lastUpdatedAt.isAcceptableOrUnknown(
+          data['last_updated_at']!,
+          _lastUpdatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  StoreDeliveryAreaData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return StoreDeliveryAreaData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      businessId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}business_id'],
+      )!,
+      storeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}store_id'],
+      )!,
+      country: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}country'],
+      )!,
+      state: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}state'],
+      )!,
+      lga: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}lga'],
+      ),
+      isDeleted: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_deleted'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $StoreDeliveryAreasTable createAlias(String alias) {
+    return $StoreDeliveryAreasTable(attachedDatabase, alias);
+  }
+}
+
+class StoreDeliveryAreaData extends DataClass
+    implements Insertable<StoreDeliveryAreaData> {
+  final String id;
+  final String businessId;
+  final String storeId;
+  final String country;
+  final String state;
+  final String? lga;
+  final bool isDeleted;
+  final DateTime createdAt;
+  final DateTime lastUpdatedAt;
+  const StoreDeliveryAreaData({
+    required this.id,
+    required this.businessId,
+    required this.storeId,
+    required this.country,
+    required this.state,
+    this.lga,
+    required this.isDeleted,
+    required this.createdAt,
+    required this.lastUpdatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['business_id'] = Variable<String>(businessId);
+    map['store_id'] = Variable<String>(storeId);
+    map['country'] = Variable<String>(country);
+    map['state'] = Variable<String>(state);
+    if (!nullToAbsent || lga != null) {
+      map['lga'] = Variable<String>(lga);
+    }
+    map['is_deleted'] = Variable<bool>(isDeleted);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    return map;
+  }
+
+  StoreDeliveryAreasCompanion toCompanion(bool nullToAbsent) {
+    return StoreDeliveryAreasCompanion(
+      id: Value(id),
+      businessId: Value(businessId),
+      storeId: Value(storeId),
+      country: Value(country),
+      state: Value(state),
+      lga: lga == null && nullToAbsent ? const Value.absent() : Value(lga),
+      isDeleted: Value(isDeleted),
+      createdAt: Value(createdAt),
+      lastUpdatedAt: Value(lastUpdatedAt),
+    );
+  }
+
+  factory StoreDeliveryAreaData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return StoreDeliveryAreaData(
+      id: serializer.fromJson<String>(json['id']),
+      businessId: serializer.fromJson<String>(json['businessId']),
+      storeId: serializer.fromJson<String>(json['storeId']),
+      country: serializer.fromJson<String>(json['country']),
+      state: serializer.fromJson<String>(json['state']),
+      lga: serializer.fromJson<String?>(json['lga']),
+      isDeleted: serializer.fromJson<bool>(json['isDeleted']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'businessId': serializer.toJson<String>(businessId),
+      'storeId': serializer.toJson<String>(storeId),
+      'country': serializer.toJson<String>(country),
+      'state': serializer.toJson<String>(state),
+      'lga': serializer.toJson<String?>(lga),
+      'isDeleted': serializer.toJson<bool>(isDeleted),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+    };
+  }
+
+  StoreDeliveryAreaData copyWith({
+    String? id,
+    String? businessId,
+    String? storeId,
+    String? country,
+    String? state,
+    Value<String?> lga = const Value.absent(),
+    bool? isDeleted,
+    DateTime? createdAt,
+    DateTime? lastUpdatedAt,
+  }) => StoreDeliveryAreaData(
+    id: id ?? this.id,
+    businessId: businessId ?? this.businessId,
+    storeId: storeId ?? this.storeId,
+    country: country ?? this.country,
+    state: state ?? this.state,
+    lga: lga.present ? lga.value : this.lga,
+    isDeleted: isDeleted ?? this.isDeleted,
+    createdAt: createdAt ?? this.createdAt,
+    lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+  );
+  StoreDeliveryAreaData copyWithCompanion(StoreDeliveryAreasCompanion data) {
+    return StoreDeliveryAreaData(
+      id: data.id.present ? data.id.value : this.id,
+      businessId: data.businessId.present
+          ? data.businessId.value
+          : this.businessId,
+      storeId: data.storeId.present ? data.storeId.value : this.storeId,
+      country: data.country.present ? data.country.value : this.country,
+      state: data.state.present ? data.state.value : this.state,
+      lga: data.lga.present ? data.lga.value : this.lga,
+      isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastUpdatedAt: data.lastUpdatedAt.present
+          ? data.lastUpdatedAt.value
+          : this.lastUpdatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StoreDeliveryAreaData(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('storeId: $storeId, ')
+          ..write('country: $country, ')
+          ..write('state: $state, ')
+          ..write('lga: $lga, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    businessId,
+    storeId,
+    country,
+    state,
+    lga,
+    isDeleted,
+    createdAt,
+    lastUpdatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is StoreDeliveryAreaData &&
+          other.id == this.id &&
+          other.businessId == this.businessId &&
+          other.storeId == this.storeId &&
+          other.country == this.country &&
+          other.state == this.state &&
+          other.lga == this.lga &&
+          other.isDeleted == this.isDeleted &&
+          other.createdAt == this.createdAt &&
+          other.lastUpdatedAt == this.lastUpdatedAt);
+}
+
+class StoreDeliveryAreasCompanion
+    extends UpdateCompanion<StoreDeliveryAreaData> {
+  final Value<String> id;
+  final Value<String> businessId;
+  final Value<String> storeId;
+  final Value<String> country;
+  final Value<String> state;
+  final Value<String?> lga;
+  final Value<bool> isDeleted;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> lastUpdatedAt;
+  final Value<int> rowid;
+  const StoreDeliveryAreasCompanion({
+    this.id = const Value.absent(),
+    this.businessId = const Value.absent(),
+    this.storeId = const Value.absent(),
+    this.country = const Value.absent(),
+    this.state = const Value.absent(),
+    this.lga = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  StoreDeliveryAreasCompanion.insert({
+    this.id = const Value.absent(),
+    required String businessId,
+    required String storeId,
+    this.country = const Value.absent(),
+    required String state,
+    this.lga = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : businessId = Value(businessId),
+       storeId = Value(storeId),
+       state = Value(state);
+  static Insertable<StoreDeliveryAreaData> custom({
+    Expression<String>? id,
+    Expression<String>? businessId,
+    Expression<String>? storeId,
+    Expression<String>? country,
+    Expression<String>? state,
+    Expression<String>? lga,
+    Expression<bool>? isDeleted,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastUpdatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (businessId != null) 'business_id': businessId,
+      if (storeId != null) 'store_id': storeId,
+      if (country != null) 'country': country,
+      if (state != null) 'state': state,
+      if (lga != null) 'lga': lga,
+      if (isDeleted != null) 'is_deleted': isDeleted,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  StoreDeliveryAreasCompanion copyWith({
+    Value<String>? id,
+    Value<String>? businessId,
+    Value<String>? storeId,
+    Value<String>? country,
+    Value<String>? state,
+    Value<String?>? lga,
+    Value<bool>? isDeleted,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? lastUpdatedAt,
+    Value<int>? rowid,
+  }) {
+    return StoreDeliveryAreasCompanion(
+      id: id ?? this.id,
+      businessId: businessId ?? this.businessId,
+      storeId: storeId ?? this.storeId,
+      country: country ?? this.country,
+      state: state ?? this.state,
+      lga: lga ?? this.lga,
+      isDeleted: isDeleted ?? this.isDeleted,
+      createdAt: createdAt ?? this.createdAt,
+      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (businessId.present) {
+      map['business_id'] = Variable<String>(businessId.value);
+    }
+    if (storeId.present) {
+      map['store_id'] = Variable<String>(storeId.value);
+    }
+    if (country.present) {
+      map['country'] = Variable<String>(country.value);
+    }
+    if (state.present) {
+      map['state'] = Variable<String>(state.value);
+    }
+    if (lga.present) {
+      map['lga'] = Variable<String>(lga.value);
+    }
+    if (isDeleted.present) {
+      map['is_deleted'] = Variable<bool>(isDeleted.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lastUpdatedAt.present) {
+      map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StoreDeliveryAreasCompanion(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('storeId: $storeId, ')
+          ..write('country: $country, ')
+          ..write('state: $state, ')
+          ..write('lga: $lga, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
@@ -48633,6 +49509,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   );
   late final $ManufacturersTable manufacturers = $ManufacturersTable(this);
   late final $StoresTable stores = $StoresTable(this);
+  late final $StoreDeliveryAreasTable storeDeliveryAreas =
+      $StoreDeliveryAreasTable(this);
   late final $UsersTable users = $UsersTable(this);
   late final $CategoriesTable categories = $CategoriesTable(this);
   late final $SuppliersTable suppliers = $SuppliersTable(this);
@@ -48837,6 +49715,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     crateSizeGroups,
     manufacturers,
     stores,
+    storeDeliveryAreas,
     users,
     categories,
     suppliers,
@@ -49007,6 +49886,33 @@ final class $$BusinessesTableReferences
     ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_storesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $StoreDeliveryAreasTable,
+    List<StoreDeliveryAreaData>
+  >
+  _storeDeliveryAreasRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.storeDeliveryAreas,
+        aliasName: $_aliasNameGenerator(
+          db.businesses.id,
+          db.storeDeliveryAreas.businessId,
+        ),
+      );
+
+  $$StoreDeliveryAreasTableProcessedTableManager get storeDeliveryAreasRefs {
+    final manager = $$StoreDeliveryAreasTableTableManager(
+      $_db,
+      $_db.storeDeliveryAreas,
+    ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _storeDeliveryAreasRefsTable($_db),
+    );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -50468,6 +51374,31 @@ class $$BusinessesTableFilterComposer
           }) => $$StoresTableFilterComposer(
             $db: $db,
             $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> storeDeliveryAreasRefs(
+    Expression<bool> Function($$StoreDeliveryAreasTableFilterComposer f) f,
+  ) {
+    final $$StoreDeliveryAreasTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.storeDeliveryAreas,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoreDeliveryAreasTableFilterComposer(
+            $db: $db,
+            $table: $db.storeDeliveryAreas,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -52187,6 +53118,32 @@ class $$BusinessesTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> storeDeliveryAreasRefs<T extends Object>(
+    Expression<T> Function($$StoreDeliveryAreasTableAnnotationComposer a) f,
+  ) {
+    final $$StoreDeliveryAreasTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.storeDeliveryAreas,
+          getReferencedColumn: (t) => t.businessId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$StoreDeliveryAreasTableAnnotationComposer(
+                $db: $db,
+                $table: $db.storeDeliveryAreas,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<T> usersRefs<T extends Object>(
     Expression<T> Function($$UsersTableAnnotationComposer a) f,
   ) {
@@ -53681,6 +54638,7 @@ class $$BusinessesTableTableManager
             bool crateSizeGroupsRefs,
             bool manufacturersRefs,
             bool storesRefs,
+            bool storeDeliveryAreasRefs,
             bool usersRefs,
             bool categoriesRefs,
             bool suppliersRefs,
@@ -53845,6 +54803,7 @@ class $$BusinessesTableTableManager
                 crateSizeGroupsRefs = false,
                 manufacturersRefs = false,
                 storesRefs = false,
+                storeDeliveryAreasRefs = false,
                 usersRefs = false,
                 categoriesRefs = false,
                 suppliersRefs = false,
@@ -53910,6 +54869,7 @@ class $$BusinessesTableTableManager
                     if (crateSizeGroupsRefs) db.crateSizeGroups,
                     if (manufacturersRefs) db.manufacturers,
                     if (storesRefs) db.stores,
+                    if (storeDeliveryAreasRefs) db.storeDeliveryAreas,
                     if (usersRefs) db.users,
                     if (categoriesRefs) db.categories,
                     if (suppliersRefs) db.suppliers,
@@ -54031,6 +54991,27 @@ class $$BusinessesTableTableManager
                                 table,
                                 p0,
                               ).storesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.businessId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (storeDeliveryAreasRefs)
+                        await $_getPrefetchedData<
+                          BusinessData,
+                          $BusinessesTable,
+                          StoreDeliveryAreaData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$BusinessesTableReferences
+                              ._storeDeliveryAreasRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$BusinessesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).storeDeliveryAreasRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.businessId == item.id,
@@ -55279,6 +56260,7 @@ typedef $$BusinessesTableProcessedTableManager =
         bool crateSizeGroupsRefs,
         bool manufacturersRefs,
         bool storesRefs,
+        bool storeDeliveryAreasRefs,
         bool usersRefs,
         bool categoriesRefs,
         bool suppliersRefs,
@@ -57716,6 +58698,12 @@ typedef $$StoresTableCreateCompanionBuilder =
       required String name,
       Value<String?> location,
       Value<String> kind,
+      Value<String?> country,
+      Value<String?> state,
+      Value<String?> lga,
+      Value<String?> phone,
+      Value<String?> onlineNote,
+      Value<bool> onlineOrderingEnabled,
       Value<bool> isDeleted,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -57728,6 +58716,12 @@ typedef $$StoresTableUpdateCompanionBuilder =
       Value<String> name,
       Value<String?> location,
       Value<String> kind,
+      Value<String?> country,
+      Value<String?> state,
+      Value<String?> lga,
+      Value<String?> phone,
+      Value<String?> onlineNote,
+      Value<bool> onlineOrderingEnabled,
       Value<bool> isDeleted,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -57754,6 +58748,33 @@ final class $$StoresTableReferences
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $StoreDeliveryAreasTable,
+    List<StoreDeliveryAreaData>
+  >
+  _storeDeliveryAreasRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.storeDeliveryAreas,
+        aliasName: $_aliasNameGenerator(
+          db.stores.id,
+          db.storeDeliveryAreas.storeId,
+        ),
+      );
+
+  $$StoreDeliveryAreasTableProcessedTableManager get storeDeliveryAreasRefs {
+    final manager = $$StoreDeliveryAreasTableTableManager(
+      $_db,
+      $_db.storeDeliveryAreas,
+    ).filter((f) => f.storeId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _storeDeliveryAreasRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
     );
   }
 
@@ -58385,6 +59406,36 @@ class $$StoresTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get country => $composableBuilder(
+    column: $table.country,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lga => $composableBuilder(
+    column: $table.lga,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get phone => $composableBuilder(
+    column: $table.phone,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get onlineNote => $composableBuilder(
+    column: $table.onlineNote,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get onlineOrderingEnabled => $composableBuilder(
+    column: $table.onlineOrderingEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<bool> get isDeleted => $composableBuilder(
     column: $table.isDeleted,
     builder: (column) => ColumnFilters(column),
@@ -58421,6 +59472,31 @@ class $$StoresTableFilterComposer
           ),
     );
     return composer;
+  }
+
+  Expression<bool> storeDeliveryAreasRefs(
+    Expression<bool> Function($$StoreDeliveryAreasTableFilterComposer f) f,
+  ) {
+    final $$StoreDeliveryAreasTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.storeDeliveryAreas,
+      getReferencedColumn: (t) => t.storeId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoreDeliveryAreasTableFilterComposer(
+            $db: $db,
+            $table: $db.storeDeliveryAreas,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
   }
 
   Expression<bool> usersRefs(
@@ -59136,6 +60212,36 @@ class $$StoresTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get country => $composableBuilder(
+    column: $table.country,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lga => $composableBuilder(
+    column: $table.lga,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get phone => $composableBuilder(
+    column: $table.phone,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get onlineNote => $composableBuilder(
+    column: $table.onlineNote,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get onlineOrderingEnabled => $composableBuilder(
+    column: $table.onlineOrderingEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isDeleted => $composableBuilder(
     column: $table.isDeleted,
     builder: (column) => ColumnOrderings(column),
@@ -59196,6 +60302,28 @@ class $$StoresTableAnnotationComposer
   GeneratedColumn<String> get kind =>
       $composableBuilder(column: $table.kind, builder: (column) => column);
 
+  GeneratedColumn<String> get country =>
+      $composableBuilder(column: $table.country, builder: (column) => column);
+
+  GeneratedColumn<String> get state =>
+      $composableBuilder(column: $table.state, builder: (column) => column);
+
+  GeneratedColumn<String> get lga =>
+      $composableBuilder(column: $table.lga, builder: (column) => column);
+
+  GeneratedColumn<String> get phone =>
+      $composableBuilder(column: $table.phone, builder: (column) => column);
+
+  GeneratedColumn<String> get onlineNote => $composableBuilder(
+    column: $table.onlineNote,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get onlineOrderingEnabled => $composableBuilder(
+    column: $table.onlineOrderingEnabled,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<bool> get isDeleted =>
       $composableBuilder(column: $table.isDeleted, builder: (column) => column);
 
@@ -59228,6 +60356,32 @@ class $$StoresTableAnnotationComposer
           ),
     );
     return composer;
+  }
+
+  Expression<T> storeDeliveryAreasRefs<T extends Object>(
+    Expression<T> Function($$StoreDeliveryAreasTableAnnotationComposer a) f,
+  ) {
+    final $$StoreDeliveryAreasTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.storeDeliveryAreas,
+          getReferencedColumn: (t) => t.storeId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$StoreDeliveryAreasTableAnnotationComposer(
+                $db: $db,
+                $table: $db.storeDeliveryAreas,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
   }
 
   Expression<T> usersRefs<T extends Object>(
@@ -59937,6 +61091,7 @@ class $$StoresTableTableManager
           StoreData,
           PrefetchHooks Function({
             bool businessId,
+            bool storeDeliveryAreasRefs,
             bool usersRefs,
             bool supplierLedgerEntriesRefs,
             bool supplierCrateLedgerRefs,
@@ -59984,6 +61139,12 @@ class $$StoresTableTableManager
                 Value<String> name = const Value.absent(),
                 Value<String?> location = const Value.absent(),
                 Value<String> kind = const Value.absent(),
+                Value<String?> country = const Value.absent(),
+                Value<String?> state = const Value.absent(),
+                Value<String?> lga = const Value.absent(),
+                Value<String?> phone = const Value.absent(),
+                Value<String?> onlineNote = const Value.absent(),
+                Value<bool> onlineOrderingEnabled = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -59994,6 +61155,12 @@ class $$StoresTableTableManager
                 name: name,
                 location: location,
                 kind: kind,
+                country: country,
+                state: state,
+                lga: lga,
+                phone: phone,
+                onlineNote: onlineNote,
+                onlineOrderingEnabled: onlineOrderingEnabled,
                 isDeleted: isDeleted,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -60006,6 +61173,12 @@ class $$StoresTableTableManager
                 required String name,
                 Value<String?> location = const Value.absent(),
                 Value<String> kind = const Value.absent(),
+                Value<String?> country = const Value.absent(),
+                Value<String?> state = const Value.absent(),
+                Value<String?> lga = const Value.absent(),
+                Value<String?> phone = const Value.absent(),
+                Value<String?> onlineNote = const Value.absent(),
+                Value<bool> onlineOrderingEnabled = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -60016,6 +61189,12 @@ class $$StoresTableTableManager
                 name: name,
                 location: location,
                 kind: kind,
+                country: country,
+                state: state,
+                lga: lga,
+                phone: phone,
+                onlineNote: onlineNote,
+                onlineOrderingEnabled: onlineOrderingEnabled,
                 isDeleted: isDeleted,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -60030,6 +61209,7 @@ class $$StoresTableTableManager
           prefetchHooksCallback:
               ({
                 businessId = false,
+                storeDeliveryAreasRefs = false,
                 usersRefs = false,
                 supplierLedgerEntriesRefs = false,
                 supplierCrateLedgerRefs = false,
@@ -60061,6 +61241,7 @@ class $$StoresTableTableManager
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
+                    if (storeDeliveryAreasRefs) db.storeDeliveryAreas,
                     if (usersRefs) db.users,
                     if (supplierLedgerEntriesRefs) db.supplierLedgerEntries,
                     if (supplierCrateLedgerRefs) db.supplierCrateLedger,
@@ -60124,6 +61305,27 @@ class $$StoresTableTableManager
                       },
                   getPrefetchedDataCallback: (items) async {
                     return [
+                      if (storeDeliveryAreasRefs)
+                        await $_getPrefetchedData<
+                          StoreData,
+                          $StoresTable,
+                          StoreDeliveryAreaData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$StoresTableReferences
+                              ._storeDeliveryAreasRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$StoresTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).storeDeliveryAreasRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.storeId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (usersRefs)
                         await $_getPrefetchedData<
                           StoreData,
@@ -60705,6 +61907,7 @@ typedef $$StoresTableProcessedTableManager =
       StoreData,
       PrefetchHooks Function({
         bool businessId,
+        bool storeDeliveryAreasRefs,
         bool usersRefs,
         bool supplierLedgerEntriesRefs,
         bool supplierCrateLedgerRefs,
@@ -60733,6 +61936,511 @@ typedef $$StoresTableProcessedTableManager =
         bool inviteCodesRefs,
         bool userStoresRefs,
       })
+    >;
+typedef $$StoreDeliveryAreasTableCreateCompanionBuilder =
+    StoreDeliveryAreasCompanion Function({
+      Value<String> id,
+      required String businessId,
+      required String storeId,
+      Value<String> country,
+      required String state,
+      Value<String?> lga,
+      Value<bool> isDeleted,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+typedef $$StoreDeliveryAreasTableUpdateCompanionBuilder =
+    StoreDeliveryAreasCompanion Function({
+      Value<String> id,
+      Value<String> businessId,
+      Value<String> storeId,
+      Value<String> country,
+      Value<String> state,
+      Value<String?> lga,
+      Value<bool> isDeleted,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+
+final class $$StoreDeliveryAreasTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $StoreDeliveryAreasTable,
+          StoreDeliveryAreaData
+        > {
+  $$StoreDeliveryAreasTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $BusinessesTable _businessIdTable(_$AppDatabase db) =>
+      db.businesses.createAlias(
+        $_aliasNameGenerator(
+          db.storeDeliveryAreas.businessId,
+          db.businesses.id,
+        ),
+      );
+
+  $$BusinessesTableProcessedTableManager get businessId {
+    final $_column = $_itemColumn<String>('business_id')!;
+
+    final manager = $$BusinessesTableTableManager(
+      $_db,
+      $_db.businesses,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $StoresTable _storeIdTable(_$AppDatabase db) => db.stores.createAlias(
+    $_aliasNameGenerator(db.storeDeliveryAreas.storeId, db.stores.id),
+  );
+
+  $$StoresTableProcessedTableManager get storeId {
+    final $_column = $_itemColumn<String>('store_id')!;
+
+    final manager = $$StoresTableTableManager(
+      $_db,
+      $_db.stores,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_storeIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$StoreDeliveryAreasTableFilterComposer
+    extends Composer<_$AppDatabase, $StoreDeliveryAreasTable> {
+  $$StoreDeliveryAreasTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get country => $composableBuilder(
+    column: $table.country,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lga => $composableBuilder(
+    column: $table.lga,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isDeleted => $composableBuilder(
+    column: $table.isDeleted,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$BusinessesTableFilterComposer get businessId {
+    final $$BusinessesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableFilterComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableFilterComposer get storeId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableFilterComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$StoreDeliveryAreasTableOrderingComposer
+    extends Composer<_$AppDatabase, $StoreDeliveryAreasTable> {
+  $$StoreDeliveryAreasTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get country => $composableBuilder(
+    column: $table.country,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lga => $composableBuilder(
+    column: $table.lga,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isDeleted => $composableBuilder(
+    column: $table.isDeleted,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$BusinessesTableOrderingComposer get businessId {
+    final $$BusinessesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableOrderingComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableOrderingComposer get storeId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableOrderingComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$StoreDeliveryAreasTableAnnotationComposer
+    extends Composer<_$AppDatabase, $StoreDeliveryAreasTable> {
+  $$StoreDeliveryAreasTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get country =>
+      $composableBuilder(column: $table.country, builder: (column) => column);
+
+  GeneratedColumn<String> get state =>
+      $composableBuilder(column: $table.state, builder: (column) => column);
+
+  GeneratedColumn<String> get lga =>
+      $composableBuilder(column: $table.lga, builder: (column) => column);
+
+  GeneratedColumn<bool> get isDeleted =>
+      $composableBuilder(column: $table.isDeleted, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => column,
+  );
+
+  $$BusinessesTableAnnotationComposer get businessId {
+    final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableAnnotationComposer get storeId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableAnnotationComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$StoreDeliveryAreasTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $StoreDeliveryAreasTable,
+          StoreDeliveryAreaData,
+          $$StoreDeliveryAreasTableFilterComposer,
+          $$StoreDeliveryAreasTableOrderingComposer,
+          $$StoreDeliveryAreasTableAnnotationComposer,
+          $$StoreDeliveryAreasTableCreateCompanionBuilder,
+          $$StoreDeliveryAreasTableUpdateCompanionBuilder,
+          (StoreDeliveryAreaData, $$StoreDeliveryAreasTableReferences),
+          StoreDeliveryAreaData,
+          PrefetchHooks Function({bool businessId, bool storeId})
+        > {
+  $$StoreDeliveryAreasTableTableManager(
+    _$AppDatabase db,
+    $StoreDeliveryAreasTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$StoreDeliveryAreasTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$StoreDeliveryAreasTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$StoreDeliveryAreasTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> businessId = const Value.absent(),
+                Value<String> storeId = const Value.absent(),
+                Value<String> country = const Value.absent(),
+                Value<String> state = const Value.absent(),
+                Value<String?> lga = const Value.absent(),
+                Value<bool> isDeleted = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => StoreDeliveryAreasCompanion(
+                id: id,
+                businessId: businessId,
+                storeId: storeId,
+                country: country,
+                state: state,
+                lga: lga,
+                isDeleted: isDeleted,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String businessId,
+                required String storeId,
+                Value<String> country = const Value.absent(),
+                required String state,
+                Value<String?> lga = const Value.absent(),
+                Value<bool> isDeleted = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => StoreDeliveryAreasCompanion.insert(
+                id: id,
+                businessId: businessId,
+                storeId: storeId,
+                country: country,
+                state: state,
+                lga: lga,
+                isDeleted: isDeleted,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$StoreDeliveryAreasTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({businessId = false, storeId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (businessId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.businessId,
+                                referencedTable:
+                                    $$StoreDeliveryAreasTableReferences
+                                        ._businessIdTable(db),
+                                referencedColumn:
+                                    $$StoreDeliveryAreasTableReferences
+                                        ._businessIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+                    if (storeId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.storeId,
+                                referencedTable:
+                                    $$StoreDeliveryAreasTableReferences
+                                        ._storeIdTable(db),
+                                referencedColumn:
+                                    $$StoreDeliveryAreasTableReferences
+                                        ._storeIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$StoreDeliveryAreasTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $StoreDeliveryAreasTable,
+      StoreDeliveryAreaData,
+      $$StoreDeliveryAreasTableFilterComposer,
+      $$StoreDeliveryAreasTableOrderingComposer,
+      $$StoreDeliveryAreasTableAnnotationComposer,
+      $$StoreDeliveryAreasTableCreateCompanionBuilder,
+      $$StoreDeliveryAreasTableUpdateCompanionBuilder,
+      (StoreDeliveryAreaData, $$StoreDeliveryAreasTableReferences),
+      StoreDeliveryAreaData,
+      PrefetchHooks Function({bool businessId, bool storeId})
     >;
 typedef $$UsersTableCreateCompanionBuilder =
     UsersCompanion Function({
@@ -111227,6 +112935,8 @@ class $AppDatabaseManager {
       $$ManufacturersTableTableManager(_db, _db.manufacturers);
   $$StoresTableTableManager get stores =>
       $$StoresTableTableManager(_db, _db.stores);
+  $$StoreDeliveryAreasTableTableManager get storeDeliveryAreas =>
+      $$StoreDeliveryAreasTableTableManager(_db, _db.storeDeliveryAreas);
   $$UsersTableTableManager get users =>
       $$UsersTableTableManager(_db, _db.users);
   $$CategoriesTableTableManager get categories =>
