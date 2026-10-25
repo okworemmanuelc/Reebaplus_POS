@@ -34,6 +34,11 @@ class _OnlineOrderDetailScreenState
     extends ConsumerState<OnlineOrderDetailScreen> {
   bool _busy = false;
 
+  /// Quantities staff chose before accepting (line id -> qty); lines not here
+  /// are untouched (#428). Lowering only: the row's controls never go above
+  /// what was asked, and the DAO rejects a raise.
+  final Map<String, int> _qty = {};
+
   Future<void> _run(Future<void> Function() action, String where) async {
     if (_busy) return;
     setState(() => _busy = true);
@@ -68,7 +73,10 @@ class _OnlineOrderDetailScreenState
     final dao = ref.read(databaseProvider).onlineOrdersDao;
     OnlineOrderAnswerOutcome? outcome;
     await _run(() async {
-      outcome = await dao.accept(onlineOrderId: order.id);
+      outcome = await dao.accept(
+        onlineOrderId: order.id,
+        acceptedQtys: Map.of(_qty),
+      );
     }, 'orders.online.accept');
     if (outcome != OnlineOrderAnswerOutcome.needsCustomerChoice) {
       if (outcome != null) _report(outcome!, 'Order accepted');
@@ -87,7 +95,11 @@ class _OnlineOrderDetailScreenState
     );
     if (choice == null) return;
     await _run(() async {
-      final linked = await dao.accept(onlineOrderId: order.id, link: choice);
+      final linked = await dao.accept(
+        onlineOrderId: order.id,
+        link: choice,
+        acceptedQtys: Map.of(_qty),
+      );
       _report(linked, 'Order accepted');
     }, 'orders.online.accept');
   }
@@ -103,6 +115,19 @@ class _OnlineOrderDetailScreenState
           .decline(onlineOrderId: order.id, reason: reason);
       _report(outcome, 'Order declined');
     }, 'orders.online.decline');
+  }
+
+  Future<void> _cancelAccepted(OnlineOrderData order) async {
+    if (_busy) return;
+    final reason = await showCancelAcceptedDialog(context);
+    if (reason == null) return;
+    await _run(() async {
+      final outcome = await ref
+          .read(databaseProvider)
+          .onlineOrdersDao
+          .cancelAccepted(onlineOrderId: order.id, reason: reason);
+      _report(outcome, 'Order cancelled');
+    }, 'orders.online.cancelAccepted');
   }
 
   @override
@@ -133,6 +158,9 @@ class _OnlineOrderDetailScreenState
               : _OnlineOrderBody(
                   order: o,
                   busy: _busy,
+                  quantities: _qty,
+                  onQuantity: (id, q) => setState(() => _qty[id] = q),
+                  onCancelAccepted: () => _cancelAccepted(o),
                   onAccept: () => _accept(o),
                   onDecline: () => _decline(o),
                 ),
@@ -146,12 +174,18 @@ class _OnlineOrderBody extends ConsumerWidget {
   const _OnlineOrderBody({
     required this.order,
     required this.busy,
+    required this.quantities,
+    required this.onQuantity,
+    required this.onCancelAccepted,
     required this.onAccept,
     required this.onDecline,
   });
 
   final OnlineOrderData order;
   final bool busy;
+  final Map<String, int> quantities;
+  final void Function(String lineId, int qty) onQuantity;
+  final VoidCallback onCancelAccepted;
   final VoidCallback onAccept;
   final VoidCallback onDecline;
 
@@ -166,7 +200,29 @@ class _OnlineOrderBody extends ConsumerWidget {
     final canAnswer =
         order.status == 'new' &&
         ref.watch(canAnswerOnlineOrderProvider(order.storeId));
+    final canCancel =
+        order.status == 'accepted' &&
+        ref.watch(canAnswerOnlineOrderProvider(order.storeId));
+    final prices = canAnswer
+        ? ref.watch(onlineOrderRetailPricesProvider(order.id)).valueOrNull
+        : null;
     final note = onlineOrderStatusNote(order);
+    final allRemoved =
+        lines.isNotEmpty &&
+        lines.every((l) => (quantities[l.id] ?? l.requestedQty) == 0);
+    final shownTotal = canAnswer
+        ? lines.fold<int>(
+            0,
+            (sum, l) =>
+                sum + l.unitPriceKobo * (quantities[l.id] ?? l.requestedQty),
+          )
+        : lines.isEmpty
+        ? order.estimatedTotalKobo
+        : lines.fold<int>(
+            0,
+            (sum, l) =>
+                sum + l.unitPriceKobo * (l.acceptedQty ?? l.requestedQty),
+          );
     final placed = DateFormat('d MMM yyyy, h:mm a').format(order.placedAt);
     final orderNote = order.note;
 
@@ -229,8 +285,17 @@ class _OnlineOrderBody extends ConsumerWidget {
             OnlineOrderSection(
               title: 'Items',
               children: [
-                for (final l in lines) OnlineOrderLineRow(line: l),
-                OnlineOrderTotalRow(totalKobo: order.estimatedTotalKobo),
+                for (final l in lines)
+                  if (canAnswer)
+                    OnlineOrderEditableLineRow(
+                      line: l,
+                      quantity: quantities[l.id] ?? l.requestedQty,
+                      currentPriceKobo: prices?[l.productId],
+                      onChanged: (q) => onQuantity(l.id, q),
+                    )
+                  else
+                    OnlineOrderLineRow(line: l),
+                OnlineOrderTotalRow(totalKobo: shownTotal),
               ],
             ),
             if (canAnswer)
@@ -250,10 +315,17 @@ class _OnlineOrderBody extends ConsumerWidget {
                       key: OnlineOrderKeys.accept,
                       text: 'Accept',
                       isLoading: busy,
-                      onPressed: busy ? null : onAccept,
+                      onPressed: busy || allRemoved ? null : onAccept,
                     ),
                   ),
                 ],
+              ),
+            if (canCancel)
+              AppButton(
+                key: OnlineOrderKeys.cancelOrder,
+                text: 'Cancel order',
+                variant: AppButtonVariant.danger,
+                onPressed: busy ? null : onCancelAccepted,
               ),
           ],
         );

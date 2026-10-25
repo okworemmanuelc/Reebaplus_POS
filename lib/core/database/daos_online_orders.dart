@@ -124,13 +124,24 @@ class OnlineOrdersDao extends DatabaseAccessor<AppDatabase>
   /// Accept a `new` order. A Shopper already linked to a Customer attaches
   /// automatically; otherwise [link] is required on the first order (else
   /// [OnlineOrderAnswerOutcome.needsCustomerChoice], nothing written).
+  ///
+  /// [acceptedQtys] (line id -> quantity) lets staff lower a line or remove it
+  /// (0) before accepting (#428). A quantity above what was asked, or an unknown
+  /// line, throws [ArgumentError]; so does removing every line (that is a
+  /// decline). Every line gets `accepted_qty` written: untouched lines get
+  /// their requested quantity.
   Future<OnlineOrderAnswerOutcome> accept({
     required String onlineOrderId,
     CustomerLinkChoice? link,
+    Map<String, int> acceptedQtys = const {},
   }) {
     return transaction(() async {
       final order = await _openOrder(onlineOrderId);
       if (order == null) return OnlineOrderAnswerOutcome.alreadyAnswered;
+      final lines = await (select(onlineOrderLines)
+            ..where((t) => t.onlineOrderId.equals(order.id) & whereBusiness(t)))
+          .get();
+      final decided = _decideAcceptedQtys(lines, acceptedQtys);
 
       String? customerId = order.customerId;
       final shopper = order.shopperAccountId;
@@ -152,6 +163,20 @@ class OnlineOrdersDao extends DatabaseAccessor<AppDatabase>
       }
 
       final now = DateTime.now();
+      for (final l in lines) {
+        await (update(onlineOrderLines)
+              ..where((t) => t.id.equals(l.id) & whereBusiness(t)))
+            .write(
+              OnlineOrderLinesCompanion(
+                acceptedQty: Value(decided[l.id]),
+                lastUpdatedAt: Value(now),
+              ),
+            );
+        final row = await (select(onlineOrderLines)
+              ..where((t) => t.id.equals(l.id) & whereBusiness(t)))
+            .getSingle();
+        await db.syncDao.enqueueUpsert('online_order_lines', row.toCompanion(true));
+      }
       await (update(onlineOrders)
             ..where((t) => t.id.equals(order.id) & whereBusiness(t)))
           .write(
@@ -160,6 +185,91 @@ class OnlineOrdersDao extends DatabaseAccessor<AppDatabase>
               customerId: Value(customerId),
               respondedAt: Value(now),
               lastUpdatedAt: Value(now),
+            ),
+          );
+      await _enqueueFullOrder(order.id);
+      return OnlineOrderAnswerOutcome.answered;
+    });
+  }
+
+  /// line id -> quantity to accept; throws on a raise, an unknown line or an
+  /// order with nothing left.
+  static Map<String, int> _decideAcceptedQtys(
+    List<OnlineOrderLineData> lines,
+    Map<String, int> wanted,
+  ) {
+    final ids = lines.map((l) => l.id).toSet();
+    for (final id in wanted.keys) {
+      if (!ids.contains(id)) {
+        throw ArgumentError.value(id, 'acceptedQtys', 'unknown line');
+      }
+    }
+    final out = <String, int>{};
+    for (final l in lines) {
+      final q = wanted[l.id] ?? l.requestedQty;
+      if (q < 0 || q > l.requestedQty) {
+        throw ArgumentError.value(
+          q,
+          'acceptedQtys',
+          'must be 0..${l.requestedQty} (never raised)',
+        );
+      }
+      out[l.id] = q;
+    }
+    if (lines.isNotEmpty && out.values.every((q) => q == 0)) {
+      throw ArgumentError('every line removed: decline the order instead');
+    }
+    return out;
+  }
+
+  /// The shop's current retail price (kobo) per product on [onlineOrderId]'s
+  /// lines, for the accept screen's price-change flag (#428).
+  Stream<Map<String, int>> watchRetailPrices(String onlineOrderId) {
+    final q = db.select(db.products).join([
+      innerJoin(
+        onlineOrderLines,
+        onlineOrderLines.productId.equalsExp(db.products.id),
+      ),
+    ])
+      ..where(
+        onlineOrderLines.onlineOrderId.equals(onlineOrderId) &
+            whereBusiness(onlineOrderLines) &
+            whereBusiness(db.products),
+      );
+    return q.watch().map(
+      (rows) => {
+        for (final r in rows)
+          r.readTable(db.products).id:
+              r.readTable(db.products).retailerPriceKobo,
+      },
+    );
+  }
+
+  /// Cancel an ACCEPTED order with the reason the Shopper will see (#428).
+  /// Moves nothing: an accepted order never moved stock or money.
+  Future<OnlineOrderAnswerOutcome> cancelAccepted({
+    required String onlineOrderId,
+    required String reason,
+  }) {
+    final trimmed = reason.trim();
+    if (trimmed.isEmpty || trimmed.length > kOnlineOrderReasonMaxLength) {
+      throw ArgumentError.value(reason, 'reason', 'must be 1–300 characters');
+    }
+    return transaction(() async {
+      final order = await (select(onlineOrders)
+            ..where((t) => t.id.equals(onlineOrderId) & whereBusiness(t))
+            ..limit(1))
+          .getSingleOrNull();
+      if (order == null || order.status != 'accepted') {
+        return OnlineOrderAnswerOutcome.alreadyAnswered;
+      }
+      await (update(onlineOrders)
+            ..where((t) => t.id.equals(order.id) & whereBusiness(t)))
+          .write(
+            OnlineOrdersCompanion(
+              status: const Value('cancelled_by_shop'),
+              cancelReason: Value(trimmed),
+              lastUpdatedAt: Value(DateTime.now()),
             ),
           );
       await _enqueueFullOrder(order.id);

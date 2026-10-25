@@ -21,6 +21,12 @@ abstract final class OnlineOrderKeys {
   static const tabBadge = Key('orders-online-badge');
   static const accept = Key('online-order-accept');
   static const decline = Key('online-order-decline');
+  static const cancelOrder = Key('online-order-cancel');
+  static const cancelReason = Key('online-order-cancel-reason');
+  static const cancelConfirm = Key('online-order-cancel-confirm');
+  static Key lineLower(String id) => ValueKey('online-order-lower-$id');
+  static Key lineRemove(String id) => ValueKey('online-order-remove-$id');
+  static Key linePriceFlag(String id) => ValueKey('online-order-price-$id');
   static const declineOther = Key('online-order-decline-other');
   static const declineConfirm = Key('online-order-decline-confirm');
   static const linkSearch = Key('online-order-link-search');
@@ -229,6 +235,8 @@ class OnlineOrderLineRow extends StatelessWidget {
     final t = Theme.of(context);
     final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     final unit = line.unit == null ? '' : ' ${line.unit}';
+    final qty = line.acceptedQty ?? line.requestedQty;
+    final changed = qty != line.requestedQty;
     return Padding(
       padding: EdgeInsets.symmetric(vertical: context.getRSize(4)),
       child: Row(
@@ -239,7 +247,10 @@ class OnlineOrderLineRow extends StatelessWidget {
               children: [
                 Text(line.productName, style: t.textTheme.bodyMedium),
                 Text(
-                  '${line.requestedQty}$unit × ${_money(line.unitPriceKobo)}',
+                  qty == 0
+                      ? 'Removed (asked for ${line.requestedQty}$unit)'
+                      : '$qty$unit × ${_money(line.unitPriceKobo)}'
+                            '${changed ? ' (asked for ${line.requestedQty})' : ''}',
                   style: t.textTheme.bodySmall?.copyWith(color: muted),
                 ),
               ],
@@ -247,9 +258,100 @@ class OnlineOrderLineRow extends StatelessWidget {
           ),
           SizedBox(width: context.getRSize(8)),
           Text(
-            _money(line.unitPriceKobo * line.requestedQty),
+            _money(line.unitPriceKobo * qty),
             style: t.textTheme.bodyMedium,
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One line while the order is being accepted (#428): staff can lower the
+/// quantity or remove the line, never raise it above what was asked. A price
+/// flag shows when today's retail price differs from the one the Shopper saw.
+class OnlineOrderEditableLineRow extends StatelessWidget {
+  const OnlineOrderEditableLineRow({
+    super.key,
+    required this.line,
+    required this.quantity,
+    required this.currentPriceKobo,
+    required this.onChanged,
+  });
+
+  final OnlineOrderLineData line;
+
+  /// The quantity that will be accepted (0 = removed).
+  final int quantity;
+
+  /// Today's retail price, or null when the product is not found here.
+  final int? currentPriceKobo;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    final unit = line.unit == null ? '' : ' ${line.unit}';
+    final removed = quantity == 0;
+    final price = currentPriceKobo;
+    final priceChanged = price != null && price != line.unitPriceKobo;
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: context.getRSize(4)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      line.productName,
+                      style: t.textTheme.bodyMedium?.copyWith(
+                        decoration: removed ? TextDecoration.lineThrough : null,
+                      ),
+                    ),
+                    Text(
+                      removed
+                          ? 'Removed (asked for ${line.requestedQty}$unit)'
+                          : '$quantity$unit × ${_money(line.unitPriceKobo)}'
+                                '${quantity < line.requestedQty ? ' (asked for ${line.requestedQty})' : ''}',
+                      style: t.textTheme.bodySmall?.copyWith(color: muted),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                key: OnlineOrderKeys.lineLower(line.id),
+                tooltip: 'Lower quantity',
+                icon: const Icon(AppIcons.removeCircle),
+                onPressed: quantity > 0 ? () => onChanged(quantity - 1) : null,
+              ),
+              IconButton(
+                key: OnlineOrderKeys.lineRemove(line.id),
+                tooltip: removed ? 'Put back' : 'Remove',
+                icon: Icon(
+                  removed ? AppIcons.undo : AppIcons.delete,
+                ),
+                onPressed: () =>
+                    onChanged(removed ? line.requestedQty : 0),
+              ),
+            ],
+          ),
+          if (priceChanged)
+            Padding(
+              padding: EdgeInsets.only(top: context.getRSize(2)),
+              child: Text(
+                key: OnlineOrderKeys.linePriceFlag(line.id),
+                'Price changed: now ${_money(price)}, customer saw '
+                '${_money(line.unitPriceKobo)}',
+                style: t.textTheme.bodySmall?.copyWith(
+                  color: t.colorScheme.error,
+                ),
+              ),
+            ),
         ],
       ),
     );
