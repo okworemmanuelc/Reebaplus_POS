@@ -62,7 +62,10 @@ class ShopperPage extends StatelessWidget {
             child: body,
           ),
         ),
-        bottomNavigationBar: bottom == null
+        // The pinned bar steps aside while the keyboard is up, so the field
+        // being typed in keeps the room (a landscape phone has very little).
+        bottomNavigationBar:
+            bottom == null || MediaQuery.viewInsetsOf(context).bottom > 0
             ? null
             : ShopperBottomBar(child: bottom!),
       ),
@@ -115,20 +118,24 @@ class ShopperSection extends StatelessWidget {
       margin: EdgeInsets.only(bottom: context.getRSize(12)),
       padding: EdgeInsets.all(context.getRSize(14)),
       decoration: AppDecorations.card(context),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (title != null) ...[
-            Text(
-              title!,
-              style: context
-                  .boldStyle(15)
-                  .copyWith(color: t.colorScheme.onSurface),
-            ),
-            SizedBox(height: context.getRSize(8)),
+      // Its own Material so list tiles inside keep their ink on the card.
+      child: Material(
+        type: MaterialType.transparency,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (title != null) ...[
+              Text(
+                title!,
+                style: context
+                    .boldStyle(15)
+                    .copyWith(color: t.colorScheme.onSurface),
+              ),
+              SizedBox(height: context.getRSize(8)),
+            ],
+            child,
           ],
-          child,
-        ],
+        ),
       ),
     );
   }

@@ -7,6 +7,22 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #426: Place orders (2026-10-25, ready for review)
+- Branch `feat/426-place-orders`, worktree `../drinkPosApp-wt-426`. Cloud
+  `0205_online_orders.sql` + Drift 92 (91 is #474's; merge after it). Shopper
+  tables (cloud-only, RPC-only), synced `online_orders` / `online_order_lines`,
+  status guard, `shopper_*` RPCs, `pos_pull_snapshot` re-issued from 0203.
+- App: `lib/core/storefront/` cart (device storage), `ShopperService`,
+  `ShopperSessionNotifier`; `lib/features/browse/` cart, sign-in, details,
+  Place order, results, My Orders, account; Add to cart on the product sheet.
+  `kBrowseFirstEnabled` stays off. No Claude Design files: ui-context tokens +
+  Browse parts.
+- Not verified live: `test/integration/sql/online_orders.sql` (needs 0205 on
+  reebaplus-dev). Not built here: shop side (#427), linked tier price (#429),
+  48 h expiry job, 18+ confirmation (#479), account deletion (#438), Shop
+  menu entry for business phones.
+- Open: if #474's 0204 also re-issues `pos_pull_snapshot`, 0205 section 6
+  must be re-based on it before deploy.
 ### Issue #425: Browse is the front door (2026-10-25, ready for review)
 - Branch `feat/425-browse`, worktree `../drinkPosApp-wt-425`. Cloud 0202 only
   (after 0201), no Drift bump. Four signed-out definer RPCs

@@ -78,6 +78,7 @@ class _PlaceOrderScreenState extends ConsumerState<PlaceOrderScreen> {
       (ref.read(shopperCartProvider).valueOrNull ?? const ShopperCart()).groups;
 
   Future<void> _checkDelivery() async {
+    await ref.read(shopperCartProvider.future);
     final address = _address;
     if (address == null || !mounted) return;
     final groups = _groups;

@@ -160,6 +160,32 @@ the shared helper's default for older rows missing showOnline, preserving an
 explicit false. Storefront reads (#425) must require show_online AND is_available
 AND NOT is_deleted; the listing preference cannot unarchive a product.
 
+**Online Orders (#426).** Cloud 0205 / Drift 92. Shopper details live
+cloud-only in `shopper_profiles` / `shopper_phones` / `shopper_addresses`
+(keyed by auth user; RLS on, no policies, no table grants — only the
+`shopper_*` definer RPCs touch them). `online_orders` + `online_order_lines`
+are business-scoped and synced to shop phones (registry entries after
+`order_crate_lines`; `online_orders` restores with `Restore.monotonicStatus`
+(`openStatus: 'new'`) so a stale `new` never overwrites an answered order;
+`zz_broadcast_sync_signal`; in `pos_pull_snapshot`). They are created only by
+`shopper_place_orders` (one order per store, each in its own sub-transaction,
+re-priced from the product row, every storefront hide rule + delivery area +
+`order_quantity_allowed` + real stock re-checked, idempotent on the
+client-generated id, at most 20 per Shopper per hour, no stock movement). A
+transition-guard trigger enforces the status machine
+(`new→accepted|declined(reason)|cancelled_by_customer(RPC only)|expired(system)`,
+`accepted→cancelled_by_shop(reason)|fulfilled(linked order)`; anything else is
+P0001 `online_order_transition_rejected`) and keeps placement snapshots fixed
+for client writes; a client may upsert an EXISTING row (the #427 outbox path)
+but never create one. The Shopper reads only `shopper_my_orders()`. The cart
+is device key-value storage (`shopperCartProvider`, `storefront_cart_v1`);
+`ShopperService` / `ShopperSessionNotifier` (`lib/core/storefront/`) are the
+sanctioned direct-RPC Shopper seam. Shopper sign-in is email OTP
+(`shouldCreateUser: true`) and never runs the business post-verify routing;
+sign-out is a local `signOut` with no wipe gate. On a phone with a business
+user the Shopper side shops with the business session: no Shopper OTP, no
+Shopper sign-out (ADR 0030).
+
 **Online store setup (#423).** Cloud0199 / Drift89. Each `stores` row carries
 its own area (`country`, `state`, `lga` — Nigeria values from the bundled lists
 that match `ng_areas`, free text elsewhere), a public `phone` (falls back to the

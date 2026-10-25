@@ -219,7 +219,7 @@ class CartGroupCard extends ConsumerWidget {
                 ),
               ],
             ),
-            Divider(height: context.getRSize(20)),
+            Divider(height: context.getRSize(20), color: t.dividerColor),
           ],
           Row(
             children: [
