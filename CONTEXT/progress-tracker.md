@@ -27,6 +27,9 @@ The human updates it when resolving open questions or making architectural decis
   (store row, inventory writes) — a true per-store sync stamp would need a
   column; admin blocking waits for #478; tier price for #429; Only-N wins over
   "above threshold" when a threshold is below 3 (owner may revisit).
+### Issue #517: snapshot misses crate_shortfall_writeoffs (2026-10-25, ready for review)
+
+Migration 0203 re-issues `pos_pull_snapshot` (verbatim from 0199) with `crate_shortfall_writeoffs` added after `store_crate_balances`. New guard `test/sync/snapshot_covers_tenant_tables_test.dart` checks every `kSyncedTenantTables` entry is in the newest snapshot migration (empty allowlist). Deploy 0203 any time; never with 0193.
 
 ### Issue #473: Listing content (2026-10-25, ready for review)
 - Branch `feat/473-listing-content`, worktree `../drinkPosApp-wt-473`. Cloud
