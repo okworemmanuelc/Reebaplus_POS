@@ -45,4 +45,18 @@ void main() {
       completes,
     );
   });
+
+  // #476: the Shopper RPC paths share the same never-throws contract.
+  test('recordShopperPushToken swallows a failure and never throws', () async {
+    final registry = DeviceRegistryService(supabase, _ThrowingSecure());
+    await expectLater(
+      registry.recordShopperPushToken(token: 'tok-1', permissionGranted: true),
+      completes,
+    );
+  });
+
+  test('clearShopperPushToken swallows a failure and never throws', () async {
+    final registry = DeviceRegistryService(supabase, _ThrowingSecure());
+    await expectLater(registry.clearShopperPushToken(), completes);
+  });
 }
