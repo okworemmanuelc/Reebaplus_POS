@@ -235,6 +235,19 @@ Branch `feat/507-name-case`, worktree `../drinkPosApp-wt-507-1`.
   - Business Info: business name and typed "Other" business type run through `toNameCase`.
   - Stores settings & Stores screen: store/van creation and update run through `toNameCase`. Store name input has `textCapitalization: TextCapitalization.words`.
 - **Tests:** `test/utils/name_case_test.dart` (8 test groups), plus save-time tests in `test/settings/stores_settings_screen_test.dart` and `test/settings/business_info_shop_types_test.dart`.
+### #466: refund permission rechecked at execution (2026-10-24)
+Branch `fix/466-refund-fire-time-gate`, worktree `../drinkPosApp-wt-466`, base668f49bf.
+- Refund confirmation now requires Gates.refundOrder and uses standard denial
+  feedback. OrderService.markAsCancelled / OrderCommands.cancel also require
+  a freshly read GateContext and reject before any DAO call; no optional bypass.
+- Regression starts a real sale with stock, payments, credits, a paid deposit
+  and crate debt, revokes permission while its confirmation is open, and compares
+  every database table (including outbox) before/after. Direct command denial
+  is checked separately. Authorized refunds preserve existing reversal results.
+- Test-first screen regression reproduced the missing denial before the fix;
+  the final focused order/refund/permission suite passes87tests. Full suite:
+  5396passed/293skipped/0failures (7m19s); analyzer clean. Independent Standards
+  and Spec reviews found no issues. No database/schema/web changes.
 
 ### #492 G1: Sign-up and Business Info offer every shop type plus "Other" (2026-10-23)
 Branch `feat/492-g1-shop-types`, worktree `../drinkPosApp-wt-492-g1`.
