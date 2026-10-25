@@ -19,9 +19,11 @@ import 'package:reebaplus_pos/core/diagnostics/overflow_route_reporter.dart';
 import 'package:reebaplus_pos/shared/widgets/error_fallback.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/core/storefront/browse_switch.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
 import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/welcome_screen.dart';
+import 'package:reebaplus_pos/features/browse/screens/browse_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/otp_verification_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart'
@@ -688,6 +690,21 @@ class _SessionExpiredScreenState extends ConsumerState<_SessionExpiredScreen> {
 Widget buildSessionExpiredScreenForTest(UserData user) =>
     _SessionExpiredScreen(user: user);
 
+/// The entry screen while no user is signed in on this run (#425):
+/// a phone with a business user (a device user) always gets the PIN screen,
+/// offline too (invariant #11); a phone without one gets Browse when the
+/// Browse-first switch is on, otherwise today's Welcome screen.
+@visibleForTesting
+Widget entryScreenWithoutSignedInUser({
+  required bool hasDeviceUser,
+  bool? browseFirst,
+}) {
+  if (hasDeviceUser) return const LoginScreen();
+  return (browseFirst ?? isBrowseFirstEnabled())
+      ? const BrowseScreen()
+      : const WelcomeScreen();
+}
+
 // ---------------------------------------------------------------------------
 // Home routing widget — extracted from _ReebaplusPosAppState so all
 // ref.watch calls live at the top of a dedicated build() (code-standards.md)
@@ -754,11 +771,15 @@ class _HomeRouter extends ConsumerWidget {
       // — the new wizard commits atomically at PIN, so abandonment
       // can't leave a half-state to resume into. Users in that
       // transitional bucket re-enter via EmailEntry / LoginScreen.
-      if (!hasDeviceUser!) return const WelcomeScreen();
+      //
+      // #425: with the Browse-first switch on, a phone with no business user
+      // (fresh install, or after a logout — logout always wipes) opens on
+      // Browse instead; its "Sell on Reebaplus" pushes today's Welcome.
+      //
       // Known device — cold start, the drawer lock button, and auto-lock all
       // land on the device user's PIN screen. Another staff member on a
       // shared till signs in through its "Not you? Switch account" link.
-      return const LoginScreen();
+      return entryScreenWithoutSignedInUser(hasDeviceUser: hasDeviceUser!);
     }
 
     // Session-gate. Local user is set but Supabase has no JWT —
