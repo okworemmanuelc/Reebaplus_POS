@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/online_orders/online_order_answer.dart';
 import 'package:reebaplus_pos/core/services/cloud_transport.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/core/services/first_load_marker_service.dart';
@@ -578,6 +579,90 @@ class SupabaseSyncService {
     return out;
   }
 
+  /// #427: the Online Order tables a shop phone answers through the outbox.
+  static const Set<String> _onlineOrderAnswerTables = {
+    'online_orders',
+    'online_order_lines',
+  };
+
+  /// The 0205/0208 transition guard's refusal: an answer to an order that is
+  /// no longer open (P0001 `online_order_transition_rejected`).
+  static bool _isOnlineOrderTransitionRejected(Object e) =>
+      e is PostgrestException &&
+      e.code == 'P0001' &&
+      e.message.contains('online_order_transition_rejected');
+
+  /// Settles a chunk the transition guard refused (#427, PRD #421 story 70).
+  /// Each row is retried alone: one that lands is done; one the guard refuses
+  /// is a stale answer — its outbox entry is DROPPED (never a Sync Issues
+  /// orphan) and the cloud's row is re-read and applied over the local edit.
+  /// The person who answered is told when the customer had cancelled first.
+  /// Any other error on the single-row retry keeps the normal classification.
+  Future<void> _settleRefusedOnlineOrderAnswers(
+    String table,
+    List<Map<String, dynamic>> payloads,
+    List<String> queueIds,
+    String businessId,
+  ) async {
+    final refused = <String>[];
+    for (var i = 0; i < payloads.length; i++) {
+      final rowId = payloads[i]['id'];
+      try {
+        await _transport.upsertRows(table, [payloads[i]]);
+        await _db.syncDao.markDone(queueIds[i]);
+      } catch (e) {
+        if (_isOnlineOrderTransitionRejected(e) && rowId is String) {
+          await _db.syncDao.markDone(queueIds[i]);
+          refused.add(rowId);
+          continue;
+        }
+        final code = e is PostgrestException ? (e.code ?? '') : '';
+        final isFk = code == '23503';
+        await _db.syncDao.markFailed(
+          queueIds[i],
+          e.toString(),
+          permanent:
+              !isFk &&
+              (code == 'P0001' ||
+                  code.startsWith('23') ||
+                  code == '42501' ||
+                  code == 'insufficient_privilege'),
+          fkDeferred: isFk,
+        );
+      }
+    }
+    if (refused.isEmpty) return;
+    debugPrint(
+      '[SyncService] $table: ${refused.length} answer(s) refused by the '
+      'transition guard — taking the cloud row (#427)',
+    );
+    try {
+      final cloudRows = await _transport.fetchRowsByIds(
+        table,
+        businessId,
+        refused,
+      );
+      await _restoreTableData(table, cloudRows, authoritative: true);
+      if (table != 'online_orders') return;
+      final me = _db.currentUserId;
+      for (final raw in cloudRows) {
+        final row = raw as Map<String, dynamic>;
+        if (row['status'] != 'cancelled_by_customer') continue;
+        await _db.notificationsDao.fireNotification(
+          type: 'online_order.cancelled_before_accept',
+          message:
+              'Online order ${row['reference']}: $kCancelledBeforeAcceptText',
+          severity: 'warning',
+          linkedRecordId: row['id'] as String?,
+          recipientUserId: me,
+        );
+      }
+    } catch (e) {
+      // The answer is already dropped; the next pull brings the cloud row.
+      debugPrint('[SyncService] $table refused-answer re-read failed: $e');
+    }
+  }
+
   /// Exposes `_restoreTableData` to unit tests so a snapshot/realtime payload
   /// can be replayed against an in-memory DB without standing up a real
   /// Supabase client (the restore path only touches `_db`). The actual logic
@@ -1027,6 +1112,21 @@ class SupabaseSyncService {
               group.action == 'upsert' &&
               _isOrderNumberCollision(e)) {
             await _healOrderNumberCollisions(chunkPayloads, chunkIds);
+            continue;
+          }
+          // #427: a shop's answer to an Online Order the cloud has already
+          // moved on (the customer cancelled first). Not an orphan: drop the
+          // stale answer and take the cloud's row. Handled per row, so a clean
+          // answer in the same chunk still lands.
+          if (group.action == 'upsert' &&
+              _onlineOrderAnswerTables.contains(group.table) &&
+              _isOnlineOrderTransitionRejected(e)) {
+            await _settleRefusedOnlineOrderAnswers(
+              group.table,
+              chunkPayloads,
+              chunkIds,
+              sessionBusinessId,
+            );
             continue;
           }
           // §6.8 failure classification — parity with the domain-RPC path
@@ -4027,6 +4127,7 @@ class SupabaseSyncService {
     String table,
     List<dynamic> data, {
     Set<String>? fkSkipped,
+    bool authoritative = false,
   }) async {
     // `profiles` has no local mirror — the current user's row is upserted by
     // AuthService.upsertLocalUserFromProfile during auth. Bail before the LWW
@@ -4045,7 +4146,12 @@ class SupabaseSyncService {
     // otherwise clobber a fresher local row with a stale snapshot. NULL
     // local LUA (legacy backfill) loses to anything; incoming rows the
     // local DB doesn't yet have always pass.
-    final rows = await _filterByLwwGuard(table, allRows);
+    // [authoritative]: the cloud just REFUSED this device's newer local edit
+    // (#427 online-order answer race), so the fresher local timestamp is a
+    // dead write and the cloud row must win regardless of LWW.
+    final rows = authoritative
+        ? allRows
+        : await _filterByLwwGuard(table, allRows);
     final filtered = allRows.length - rows.length;
     if (filtered > 0) {
       debugPrint(

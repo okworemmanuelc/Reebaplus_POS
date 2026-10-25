@@ -929,6 +929,29 @@ final List<SyncedTable> kSyncRegistry = [
   SyncedTable(
     name: 'online_orders',
     tenantScoped: true,
+    // #427: the shop's answer pushes only what a shop may change, plus the
+    // NOT NULL placement columns the upsert's INSERT tuple needs (exact text,
+    // unchanged). The cloud-owned snapshots stay off the wire: Drift keeps
+    // timestamps to the second, so a round-tripped `placed_at` / `created_at`
+    // would differ from the cloud's and trip the 0205 placement guard (42501).
+    pushColumns: {
+      'id',
+      'business_id',
+      'store_id',
+      'reference',
+      'shopper_name',
+      'delivery_phone',
+      'delivery_state',
+      'delivery_lga',
+      'delivery_street',
+      'status',
+      'customer_id',
+      'decline_reason',
+      'cancel_reason',
+      'linked_order_id',
+      'responded_at',
+      'last_updated_at',
+    },
     restore: Restore.monotonicStatus(
       (db) => db.onlineOrders,
       OnlineOrderData.fromJson,
@@ -939,6 +962,19 @@ final List<SyncedTable> kSyncRegistry = [
   SyncedTable(
     name: 'online_order_lines',
     tenantScoped: true,
+    // #427: same rule as online_orders — only accepted_qty is the shop's; the
+    // snapshots (and created_at) never cross the wire from a phone.
+    pushColumns: {
+      'id',
+      'business_id',
+      'online_order_id',
+      'product_id',
+      'product_name',
+      'unit_price_kobo',
+      'requested_qty',
+      'accepted_qty',
+      'last_updated_at',
+    },
     restore: Restore.plain(
       (db) => db.onlineOrderLines,
       OnlineOrderLineData.fromJson,

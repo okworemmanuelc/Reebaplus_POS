@@ -454,12 +454,16 @@ class DrawerNavTile extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.isActive = false,
+    this.badgeCount = 0,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
   final bool isActive;
+
+  /// A count badge on the icon (e.g. New online orders, #427); hidden at 0.
+  final int badgeCount;
 
   @override
   Widget build(BuildContext context) {
@@ -476,11 +480,15 @@ class DrawerNavTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            AppIcon(
-              icon,
-              filled: isActive,
-              size: context.getRSize(24),
-              color: isActive ? onPrimary : muted,
+            Badge(
+              label: Text('$badgeCount'),
+              isLabelVisible: badgeCount > 0,
+              child: AppIcon(
+                icon,
+                filled: isActive,
+                size: context.getRSize(24),
+                color: isActive ? onPrimary : muted,
+              ),
             ),
             SizedBox(width: context.getRSize(isActive ? 18 : 16)),
             Expanded(

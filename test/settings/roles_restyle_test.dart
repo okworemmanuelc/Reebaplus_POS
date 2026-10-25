@@ -322,10 +322,11 @@ void main() {
       );
       expect(find.byType(SwitchListTile), findsWidgets);
       await tester.scrollUntilVisible(
-        find.text('Restore defaults'),
+        find.text('Ngozi Adeyemi is already on the Cashier defaults.'),
         400,
         scrollable: find.byType(Scrollable).first,
       );
+      expect(find.text('Restore defaults'), findsOneWidget);
       expect(
         find.text('Ngozi Adeyemi is already on the Cashier defaults.'),
         findsOneWidget,

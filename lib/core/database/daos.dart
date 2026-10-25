@@ -24,6 +24,8 @@ import 'package:reebaplus_pos/core/crates/crate_shortfall.dart';
 import 'package:reebaplus_pos/core/crates/manufacturer_crate_position.dart';
 import 'package:reebaplus_pos/core/data/marketplace_categories.dart';
 import 'package:reebaplus_pos/core/industry/industry.dart';
+// #427: the Online Order answer vocabulary (decline reasons, link choice).
+import 'package:reebaplus_pos/core/online_orders/online_order_answer.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/business_scoped_dao.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
@@ -67,6 +69,7 @@ part 'daos_van_sales.dart';
 part 'daos_permissions.dart';
 part 'daos_org.dart';
 part 'daos_reports.dart';
+part 'daos_online_orders.dart';
 
 /// Sentinel for "argument was not provided" on optional setter parameters,
 /// distinct from "argument was provided as null". Used by methods that

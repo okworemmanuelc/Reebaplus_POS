@@ -326,6 +326,25 @@ abstract final class Gates {
     rule: Gate.key('stores.online_ordering'),
   );
 
+  /// See Online Orders (#427): the Orders screen's Online tab, its New-orders
+  /// badge (tab + side menu) and the order detail. CEO / Manager / Cashier by
+  /// default (cloud 0208).
+  static const NamedGate viewOnlineOrders = NamedGate(
+    name: 'viewOnlineOrders',
+    action: 'See online orders',
+    rule: Gate.key('online_orders.view'),
+  );
+
+  /// Accept / decline an Online Order (#427). The key alone is not enough:
+  /// the order's store must also be one the user works in
+  /// (`canAnswerOnlineOrderProvider`); the cloud guard (0208) re-checks the
+  /// key.
+  static const NamedGate answerOnlineOrders = NamedGate(
+    name: 'answerOnlineOrders',
+    action: 'Accept or decline online orders',
+    rule: Gate.key('online_orders.answer'),
+  );
+
   /// Request a stock transfer from another store (§16.8.2) — store details,
   /// and one leg of the Stores screen's browse composite.
   static const NamedGate requestStoreTransfer = NamedGate(

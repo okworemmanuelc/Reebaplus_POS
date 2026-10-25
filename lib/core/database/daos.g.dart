@@ -1944,3 +1944,49 @@ class DailyClosingsDaoManager {
   $$DailyClosingsTableTableManager get dailyClosings =>
       $$DailyClosingsTableTableManager(_db.attachedDatabase, _db.dailyClosings);
 }
+
+mixin _$OnlineOrdersDaoMixin on DatabaseAccessor<AppDatabase> {
+  $BusinessesTable get businesses => attachedDatabase.businesses;
+  $StoresTable get stores => attachedDatabase.stores;
+  $OnlineOrdersTable get onlineOrders => attachedDatabase.onlineOrders;
+  $CategoriesTable get categories => attachedDatabase.categories;
+  $CrateSizeGroupsTable get crateSizeGroups => attachedDatabase.crateSizeGroups;
+  $SuppliersTable get suppliers => attachedDatabase.suppliers;
+  $ManufacturersTable get manufacturers => attachedDatabase.manufacturers;
+  $ProductsTable get products => attachedDatabase.products;
+  $OnlineOrderLinesTable get onlineOrderLines =>
+      attachedDatabase.onlineOrderLines;
+  $CustomersTable get customers => attachedDatabase.customers;
+  OnlineOrdersDaoManager get managers => OnlineOrdersDaoManager(this);
+}
+
+class OnlineOrdersDaoManager {
+  final _$OnlineOrdersDaoMixin _db;
+  OnlineOrdersDaoManager(this._db);
+  $$BusinessesTableTableManager get businesses =>
+      $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$StoresTableTableManager get stores =>
+      $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
+  $$OnlineOrdersTableTableManager get onlineOrders =>
+      $$OnlineOrdersTableTableManager(_db.attachedDatabase, _db.onlineOrders);
+  $$CategoriesTableTableManager get categories =>
+      $$CategoriesTableTableManager(_db.attachedDatabase, _db.categories);
+  $$CrateSizeGroupsTableTableManager get crateSizeGroups =>
+      $$CrateSizeGroupsTableTableManager(
+        _db.attachedDatabase,
+        _db.crateSizeGroups,
+      );
+  $$SuppliersTableTableManager get suppliers =>
+      $$SuppliersTableTableManager(_db.attachedDatabase, _db.suppliers);
+  $$ManufacturersTableTableManager get manufacturers =>
+      $$ManufacturersTableTableManager(_db.attachedDatabase, _db.manufacturers);
+  $$ProductsTableTableManager get products =>
+      $$ProductsTableTableManager(_db.attachedDatabase, _db.products);
+  $$OnlineOrderLinesTableTableManager get onlineOrderLines =>
+      $$OnlineOrderLinesTableTableManager(
+        _db.attachedDatabase,
+        _db.onlineOrderLines,
+      );
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
+}
