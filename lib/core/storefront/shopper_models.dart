@@ -244,6 +244,7 @@ enum PlaceOrderFailure {
   productUnavailable('product_unavailable'),
   quantityRule('quantity_rule'),
   notEnoughStock('not_enough_stock'),
+  ageConfirmationRequired('age_confirmation_required'),
   invalid('invalid');
 
   const PlaceOrderFailure(this.wire);

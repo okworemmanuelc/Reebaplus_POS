@@ -4,7 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:reebaplus_pos/core/storefront/shopper_cart.dart';
 import 'package:reebaplus_pos/core/storefront/shopper_age_confirmation.dart';
+import 'package:reebaplus_pos/core/storefront/shopper_models.dart';
+import 'package:reebaplus_pos/core/storefront/storefront_models.dart';
+import 'package:reebaplus_pos/features/browse/widgets/add_to_cart_box.dart';
+import 'package:reebaplus_pos/features/browse/widgets/shopper_texts.dart';
+import 'browse_fixtures.dart';
 import 'package:reebaplus_pos/core/storefront/storefront_service.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/features/browse/widgets/age_confirmation_dialog.dart';
@@ -173,6 +179,72 @@ void main() {
       await tester.tap(find.text('Add beer'));
       await tester.pumpAndSettle();
       expect(find.text(AgeConfirmationDialog.title), findsOneWidget);
+    });
+  });
+
+  group('add-to-cart gate (#479)', () {
+    Future<void> pumpBox(WidgetTester tester, StorefrontCard card, FakeAgeCloud cloud,
+        List<String> added) async {
+      await tester.pumpWidget(ProviderScope(
+        overrides: [shopperAgeServiceProvider.overrideWithValue(cloud.service)],
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: Scaffold(
+            body: AddToCartBox(card: card, onAdded: () => added.add(card.productId)),
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('an 18+ card asks first; Not now keeps it out of the cart',
+        (tester) async {
+      final added = <String>[];
+      await pumpBox(tester, StorefrontCard.fromRow(cardRow(id: 'b', name: 'Beer', age: true)),
+          FakeAgeCloud(), added);
+      await tester.tap(find.byKey(const Key('shopper-add-to-cart')));
+      await tester.pumpAndSettle();
+      expect(find.text(AgeConfirmationDialog.title), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('age-decline')));
+      await tester.pumpAndSettle();
+      expect(added, isEmpty);
+    });
+
+    testWidgets('confirming adds it; a plain card never asks', (tester) async {
+      final added = <String>[];
+      await pumpBox(tester, StorefrontCard.fromRow(cardRow(id: 'b', name: 'Beer', age: true)),
+          FakeAgeCloud(), added);
+      await tester.tap(find.byKey(const Key('shopper-add-to-cart')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('age-confirm')));
+      await tester.pumpAndSettle();
+      expect(added, ['b']);
+
+      final plain = <String>[];
+      await pumpBox(tester, StorefrontCard.fromRow(cardRow(id: 'w', name: 'Water')),
+          FakeAgeCloud(), plain);
+      await tester.tap(find.byKey(const Key('shopper-add-to-cart')));
+      await tester.pumpAndSettle();
+      expect(find.text(AgeConfirmationDialog.title), findsNothing);
+      expect(plain, ['w']);
+    });
+
+    test('the cart line remembers it is 18+ across restarts', () {
+      final line = ShopperCartLine.fromCard(
+          StorefrontCard.fromRow(cardRow(id: 'b', name: 'Beer', age: true)), 2);
+      expect(ShopperCartLine.fromJson(line.toJson())!.ageRestricted, isTrue);
+      expect(line.withQuantity(4).ageRestricted, isTrue);
+    });
+  });
+
+  group('Place order (#479)', () {
+    test('age_confirmation_required maps to a plain message', () {
+      expect(PlaceOrderFailure.fromWire('age_confirmation_required'),
+          PlaceOrderFailure.ageConfirmationRequired);
+      expect(
+        placeOrderFailureText(PlaceOrderFailure.ageConfirmationRequired),
+        'Confirm you are 18 or older to order this',
+      );
     });
   });
 }

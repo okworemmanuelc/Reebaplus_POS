@@ -6,6 +6,7 @@ import 'package:reebaplus_pos/core/storefront/storefront_models.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/browse/widgets/age_confirmation_dialog.dart';
 import 'package:reebaplus_pos/features/browse/widgets/quantity_entry.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 
@@ -52,6 +53,12 @@ class _AddToCartBoxState extends ConsumerState<AddToCartBox> {
   }
 
   Future<void> _add() async {
+    // An 18+ item needs the age answer first (#479); "Not now" keeps it out.
+    if (widget.card.ageRestricted &&
+        !await ensureShopperAgeConfirmed(context, ref)) {
+      return;
+    }
+    if (!mounted) return;
     setState(() => _busy = true);
     final problem = await ref
         .read(shopperCartProvider.notifier)
