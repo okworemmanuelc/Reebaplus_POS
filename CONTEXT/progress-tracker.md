@@ -7,6 +7,9 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #436: Order again (2026-10-25, ready for review)
+- Order again button on every My Orders card; re-adds lines at today's price/stock via `storefront_store_products` (no by-id RPC), skips unavailable with one note, 18+ gate, qty clamp. App-only. Logic in `lib/core/storefront/order_again.dart`.
+
 ### Issue #426: Place orders (2026-10-25, ready for review)
 - Branch `feat/426-place-orders`, worktree `../drinkPosApp-wt-426`. Cloud
   `0205_online_orders.sql` + Drift 92 (after #474's 91). Shopper
