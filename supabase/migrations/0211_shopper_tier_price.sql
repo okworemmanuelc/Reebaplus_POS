@@ -176,8 +176,11 @@ BEGIN
       p.unit                                   AS unit,
       p.units_per_pack                         AS units_per_pack,
       coalesce(mc.slug, 'other')               AS category,
+      -- Online, an unset (0) wholesale price falls back to Retail so a
+      -- Wholesaler can never order at 0 (supervisor decision, #429).
       CASE WHEN pl.shopper_tier = 'wholesaler'
-           THEN coalesce(p.wholesaler_price_kobo, 0)
+                AND coalesce(p.wholesaler_price_kobo, 0) > 0
+           THEN p.wholesaler_price_kobo
            ELSE coalesce(p.retailer_price_kobo, 0)
       END::bigint                              AS price_kobo,
       pl.currency                              AS currency,
@@ -436,9 +439,14 @@ BEGIN
             SELECT p.id, p.name, p.unit, p.min_order_qty, p.order_step,
                    p.max_order_qty,
                    CASE WHEN v_tier = 'wholesaler'
-                        THEN coalesce(p.wholesaler_price_kobo, 0)
+                             AND coalesce(p.wholesaler_price_kobo, 0) > 0
+                        THEN p.wholesaler_price_kobo
                         ELSE coalesce(p.retailer_price_kobo, 0)
-                   END::bigint AS price
+                   END::bigint AS price,
+                   CASE WHEN v_tier = 'wholesaler'
+                             AND coalesce(p.wholesaler_price_kobo, 0) > 0
+                        THEN 'wholesaler' ELSE 'retailer'
+                   END AS tier
               INTO v_product
               FROM public.products p
               LEFT JOIN public.categories c
@@ -479,7 +487,7 @@ BEGIN
             unit_price_kobo, price_tier, requested_qty)
           VALUES (
             v_store.business_id, v_order_id, v_product.id, v_product.name,
-            v_product.unit, v_product.price, v_tier, v_qty);
+            v_product.unit, v_product.price, v_product.tier, v_qty);
           v_total := v_total + v_product.price * v_qty;
         END LOOP;
 
