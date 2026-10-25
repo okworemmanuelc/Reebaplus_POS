@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/online_order_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/settings_screen.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
@@ -305,11 +306,15 @@ class AppDrawer extends ConsumerWidget {
                 isActive: activeRoute == 'inventory',
                 onTap: () => _navigateTo(context, ref, 'inventory'),
               ),
-            // Orders — visible to all four roles (§27.3).
+            // Orders — visible to all four roles (§27.3). The badge counts New
+            // online orders in the active store scope (#427; 0 without
+            // `online_orders.view`).
             DrawerNavTile(
+              key: const Key('drawer-orders'),
               icon: AppIcons.orders,
               label: 'Orders',
               isActive: activeRoute == 'orders',
+              badgeCount: ref.watch(newOnlineOrderCountProvider),
               onTap: () => _navigateTo(context, ref, 'orders'),
             ),
             // Customers — hidden for Stock keeper (§27.3). customers.add is

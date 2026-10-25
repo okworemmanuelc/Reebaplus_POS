@@ -14729,6 +14729,17 @@ class $CustomersTable extends Customers
         requiredDuringInsert: false,
         defaultValue: currentDateAndTime,
       );
+  static const VerificationMeta _shopperAccountIdMeta = const VerificationMeta(
+    'shopperAccountId',
+  );
+  @override
+  late final GeneratedColumn<String> shopperAccountId = GeneratedColumn<String>(
+    'shopper_account_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -14744,6 +14755,7 @@ class $CustomersTable extends Customers
     isDeleted,
     createdAt,
     lastUpdatedAt,
+    shopperAccountId,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -14845,6 +14857,15 @@ class $CustomersTable extends Customers
         ),
       );
     }
+    if (data.containsKey('shopper_account_id')) {
+      context.handle(
+        _shopperAccountIdMeta,
+        shopperAccountId.isAcceptableOrUnknown(
+          data['shopper_account_id']!,
+          _shopperAccountIdMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -14906,6 +14927,10 @@ class $CustomersTable extends Customers
         DriftSqlType.dateTime,
         data['${effectivePrefix}last_updated_at'],
       )!,
+      shopperAccountId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}shopper_account_id'],
+      ),
     );
   }
 
@@ -14929,6 +14954,12 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
   final bool isDeleted;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
+
+  /// #427 (v93 / cloud 0208): the Shopper login this Customer is linked to.
+  /// Set only by a staff choice on the first accepted Online Order (ADR 0030,
+  /// never a phone match). At most one live Customer per Shopper per business
+  /// (partial unique index `uq_customers_business_shopper_account`).
+  final String? shopperAccountId;
   const CustomerData({
     required this.id,
     required this.businessId,
@@ -14943,6 +14974,7 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
     required this.isDeleted,
     required this.createdAt,
     required this.lastUpdatedAt,
+    this.shopperAccountId,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -14970,6 +15002,9 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
     map['is_deleted'] = Variable<bool>(isDeleted);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    if (!nullToAbsent || shopperAccountId != null) {
+      map['shopper_account_id'] = Variable<String>(shopperAccountId);
+    }
     return map;
   }
 
@@ -14998,6 +15033,9 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
       isDeleted: Value(isDeleted),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
+      shopperAccountId: shopperAccountId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(shopperAccountId),
     );
   }
 
@@ -15022,6 +15060,7 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+      shopperAccountId: serializer.fromJson<String?>(json['shopperAccountId']),
     );
   }
   @override
@@ -15041,6 +15080,7 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
       'isDeleted': serializer.toJson<bool>(isDeleted),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+      'shopperAccountId': serializer.toJson<String?>(shopperAccountId),
     };
   }
 
@@ -15058,6 +15098,7 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
     bool? isDeleted,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
+    Value<String?> shopperAccountId = const Value.absent(),
   }) => CustomerData(
     id: id ?? this.id,
     businessId: businessId ?? this.businessId,
@@ -15074,6 +15115,9 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
     isDeleted: isDeleted ?? this.isDeleted,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+    shopperAccountId: shopperAccountId.present
+        ? shopperAccountId.value
+        : this.shopperAccountId,
   );
   CustomerData copyWithCompanion(CustomersCompanion data) {
     return CustomerData(
@@ -15098,6 +15142,9 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
       lastUpdatedAt: data.lastUpdatedAt.present
           ? data.lastUpdatedAt.value
           : this.lastUpdatedAt,
+      shopperAccountId: data.shopperAccountId.present
+          ? data.shopperAccountId.value
+          : this.shopperAccountId,
     );
   }
 
@@ -15116,7 +15163,8 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
           ..write('walletLimitKobo: $walletLimitKobo, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('createdAt: $createdAt, ')
-          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('shopperAccountId: $shopperAccountId')
           ..write(')'))
         .toString();
   }
@@ -15136,6 +15184,7 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
     isDeleted,
     createdAt,
     lastUpdatedAt,
+    shopperAccountId,
   );
   @override
   bool operator ==(Object other) =>
@@ -15153,7 +15202,8 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
           other.walletLimitKobo == this.walletLimitKobo &&
           other.isDeleted == this.isDeleted &&
           other.createdAt == this.createdAt &&
-          other.lastUpdatedAt == this.lastUpdatedAt);
+          other.lastUpdatedAt == this.lastUpdatedAt &&
+          other.shopperAccountId == this.shopperAccountId);
 }
 
 class CustomersCompanion extends UpdateCompanion<CustomerData> {
@@ -15170,6 +15220,7 @@ class CustomersCompanion extends UpdateCompanion<CustomerData> {
   final Value<bool> isDeleted;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
+  final Value<String?> shopperAccountId;
   final Value<int> rowid;
   const CustomersCompanion({
     this.id = const Value.absent(),
@@ -15185,6 +15236,7 @@ class CustomersCompanion extends UpdateCompanion<CustomerData> {
     this.isDeleted = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
+    this.shopperAccountId = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   CustomersCompanion.insert({
@@ -15201,6 +15253,7 @@ class CustomersCompanion extends UpdateCompanion<CustomerData> {
     this.isDeleted = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
+    this.shopperAccountId = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : businessId = Value(businessId),
        name = Value(name);
@@ -15218,6 +15271,7 @@ class CustomersCompanion extends UpdateCompanion<CustomerData> {
     Expression<bool>? isDeleted,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
+    Expression<String>? shopperAccountId,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -15235,6 +15289,7 @@ class CustomersCompanion extends UpdateCompanion<CustomerData> {
       if (isDeleted != null) 'is_deleted': isDeleted,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (shopperAccountId != null) 'shopper_account_id': shopperAccountId,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -15253,6 +15308,7 @@ class CustomersCompanion extends UpdateCompanion<CustomerData> {
     Value<bool>? isDeleted,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
+    Value<String?>? shopperAccountId,
     Value<int>? rowid,
   }) {
     return CustomersCompanion(
@@ -15269,6 +15325,7 @@ class CustomersCompanion extends UpdateCompanion<CustomerData> {
       isDeleted: isDeleted ?? this.isDeleted,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      shopperAccountId: shopperAccountId ?? this.shopperAccountId,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -15315,6 +15372,9 @@ class CustomersCompanion extends UpdateCompanion<CustomerData> {
     if (lastUpdatedAt.present) {
       map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
     }
+    if (shopperAccountId.present) {
+      map['shopper_account_id'] = Variable<String>(shopperAccountId.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -15337,6 +15397,7 @@ class CustomersCompanion extends UpdateCompanion<CustomerData> {
           ..write('isDeleted: $isDeleted, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('shopperAccountId: $shopperAccountId, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -52540,6 +52601,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     this as AppDatabase,
   );
   late final UserStoresDao userStoresDao = UserStoresDao(this as AppDatabase);
+  late final OnlineOrdersDao onlineOrdersDao = OnlineOrdersDao(
+    this as AppDatabase,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -79149,6 +79213,7 @@ typedef $$CustomersTableCreateCompanionBuilder =
       Value<bool> isDeleted,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
+      Value<String?> shopperAccountId,
       Value<int> rowid,
     });
 typedef $$CustomersTableUpdateCompanionBuilder =
@@ -79166,6 +79231,7 @@ typedef $$CustomersTableUpdateCompanionBuilder =
       Value<bool> isDeleted,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
+      Value<String?> shopperAccountId,
       Value<int> rowid,
     });
 
@@ -79432,6 +79498,11 @@ class $$CustomersTableFilterComposer
 
   ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
     column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get shopperAccountId => $composableBuilder(
+    column: $table.shopperAccountId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -79722,6 +79793,11 @@ class $$CustomersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get shopperAccountId => $composableBuilder(
+    column: $table.shopperAccountId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$BusinessesTableOrderingComposer get businessId {
     final $$BusinessesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -79814,6 +79890,11 @@ class $$CustomersTableAnnotationComposer
 
   GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
     column: $table.lastUpdatedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get shopperAccountId => $composableBuilder(
+    column: $table.shopperAccountId,
     builder: (column) => column,
   );
 
@@ -80093,6 +80174,7 @@ class $$CustomersTableTableManager
                 Value<bool> isDeleted = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<String?> shopperAccountId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CustomersCompanion(
                 id: id,
@@ -80108,6 +80190,7 @@ class $$CustomersTableTableManager
                 isDeleted: isDeleted,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
+                shopperAccountId: shopperAccountId,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -80125,6 +80208,7 @@ class $$CustomersTableTableManager
                 Value<bool> isDeleted = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<String?> shopperAccountId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CustomersCompanion.insert(
                 id: id,
@@ -80140,6 +80224,7 @@ class $$CustomersTableTableManager
                 isDeleted: isDeleted,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
+                shopperAccountId: shopperAccountId,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

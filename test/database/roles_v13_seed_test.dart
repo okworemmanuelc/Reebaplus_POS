@@ -62,10 +62,10 @@ void main() {
       );
     });
 
-    test('permissions table seeded with 44 default rows on fresh install',
+    test('permissions table seeded with 46 default rows on fresh install',
         () async {
       final perms = await db.permissionsDao.getAll();
-      expect(perms.length, equals(44));
+      expect(perms.length, equals(46)); // #427 added online_orders.view / .answer
       expect(perms.singleWhere((p) => p.key == 'stores.online_ordering').category,
           'Online store'); // #423
 

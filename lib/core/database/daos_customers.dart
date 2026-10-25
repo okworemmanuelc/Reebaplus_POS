@@ -64,14 +64,22 @@ class CustomersDao extends DatabaseAccessor<AppDatabase>
     return attachedDatabase.cratePoolDao.watchCustomerCrateDebt(customerId);
   }
 
-  Future<String> addCustomer(CustomersCompanion customer) async {
+  /// [viaTablePush] forces the plain table upserts even when the
+  /// `pos_create_customer` domain RPC flag is on: that RPC carries no
+  /// `shopper_account_id`, so a Customer created by linking an Online Order
+  /// (#427) must push as a full row or the link would never reach the cloud.
+  Future<String> addCustomer(
+    CustomersCompanion customer, {
+    bool viaTablePush = false,
+  }) async {
     final customerId = UuidV7.generate();
     final walletId = UuidV7.generate();
 
     final flagValue = await db.systemConfigDao.get(
       'feature.domain_rpcs_v2.create_customer',
     );
-    final useDomainRpc = flagValue == 'true' || flagValue == '"true"';
+    final useDomainRpc =
+        !viaTablePush && (flagValue == 'true' || flagValue == '"true"');
 
     await transaction(() async {
       final custComp = customer.copyWith(
