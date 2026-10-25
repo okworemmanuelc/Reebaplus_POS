@@ -326,14 +326,14 @@ class OnlineOrderEditableLineRow extends StatelessWidget {
               IconButton(
                 key: OnlineOrderKeys.lineLower(line.id),
                 tooltip: 'Lower quantity',
-                icon: const Icon(Icons.remove_circle_outline),
+                icon: const Icon(AppIcons.removeCircle),
                 onPressed: quantity > 0 ? () => onChanged(quantity - 1) : null,
               ),
               IconButton(
                 key: OnlineOrderKeys.lineRemove(line.id),
                 tooltip: removed ? 'Put back' : 'Remove',
                 icon: Icon(
-                  removed ? Icons.undo : Icons.delete_outline,
+                  removed ? AppIcons.undo : AppIcons.delete,
                 ),
                 onPressed: () =>
                     onChanged(removed ? line.requestedQty : 0),
