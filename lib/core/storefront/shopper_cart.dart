@@ -29,6 +29,7 @@ class ShopperCartLine {
     this.orderStep = 1,
     this.maxOrderQty,
     this.onlyLeft,
+    this.ageRestricted = false,
   });
 
   factory ShopperCartLine.fromCard(StorefrontCard card, int quantity) =>
@@ -47,6 +48,7 @@ class ShopperCartLine {
         orderStep: card.orderStep,
         maxOrderQty: card.maxOrderQty,
         onlyLeft: card.onlyLeft,
+        ageRestricted: card.ageRestricted,
         quantity: quantity,
       );
 
@@ -67,6 +69,9 @@ class ShopperCartLine {
   /// 1–3 when the store showed "Only N left" — the one count the Shopper
   /// already saw, so the cart may cap at it. The real cap is server-side.
   final int? onlyLeft;
+
+  /// An 18+ product (#479): Place order syncs the age confirmation first.
+  final bool ageRestricted;
   final int quantity;
 
   OrderQuantityRule get rule =>
@@ -112,6 +117,7 @@ class ShopperCartLine {
     orderStep: orderStep,
     maxOrderQty: maxOrderQty,
     onlyLeft: onlyLeft,
+    ageRestricted: ageRestricted,
     quantity: qty,
   );
 
@@ -130,6 +136,7 @@ class ShopperCartLine {
     'orderStep': orderStep,
     'maxOrderQty': maxOrderQty,
     'onlyLeft': onlyLeft,
+    'ageRestricted': ageRestricted,
     'quantity': quantity,
   };
 
@@ -162,6 +169,7 @@ class ShopperCartLine {
       orderStep: optInt(json['orderStep']) ?? 1,
       maxOrderQty: optInt(json['maxOrderQty']),
       onlyLeft: optInt(json['onlyLeft']),
+      ageRestricted: json['ageRestricted'] == true,
       quantity: quantity,
     );
   }

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/data/area_selection.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
+import 'package:reebaplus_pos/core/storefront/shopper_age_confirmation.dart';
 import 'package:reebaplus_pos/core/storefront/shopper_cart.dart';
 import 'package:reebaplus_pos/core/storefront/shopper_models.dart';
 import 'package:reebaplus_pos/core/storefront/shopper_providers.dart';
@@ -175,6 +176,20 @@ class _PlaceOrderScreenState extends ConsumerState<PlaceOrderScreen> {
       _error = null;
     });
     try {
+      // 18+ lines: make the login agree with the phone before the cloud
+      // re-checks it (#479). An unreachable cloud stops the order.
+      if (groups.any((g) => g.lines.any((l) => l.ageRestricted))) {
+        try {
+          await ref.read(shopperAgeConfirmationProvider.notifier).syncToCloud();
+        } on StorefrontException catch (e) {
+          throw ShopperException(
+            e.failure == StorefrontFailure.offline
+                ? ShopperFailure.offline
+                : ShopperFailure.failed,
+            e,
+          );
+        }
+      }
       final results = await ref
           .read(shopperServiceProvider)
           .placeOrders(

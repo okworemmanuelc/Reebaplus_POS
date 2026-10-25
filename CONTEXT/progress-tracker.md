@@ -23,6 +23,7 @@ The human updates it when resolving open questions or making architectural decis
   menu entry for business phones.
 - Deploy 0205 after 0204 and before the app; never with 0193.
 ### Issue #479: Restricted goods (2026-10-25, ready for review — Part of #479)
+- Follow-up (2026-10-25): cloud 0207 replaces `shopper_place_orders` (same signature) to refuse an 18+ line with `age_confirmation_required`; app gates Add to cart, syncs the age answer before Place order, maps the code. Not deployed (after 0205+0206).
 - Cloud 0206 only, no Drift bump; independent of 0205 (#426). Adds public
   category `prescription-medicines` (Health, restricted 'prescription'; bundled
   Dart row + parity test), RPC-only `shopper_age_confirmations`, server-only
