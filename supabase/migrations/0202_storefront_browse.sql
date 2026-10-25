@@ -54,12 +54,16 @@
 -- to one business) from its best store by the same order. Pagination is
 -- keyset on those rank values (opaque `cursor`), never OFFSET.
 --
+-- LISTING CONTENT (#473, 0201): online_description, brand and the order
+-- quantity rule (min_order_qty / order_step / max_order_qty) ride on every
+-- card so the #426 cart can enforce them; this slice builds no cart.
+--
 -- PUBLIC FIELDS ONLY. Cards never carry buying price, cost, raw stock,
 -- customers, business id or tenant category id. Prices are the Retailer
 -- price in the store's currency (settings.default_currency, default NGN);
 -- the linked-customer tier arrives in #429.
 --
--- DEPLOY: independent of any app build (nothing calls these until the
+-- DEPLOY: after 0201 (reads its listing columns); independent of any app build (nothing calls these until the
 -- Browse switch is on). Run test/integration/sql/storefront_browse.sql on
 -- reebaplus-dev after applying (EXPLAIN ANALYZE + EXECUTE boundaries).
 
@@ -233,6 +237,11 @@ RETURNS TABLE (
   stock_may_be_stale boolean,
   business_name      text,
   store_lga          text,
+  online_description text,
+  brand              text,
+  min_order_qty      integer,
+  order_step         integer,
+  max_order_qty      integer,
   sponsored          boolean,
   cursor             text
 )
@@ -324,6 +333,11 @@ BEGIN
       pl.stale_rank                            AS stale_rank,
       pl.business_name                         AS business_name,
       pl.store_lga                             AS store_lga,
+      nullif(btrim(p.online_description), '')  AS online_description,
+      nullif(btrim(p.brand), '')               AS brand,
+      p.min_order_qty                          AS min_order_qty,
+      p.order_step                             AS order_step,
+      p.max_order_qty                          AS max_order_qty,
       pl.area_rank                             AS area_rank,
       CASE WHEN nullif(btrim(p.image_url), '') IS NULL THEN 1 ELSE 0 END
                                                AS nophoto,
@@ -371,6 +385,11 @@ BEGIN
     o.stale_rank = 1,
     o.business_name,
     o.store_lga,
+    o.online_description,
+    o.brand,
+    o.min_order_qty,
+    o.order_step,
+    o.max_order_qty,
     false,
     concat_ws(':', o.stale_rank, o.area_rank, o.stock_rank, o.nophoto,
               o.recency, o.product_id)
@@ -418,7 +437,8 @@ RETURNS TABLE (
   units_per_pack integer, category text, price_kobo bigint, currency text,
   crate_deposit_kobo bigint, stock_label text, only_left integer,
   age_restricted boolean, stock_may_be_stale boolean, business_name text,
-  store_lga text, sponsored boolean, cursor text
+  store_lga text, online_description text, brand text, min_order_qty integer,
+  order_step integer, max_order_qty integer, sponsored boolean, cursor text
 )
 LANGUAGE sql
 STABLE
@@ -445,7 +465,8 @@ RETURNS TABLE (
   units_per_pack integer, category text, price_kobo bigint, currency text,
   crate_deposit_kobo bigint, stock_label text, only_left integer,
   age_restricted boolean, stock_may_be_stale boolean, business_name text,
-  store_lga text, sponsored boolean, cursor text
+  store_lga text, online_description text, brand text, min_order_qty integer,
+  order_step integer, max_order_qty integer, sponsored boolean, cursor text
 )
 LANGUAGE sql
 STABLE
@@ -505,7 +526,8 @@ RETURNS TABLE (
   units_per_pack integer, category text, price_kobo bigint, currency text,
   crate_deposit_kobo bigint, stock_label text, only_left integer,
   age_restricted boolean, stock_may_be_stale boolean, business_name text,
-  store_lga text, sponsored boolean, cursor text
+  store_lga text, online_description text, brand text, min_order_qty integer,
+  order_step integer, max_order_qty integer, sponsored boolean, cursor text
 )
 LANGUAGE sql
 STABLE

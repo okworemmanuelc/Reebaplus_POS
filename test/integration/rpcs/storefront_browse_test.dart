@@ -32,7 +32,8 @@ const _cardKeys = {
   'product_id', 'store_id', 'name', 'image_url', 'unit', 'units_per_pack',
   'category', 'price_kobo', 'currency', 'crate_deposit_kobo', 'stock_label',
   'only_left', 'age_restricted', 'stock_may_be_stale', 'business_name',
-  'store_lga', 'sponsored', 'cursor',
+  'store_lga', 'online_description', 'brand', 'min_order_qty', 'order_step',
+  'max_order_qty', 'sponsored', 'cursor',
 };
 const _storeKeys = {
   'store_id', 'business_name', 'logo_url', 'store_state', 'store_lga',
@@ -117,9 +118,11 @@ void main() {
     int crateValue = 0,
     Duration updatedAgo = Duration.zero,
     Duration syncedAgo = Duration.zero,
+    Map<String, Object?> listing = const {},
   }) async {
     final id = UuidV7.generate();
     await admin.from('products').insert({
+      ...listing,
       'id': id,
       'business_id': businessId,
       'name': '$name $token',
@@ -228,7 +231,10 @@ void main() {
     await item('Prescription', a, {a1: 20}, categoryId: rx);
     // 18+ and the crate deposit note.
     await item('Beer bottle', a, {a1: 20}, categoryId: beer, unit: 'Bottle',
-        trackEmpties: true, crateValue: 150000);
+        trackEmpties: true, crateValue: 150000, listing: {
+          'online_description': 'Cold on request', 'brand': 'Fixture Brewery',
+          'min_order_qty': 2, 'order_step': 2, 'max_order_qty': 20,
+        });
 
     final t = await business('T', status: 'trial',
         trialEnds: now.subtract(const Duration(days: 1)));
@@ -312,6 +318,9 @@ void main() {
     expect(beer['age_restricted'], isTrue);
     expect(beer['crate_deposit_kobo'], 150000);
     expect(beer['category'], 'beer');
+    expect(beer['brand'], 'Fixture Brewery');
+    expect(beer['online_description'], 'Cold on request');
+    expect([beer['min_order_qty'], beer['order_step'], beer['max_order_qty']], [2, 2, 20]);
     expect(feed.singleWhere((r) => nameOf(r) == 'Q11')['category'], 'other');
   }, skip: _skip);
 

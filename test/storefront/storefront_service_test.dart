@@ -48,6 +48,15 @@ void main() {
       expect(StorefrontStock.fromWire('bogus'), StorefrontStock.outOfStock);
     });
 
+    test('listing content and order rule (#473)', () {
+      final card = StorefrontCard.fromRow(cardRow(id: 'a', name: 'A',
+          brand: 'Guinness', description: 'Stout', minQty: 6, step: 6));
+      expect(card.brand, 'Guinness');
+      expect(card.onlineDescription, 'Stout');
+      expect(card.orderRuleText, 'Order at least 6, in steps of 6');
+      expect(StorefrontCard.fromRow(cardRow(id: 'b', name: 'B')).orderRuleText, isNull);
+    });
+
     test('store currency formatting', () {
       expect(formatCurrencyIn(4500, 'NGN'), '₦4,500');
       expect(formatCurrencyIn(12, 'KES'), 'KSh 12');

@@ -183,7 +183,10 @@ stores not synced for 7 days (72 h = demoted + "Stock may be out of date").
 "Last synced" is approximated as the newest of the store row, its inventory
 rows and the business's `devices.last_seen_at` (devices are per business,
 not per store). Admin blocking (#478) and tier prices (#429) and Sponsored
-slots (#461) plug into `_storefront_cards`.
+slots (#461) plug into `_storefront_cards`. Cards also carry the #473 listing
+content (`online_description`, `brand`) and the order quantity rule
+(`min_order_qty`, `order_step`, `max_order_qty`) for the #426 cart; 0202 must
+deploy after 0201.
 
 **Listing content (#473).** Cloud 0201 and Drift 90 add `products.online_description`
 (≤2000), `brand` (≤60), `min_order_qty`, `order_step` (both default 1) and

@@ -896,4 +896,9 @@ muted text, buttons) for offline ("Connect to the internet to browse"), failed,
 no shops in the area, no search match. The store page adds a back button,
 business name + "LGA, State", a warning notice "This store doesn't deliver to
 your area", the stale note and the store's own note, then its own search.
-Goldens: `test/redesign/goldens/browse_{feed,offline,store}_{390x844,844x390}_{light,dark}.png`.
+Tapping a card opens a read-only product sheet (`showStorefrontProductSheet`,
+640dp cap, scrolls, 48dp ✕): seller line, photo, brand, name + 18+, unit,
+price, stock words, deposit note, the order rule ("Order at least 2, in steps
+of 2, up to 20", #473), the shop's online description and "See this store".
+Goldens: `test/redesign/goldens/browse_{feed,offline,store}_{390x844,844x390}_{light,dark}.png`
+and `browse_product_sheet_390x844_light` / `_844x390_dark`.

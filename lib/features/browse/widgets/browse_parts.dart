@@ -437,6 +437,13 @@ class StorefrontCardTile extends StatelessWidget {
           ),
         ),
         SizedBox(height: context.getRSize(8)),
+        if (card.brand != null)
+          Text(
+            card.brand!,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: context.semiBoldStyle(11).copyWith(color: muted),
+          ),
         Text(
           card.name,
           maxLines: 2,
@@ -516,13 +523,27 @@ class StorefrontCardTile extends StatelessWidget {
       child: Container(
         key: ValueKey('browse-card-${card.productId}'),
         decoration: AppDecorations.card(context),
-        padding: EdgeInsets.fromLTRB(
-          context.getRSize(10),
-          context.getRSize(10),
-          context.getRSize(10),
-          context.getRSize(2),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(AppSpacing.borderRadiusXL),
+            // Details only — nothing is added to a cart in this slice (#426).
+            onTap: () => showStorefrontProductSheet(
+              context,
+              card: card,
+              onOpenStore: onOpenStore,
+            ),
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                context.getRSize(10),
+                context.getRSize(10),
+                context.getRSize(10),
+                context.getRSize(2),
+              ),
+              child: Opacity(opacity: out ? 0.5 : 1, child: body),
+            ),
+          ),
         ),
-        child: Opacity(opacity: out ? 0.5 : 1, child: body),
       ),
     );
   }
@@ -688,5 +709,161 @@ List<Widget> browseListSlivers(
           ),
         ),
       ];
+  }
+}
+
+/// Product details (#425 + #473 listing content): photo, brand, name, the
+/// shop's online description, unit, price, stock, deposit and the order
+/// quantity rule. Read-only — ordering arrives in #426.
+Future<void> showStorefrontProductSheet(
+  BuildContext context, {
+  required StorefrontCard card,
+  VoidCallback? onOpenStore,
+}) => showModalBottomSheet<void>(
+  context: context,
+  useSafeArea: true,
+  isScrollControlled: true,
+  constraints: const BoxConstraints(maxWidth: 640),
+  builder: (sheetContext) => _ProductSheet(
+    card: card,
+    onOpenStore: onOpenStore == null
+        ? null
+        : () {
+            Navigator.of(sheetContext).pop();
+            onOpenStore();
+          },
+  ),
+);
+
+class _ProductSheet extends StatelessWidget {
+  const _ProductSheet({required this.card, this.onOpenStore});
+
+  final StorefrontCard card;
+  final VoidCallback? onOpenStore;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    final visual = categoryVisual(_categoryName(card.category), f);
+    final url = card.imageUrl;
+    final fallback = Center(
+      child: AppIcon(visual.icon, filled: true, size: context.getRSize(48),
+          color: visual.iconColor),
+    );
+    final unit = StorefrontCardTile._unitText(card);
+    final rule = card.orderRuleText;
+    final deposit = card.crateDepositKobo;
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: context.screenHeight * 0.9),
+      child: SingleChildScrollView(
+        key: const Key('browse-product-sheet'),
+        padding: EdgeInsets.fromLTRB(
+          context.getRSize(16),
+          context.getRSize(16),
+          context.getRSize(16),
+          context.getRSize(16) + context.deviceBottomPadding,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    card.sellerLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.semiBoldStyle(13).copyWith(color: muted),
+                  ),
+                ),
+                SizedBox.square(
+                  dimension: kMinInteractiveDimension,
+                  child: IconButton(
+                    tooltip: 'Close',
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: AppIcon(AppIcons.close, size: context.getRSize(22),
+                        color: t.colorScheme.onSurface),
+                  ),
+                ),
+              ],
+            ),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppSpacing.borderRadiusL),
+              child: ColoredBox(
+                color: visual.tint,
+                child: SizedBox(
+                  height: context.getRSize(180),
+                  child: url == null
+                      ? fallback
+                      : Image.network(url, fit: BoxFit.cover,
+                          width: double.infinity,
+                          errorBuilder: (_, __, ___) => fallback),
+                ),
+              ),
+            ),
+            SizedBox(height: context.getRSize(12)),
+            if (card.brand != null)
+              Text(card.brand!,
+                  style: context.semiBoldStyle(13).copyWith(color: muted)),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(card.name,
+                      style: context.extraBoldStyle(19)
+                          .copyWith(color: t.colorScheme.onSurface)),
+                ),
+                if (card.ageRestricted)
+                  const TagPill(label: '18+', tone: TagPillTone.danger),
+              ],
+            ),
+            if (unit != null)
+              Text(unit, style: context.regularStyle(13).copyWith(color: muted)),
+            SizedBox(height: context.getRSize(8)),
+            Text(
+              formatCurrencyIn(card.priceKobo / 100, card.currency),
+              style: context.boldStyle(20).copyWith(color: t.colorScheme.primary),
+            ),
+            SizedBox(height: context.getRSize(4)),
+            Text(card.stockText,
+                style: context.semiBoldStyle(13)
+                    .copyWith(color: card.orderable ? t.colorScheme.onSurface : f.danger)),
+            if (card.stockMayBeStale)
+              Text('Stock may be out of date',
+                  style: context.semiBoldStyle(12).copyWith(color: f.warning)),
+            if (deposit != null)
+              Text(
+                '+ ${formatCurrencyIn(deposit / 100, card.currency)} deposit per crate '
+                'if no empties are returned',
+                style: context.regularStyle(12).copyWith(color: muted),
+              ),
+            if (rule != null) ...[
+              SizedBox(height: context.getRSize(4)),
+              Text(rule, key: const Key('browse-order-rule'),
+                  style: context.regularStyle(12).copyWith(color: muted)),
+            ],
+            if (card.onlineDescription != null) ...[
+              SizedBox(height: context.getRSize(12)),
+              Text(card.onlineDescription!,
+                  key: const Key('browse-product-description'),
+                  style: context.regularStyle(14)
+                      .copyWith(color: t.colorScheme.onSurface)),
+            ],
+            if (onOpenStore != null) ...[
+              SizedBox(height: context.getRSize(16)),
+              AppButton(
+                text: 'See this store',
+                icon: AppIcons.storefront,
+                variant: AppButtonVariant.outline,
+                onPressed: onOpenStore,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 }

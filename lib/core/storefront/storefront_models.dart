@@ -107,6 +107,11 @@ class StorefrontCard {
     this.ageRestricted = false,
     this.stockMayBeStale = false,
     this.storeLga,
+    this.onlineDescription,
+    this.brand,
+    this.minOrderQty = 1,
+    this.orderStep = 1,
+    this.maxOrderQty,
     this.sponsored = false,
   });
 
@@ -135,6 +140,16 @@ class StorefrontCard {
   final String businessName;
   final String? storeLga;
 
+  /// Listing content (#473): the shop's online description and brand.
+  final String? onlineDescription;
+  final String? brand;
+
+  /// Order quantity rule (#473) for the #426 cart: at least [minOrderQty],
+  /// in multiples of [orderStep], at most [maxOrderQty] (null = no limit).
+  final int minOrderQty;
+  final int orderStep;
+  final int? maxOrderQty;
+
   /// Filled by #461; always false until then.
   final bool sponsored;
 
@@ -147,6 +162,17 @@ class StorefrontCard {
   String get sellerLabel {
     final lga = storeLga?.trim();
     return lga == null || lga.isEmpty ? businessName : '$businessName · $lga';
+  }
+
+  /// "Order at least 2, in steps of 2, up to 20" — null for the default 1/1/none.
+  String? get orderRuleText {
+    final parts = <String>[
+      if (minOrderQty > 1) 'at least $minOrderQty',
+      if (orderStep > 1) 'in steps of $orderStep',
+      if (maxOrderQty != null) 'up to $maxOrderQty',
+    ];
+    if (parts.isEmpty) return null;
+    return 'Order ${parts.join(', ')}';
   }
 
   /// Display words for the stock pill.
@@ -174,6 +200,11 @@ class StorefrontCard {
     stockMayBeStale: row['stock_may_be_stale'] == true,
     businessName: _string(row['business_name']),
     storeLga: _optString(row['store_lga']),
+    onlineDescription: _optString(row['online_description']),
+    brand: _optString(row['brand']),
+    minOrderQty: _optInt(row['min_order_qty']) ?? 1,
+    orderStep: _optInt(row['order_step']) ?? 1,
+    maxOrderQty: _optInt(row['max_order_qty']),
     sponsored: row['sponsored'] == true,
     cursor: _string(row['cursor']),
   );

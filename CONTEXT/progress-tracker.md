@@ -7,6 +7,27 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #425: Browse is the front door (2026-10-25, ready for review)
+- Branch `feat/425-browse`, worktree `../drinkPosApp-wt-425`. Cloud 0202 only
+  (after 0201), no Drift bump. Four signed-out definer RPCs
+  (`storefront_feed/search/store/store_products`) over server-only
+  `_storefront_*` helpers; all hide rules, stock label, ranking, one card per
+  business per product and keyset paging server-side; pg_trgm + unaccent
+  trigram index. Cards carry #473 listing content + order rule (no cart).
+- App: `lib/core/storefront/` (service, models, area + list providers,
+  `kBrowseFirstEnabled` = false until #426/#427), `lib/features/browse/`
+  (Browse, store page, product sheet). `_HomeRouter` → 
+  `entryScreenWithoutSignedInUser`: device user → PIN (unchanged), else
+  Browse (switch on) / Welcome. Sell on Reebaplus pushes the unchanged Welcome.
+- No Claude Design files in the repo: built from ui-context tokens/parts.
+- Not verified live: tier-2 `test/integration/rpcs/storefront_browse_test.dart`
+  and `test/integration/sql/storefront_browse.sql` (EXECUTE boundaries +
+  EXPLAIN ANALYZE) need 0201/0202 applied on reebaplus-dev.
+- Open: "last synced" is approximated per business (devices) + per store
+  (store row, inventory writes) — a true per-store sync stamp would need a
+  column; admin blocking waits for #478; tier price for #429; Only-N wins over
+  "above threshold" when a threshold is below 3 (owner may revisit).
+
 ### Issue #473: Listing content (2026-10-25, ready for review)
 - Branch `feat/473-listing-content`, worktree `../drinkPosApp-wt-473`. Cloud
   `0201_product_listing_content.sql` + Drift schema 90 (after #423's 89).

@@ -57,6 +57,22 @@ void main() {
     expect(backend.calls.first.$2['p_lga'], 'Keffi');
   });
 
+  testWidgets('card opens product details with listing content (#473)',
+      (tester) async {
+    await pumpBrowse(tester, screen: const BrowseScreen(), backend: FakeStorefront());
+    expect(find.text('Nigerian Breweries'), findsOneWidget);
+    await tester.tap(find.text('Star Lager'));
+    await tester.pumpAndSettle();
+    final sheet = find.byKey(const Key('browse-product-sheet'));
+    expect(find.descendant(of: sheet,
+        matching: find.text('Chilled on request. 60cl returnable bottles.')), findsOneWidget);
+    expect(find.descendant(of: sheet,
+        matching: find.text('Order at least 2, in steps of 2, up to 20')), findsOneWidget);
+    await tester.tap(find.text('See this store'));
+    await tester.pumpAndSettle();
+    expect(find.byType(StorefrontStoreScreen), findsOneWidget);
+  });
+
   testWidgets('category chip filters the feed', (tester) async {
     final backend = FakeStorefront();
     await pumpBrowse(tester, screen: const BrowseScreen(), backend: backend);

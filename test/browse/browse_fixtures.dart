@@ -27,6 +27,11 @@ Map<String, Object?> cardRow({
   int? deposit,
   bool age = false,
   bool stale = false,
+  String? brand,
+  String? description,
+  int minQty = 1,
+  int step = 1,
+  int? maxQty,
 }) => {
   'product_id': id,
   'store_id': store,
@@ -44,12 +49,19 @@ Map<String, Object?> cardRow({
   'stock_may_be_stale': stale,
   'business_name': business,
   'store_lga': lga,
+  'online_description': description,
+  'brand': brand,
+  'min_order_qty': minQty,
+  'order_step': step,
+  'max_order_qty': maxQty,
   'sponsored': false,
   'cursor': '0:0:0:0:-1:$id',
 };
 
 final kFeedRows = [
-  cardRow(id: 'p1', name: 'Star Lager', deposit: 150000, age: true),
+  cardRow(id: 'p1', name: 'Star Lager', deposit: 150000, age: true,
+      brand: 'Nigerian Breweries', description: 'Chilled on request. 60cl returnable bottles.',
+      minQty: 2, step: 2, maxQty: 20),
   cardRow(id: 'p2', name: 'Eva Water 75cl', category: 'water', stock: 'low_stock',
       price: 120000, unit: 'Pack', pack: 12, business: 'Keffi Drinks', lga: 'Keffi',
       store: 'store-2'),

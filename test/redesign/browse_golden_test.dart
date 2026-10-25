@@ -46,4 +46,17 @@ void main() {
       }
     }
   }
+
+  for (final size in sizes.entries) {
+    final brightness = size.key == '390x844' ? Brightness.light : Brightness.dark;
+    final name = 'browse_product_sheet_${size.key}_${brightness.name}';
+    testWidgets(name, (tester) async {
+      await pumpBrowse(tester, screen: const BrowseScreen(), backend: FakeStorefront(),
+          size: size.value.$1, padding: size.value.$2, brightness: brightness);
+      await tester.tap(find.text('Star Lager'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/$name.png'));
+    });
+  }
 }
