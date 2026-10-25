@@ -1,16 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/storefront/order_again.dart';
+import 'package:reebaplus_pos/core/storefront/shopper_cart.dart';
 import 'package:reebaplus_pos/core/storefront/shopper_models.dart';
 import 'package:reebaplus_pos/core/storefront/shopper_providers.dart';
 import 'package:reebaplus_pos/core/storefront/shopper_service.dart';
 import 'package:reebaplus_pos/core/storefront/shopper_session.dart';
+import 'package:reebaplus_pos/core/storefront/storefront_providers.dart';
+import 'package:reebaplus_pos/core/storefront/storefront_service.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/browse/screens/shopper_sign_in_screen.dart';
+import 'package:reebaplus_pos/features/browse/widgets/age_confirmation_dialog.dart';
 import 'package:reebaplus_pos/features/browse/widgets/browse_parts.dart';
 import 'package:reebaplus_pos/features/browse/widgets/shopper_parts.dart';
 import 'package:reebaplus_pos/features/browse/widgets/shopper_texts.dart';
@@ -67,6 +72,57 @@ class MyOrdersScreen extends ConsumerWidget {
     ref.invalidate(shopperOrdersProvider);
   }
 
+  /// Order again (#436): the same products back in the cart at today's prices
+  /// and stock labels. Unavailable lines are skipped with one note; 18+ lines
+  /// need the age answer first ("Not now" skips them).
+  Future<void> _orderAgain(
+    BuildContext context,
+    WidgetRef ref,
+    ShopperOrder order,
+  ) async {
+    final OrderAgainPlan plan;
+    try {
+      plan = await planOrderAgain(ref.read(storefrontServiceProvider), order);
+    } on StorefrontException {
+      if (context.mounted) {
+        AppNotification.showError(
+          context,
+          "Couldn't check today's prices. Try again.",
+        );
+      }
+      return;
+    }
+    var skipped = plan.skipped;
+    var items = plan.items;
+    if (items.any((i) => i.card.ageRestricted) &&
+        context.mounted &&
+        !await ensureShopperAgeConfirmed(context, ref)) {
+      final kept = items.where((i) => !i.card.ageRestricted).toList();
+      skipped += items.length - kept.length;
+      items = kept;
+    }
+    final cart = ref.read(shopperCartProvider.notifier);
+    var added = 0;
+    for (final i in items) {
+      if (await cart.add(i.card, i.quantity) == null) {
+        added++;
+      } else {
+        skipped++;
+      }
+    }
+    if (!context.mounted) return;
+    if (added > 0) {
+      AppNotification.showSuccess(
+        context,
+        skipped > 0
+            ? 'Added to your cart. ${orderAgainSkippedNote(skipped)}'
+            : 'Added to your cart',
+      );
+    } else {
+      AppNotification.showError(context, orderAgainSkippedNote(skipped));
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(shopperSessionProvider);
@@ -103,6 +159,7 @@ class MyOrdersScreen extends ConsumerWidget {
               ShopperOrderCard(
                 order: o,
                 onCancel: o.canCancel ? () => _cancel(context, ref, o) : null,
+                onOrderAgain: () => _orderAgain(context, ref, o),
               ),
           ],
         ),
@@ -137,10 +194,16 @@ class MyOrdersScreen extends ConsumerWidget {
 
 /// One order in My Orders.
 class ShopperOrderCard extends StatelessWidget {
-  const ShopperOrderCard({super.key, required this.order, this.onCancel});
+  const ShopperOrderCard({
+    super.key,
+    required this.order,
+    this.onCancel,
+    this.onOrderAgain,
+  });
 
   final ShopperOrder order;
   final VoidCallback? onCancel;
+  final VoidCallback? onOrderAgain;
 
   TagPillTone get _tone => switch (order.status) {
     OnlineOrderStatus.placed => TagPillTone.info,
@@ -224,6 +287,17 @@ class ShopperOrderCard extends StatelessWidget {
                 ),
             ],
           ),
+          if (onOrderAgain != null && order.lines.isNotEmpty) ...[
+            SizedBox(height: context.getRSize(8)),
+            AppButton(
+              key: ValueKey('my-order-again-${order.id}'),
+              text: 'Order again',
+              icon: AppIcons.cartAdd,
+              variant: AppButtonVariant.secondary,
+              isFullWidth: false,
+              onPressed: onOrderAgain,
+            ),
+          ],
         ],
       ),
     );
