@@ -11,6 +11,9 @@ The human updates it when resolving open questions or making architectural decis
 - Cloud 0211 (NOT deployed): server-only `_shopper_price_tier(business)` (wholesaler only when auth.uid() links a live Wholesaler customer and the shop does not sell one price; anon = retailer); `_storefront_cards` (0202) + `shopper_place_orders` (0207) re-issued verbatim, same signatures; lines snapshot `price_tier`. No app change (cart price is an estimate; placement re-prices). Tier-2 test `test/integration/sql/shopper_tier_price.sql` (not run).
 ### Issue #477: Shopper data rights (2026-10-25, ready for review)
 - Cloud 0209 (marketing_opt_in + consent_at, `shopper_export`, `shopper_set_marketing_opt_in`, get_profile re-issued with the flag; NOT deployed) + Shopper account: Download my data, marketing switch (off), privacy note. Owner reviews the privacy wording.
+### Issue #428: Change before accepting, price flag, cancel accepted (2026-10-25, ready for review)
+- `accept(acceptedQtys)` lowers/removes lines (never raises) and writes accepted_qty on every line + outbox; `cancelAccepted(reason)`; price flag from local retail price; shopper sees store phone. Cloud `0210` = `shopper_my_orders` + `store_phone` only; NO Drift change (stays v93). pos-parity issue filed in reebaplus-web.
+
 ### Issue #436: Order again (2026-10-25, ready for review)
 - Order again button on every My Orders card; re-adds lines at today's price/stock via `storefront_store_products` (no by-id RPC), skips unavailable with one note, 18+ gate, qty clamp. App-only. Logic in `lib/core/storefront/order_again.dart`.
 

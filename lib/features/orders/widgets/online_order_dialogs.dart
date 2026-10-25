@@ -107,6 +107,85 @@ class _DeclineReasonDialogState extends State<_DeclineReasonDialog> {
   }
 }
 
+/// Asks why the shop cancels an ACCEPTED order (#428); returns the words the
+/// Shopper will see, or null when dismissed.
+Future<String?> showCancelAcceptedDialog(BuildContext context) {
+  return showDialog<String>(
+    context: context,
+    builder: (_) => const _CancelAcceptedDialog(),
+  );
+}
+
+class _CancelAcceptedDialog extends StatefulWidget {
+  const _CancelAcceptedDialog();
+
+  @override
+  State<_CancelAcceptedDialog> createState() => _CancelAcceptedDialogState();
+}
+
+class _CancelAcceptedDialogState extends State<_CancelAcceptedDialog> {
+  final TextEditingController _reason = TextEditingController();
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final typed = _reason.text.trim();
+    return AlertDialog(
+      // Scrolls so the reason box stays reachable with the keyboard open.
+      scrollable: true,
+      title: Text(
+        'Cancel order',
+        style: context.screenTitleStyle.copyWith(color: t.colorScheme.onSurface),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'The customer will see this reason.',
+            style: t.textTheme.bodyMedium,
+          ),
+          SizedBox(height: context.getRSize(12)),
+          AppInput(
+            key: OnlineOrderKeys.cancelReason,
+            controller: _reason,
+            labelText: 'Reason',
+            hintText: 'Tell the customer why',
+            autofocus: true,
+            maxLines: 3,
+            minLines: 1,
+            onChanged: (_) => setState(() {}),
+            inputFormatters: [
+              LengthLimitingTextInputFormatter(kOnlineOrderReasonMaxLength),
+            ],
+          ),
+        ],
+      ),
+      actions: [
+        AppButton(
+          text: 'Keep order',
+          variant: AppButtonVariant.ghost,
+          isFullWidth: false,
+          onPressed: () => Navigator.pop(context),
+        ),
+        AppButton(
+          key: OnlineOrderKeys.cancelConfirm,
+          text: 'Cancel order',
+          variant: AppButtonVariant.danger,
+          isFullWidth: false,
+          onPressed: typed.isEmpty ? null : () => Navigator.pop(context, typed),
+        ),
+      ],
+    );
+  }
+}
+
 /// Asks, on a Shopper's first order here, whether they are a Customer the
 /// shop already has. [suggestions] come first (phone match, then name);
 /// [search] looks through every not-yet-linked Customer. Returns null when

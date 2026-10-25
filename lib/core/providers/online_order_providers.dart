@@ -53,6 +53,14 @@ final onlineOrderLinesProvider =
       whenAbsent: const [],
     );
 
+/// Current retail price (kobo) per product on the order's lines, for the
+/// accept screen's price-change flag (#428).
+final onlineOrderRetailPricesProvider =
+    businessScopedStreamFamily<Map<String, int>, String>(
+      (ref, db, businessId, id) => db.onlineOrdersDao.watchRetailPrices(id),
+      whenAbsent: const {},
+    );
+
 /// The shop Customer an accepted order is attached to, if any.
 final onlineOrderCustomerProvider =
     businessScopedStreamFamily<CustomerData?, String>(
