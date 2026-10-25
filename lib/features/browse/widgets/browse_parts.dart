@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/data/marketplace_categories.dart';
 import 'package:reebaplus_pos/core/storefront/storefront_models.dart';
@@ -14,6 +15,7 @@ import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/shared/widgets/product_photo_gallery.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
 /// Widest the Browse content column grows on a tablet / wide screen.
@@ -735,14 +737,14 @@ Future<void> showStorefrontProductSheet(
   ),
 );
 
-class _ProductSheet extends StatelessWidget {
+class _ProductSheet extends ConsumerWidget {
   const _ProductSheet({required this.card, this.onOpenStore});
 
   final StorefrontCard card;
   final VoidCallback? onOpenStore;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final t = Theme.of(context);
     final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
     final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
@@ -794,13 +796,20 @@ class _ProductSheet extends StatelessWidget {
               borderRadius: BorderRadius.circular(AppSpacing.borderRadiusL),
               child: ColoredBox(
                 color: visual.tint,
-                child: SizedBox(
+                // #474: swipeable gallery, cover first; the card's cover
+                // while the photo list loads or if it fails.
+                child: ProductPhotoGallery(
                   height: context.getRSize(180),
-                  child: url == null
-                      ? fallback
-                      : Image.network(url, fit: BoxFit.cover,
-                          width: double.infinity,
-                          errorBuilder: (_, __, ___) => fallback),
+                  photos: ref.watch(storefrontProductPhotosProvider((
+                        storeId: card.storeId,
+                        productId: card.productId,
+                      ))).valueOrNull?.nonEmptyOrNull ??
+                      [?url],
+                  placeholder: fallback,
+                  photoBuilder: (_, photo) => Image.network(photo,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      errorBuilder: (_, __, ___) => fallback),
                 ),
               ),
             ),
@@ -866,4 +875,8 @@ class _ProductSheet extends StatelessWidget {
       ),
     );
   }
+}
+
+extension on List<String> {
+  List<String>? get nonEmptyOrNull => isEmpty ? null : this;
 }

@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -31,7 +32,9 @@ import 'package:reebaplus_pos/features/inventory/widgets/catalogue_report_link.d
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
+import 'package:reebaplus_pos/core/services/product_gallery_service.dart';
 import 'package:reebaplus_pos/core/services/product_listing_service.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/product_photos_card.dart';
 import 'package:reebaplus_pos/core/listings/listing_content.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
@@ -79,6 +82,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   List<ProductDaySales>? _salesDays;
   bool _contentReady = false; // deferred load flag
   bool _savingListing = false;
+  bool _savingPhotos = false;
   String? _imagePath;
 
   // ── Role gating (master plan §16.6 / §16.7) ────────────────────────────────
@@ -400,6 +404,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     );
     final prices = _buildPrices(context);
     final listing = _buildListing();
+    final photos = _buildPhotos();
     final stock = ProductStockByStoreCard(
       rows: rows,
       alertAt: _alertAt,
@@ -436,11 +441,11 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     final Widget body = switch (columns) {
       3 => cols([
         [hero, description, manage],
-        [prices, listing, stock, target],
+        [prices, listing, photos, stock, target],
         [salesCard, history],
       ]),
       2 => cols([
-        [hero, description, prices, listing, manage],
+        [hero, description, prices, listing, photos, manage],
         [stock, target, salesCard, history],
       ]),
       _ => Column(
@@ -450,6 +455,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
           description,
           prices,
           listing,
+          photos,
           stock,
           target,
           salesCard,
@@ -548,6 +554,152 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       content: ListingContent.of(p),
       onEdit: _editListing,
     );
+  }
+
+  // ── Photos (#474) ─────────────────────────────────────────────────────────
+
+  /// The gallery card, after Online listing. Only a `products.manage_listing`
+  /// holder sees it; the cover row shows the main photo.
+  Widget? _buildPhotos() {
+    if (_productData == null || !Gates.manageListing.allowsNow(ref)) {
+      return null;
+    }
+    final urls = [
+      for (final p
+          in ref.watch(productPhotosProvider(widget.item.id)).valueOrNull ??
+              const <ProductPhotoData>[])
+        p.imageUrl,
+    ];
+    final coverPath = _imagePath;
+    final hasCover = (coverPath != null && coverPath.isNotEmpty) ||
+        (_productData?.imageUrl?.isNotEmpty ?? false);
+    final f = Theme.of(context).extension<AppFixedColors>() ??
+        AppFixedColors.light;
+    Widget placeholder() => ColoredBox(
+      color: f.neutralTile,
+      child: Center(
+        child: AppIcon(AppIcons.image, size: context.getRSize(22)),
+      ),
+    );
+    return ProductPhotosCard(
+      hasCover: hasCover,
+      cover: coverPath == null || coverPath.isEmpty
+          ? null
+          : Image.file(File(coverPath), fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => placeholder()),
+      photos: urls,
+      maxPhotos: kMaxProductPhotos,
+      busy: _savingPhotos,
+      thumbnail: (_, url) => Consumer(
+        builder: (context, ref, _) {
+          final path = ref.watch(galleryPhotoPathProvider(url)).valueOrNull;
+          return path == null
+              ? placeholder()
+              : Image.file(File(path), fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => placeholder());
+        },
+      ),
+      onAdd: _addGalleryPhoto,
+      onMove: (from, to) => _runGallery((service, gate) => service.movePhoto(
+            productId: widget.item.id, from: from, to: to, gateContext: gate)),
+      onRemove: _confirmRemoveGalleryPhoto,
+    );
+  }
+
+  ProductGalleryService _galleryService() => ProductGalleryService(
+    catalog: ref.read(databaseProvider).catalogDao,
+    images: ref.read(productGalleryImagesProvider),
+  );
+
+  Future<void> _runGallery(
+    Future<Result<void, AppError>> Function(
+      ProductGalleryService service,
+      GateContext gate,
+    ) action,
+  ) async {
+    if (!Gates.manageListing.allowsNow(ref)) {
+      showGateDenied(context, Gates.manageListing);
+      return;
+    }
+    if (_savingPhotos) return;
+    setState(() => _savingPhotos = true);
+    final result = await action(_galleryService(), ref.read(gateContextProvider));
+    if (!mounted) return;
+    setState(() => _savingPhotos = false);
+    if (result case Err(:final error)) {
+      AppNotification.showError(context, error.message);
+    }
+  }
+
+  Future<void> _addGalleryPhoto() async {
+    if (!Gates.manageListing.allowsNow(ref)) {
+      showGateDenied(context, Gates.manageListing);
+      return;
+    }
+    if (_savingPhotos) return;
+    AutoLockWrapper.suppressNextResume = true;
+    final picked = await ref.read(productImageServiceProvider).pickAndProcess();
+    if (!mounted) return;
+    final Uint8List bytes;
+    switch (picked) {
+      case Ok(:final value):
+        bytes = value;
+      case Err(:final error):
+        if (!error.isCancelled) {
+          AppNotification.showError(context, 'Could not load image.');
+        }
+        return;
+    }
+    setState(() => _savingPhotos = true);
+    final result = await _galleryService().addPhoto(
+      productId: widget.item.id,
+      bytes: bytes,
+      gateContext: ref.read(gateContextProvider),
+    );
+    if (!mounted) return;
+    setState(() => _savingPhotos = false);
+    switch (result) {
+      case Ok(:final value):
+        AppNotification.showSuccess(
+          context,
+          value
+              ? 'Photo added'
+              : 'Photo saved. It uploads when you are back online.',
+        );
+      case Err(:final error):
+        AppNotification.showError(context, error.message);
+    }
+  }
+
+  Future<void> _confirmRemoveGalleryPhoto(String url) async {
+    final t = Theme.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        scrollable: true,
+        backgroundColor: _surface,
+        title: Text('Remove photo?',
+            style: ctx.screenTitleStyle.copyWith(color: _text)),
+        content: Text(
+          'Shoppers will no longer see this photo.',
+          style: ctx.regularStyle(14).copyWith(color: _text),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text('Remove',
+                style: TextStyle(color: t.colorScheme.error)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    await _runGallery((service, gate) => service.removePhoto(
+          productId: widget.item.id, imageUrl: url, gateContext: gate));
   }
 
   Future<void> _editListing() async {

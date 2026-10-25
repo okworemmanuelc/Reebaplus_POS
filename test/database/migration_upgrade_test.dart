@@ -121,6 +121,44 @@ void main() {
     } finally { await db.close(); }
   });
 
+  test('v90 to v91 adds product_photos with its trigger and live-slot index',
+      () async {
+    var db = await openAndInit();
+    final businessId = UuidV7.generate();
+    final productId = UuidV7.generate();
+    await db.into(db.businesses).insert(
+      BusinessesCompanion.insert(id: Value(businessId), name: 'Photo shop'));
+    await db.into(db.products).insert(ProductsCompanion.insert(
+        id: Value(productId), businessId: businessId, name: 'Shoe'));
+    await db.customStatement('DROP TABLE product_photos');
+    await db.customStatement('PRAGMA user_version = 90');
+    await db.close();
+    db = await openAndInit();
+    try {
+      expect(await columnsOf(db, 'product_photos'),
+          containsAll(['product_id', 'position', 'image_url', 'is_deleted']));
+      Future<Set<String>> objects(String type) async => {
+        for (final r in await db.customSelect(
+          "SELECT name FROM sqlite_master WHERE type = '$type' "
+          "AND tbl_name = 'product_photos'",
+        ).get())
+          r.read<String>('name'),
+      };
+      expect(await objects('trigger'),
+          contains('bump_product_photos_last_updated_at'));
+      expect(await objects('index'), containsAll([
+        'uq_product_photos_live_position',
+        'idx_product_photos_business_lua',
+      ]));
+      expect((await db.select(db.products).get()).single.id, productId);
+      // Re-running the step is idempotent.
+      await db.customStatement('PRAGMA user_version = 90');
+      await db.close();
+      db = await openAndInit();
+      expect(await db.select(db.productPhotos).get(), isEmpty);
+    } finally { await db.close(); }
+  });
+
   test('v89 to v90 adds listing content with defaults, keeping product data', () async {
     var db = await openAndInit();
     final businessId = UuidV7.generate();

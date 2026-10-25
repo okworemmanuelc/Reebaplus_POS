@@ -116,6 +116,28 @@ class StorefrontService {
     });
   }
 
+  /// One listed product's photo urls in gallery order, cover first (#474,
+  /// `storefront_product_photos`). Empty when the product is not listed there
+  /// or has no photo.
+  Future<List<String>> productPhotos({
+    required String storeId,
+    required String productId,
+  }) async {
+    final rows = await _rows('storefront_product_photos', {
+      'p_store_id': storeId,
+      'p_product_id': productId,
+    });
+    final ordered = [...rows]..sort((a, b) =>
+        _position(a['photo_position']).compareTo(_position(b['photo_position'])));
+    return [
+      for (final row in ordered)
+        if (row['image_url'] case final String url when url.trim().isNotEmpty)
+          url,
+    ];
+  }
+
+  static int _position(Object? v) => v is num ? v.toInt() : 0;
+
   Future<StorefrontPage> _page(String fn, Map<String, Object?> params) async {
     final rows = await _rows(fn, params);
     final cards = <StorefrontCard>[];
