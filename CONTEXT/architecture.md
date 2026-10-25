@@ -196,6 +196,17 @@ content (`online_description`, `brand`) and the order quantity rule
 (`min_order_qty`, `order_step`, `max_order_qty`) for the #426 cart; 0202 must
 deploy after 0201.
 
+**Restricted goods (#479).** Cloud 0206 only, no Drift change. The public
+category `prescription-medicines` (Health) is restricted 'prescription'; Beer,
+Spirits and Wine are 'age_18'. `product_online_restriction(product)` is the
+single server-only classification (category or parent). Prescription items are
+never returned by any storefront RPC or accepted by place-order. 18+: the
+Shopper confirms once before the first age-restricted item enters the cart
+(`ensureShopperAgeConfirmed`); signed out it is a device key-value flag, signed
+in it is recorded in the RPC-only `shopper_age_confirmations` via
+`shopper_confirm_age()`. Place order re-checks it server-side
+(`shopper_age_confirmation_missing`, store code `age_confirmation_required`).
+
 **Listing content (#473).** Cloud 0201 and Drift 90 add `products.online_description`
 (≤2000), `brand` (≤60), `min_order_qty`, `order_step` (both default 1) and
 `max_order_qty` (null = no limit, ≥ min), with CHECKs mirrored on both sides.

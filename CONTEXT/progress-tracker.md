@@ -7,6 +7,32 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #479: Restricted goods (2026-10-25, ready for review — Part of #479)
+- Cloud 0206 only, no Drift bump; independent of 0205 (#426). Adds public
+  category `prescription-medicines` (Health, restricted 'prescription'; bundled
+  Dart row + parity test), RPC-only `shopper_age_confirmations`, server-only
+  `product_online_restriction(product)` and
+  `shopper_age_confirmation_missing(uid, product ids)`, signed-in
+  `shopper_confirm_age()` / `shopper_age_confirmed_at()`.
+- Prescription items were already excluded by every storefront RPC (0202
+  `_storefront_cards`, 0204 photos, #426's place-order); Sponsored (#461) plugs
+  into `_storefront_cards`, so it inherits the filter.
+- App: `shopperAgeConfirmationProvider` (phone memory, copied to the login;
+  `syncToCloud()` before Place order) and `ensureShopperAgeConfirmed` +
+  `AgeConfirmationDialog` (agent-designed; no Claude Design file). 18+ mark
+  already on cards/sheet (#425).
+- Left for #426 (or a follow-up): call `ensureShopperAgeConfirmed` before an
+  `ageRestricted` card first enters the cart; call `syncToCloud()` before
+  `shopper_place_orders`; in that RPC refuse a store with code
+  `age_confirmation_required` when `shopper_age_confirmation_missing(v_uid,
+  <its product ids>)`.
+- Open question (owner): pharmacy products in unmapped categories (Other) and
+  the Antibiotics category are still listed; only `prescription-medicines` is
+  blocked. Legal review of online alcohol/medicine sales is an owner action.
+- Not verified live: `test/integration/sql/restricted_goods.sql` needs 0206 on
+  reebaplus-dev. Deploy 0206 BEFORE an app build that offers the new category
+  (cloud FK on `categories.marketplace_category`).
+
 ### Issue #474: Up to 5 photos per product (2026-10-25, ready for review)
 - Cloud 0204 + Drift 91: synced `product_photos` (positions 2–5; the cover stays
   `products.image_url`), deterministic slot ids, RLS, realtime, broadcast
