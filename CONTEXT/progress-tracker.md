@@ -9,6 +9,8 @@ The human updates it when resolving open questions or making architectural decis
 ## Current Phase
 ### Issue #435: Expire unanswered Online Orders (2026-10-25, ready for review)
 - Cloud 0213: `expire_stale_online_orders()` (service_role only) + hourly pg_cron (guarded); no Drift change, no guard change. NOT deployed.
+### Issue #478: Report a listing + admin takedown (2026-10-25, ready for review)
+- Cloud 0214 (NOT deployed): `listing_reports` + `storefront_blocks` (cloud-only, service_role), `shopper_report_listing` (10/h, one open per target); `_storefront_stores`/`_storefront_cards`/`storefront_product_photos` re-issued with the block filter. App: Report on product sheet + store page. Console review screen + pos-parity filed in reebaplus-web.
 
 ### Issue #429: Linked customers see their tier price (2026-10-25, ready for review)
 - Cloud 0211 (NOT deployed): server-only `_shopper_price_tier(business)` (wholesaler only when auth.uid() links a live Wholesaler customer and the shop does not sell one price; anon = retailer); `_storefront_cards` (0202) + `shopper_place_orders` (0207) re-issued verbatim, same signatures; lines snapshot `price_tier`. No app change (cart price is an estimate; placement re-prices). Tier-2 test `test/integration/sql/shopper_tier_price.sql` (not run).

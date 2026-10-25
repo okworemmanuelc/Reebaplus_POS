@@ -76,6 +76,9 @@ class FakeShopperBackend {
   /// store id → failure code for shopper_place_orders.
   final failStores = <String, String>{};
 
+  /// What shopper_report_listing answers (#478).
+  Map<String, Object?> reportResult = {'ok': true};
+
   late final service = ShopperService.withRpc(
     rpc: (fn, params) async {
       calls.add((fn, params));
@@ -105,6 +108,8 @@ class FakeShopperBackend {
         case 'shopper_set_marketing_opt_in':
           profile = {...?profile, 'marketing_opt_in': params['p_opt_in']};
           return params['p_opt_in'];
+        case 'shopper_report_listing':
+          return reportResult;
         case 'shopper_save_phone':
         case 'shopper_save_address':
           return 'id';
