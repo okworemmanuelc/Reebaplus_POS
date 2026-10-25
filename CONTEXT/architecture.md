@@ -130,6 +130,18 @@ the shared helper's default for older rows missing showOnline, preserving an
 explicit false. Storefront reads (#425) must require show_online AND is_available
 AND NOT is_deleted; the listing preference cannot unarchive a product.
 
+**Online store setup (#423).** Cloud0199 / Drift89. Each `stores` row carries
+its own area (`country`, `state`, `lga` — Nigeria values from the bundled lists
+that match `ng_areas`, free text elsewhere), a public `phone` (falls back to the
+business phone), a shopper `online_note` (≤280) and `online_ordering_enabled`
+(default off). The synced `store_delivery_areas` table lists the states/LGAs a
+store delivers to (null `lga` = whole state; soft-deleted, deterministic ids).
+Only `kind='store'` rows with state + LGA and at least one delivery area may be
+switched on; vans never. Writes go through `StoreOnlineService` (fire-time
+`Gates.manageOnlineStore`, key `stores.online_ordering`) → `StoresDao` → outbox.
+Storefront reads (#425) must require `online_ordering_enabled`; switching off
+hides the store at once, while placed online orders are separate rows.
+
 | What | Where | Why | Synced to cloud? |
 |---|---|---|---|
 | Products, categories, stock levels, expiry dates | Drift (SQLite) | Read on every POS interaction; must work fully offline. **`products.unit`** is stored raw (`Bottle`, `Crate`, … — `kProductUnits` + the CHECK); a stored `Bottle` is only *shown* as "Bottle Crate", and only in a shop where `businessTracksCrates` is true (`unitLabel(…, crates:)`, #487; every other shop shows "Bottle"), and every crate rule still keys on `unit == 'bottle'`. Plain `Crate` stays valid for existing rows but is not offered to new products. **`products.units_per_pack`** (nullable int > 0, Drift v84 / cloud 0187, #487) is "how many in one" (12 bottles in one crate) — **display only**, it never feeds stock, prices, crate counts or money. **`products.is_available = false` means archived** (#487): off sale (POS grid, scanner), hidden from the Inventory list and figure cards (an Archived card lists them) and from the Receive Stock grid; stock count, reports and history still include it. The one writer is `CatalogDao.setProductArchived`. | Yes |
