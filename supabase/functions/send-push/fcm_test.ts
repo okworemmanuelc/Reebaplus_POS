@@ -14,8 +14,11 @@ import {
   type BroadcastRecord,
   buildFcmMessages,
   type FcmSender,
+  type PushRecord,
+  resolveRecipient,
   sendAll,
   titleForSeverity,
+  tokenFilterFor,
 } from "./fcm.ts";
 
 const record: BroadcastRecord = {
@@ -81,4 +84,59 @@ Deno.test("sendAll: counts accepted and collects tokens to prune", async () => {
   const { sent, prune } = await sendAll(fake, "at", "proj", msgs);
   assertEquals(sent, 2); // live1 + live2
   assertEquals(prune, ["dead"]); // only the UNREGISTERED one
+});
+
+// ── #476: recipient routing (staff by business, Shopper by auth user) ────────
+
+const shopperRecord: PushRecord = {
+  id: "push-1",
+  type: "shopper_order_update",
+  message: "Your order was accepted.",
+  severity: "info",
+  auth_user_id: "auth-1",
+  title: "Order accepted",
+};
+
+Deno.test("resolveRecipient: console broadcast routes by business (unchanged)", () => {
+  const r = resolveRecipient(record);
+  assertEquals(r, { audience: "staff", businessId: "biz-1" });
+  assertEquals(tokenFilterFor(r!), { column: "business_id", value: "biz-1" });
+});
+
+Deno.test("resolveRecipient: Shopper push routes by auth user id", () => {
+  const r = resolveRecipient(shopperRecord);
+  assertEquals(r, { audience: "shopper", authUserId: "auth-1" });
+  assertEquals(tokenFilterFor(r!), { column: "auth_user_id", value: "auth-1" });
+});
+
+Deno.test("resolveRecipient: never routes by both keys or by neither", () => {
+  // A Shopper push carrying a business must not fan out to that business.
+  assertEquals(resolveRecipient({ ...shopperRecord, business_id: "biz-1" }), null);
+  assertEquals(resolveRecipient({ ...shopperRecord, auth_user_id: null }), null);
+  assertEquals(resolveRecipient({ ...record, business_id: "" }), null);
+  // Other types never push, whatever key they carry.
+  assertEquals(resolveRecipient({ ...record, type: "low_stock" }), null);
+  assertEquals(
+    resolveRecipient({ ...shopperRecord, type: "sale_rejected" }),
+    null,
+  );
+  assertEquals(resolveRecipient(null), null);
+  assertEquals(resolveRecipient({ id: "x" }), null);
+});
+
+Deno.test("buildFcmMessages: audience tags a shared phone's two roles", () => {
+  const staff = buildFcmMessages(record, ["t"])[0].message;
+  assertEquals(staff.data.audience, "staff");
+  assertEquals(staff.data.business_id, "biz-1");
+
+  const shopper = buildFcmMessages(shopperRecord, ["t"], "shopper")[0].message;
+  assertEquals(shopper.data.audience, "shopper");
+  assertEquals(shopper.data.type, "shopper_order_update");
+  assert(!("business_id" in shopper.data));
+  assertEquals(shopper.notification.title, "Order accepted");
+  assertEquals(
+    buildFcmMessages({ ...shopperRecord, title: null }, ["t"], "shopper")[0]
+      .message.notification.title,
+    "Reebaplus",
+  );
 });
