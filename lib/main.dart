@@ -368,6 +368,12 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
     await _pushService.start();
     // Seed registration from the already-signed-in state (warm launch).
     _syncPushSignIn();
+    // #426: a Shopper-only phone (no business user) restored its persisted
+    // Shopper session — register its push token by auth user (#476).
+    if (await _auth.getDeviceUserId() == null &&
+        Supabase.instance.client.auth.currentUser != null) {
+      unawaited(_pushService.onShopperSignedIn());
+    }
   }
 
   /// The sign-in edge: a business became bound (login or app-open unlock).

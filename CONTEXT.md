@@ -23,6 +23,10 @@ _Avoid_: Customer (the shop's own record), staff membership.
 A Shopper's request to one Store. It becomes linked to an Order only when the
 shop completes Checkout. Before that it reserves no stock and moves no revenue,
 money or crates.
+Shoppers see its status in plain words: Placed (`new`), Accepted / Changed,
+Declined, Cancelled, Cancelled by the shop, Sent out (`fulfilled`), The shop
+didn't respond (`expired`). One cart across shops places one Online Order per
+shop (#426).
 _Avoid_: Sale, Order (the existing persisted sale record), reservation.
 
 **Send to till**:

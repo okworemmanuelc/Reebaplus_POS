@@ -91,6 +91,9 @@ void main() {
     'orders',
     'order_items',
     'order_crate_lines',
+    // #426: Online Orders + lines, after their parents.
+    'online_orders',
+    'online_order_lines',
     'shipments',
     'purchase_items',
     'expense_categories',
@@ -169,6 +172,8 @@ void main() {
     'orders',
     'order_items',
     'order_crate_lines',
+    'online_orders', // #426
+    'online_order_lines', // #426
     'shipments',
     'purchase_items',
     'drivers',
