@@ -7,6 +7,26 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #425: Browse is the front door (2026-10-25, ready for review)
+- Branch `feat/425-browse`, worktree `../drinkPosApp-wt-425`. Cloud 0202 only
+  (after 0201), no Drift bump. Four signed-out definer RPCs
+  (`storefront_feed/search/store/store_products`) over server-only
+  `_storefront_*` helpers; all hide rules, stock label, ranking, one card per
+  business per product and keyset paging server-side; pg_trgm + unaccent
+  trigram index. Cards carry #473 listing content + order rule (no cart).
+- App: `lib/core/storefront/` (service, models, area + list providers,
+  `kBrowseFirstEnabled` = false until #426/#427), `lib/features/browse/`
+  (Browse, store page, product sheet). `_HomeRouter` → 
+  `entryScreenWithoutSignedInUser`: device user → PIN (unchanged), else
+  Browse (switch on) / Welcome. Sell on Reebaplus pushes the unchanged Welcome.
+- No Claude Design files in the repo: built from ui-context tokens/parts.
+- Not verified live: tier-2 `test/integration/rpcs/storefront_browse_test.dart`
+  and `test/integration/sql/storefront_browse.sql` (EXECUTE boundaries +
+  EXPLAIN ANALYZE) need 0201/0202 applied on reebaplus-dev.
+- Open: "last synced" is approximated per business (devices) + per store
+  (store row, inventory writes) — a true per-store sync stamp would need a
+  column; admin blocking waits for #478; tier price for #429; Only-N wins over
+  "above threshold" when a threshold is below 3 (owner may revisit).
 ### Issue #517: snapshot misses crate_shortfall_writeoffs (2026-10-25, ready for review)
 
 Migration 0203 re-issues `pos_pull_snapshot` (verbatim from 0199) with `crate_shortfall_writeoffs` added after `store_crate_balances`. New guard `test/sync/snapshot_covers_tenant_tables_test.dart` checks every `kSyncedTenantTables` entry is in the newest snapshot migration (empty allowlist). Deploy 0203 any time; never with 0193.

@@ -36,7 +36,9 @@ _Avoid_: online payment, a promise that Reebaplus collects or delivers.
 
 **Browse**:
 The marketplace product feed across shops serving a Shopper's area, available
-without an account. Planned front door when no business is signed in.
+without an account. The front door when no business is signed in (behind the
+Browse-first switch until ordering ships). Shows a **Stock label** (In stock /
+Low stock / Only N left / Out of stock), never a stock count.
 _Avoid_: the business POS product grid.
 
 **Sponsored**:

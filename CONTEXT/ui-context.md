@@ -870,3 +870,35 @@ New picker strings live in `lib/l10n/area_en.arb`, generated with Flutter
 available and generated English as fallback for today's non-localised app.
 This adds only Flutter's SDK localisation dependency; existing screens are
 not converted. The caller supplies initial values and owns persistence.
+
+## Browse and store page (`lib/features/browse/`, #425)
+
+No Claude Design files for these screens were in the repo; they are built from
+this file's tokens and the shared parts (agent-designed, owner authorisation
+2026-10-23). Page fade + solid `BrowseTopBar` (surface, hairline,
+`topBarShadow`) with `ScreenHeader` — storefront tile, "Browse", the Shopper's
+area in primary — and **Sell on Reebaplus** (store icon + label, "Sell" under
+380dp, 48dp target, always tappable, pushes the unchanged Welcome). Under it:
+"Delivering to <area> · Change" (opens the shared area picker, whole state
+allowed), an `AppInput` search, and `CategoryChip`s for the top-level Reebaplus
+categories ("All" first, "Other" last). First run asks for the area ("Choose
+my area" / "Browse all of Nigeria").
+Cards (`StorefrontCardTile`) are a fixed-extent grid (2 columns on a phone,
+width / 180 above; content capped at 1100dp): photo from its public URL or the
+`categoryVisual` tint + icon, a red `TagPill` "18+" on age-restricted items,
+name, "Crate of 12", price in primary in the store's currency
+(`formatCurrencyIn`), the stock pill (green In stock, amber Low stock / Only N
+left, red Out of stock), the crate-deposit note, "Stock may be out of date" in
+warning, and the seller line "Business · LGA" in primary with a storefront
+icon (48dp, opens the store page). Out of stock: 50% opacity, nothing
+tappable but the seller. Messages (`BrowseMessage`: IconTile, ExtraBold title,
+muted text, buttons) for offline ("Connect to the internet to browse"), failed,
+no shops in the area, no search match. The store page adds a back button,
+business name + "LGA, State", a warning notice "This store doesn't deliver to
+your area", the stale note and the store's own note, then its own search.
+Tapping a card opens a read-only product sheet (`showStorefrontProductSheet`,
+640dp cap, scrolls, 48dp ✕): seller line, photo, brand, name + 18+, unit,
+price, stock words, deposit note, the order rule ("Order at least 2, in steps
+of 2, up to 20", #473), the shop's online description and "See this store".
+Goldens: `test/redesign/goldens/browse_{feed,offline,store}_{390x844,844x390}_{light,dark}.png`
+and `browse_product_sheet_390x844_light` / `_844x390_dark`.
