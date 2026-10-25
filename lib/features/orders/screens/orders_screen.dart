@@ -1014,17 +1014,26 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
   }
 
   void _executeRefund(OrderData order, String reason) async {
+    try {
+      Gates.refundOrder.require(ref);
+    } on GateDeniedError {
+      showGateDenied(context, Gates.refundOrder);
+      return;
+    }
     final staffId = ref.read(authProvider).currentUser?.id ?? '';
     try {
       await ref
           .read(orderServiceProvider)
-          .markAsCancelled(order.id, reason, staffId);
+          .markAsCancelled(order.id, reason, staffId,
+            gateContext: ref.read(gateContextProvider));
       if (mounted) {
         AppNotification.showSuccess(
           context,
           'Refund issued for ${order.orderNumber}.',
         );
       }
+    } on GateDeniedError {
+      if (mounted) showGateDenied(context, Gates.refundOrder);
     } catch (e) {
       if (mounted) {
         AppNotification.showError(context, 'Could not issue refund: $e');
