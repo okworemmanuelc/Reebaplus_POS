@@ -66,6 +66,8 @@ void main() {
     'categories',
     'suppliers',
     'products',
+    // #474: gallery photos, right after their parent product.
+    'product_photos',
     'inventory',
     'cost_batches',
     'customers',
@@ -155,6 +157,7 @@ void main() {
     // #216 (PRD #203): the Crate Shortfall write-off ledger.
     'crate_shortfall_writeoffs',
     'products',
+    'product_photos', // #474
     'cost_batches',
     'price_lists',
     'customers',

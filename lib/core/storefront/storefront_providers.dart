@@ -214,3 +214,12 @@ final storefrontStoreProvider = FutureProvider.autoDispose
           .read(storefrontServiceProvider)
           .store(storeId: key.storeId, area: key.area),
     );
+
+/// One listed product's photos, cover first (#474). The sheet falls back to
+/// the card's cover while this loads or if it fails.
+final storefrontProductPhotosProvider = FutureProvider.autoDispose
+    .family<List<String>, ({String storeId, String productId})>(
+      (ref, key) => ref
+          .read(storefrontServiceProvider)
+          .productPhotos(storeId: key.storeId, productId: key.productId),
+    );

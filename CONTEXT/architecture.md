@@ -88,6 +88,14 @@ path):
   in the `pending_product_image_uploads` list (not the outbox) until
   `PendingPhotoUploads.upload` flushes it; the logout wipe gate counts these
   (see invariant #12).
+  **Gallery photos (#474)** — positions 2–5 after the cover — go through
+  `ProductGalleryImages` (`lib/core/services/product_gallery_images.dart`):
+  objects `<businessId>/<productId>/<photoId>.jpg` (fresh photoId, never
+  overwritten, so no `?v=`), device copies under
+  `<appDocs>/product_images/gallery/<productId>/`, offline uploads waiting in
+  `pending_product_gallery_uploads`. `PendingPhotoUploads` counts and flushes
+  them with the cover photos (invariant #12), and both `LocalPhotoFiles` wipes
+  remove them.
 - **`BarcodeCatalogueService` (`lib/core/services/barcode_catalogue_service.dart`)**
   — the shared barcode catalogue lookup (ADR 0029 §8, #332). The lookup is read-only: it
   calls the definer RPC `barcode_suggestion(p_barcode)` and fetches the public
@@ -223,6 +231,20 @@ Only `Gates.manageListing` holders edit them, through
 catalogue. An online order quantity must obey `OrderQuantityRule` (≥ min, a
 multiple of step, ≤ max). The cloud twin is `order_quantity_allowed()`, which the
 storefront cart and the place-order RPC (#425/#426) must enforce.
+
+**Product photos (#474).** Cloud 0204 / Drift 91. Gallery position 1 is the
+cover and stays `products.image_url` (till, barcode share, storefront cards
+unchanged). The synced, soft-deleted `product_photos` table holds positions 2–5
+(CHECK 2..5, ≤5 photos in all) as slots with deterministic ids
+(`productPhotoSlotId(product, position)`): a reorder or removal moves
+`image_url` between slots and soft-deletes leftovers — a row's position never
+changes, so the live (product, position) unique index cannot collide inside a
+batched upsert. A photo's row is written offline with its final public url;
+the bytes follow. Writes go through `ProductGalleryService` (fire-time
+`Gates.manageListing`) → `CatalogDao.setProductGallery` → outbox; the cover keeps
+its own photo flow. The signed-out `storefront_product_photos(store, product)`
+returns cover + live slots in order, only once each slot's Storage object
+exists; the Browse product sheet shows them as a swipeable gallery.
 
 | What | Where | Why | Synced to cloud? |
 |---|---|---|---|

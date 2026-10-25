@@ -142,4 +142,23 @@ void main() {
         StorefrontFailure.failed);
     });
   });
+
+  test('#474 productPhotos returns urls in gallery order, cover first', () async {
+    String? fn;
+    Map<String, Object?>? sent;
+    final service = StorefrontService.withRpc(rpc: (f, params) async {
+      fn = f;
+      sent = params;
+      return [
+        {'photo_position': 3, 'image_url': 'c'},
+        {'photo_position': 1, 'image_url': 'cover'},
+        {'photo_position': 2, 'image_url': 'b'},
+        {'photo_position': 4, 'image_url': ' '},
+      ];
+    });
+    expect(await service.productPhotos(storeId: 's1', productId: 'p1'),
+        ['cover', 'b', 'c']);
+    expect(fn, 'storefront_product_photos');
+    expect(sent, {'p_store_id': 's1', 'p_product_id': 'p1'});
+  });
 }

@@ -9,9 +9,9 @@ The human updates it when resolving open questions or making architectural decis
 ## Current Phase
 ### Issue #426: Place orders (2026-10-25, ready for review)
 - Branch `feat/426-place-orders`, worktree `../drinkPosApp-wt-426`. Cloud
-  `0205_online_orders.sql` + Drift 92 (91 is #474's; merge after it). Shopper
+  `0205_online_orders.sql` + Drift 92 (after #474's 91). Shopper
   tables (cloud-only, RPC-only), synced `online_orders` / `online_order_lines`,
-  status guard, `shopper_*` RPCs, `pos_pull_snapshot` re-issued from 0203.
+  status guard, `shopper_*` RPCs, `pos_pull_snapshot` re-issued from 0204.
 - App: `lib/core/storefront/` cart (device storage), `ShopperService`,
   `ShopperSessionNotifier`; `lib/features/browse/` cart, sign-in, details,
   Place order, results, My Orders, account; Add to cart on the product sheet.
@@ -21,8 +21,22 @@ The human updates it when resolving open questions or making architectural decis
   reebaplus-dev). Not built here: shop side (#427), linked tier price (#429),
   48 h expiry job, 18+ confirmation (#479), account deletion (#438), Shop
   menu entry for business phones.
-- Open: if #474's 0204 also re-issues `pos_pull_snapshot`, 0205 section 6
-  must be re-based on it before deploy.
+- Deploy 0205 after 0204 and before the app; never with 0193.
+### Issue #474: Up to 5 photos per product (2026-10-25, ready for review)
+- Cloud 0204 + Drift 91: synced `product_photos` (positions 2–5; the cover stays
+  `products.image_url`), deterministic slot ids, RLS, realtime, broadcast
+  trigger, `pos_pull_snapshot` re-issued with it; `storefront_product_photos`
+  (anon) returns cover + uploaded slots in order.
+- App: `ProductGalleryImages` (Storage + device copy + pending list),
+  `ProductGalleryService` (Gates.manageListing), Product Details Photos card
+  (add / move up-down / remove), Browse product sheet swipeable gallery
+  (`ProductPhotoGallery`). Offline adds upload later; wipe gate counts them.
+- No Claude Design files exist for this screen: built from `ui-context.md` tokens
+  and the existing Product Details card patterns.
+- Deferred: making a gallery photo the cover (the cover keeps its own flow and
+  gate); store-card thumbnails stay cover-only.
+- Deploy 0204 after 0202 and before the app; never with 0193.
+
 ### Issue #425: Browse is the front door (2026-10-25, ready for review)
 - Branch `feat/425-browse`, worktree `../drinkPosApp-wt-425`. Cloud 0202 only
   (after 0201), no Drift bump. Four signed-out definer RPCs

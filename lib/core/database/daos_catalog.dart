@@ -1,6 +1,8 @@
 part of 'daos.dart';
 
-@DriftAccessor(tables: [Suppliers, Products, Categories, Stores, Manufacturers])
+@DriftAccessor(
+  tables: [Suppliers, Products, ProductPhotos, Categories, Stores, Manufacturers],
+)
 class CatalogDao extends DatabaseAccessor<AppDatabase>
     with _$CatalogDaoMixin, BusinessScopedDao<AppDatabase> {
   CatalogDao(super.db);
@@ -883,6 +885,91 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     await db.syncDao.enqueueUpsert('products', row.toCompanion(false));
     return true;
   });
+
+  /// The live gallery photos of [productId] (#474), positions 2–5 in order.
+  /// The cover (position 1) is `products.image_url`, not a row here.
+  Stream<List<ProductPhotoData>> watchProductPhotos(String productId) =>
+      (select(productPhotos)
+            ..where((t) =>
+                t.productId.equals(productId) &
+                whereBusiness(t) &
+                t.isDeleted.not())
+            ..orderBy([(t) => OrderingTerm(expression: t.position)]))
+          .watch();
+
+  Future<List<ProductPhotoData>> getProductPhotos(String productId) =>
+      (select(productPhotos)
+            ..where((t) =>
+                t.productId.equals(productId) &
+                whereBusiness(t) &
+                t.isDeleted.not())
+            ..orderBy([(t) => OrderingTerm(expression: t.position)]))
+          .get();
+
+  /// Makes [productId]'s gallery exactly [imageUrls], in order, at positions
+  /// 2, 3, … (#474). Each position is a slot with a deterministic id: a slot
+  /// whose url changes is updated (or revived), slots past the end are
+  /// soft-deleted, unchanged slots are not touched. Every changed slot queues
+  /// its full row. One transaction, tenant-scoped.
+  ///
+  /// Returns false (and writes nothing) when the product is not one of this
+  /// business's live products. Throws [ArgumentError] for more than
+  /// `kMaxProductPhotos - 1` urls.
+  Future<bool> setProductGallery({
+    required String productId,
+    required List<String> imageUrls,
+  }) {
+    if (imageUrls.length > kMaxProductPhotos - 1) {
+      throw ArgumentError.value(
+        imageUrls.length, 'imageUrls', 'at most ${kMaxProductPhotos - 1}');
+    }
+    return transaction(() async {
+      final product = await (select(products)..where((t) =>
+              t.id.equals(productId) & whereBusiness(t) & t.isDeleted.not()))
+          .getSingleOrNull();
+      if (product == null) return false;
+      final now = DateTime.now();
+      for (var position = 2; position <= kMaxProductPhotos; position++) {
+        final id = productPhotoSlotId(productId, position);
+        final url = position - 2 < imageUrls.length
+            ? imageUrls[position - 2]
+            : null;
+        final existing = await (select(productPhotos)
+              ..where((t) => t.id.equals(id) & whereBusiness(t)))
+            .getSingleOrNull();
+        if (url == null) {
+          if (existing == null || existing.isDeleted) continue;
+          final removed = existing.copyWith(isDeleted: true, lastUpdatedAt: now);
+          await update(productPhotos).replace(removed);
+          await db.syncDao.enqueueUpsert(
+            'product_photos', removed.toCompanion(false));
+          continue;
+        }
+        if (existing == null) {
+          final row = ProductPhotosCompanion(
+            id: Value(id),
+            businessId: Value(product.businessId),
+            productId: Value(productId),
+            position: Value(position),
+            imageUrl: Value(url),
+            isDeleted: const Value(false),
+            createdAt: Value(now),
+            lastUpdatedAt: Value(now),
+          );
+          await into(productPhotos).insert(row);
+          await db.syncDao.enqueueUpsert('product_photos', row);
+          continue;
+        }
+        if (!existing.isDeleted && existing.imageUrl == url) continue;
+        final changed = existing.copyWith(
+          imageUrl: url, isDeleted: false, lastUpdatedAt: now);
+        await update(productPhotos).replace(changed);
+        await db.syncDao.enqueueUpsert(
+          'product_photos', changed.toCompanion(false));
+      }
+      return true;
+    });
+  }
 
   /// Online listing content (#473): description, brand and order limits. Same
   /// shape as [setProductShowOnline] — one tenant-scoped write plus a full-row

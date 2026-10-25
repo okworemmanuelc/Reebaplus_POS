@@ -24,6 +24,53 @@ class LocalPhotoFiles {
   /// phone but not uploaded yet. Owned by `ProductImageService`.
   static const pendingProductUploadsKey = 'pending_product_image_uploads';
 
+  /// `<appDocs>/product_images/gallery/<productId>/<photoId>.jpg` — the device
+  /// copies of a product's gallery photos (#474). Inside [productImagesFolder],
+  /// so [deleteAll] removes them with the cover copies.
+  static const galleryFolder = 'gallery';
+
+  /// SharedPreferences list of `<businessId>|<productId>|<photoId>` gallery
+  /// photos saved on this phone but not uploaded yet (#474). Owned by
+  /// `ProductGalleryImages`; counted by the logout wipe gate.
+  static const pendingGalleryUploadsKey = 'pending_product_gallery_uploads';
+
+  /// `<appDocs>/product_images/gallery` (or under [documents] in tests).
+  static Future<Directory> galleryDir({Directory? documents}) async {
+    final products = await _productImagesDirIn(documents);
+    return Directory('${products.path}/$galleryFolder');
+  }
+
+  /// The gallery photos of [businessId] saved on this phone but not uploaded
+  /// yet AND whose device copy is still there (#474) — exactly the entries
+  /// `ProductGalleryImages.flushPending` would try. Same rules as
+  /// [pendingUploadProductIds]: another business's, malformed and copy-gone
+  /// entries are left out. Never throws.
+  static Future<List<({String productId, String photoId})>>
+      pendingGalleryUploads(
+    String businessId, {
+    Directory? documents,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final entries =
+          prefs.getStringList(pendingGalleryUploadsKey) ?? const <String>[];
+      final dir = await galleryDir(documents: documents);
+      final out = <({String productId, String photoId})>[];
+      for (final entry in entries) {
+        final parts = entry.split('|');
+        if (parts.length != 3 || parts[0] != businessId) continue;
+        if (parts[1].isEmpty || parts[2].isEmpty) continue;
+        if (!File('${dir.path}/${parts[1]}/${parts[2]}.jpg').existsSync()) {
+          continue;
+        }
+        out.add((productId: parts[1], photoId: parts[2]));
+      }
+      return out;
+    } catch (_) {
+      return const [];
+    }
+  }
+
   static Future<Directory> productImagesDir() async {
     final docs = await getApplicationDocumentsDirectory();
     return Directory('${docs.path}/$productImagesFolder');
@@ -70,8 +117,9 @@ class LocalPhotoFiles {
   }
 
   /// Removes ONE business's photos from this phone: the copies of
-  /// [productIds] (`<productId>.png` + its `.url` record), the business's logo
-  /// copy, and its entries in the pending-upload list. Called from
+  /// [productIds] (`<productId>.png` + its `.url` record, and its gallery
+  /// folder, #474), the business's logo copy, and its entries in both
+  /// pending-upload lists. Called from
   /// `AppDatabase.clearBusinessData` (#285 / #343) when an older business is
   /// cleared at sign-in; every other business's files and entries are left
   /// alone. Best-effort per step, like [deleteAll]. Never throws.
@@ -85,12 +133,13 @@ class LocalPhotoFiles {
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final entries = prefs.getStringList(pendingProductUploadsKey);
-      if (entries != null) {
+      for (final key in [pendingProductUploadsKey, pendingGalleryUploadsKey]) {
+        final entries = prefs.getStringList(key);
+        if (entries == null) continue;
         final keep =
             entries.where((e) => !e.startsWith('$businessId|')).toList();
         if (keep.length != entries.length) {
-          await prefs.setStringList(pendingProductUploadsKey, keep);
+          await prefs.setStringList(key, keep);
         }
       }
     } catch (_) {}
@@ -117,6 +166,13 @@ class LocalPhotoFiles {
         if (file.existsSync()) await file.delete();
       } catch (_) {}
     }
+    // #474: each product's gallery copies.
+    for (final id in productIds) {
+      try {
+        final dir = Directory('${products.path}/$galleryFolder/$id');
+        if (dir.existsSync()) await dir.delete(recursive: true);
+      } catch (_) {}
+    }
   }
 
   static Future<Directory> _productImagesDirIn(Directory? documents) async =>
@@ -124,8 +180,8 @@ class LocalPhotoFiles {
           ? await productImagesDir()
           : Directory('${documents.path}/$productImagesFolder');
 
-  /// Deletes every product photo copy, every logo copy and the pending-upload
-  /// list. Called from `AppDatabase.clearAllData` (logout, resign, removal,
+  /// Deletes every product photo copy (gallery copies included), every logo
+  /// copy and both pending-upload lists. Called from `AppDatabase.clearAllData` (logout, resign, removal,
   /// business delete): one user per device, so the next user must not see the
   /// last one's photos. Each step is best-effort — a file-system hiccup must
   /// never abort the wipe. Never throws.
@@ -149,6 +205,7 @@ class LocalPhotoFiles {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(pendingProductUploadsKey);
+      await prefs.remove(pendingGalleryUploadsKey);
     } catch (_) {}
   }
 }
