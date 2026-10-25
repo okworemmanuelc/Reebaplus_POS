@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/shared/utils/product_icon_helper.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/online_orders/online_order_till.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 
@@ -69,6 +70,83 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
     activeCustomer.value = customer;
   }
 
+  // ── Send to till (#431) ────────────────────────────────────────────────────
+  //
+  // A Cart loaded from an accepted Online Order carries the order id ON EACH
+  // LINE it loaded ([kOnlineOrderIdKey]) together with the agreed unit price
+  // ([kAgreedPriceKey]). The tag is derived from the lines, so it travels with
+  // them everywhere a cart goes — a saved cart's JSON keeps it, a recall brings
+  // it back, Clear drops it (leaving the Online Order Accepted), and Checkout
+  // reads it from the snapshot it is handed.
+
+  /// The Online Order a line was sent to the till from.
+  static const String kOnlineOrderIdKey = 'onlineOrderId';
+
+  /// The unit price (kobo) agreed on the Online Order. Held against catalogue
+  /// refreshes and price-staleness, like a custom price.
+  static const String kAgreedPriceKey = 'agreedPriceKobo';
+
+  /// The Online Order [lines] were sent to the till from, if any.
+  static String? onlineOrderIdOf(Iterable<Map<String, dynamic>> lines) {
+    for (final l in lines) {
+      final id = l[kOnlineOrderIdKey];
+      if (id is String && id.isNotEmpty) return id;
+    }
+    return null;
+  }
+
+  /// True for a line whose price must not follow the catalogue: a hand-set
+  /// custom price (§13.4) or an Online Order's agreed price (#431).
+  static bool holdsPrice(Map<String, dynamic> line) =>
+      line['customPriceKobo'] != null || line[kAgreedPriceKey] != null;
+
+  /// The Online Order the ACTIVE cart is tagged with, if any.
+  String? get activeOnlineOrderId => onlineOrderIdOf(value);
+
+  /// Whether [storeId]'s cart (this user) already holds lines.
+  bool hasItemsInStore(String storeId) =>
+      (_userCarts['$_uid|$storeId'] ?? const []).isNotEmpty;
+
+  /// Loads an accepted Online Order into the Cart of its store (#431),
+  /// replacing that store's cart: each line at the agreed unit price, with
+  /// the catalogue price kept as `catalogPriceKobo` so Checkout records any
+  /// difference, the linked Customer attached, and every line tagged with the
+  /// order id. A quantity above the store's stock is lowered to it (a till
+  /// sale cannot oversell); an out-of-stock line is left out.
+  ///
+  /// Returns the names of the lines lowered or left out.
+  List<String> loadOnlineOrder(OnlineOrderTillLoad load) {
+    final short = <String>[...load.missing];
+    final items = <Map<String, dynamic>>[];
+    for (final t in load.lines) {
+      final p = t.product;
+      final qty = t.quantity <= t.stock ? t.quantity : t.stock;
+      if (qty < t.quantity) short.add(t.line.productName);
+      if (qty <= 0) continue;
+      final wholesale = t.line.priceTier == PriceTier.wholesaler.name;
+      final tier = wholesale ? PriceTier.wholesaler : PriceTier.retailer;
+      final catalogKobo = wholesale && p.wholesalerPriceKobo > 0
+          ? p.wholesalerPriceKobo
+          : p.retailerPriceKobo;
+      final agreed = t.line.unitPriceKobo;
+      items.add(
+        _newLine(p, qty: qty.toDouble(), maxStock: t.stock, tier: tier)
+          ..['catalogPriceKobo'] = catalogKobo
+          ..['unitPriceKobo'] = agreed
+          ..['price'] = agreed / 100.0
+          ..[kAgreedPriceKey] = agreed
+          ..[kOnlineOrderIdKey] = load.order.id,
+      );
+    }
+    final customer = load.customer;
+    loadCart(
+      items,
+      customer == null ? null : Customer.fromDb(customer),
+      storeId: load.order.storeId,
+    );
+    return short;
+  }
+
   /// Adds a product to the cart, clamping the total quantity to [maxStock]
   /// (the available stock for the locked store). Returns true if the
   /// full requested [qty] was accepted, false if it was clamped or rejected.
@@ -108,81 +186,96 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
       // Refresh maxStock in case it changed since the item was first added.
       if (maxStock != null) current[index]['maxStock'] = maxStock;
     } else {
-      final int unitPriceKobo = product is ProductData
-          ? (tier == PriceTier.wholesaler
-                ? product.wholesalerPriceKobo
-                : product.retailerPriceKobo)
-          : (((product['price'] as num).toDouble() * 100).round());
-      current.add({
-        'id': id,
-        'name': name,
-        'subtitle': product is ProductData
-            ? product.subtitle
-            : product['subtitle'],
-        'price': unitPriceKobo / 100.0,
-        'unitPriceKobo': unitPriceKobo,
-        // Designated selling price (kobo) for the chosen tier — the immutable
-        // catalog reference. `unitPriceKobo`/`price` above are the EFFECTIVE
-        // charged price and may be overwritten by a custom price (§13.4);
-        // `catalogPriceKobo` is never mutated by a custom price so the line can
-        // revert and so staleness compares against the right number.
-        'catalogPriceKobo': unitPriceKobo,
-        // Per-line custom price (§13.4). null = no override (charge the catalog
-        // price); a positive kobo value = the unit price was set by hand by a
-        // user holding `sales.set_custom_price`. When set, it equals
-        // `unitPriceKobo`. Marks the line for the "Custom" badge and skips the
-        // checkout staleness check.
-        'customPriceKobo': null,
-        // Tier the line was priced at (§12.2). Used by checkout staleness so a
-        // wholesaler line is re-priced against the wholesaler column, not
-        // silently reverted to retailer. Quick-Sale (Map) lines default to
-        // 'retailer' and are skipped by staleness (no DB product id).
-        'priceTier': product is ProductData ? tier.name : 'retailer',
-        'version': product is ProductData ? product.version : null,
-        'qty': allowed,
-        'icon': product is ProductData
-            ? (product.iconCodePoint ?? kStoredIconBox)
-            : product['icon'],
-        'color': product is ProductData ? product.colorHex : product['color'],
-        'category': product is ProductData
-            ? product.categoryId
-            : product['category'],
-        'crateSizeGroupId': product is ProductData
-            ? product.crateSizeGroupId
-            : product['crateSizeGroupId'],
-        'crateGroupName': product is ProductData
-            ? null
-            : product['crateGroupName'],
-        'emptyCrateValueKobo': product is ProductData
-            ? product.emptyCrateValueKobo
-            : (product['emptyCrateValueKobo'] ?? 0),
-        'manufacturerId': product is ProductData
-            ? product.manufacturerId
-            : product['manufacturerId'],
-        'buyingPriceKobo': product is ProductData
-            ? product.buyingPriceKobo
-            : (product['buyingPriceKobo'] ?? 0),
-        'size': product is ProductData ? product.size : product['size'],
-        'unit': product is ProductData ? product.unit : product['unit'],
-        'trackEmpties': product is ProductData
-            ? product.trackEmpties
-            : (product['trackEmpties'] ?? false),
-        'allowFractionalSales': product is ProductData
-            ? product.allowFractionalSales
-            : (product['allowFractionalSales'] ?? false),
-        // Per-line discount (§13.2). discountKind: 'percent' | 'naira' | null;
-        // discountValue: the entered number (for the badge); discountKobo:
-        // the resolved amount off this line's gross total (source of truth).
-        'discountKind': null,
-        'discountValue': 0.0,
-        'discountKobo': 0,
-        'maxStock': maxStock ?? (1 << 30),
-      });
+      current.add(
+        _newLine(product, qty: allowed, maxStock: maxStock, tier: tier),
+      );
     }
 
     _userCarts[_cartKey] = current;
     value = List.from(current);
     return fullyAccepted;
+  }
+
+  /// A fresh cart line for [product] (a [ProductData], or a legacy Quick-Sale
+  /// Map) priced at [tier]. Shared by [addItem] and [loadOnlineOrder].
+  static Map<String, dynamic> _newLine(
+    dynamic product, {
+    required double qty,
+    int? maxStock,
+    PriceTier tier = PriceTier.retailer,
+  }) {
+    final String name = product is ProductData ? product.name : product['name'];
+    final String? id = product is ProductData ? product.id : null;
+    final int unitPriceKobo = product is ProductData
+        ? (tier == PriceTier.wholesaler
+              ? product.wholesalerPriceKobo
+              : product.retailerPriceKobo)
+        : (((product['price'] as num).toDouble() * 100).round());
+    return {
+      'id': id,
+      'name': name,
+      'subtitle': product is ProductData
+          ? product.subtitle
+          : product['subtitle'],
+      'price': unitPriceKobo / 100.0,
+      'unitPriceKobo': unitPriceKobo,
+      // Designated selling price (kobo) for the chosen tier — the immutable
+      // catalog reference. `unitPriceKobo`/`price` above are the EFFECTIVE
+      // charged price and may be overwritten by a custom price (§13.4);
+      // `catalogPriceKobo` is never mutated by a custom price so the line can
+      // revert and so staleness compares against the right number.
+      'catalogPriceKobo': unitPriceKobo,
+      // Per-line custom price (§13.4). null = no override (charge the catalog
+      // price); a positive kobo value = the unit price was set by hand by a
+      // user holding `sales.set_custom_price`. When set, it equals
+      // `unitPriceKobo`. Marks the line for the "Custom" badge and skips the
+      // checkout staleness check.
+      'customPriceKobo': null,
+      // Tier the line was priced at (§12.2). Used by checkout staleness so a
+      // wholesaler line is re-priced against the wholesaler column, not
+      // silently reverted to retailer. Quick-Sale (Map) lines default to
+      // 'retailer' and are skipped by staleness (no DB product id).
+      'priceTier': product is ProductData ? tier.name : 'retailer',
+      'version': product is ProductData ? product.version : null,
+      'qty': qty,
+      'icon': product is ProductData
+          ? (product.iconCodePoint ?? kStoredIconBox)
+          : product['icon'],
+      'color': product is ProductData ? product.colorHex : product['color'],
+      'category': product is ProductData
+          ? product.categoryId
+          : product['category'],
+      'crateSizeGroupId': product is ProductData
+          ? product.crateSizeGroupId
+          : product['crateSizeGroupId'],
+      'crateGroupName': product is ProductData
+          ? null
+          : product['crateGroupName'],
+      'emptyCrateValueKobo': product is ProductData
+          ? product.emptyCrateValueKobo
+          : (product['emptyCrateValueKobo'] ?? 0),
+      'manufacturerId': product is ProductData
+          ? product.manufacturerId
+          : product['manufacturerId'],
+      'buyingPriceKobo': product is ProductData
+          ? product.buyingPriceKobo
+          : (product['buyingPriceKobo'] ?? 0),
+      'size': product is ProductData ? product.size : product['size'],
+      'unit': product is ProductData ? product.unit : product['unit'],
+      'trackEmpties': product is ProductData
+          ? product.trackEmpties
+          : (product['trackEmpties'] ?? false),
+      'allowFractionalSales': product is ProductData
+          ? product.allowFractionalSales
+          : (product['allowFractionalSales'] ?? false),
+      // Per-line discount (§13.2). discountKind: 'percent' | 'naira' | null;
+      // discountValue: the entered number (for the badge); discountKobo:
+      // the resolved amount off this line's gross total (source of truth).
+      'discountKind': null,
+      'discountValue': 0.0,
+      'discountKobo': 0,
+      'maxStock': maxStock ?? (1 << 30),
+    };
   }
 
   /// Updates the quantity of a cart line. The new qty is clamped to the
@@ -287,9 +380,12 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
         (current[index]['catalogPriceKobo'] as int?) ??
         (current[index]['unitPriceKobo'] as num).toInt();
     if (customPriceKobo == null || customPriceKobo <= 0) {
+      // An Online Order line reverts to its agreed price, not the catalogue.
+      final revertKobo =
+          (current[index][kAgreedPriceKey] as int?) ?? catalogKobo;
       current[index]['customPriceKobo'] = null;
-      current[index]['unitPriceKobo'] = catalogKobo;
-      current[index]['price'] = catalogKobo / 100.0;
+      current[index]['unitPriceKobo'] = revertKobo;
+      current[index]['price'] = revertKobo / 100.0;
     } else {
       final floorKobo = (catalogKobo * (100 - maxPercent) / 100.0).round();
       final clampedCustomKobo = customPriceKobo < floorKobo
@@ -363,12 +459,13 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
       final cart = _userCarts[uid]!;
       for (int i = 0; i < cart.length; i++) {
         if (cart[i]['id'] == productId) {
-          final isCustomPriced = cart[i]['customPriceKobo'] != null;
+          final isCustomPriced = holdsPrice(cart[i]);
           cart[i] = Map<String, dynamic>.from(cart[i])
             ..['name'] = name
             ..['emptyCrateValueKobo'] = emptyCrateValueKobo;
-          // A custom-priced line keeps its hand-set price; only refresh the
-          // catalog reference (§13.4). A normal line tracks the new price.
+          // A custom-priced line keeps its hand-set price, and an Online Order
+          // line its agreed price (#431); only refresh the catalog reference
+          // (§13.4). A normal line tracks the new price.
           if (unitPriceKobo != null) {
             cart[i]['catalogPriceKobo'] = unitPriceKobo;
           }

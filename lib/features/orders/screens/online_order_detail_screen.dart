@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/online_orders/online_order_answer.dart';
+import 'package:reebaplus_pos/core/online_orders/online_order_till.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/online_order_providers.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
@@ -130,6 +131,47 @@ class _OnlineOrderDetailScreenState
     }, 'orders.online.cancelAccepted');
   }
 
+  /// Send to till (#431): load the accepted lines into the Cart of the order's
+  /// store at the agreed prices with the linked Customer, tagged with this
+  /// order, then open the Cart. Writes nothing: the order turns Sent out only
+  /// when that Cart is checked out; clearing the Cart leaves it Accepted.
+  Future<void> _sendToTill(OnlineOrderData order) async {
+    if (_busy) return;
+    final cart = ref.read(cartProvider);
+    OnlineOrderTillLoad? load;
+    await _run(() async {
+      load = await ref.read(databaseProvider).onlineOrdersDao.tillLoad(order.id);
+    }, 'orders.online.sendToTill');
+    if (!mounted) return;
+    final l = load;
+    if (l == null) {
+      AppNotification.showError(context, 'This order is no longer accepted.');
+      return;
+    }
+    if (!l.lines.any((t) => t.stock > 0)) {
+      AppNotification.showError(
+        context,
+        'None of these items is in stock in this store.',
+      );
+      return;
+    }
+    if (cart.hasItemsInStore(order.storeId)) {
+      final replace = await showReplaceCartDialog(context);
+      if (replace != true || !mounted) return;
+    }
+    final short = cart.loadOnlineOrder(l);
+    Navigator.of(context).popUntil((r) => r.isFirst);
+    ref.read(navigationProvider).setIndex(8);
+    if (short.isEmpty) {
+      AppNotification.showSuccess(context, 'Order ${order.reference} is in the cart');
+    } else {
+      AppNotification.showInfo(
+        context,
+        'Not enough stock for: ${short.join(', ')}. The cart has what is in stock.',
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final order = ref.watch(onlineOrderProvider(widget.onlineOrderId));
@@ -161,6 +203,7 @@ class _OnlineOrderDetailScreenState
                   quantities: _qty,
                   onQuantity: (id, q) => setState(() => _qty[id] = q),
                   onCancelAccepted: () => _cancelAccepted(o),
+                  onSendToTill: () => _sendToTill(o),
                   onAccept: () => _accept(o),
                   onDecline: () => _decline(o),
                 ),
@@ -177,6 +220,7 @@ class _OnlineOrderBody extends ConsumerWidget {
     required this.quantities,
     required this.onQuantity,
     required this.onCancelAccepted,
+    required this.onSendToTill,
     required this.onAccept,
     required this.onDecline,
   });
@@ -186,6 +230,7 @@ class _OnlineOrderBody extends ConsumerWidget {
   final Map<String, int> quantities;
   final void Function(String lineId, int qty) onQuantity;
   final VoidCallback onCancelAccepted;
+  final VoidCallback onSendToTill;
   final VoidCallback onAccept;
   final VoidCallback onDecline;
 
@@ -203,6 +248,9 @@ class _OnlineOrderBody extends ConsumerWidget {
     final canCancel =
         order.status == 'accepted' &&
         ref.watch(canAnswerOnlineOrderProvider(order.storeId));
+    final canSendToTill =
+        order.status == 'accepted' &&
+        ref.watch(canSendOnlineOrderToTillProvider(order.storeId));
     final prices = canAnswer
         ? ref.watch(onlineOrderRetailPricesProvider(order.id)).valueOrNull
         : null;
@@ -320,6 +368,16 @@ class _OnlineOrderBody extends ConsumerWidget {
                   ),
                 ],
               ),
+            if (canSendToTill) ...[
+              AppButton(
+                key: OnlineOrderKeys.sendToTill,
+                text: 'Send to till',
+                icon: AppIcons.cart,
+                isLoading: busy,
+                onPressed: busy ? null : onSendToTill,
+              ),
+              SizedBox(height: context.getRSize(12)),
+            ],
             if (canCancel)
               AppButton(
                 key: OnlineOrderKeys.cancelOrder,

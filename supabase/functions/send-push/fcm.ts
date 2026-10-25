@@ -27,6 +27,12 @@ export interface PushRecord {
   business_id?: string | null;
   auth_user_id?: string | null;
   title?: string | null;
+  /// Targeted staff push (#433): the exact `users.id`s to notify (resolved by
+  /// the DB trigger from store assignment + permission). Their live tokens are
+  /// the `devices` rows whose `last_user_id` is in this list, in `business_id`.
+  user_ids?: string[] | null;
+  /// Extra string-valued FCM `data` entries (e.g. online_order_id, store_id).
+  data?: Record<string, string> | null;
 }
 
 /// Who a push goes to. Staff = every live token of a business (unchanged
@@ -34,7 +40,7 @@ export interface PushRecord {
 /// Shopper-only row, or the business row of a phone that also shops (one row
 /// per token, migration 0200).
 export type PushRecipient =
-  | { audience: "staff"; businessId: string }
+  | { audience: "staff"; businessId: string; userIds?: string[] }
   | { audience: "shopper"; authUserId: string };
 
 /// Shopper push types share this prefix (senders arrive with #434). The hook
@@ -44,6 +50,9 @@ export const SHOPPER_PUSH_TYPE_PREFIX = "shopper_";
 
 const nonEmpty = (v: unknown): v is string =>
   typeof v === "string" && v.length > 0;
+
+/// Targeted staff push types (#433). Routed by an explicit `user_ids` list.
+export const TARGETED_STAFF_PUSH_TYPES = ["online_order"];
 
 /// Route a hook record to its recipient, or null to skip it. A record never
 /// routes by BOTH keys: a Shopper push carrying a business_id is rejected, so
@@ -60,6 +69,14 @@ export function resolveRecipient(r: unknown): PushRecipient | null {
       ? { audience: "staff", businessId: rec.business_id }
       : null;
   }
+  if (TARGETED_STAFF_PUSH_TYPES.includes(rec.type)) {
+    const ids = Array.isArray(rec.user_ids)
+      ? [...new Set(rec.user_ids.filter(nonEmpty))]
+      : [];
+    return nonEmpty(rec.business_id) && ids.length > 0
+      ? { audience: "staff", businessId: rec.business_id, userIds: ids }
+      : null;
+  }
   if (rec.type.startsWith(SHOPPER_PUSH_TYPE_PREFIX)) {
     if (rec.business_id != null) return null;
     return nonEmpty(rec.auth_user_id)
@@ -72,9 +89,17 @@ export function resolveRecipient(r: unknown): PushRecipient | null {
 /// The `devices` column + value whose live tokens address [recipient].
 export function tokenFilterFor(
   recipient: PushRecipient,
-): { column: "business_id" | "auth_user_id"; value: string } {
+): {
+  column: "business_id" | "auth_user_id";
+  value: string;
+  userIds?: string[];
+} {
   return recipient.audience === "staff"
-    ? { column: "business_id", value: recipient.businessId }
+    ? {
+      column: "business_id",
+      value: recipient.businessId,
+      ...(recipient.userIds ? { userIds: recipient.userIds } : {}),
+    }
     : { column: "auth_user_id", value: recipient.authUserId };
 }
 
@@ -131,6 +156,9 @@ export function buildFcmMessages(
 ): FcmMessage[] {
   const title = audience === "shopper"
     ? (nonEmpty(record.title) ? record.title : "Reebaplus")
+    : (TARGETED_STAFF_PUSH_TYPES.includes(record.type) &&
+        nonEmpty(record.title))
+    ? record.title
     : titleForSeverity(record.severity);
   const data: Record<string, string> = {
     notification_id: record.id,
@@ -140,6 +168,11 @@ export function buildFcmMessages(
   };
   if (audience === "staff" && nonEmpty(record.business_id)) {
     data.business_id = record.business_id;
+  }
+  if (TARGETED_STAFF_PUSH_TYPES.includes(record.type) && record.data) {
+    for (const [k, v] of Object.entries(record.data)) {
+      if (typeof v === "string" && !(k in data)) data[k] = v;
+    }
   }
   return tokens.map((token) => ({
     message: {

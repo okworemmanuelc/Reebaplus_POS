@@ -22,6 +22,8 @@ abstract final class OnlineOrderKeys {
   static const accept = Key('online-order-accept');
   static const decline = Key('online-order-decline');
   static const cancelOrder = Key('online-order-cancel');
+  static const sendToTill = Key('online-order-send-to-till');
+  static const replaceCartConfirm = Key('online-order-replace-cart');
   static const cancelReason = Key('online-order-cancel-reason');
   static const cancelConfirm = Key('online-order-cancel-confirm');
   static Key lineLower(String id) => ValueKey('online-order-lower-$id');
@@ -54,6 +56,7 @@ String? onlineOrderStatusNote(OnlineOrderData o) => switch (o.status) {
   'declined' => 'You declined: ${o.declineReason ?? ''}',
   'cancelled_by_shop' => 'You cancelled: ${o.cancelReason ?? ''}',
   'expired' => 'Not answered in time',
+  'fulfilled' => 'Sent out: sold at the till',
   _ => null,
 };
 

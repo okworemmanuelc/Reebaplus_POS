@@ -31,6 +31,16 @@ class OnlineOrdersDao extends DatabaseAccessor<AppDatabase>
         .watchSingleOrNull();
   }
 
+  /// Whether the order is already in Drift (a push tap, #433, must never wait
+  /// on a pull — it opens the detail only when this is true).
+  Future<bool> existsById(String id) async {
+    final row = await (select(onlineOrders)
+          ..where((t) => t.id.equals(id) & whereBusiness(t))
+          ..limit(1))
+        .getSingleOrNull();
+    return row != null;
+  }
+
   /// The order's lines in placement order (name as a stable tiebreak).
   Stream<List<OnlineOrderLineData>> watchLines(String onlineOrderId) {
     return (select(onlineOrderLines)
@@ -303,6 +313,145 @@ class OnlineOrdersDao extends DatabaseAccessor<AppDatabase>
       await _enqueueFullOrder(order.id);
       return OnlineOrderAnswerOutcome.answered;
     });
+  }
+
+  /// What Send to till (#431) loads into the Cart: an ACCEPTED order's lines
+  /// with accepted_qty > 0, each with its live product and the stock of the
+  /// order's store, plus the linked Customer. Null when the order is not (or no
+  /// longer) accepted here. Reads only; nothing is written.
+  Future<OnlineOrderTillLoad?> tillLoad(String onlineOrderId) async {
+    final order =
+        await (select(onlineOrders)
+              ..where((t) => t.id.equals(onlineOrderId) & whereBusiness(t))
+              ..limit(1))
+            .getSingleOrNull();
+    if (order == null || order.status != 'accepted') return null;
+    final lines = await (select(onlineOrderLines)
+          ..where((t) => t.onlineOrderId.equals(order.id) & whereBusiness(t))
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.createdAt),
+            (t) => OrderingTerm(expression: t.productName),
+          ]))
+        .get();
+    final out = <OnlineOrderTillLine>[];
+    final missing = <String>[];
+    for (final l in lines) {
+      if ((l.acceptedQty ?? l.requestedQty) <= 0) continue;
+      final product =
+          await (db.select(db.products)
+                ..where(
+                  (p) =>
+                      p.id.equals(l.productId) &
+                      whereBusiness(p) &
+                      p.isDeleted.not(),
+                )
+                ..limit(1))
+              .getSingleOrNull();
+      if (product == null) {
+        missing.add(l.productName);
+        continue;
+      }
+      final inv =
+          await (db.select(db.inventory)
+                ..where(
+                  (i) =>
+                      i.productId.equals(product.id) &
+                      i.storeId.equals(order.storeId) &
+                      whereBusiness(i),
+                )
+                ..limit(1))
+              .getSingleOrNull();
+      out.add(
+        OnlineOrderTillLine(line: l, product: product, stock: inv?.quantity ?? 0),
+      );
+    }
+    final customerId = order.customerId;
+    final customer = customerId == null
+        ? null
+        : await (select(customers)
+                ..where(
+                  (c) =>
+                      c.id.equals(customerId) &
+                      whereBusiness(c) &
+                      c.isDeleted.not(),
+                )
+                ..limit(1))
+              .getSingleOrNull();
+    return OnlineOrderTillLoad(
+      order: order,
+      lines: out,
+      customer: customer,
+      missing: missing,
+    );
+  }
+
+  /// Checkout of a Cart tagged with [onlineOrderId] (#431): `accepted` ->
+  /// `fulfilled` linked to the new sale [orderId]. Called by
+  /// `OrdersDao.createOrder` INSIDE the sale's transaction, so the two commit
+  /// together. A no-op (false) when the order is no longer accepted here or
+  /// belongs to another store: the sale itself is never blocked.
+  ///
+  /// [heldByOrderId] holds the outbox row behind the sale's v2 envelope (the
+  /// cloud `linked_order_id` FK needs the order first); v1 relies on the push
+  /// priority (orders before online_orders).
+  Future<bool> markFulfilled({
+    required String onlineOrderId,
+    required String orderId,
+    required String? storeId,
+    String? heldByOrderId,
+  }) async {
+    final order =
+        await (select(onlineOrders)
+              ..where((t) => t.id.equals(onlineOrderId) & whereBusiness(t))
+              ..limit(1))
+            .getSingleOrNull();
+    if (order == null || order.status != 'accepted') return false;
+    if (storeId != null && order.storeId != storeId) return false;
+    await (update(onlineOrders)
+          ..where((t) => t.id.equals(order.id) & whereBusiness(t)))
+        .write(
+          OnlineOrdersCompanion(
+            status: const Value('fulfilled'),
+            linkedOrderId: Value(orderId),
+            lastUpdatedAt: Value(DateTime.now()),
+          ),
+        );
+    final row = await (select(
+      onlineOrders,
+    )..where((t) => t.id.equals(order.id) & whereBusiness(t))).getSingle();
+    await db.syncDao.enqueueUpsert(
+      'online_orders',
+      row.toCompanion(true),
+      heldByOrderId: heldByOrderId,
+    );
+    return true;
+  }
+
+  /// The sale [orderId] was rejected by the server and reversed locally: the
+  /// Online Order it fulfilled goes back to `accepted` (its held `fulfilled`
+  /// push was discarded with the sale). Re-queued so a coalesced, discarded
+  /// accept still reaches the cloud.
+  Future<void> reopenForRejectedSale(String orderId) async {
+    final linked = await (select(onlineOrders)
+          ..where(
+            (t) =>
+                t.linkedOrderId.equals(orderId) &
+                t.status.equals('fulfilled') &
+                whereBusiness(t),
+          ))
+        .get();
+    for (final o in linked) {
+      await (update(onlineOrders)
+            ..where((t) => t.id.equals(o.id) & whereBusiness(t)))
+          .write(
+            OnlineOrdersCompanion(
+              status: const Value('accepted'),
+              linkedOrderId: const Value(null),
+              lastUpdatedAt: Value(DateTime.now()),
+            ),
+          );
+      await _enqueueFullOrder(o.id);
+    }
   }
 
   Future<OnlineOrderData?> _openOrder(String id) async {

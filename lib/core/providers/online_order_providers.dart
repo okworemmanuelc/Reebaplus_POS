@@ -81,3 +81,16 @@ final canAnswerOnlineOrderProvider = Provider.family<bool, String>((
   if (ref.watch(canViewAllStoresProvider)) return true;
   return ref.watch(selectableStoresProvider).any((s) => s.id == storeId);
 });
+
+/// Whether the viewer may Send to till an accepted order of [storeId] (#431):
+/// they make sales (`sales.make`) in a store they work in (all-stores viewers:
+/// any store). No custom-price grant is needed — accepting agreed the prices.
+final canSendOnlineOrderToTillProvider = Provider.family<bool, String>((
+  ref,
+  storeId,
+) {
+  final ctx = ref.watch(gateContextProvider);
+  if (!Gates.makeSale.rule.evaluate(ctx)) return false;
+  if (ref.watch(canViewAllStoresProvider)) return true;
+  return ref.watch(selectableStoresProvider).any((s) => s.id == storeId);
+});

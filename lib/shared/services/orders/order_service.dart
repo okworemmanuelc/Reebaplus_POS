@@ -53,6 +53,9 @@ class OrderService {
     String paymentSubType = 'cash',
     int walletBalanceKobo = 0,
     Map<String, int> crateDepositPaidByManufacturer = const {},
+    // #431 Send to till: the accepted Online Order the Cart is tagged with. It
+    // becomes `fulfilled` (linked to the new order) in the sale's transaction.
+    String? onlineOrderId,
   }) {
     return _commands.checkout(
       customerId: customerId,
@@ -67,6 +70,7 @@ class OrderService {
       paymentSubType: paymentSubType,
       walletBalanceKobo: walletBalanceKobo,
       crateDepositPaidByManufacturer: crateDepositPaidByManufacturer,
+      onlineOrderId: onlineOrderId,
     );
   }
 

@@ -653,6 +653,9 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     // = no per-brand deposit captured yet (every crate brand is "no deposit" →
     // crate-track). Ring 3 checkout UI populates this.
     Map<String, int> crateDepositPaidByManufacturer = const {},
+    // #431 Send to till — the accepted Online Order this Cart was tagged with.
+    // In this same transaction it becomes `fulfilled`, linked to the new order.
+    String? onlineOrderId,
   }) {
     return db.transaction(() async {
       final orderId = order.id.present ? order.id.value : UuidV7.generate();
@@ -899,6 +902,21 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         paymentMethod: paymentMethod,
         crateDepositPaidByManufacturer: crateDepositPaidByManufacturer,
       );
+
+      // #431 — a Cart sent to the till from an accepted Online Order: mark it
+      // `fulfilled` with this sale's id, atomically with the sale. On the v2
+      // path the push is HELD by the order (the cloud linked_order_id FK needs
+      // the order header first, and a rejected sale must not fulfil it); v1
+      // pushes `orders` first by priority. Nothing else about the sale changes:
+      // stock, money and crates are exactly a till sale's.
+      if (onlineOrderId != null) {
+        await db.onlineOrdersDao.markFulfilled(
+          onlineOrderId: onlineOrderId,
+          orderId: orderId,
+          storeId: resolvedSaleStoreId,
+          heldByOrderId: useDomainRpc ? orderId : null,
+        );
+      }
 
       if (useDomainRpc) {
         // v2 thin-intent: server mints order_items, stock_tx, payment_tx,
@@ -2005,6 +2023,10 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           lastUpdatedAt: Value(now),
         ),
       );
+
+      // 1b. #431 — an Online Order this sale fulfilled goes back to Accepted
+      // (its held `fulfilled` push was discarded with the rejected sale).
+      await db.onlineOrdersDao.reopenForRejectedSale(orderId);
 
       // 2. Refund the optimistic inventory pre-check deduction. Sourced from
       // [items] (a v2 sale writes no local stock_transactions to rewind). No

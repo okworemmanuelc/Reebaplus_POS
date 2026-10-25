@@ -61,6 +61,8 @@ class OrderCommands {
     // the checkout per-brand capture is wired; createOrder then treats every
     // crate brand as "no deposit" (crate-track).
     Map<String, int> crateDepositPaidByManufacturer = const {},
+    // #431 — the accepted Online Order the Cart was sent to the till from.
+    String? onlineOrderId,
   }) async {
     if (staffId == null || staffId.isEmpty) {
       throw ArgumentError('staffId is required');
@@ -142,6 +144,7 @@ class OrderCommands {
       storeId: storeId,
       paymentMethod: _resolvePaymentMethod(paymentSubType),
       crateDepositPaidByManufacturer: crateDepositPaidByManufacturer,
+      onlineOrderId: onlineOrderId,
     );
 
     // Surface server-side errors (insufficient_stock from a concurrent
