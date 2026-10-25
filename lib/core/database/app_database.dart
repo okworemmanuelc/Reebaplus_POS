@@ -2046,6 +2046,86 @@ class Orders extends Table {
   ];
 }
 
+/// Online Order statuses (#426, cloud CHECK + transition guard in 0205).
+/// `new` is the only open state a Shopper can cancel; the shop answers it.
+const List<String> kOnlineOrderStatuses = [
+  'new',
+  'accepted',
+  'declined',
+  'cancelled_by_customer',
+  'cancelled_by_shop',
+  'fulfilled',
+  'expired',
+];
+
+/// A Shopper's request to one store (#426, PRD #421). NOT a Sale: it moves no
+/// stock, revenue, money or crates. Created only in the cloud by
+/// `shopper_place_orders` and pulled to shop phones; the shop's answers
+/// (#427) are status changes pushed through the outbox, checked by the cloud
+/// transition guard. [customerId] / [linkedOrderId] are plain ids (no local
+/// FK) so a pulled order never waits on a Customer or Order row.
+@DataClassName('OnlineOrderData')
+class OnlineOrders extends Table {
+  TextColumn get id => text()();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get storeId => text().references(Stores, #id)();
+  TextColumn get shopperAccountId => text().nullable()();
+  TextColumn get customerId => text().nullable()();
+  TextColumn get status => text().withDefault(const Constant('new'))();
+  TextColumn get reference => text()();
+  TextColumn get currency => text().withDefault(const Constant('NGN'))();
+  IntColumn get estimatedTotalKobo =>
+      integer().withDefault(const Constant(0))();
+  TextColumn get shopperName => text()();
+  TextColumn get deliveryPhone => text()();
+  TextColumn get deliveryCountry =>
+      text().withDefault(const Constant('Nigeria'))();
+  TextColumn get deliveryState => text()();
+  TextColumn get deliveryLga => text()();
+  TextColumn get deliveryStreet => text()();
+  TextColumn get note => text().nullable()();
+  TextColumn get declineReason => text().nullable()();
+  TextColumn get cancelReason => text().nullable()();
+  TextColumn get linkedOrderId => text().nullable()();
+  DateTimeColumn get placedAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get respondedAt => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    "CHECK (status IN ('new','accepted','declined','cancelled_by_customer',"
+        "'cancelled_by_shop','fulfilled','expired'))",
+  ];
+}
+
+/// One line of an [OnlineOrders] row (#426): the price, tier and name the
+/// Shopper saw at placement, the quantity asked and (after #427) the quantity
+/// the shop accepted (only ever lowered; 0 = removed).
+@DataClassName('OnlineOrderLineData')
+class OnlineOrderLines extends Table {
+  TextColumn get id => text()();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get onlineOrderId => text().references(OnlineOrders, #id)();
+  TextColumn get productId => text().references(Products, #id)();
+  TextColumn get productName => text()();
+  TextColumn get unit => text().nullable()();
+  IntColumn get unitPriceKobo => integer()();
+  TextColumn get priceTier => text().withDefault(const Constant('retailer'))();
+  IntColumn get requestedQty => integer()();
+  IntColumn get acceptedQty => integer().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 @DataClassName('OrderItemData')
 class OrderItems extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
@@ -2893,6 +2973,8 @@ class MigrationEvents extends Table {
     Orders,
     OrderItems,
     OrderCrateLines,
+    OnlineOrders,
+    OnlineOrderLines,
     Shipments,
     PurchaseItems,
     ExpenseCategories,
@@ -3010,7 +3092,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 90;
+  int get schemaVersion => 92;
 
   /// The v90 (#473) listing columns, pinned to their defaults in every older
   /// products rebuild: TableMigration copies from the CURRENT schema, so a
@@ -6622,6 +6704,25 @@ class AppDatabase extends _$AppDatabase {
           if (!existing.contains(column.name)) {
             await m.addColumn(products, column);
           }
+        }
+      }
+      // v91 is reserved for #474 (photo gallery, in progress) — it merges
+      // first and keeps its step above this one.
+      if (from < 92) {
+        // ── v92 — #426: Online Orders pulled to shop phones ───────────────
+        //
+        // Mirrors supabase/migrations/0205_online_orders.sql. Two new tables,
+        // created only when absent so a re-upgrade is idempotent.
+        final names = {
+          for (final r in await customSelect(
+            "SELECT name FROM sqlite_master WHERE type = 'table' "
+            "AND name IN ('online_orders', 'online_order_lines')",
+          ).get())
+            r.read<String>('name'),
+        };
+        if (!names.contains('online_orders')) await m.createTable(onlineOrders);
+        if (!names.contains('online_order_lines')) {
+          await m.createTable(onlineOrderLines);
         }
       }
     },

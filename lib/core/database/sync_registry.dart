@@ -190,19 +190,24 @@ abstract final class Restore {
   /// resolved; every other transition (including the normal cross-device
   /// `pending` → terminal convergence, and terminal → terminal) applies exactly
   /// as [plain].
+  ///
+  /// [openStatus] is the table's single non-terminal starting state: `pending`
+  /// for the approval queues, `new` for Online Orders (#426) — a stale `new`
+  /// must never overwrite an order the shop already accepted or declined.
   static RestoreFn monotonicStatus<T extends Table, D extends Insertable<D>>(
     TableInfo<T, D> Function(AppDatabase db) tableOf,
     D Function(Map<String, dynamic> json) fromJson, {
     bool resilient = true,
+    String openStatus = 'pending',
   }) => (ex, table, rows, fkSkipped) async {
     final t = tableOf(ex.db);
     for (final r in rows) {
       final data = fromJson(r);
       Future<void> doInsert() async {
         final id = r['id'];
-        if (r['status'] == 'pending' && id is String) {
+        if (r['status'] == openStatus && id is String) {
           final local = await ex.localStatusFor(table, id);
-          if (local != null && local != 'pending') {
+          if (local != null && local != openStatus) {
             // Resolved locally — a stale/duplicate pending snapshot must not
             // revert it back into the pending set.
             return;
@@ -901,6 +906,30 @@ final List<SyncedTable> kSyncRegistry = [
           t.orderId.equals(p.orderId) &
           t.manufacturerId.equals(p.manufacturerId) &
           t.id.equals(p.id).not(),
+    ),
+  ),
+  // #426: Online Orders, after stores/products/orders. Written in the cloud
+  // by `shopper_place_orders`; shop answers (#427) push as full-row upserts.
+  // Never hard-deleted. Monotonic status: a stale `new` snapshot must never
+  // overwrite an order the shop has already answered.
+  SyncedTable(
+    name: 'online_orders',
+    tenantScoped: true,
+    restore: Restore.monotonicStatus(
+      (db) => db.onlineOrders,
+      OnlineOrderData.fromJson,
+      resilient: true,
+      openStatus: 'new',
+    ),
+  ),
+  SyncedTable(
+    name: 'online_order_lines',
+    tenantScoped: true,
+    restore: Restore.plain(
+      (db) => db.onlineOrderLines,
+      OnlineOrderLineData.fromJson,
+      resilient: true,
+      defaults: {'priceTier': 'retailer'},
     ),
   ),
   SyncedTable(
