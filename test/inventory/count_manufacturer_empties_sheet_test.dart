@@ -340,7 +340,7 @@ void main() {
         roleName: 'CEO',
         selectableStores: [
           env.store,
-          StoreData(
+          StoreData(onlineOrderingEnabled: false, 
             id: 'store-2',
             businessId: env.businessId,
             name: 'Warehouse Branch',

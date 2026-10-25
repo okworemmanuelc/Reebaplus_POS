@@ -226,7 +226,7 @@ void main() {
   // with null makes every business-scoped provider emit its `whenAbsent` value
   // without touching a database, so only the expense feed, the payment feed and
   // the store-filter inputs need real values.
-  StoreData store(String id) => StoreData(
+  StoreData store(String id) => StoreData(onlineOrderingEnabled: false, 
     id: id,
     businessId: 'biz-1',
     name: 'Store $id',

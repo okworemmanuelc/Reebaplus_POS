@@ -188,7 +188,7 @@ void main() {
             currentPeriodEnd: localNow.add(const Duration(days: 30)),
           ),
           // stores
-          StoreData(
+          StoreData(onlineOrderingEnabled: false, 
             id: UuidV7.generate(),
             businessId: 'biz-1',
             name: 'Main Store',

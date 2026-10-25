@@ -51,6 +51,8 @@ void main() {
     'crate_size_groups',
     'manufacturers',
     'stores',
+    // #423: per-store delivery areas, right after their parent store.
+    'store_delivery_areas',
     'users',
     'roles',
     'role_settings',
@@ -137,6 +139,7 @@ void main() {
     'users',
     'sessions',
     'stores',
+    'store_delivery_areas', // #423
     'manufacturers',
     'crate_size_groups',
     'categories',
