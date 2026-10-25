@@ -4356,4 +4356,30 @@ void main() {
       expect(await db.select(db.onlineOrders).get(), isEmpty);
     } finally { await db.close(); }
   });
+
+  test('v92 to v93 adds the Shopper link + online order keys (#427)',
+      () async {
+    var db = await openAndInit();
+    await db.customStatement(
+        'DROP INDEX IF EXISTS uq_customers_business_shopper_account');
+    await db.customStatement('ALTER TABLE customers DROP COLUMN shopper_account_id');
+    await db.customStatement(
+        "DELETE FROM permissions WHERE key LIKE 'online_orders.%'");
+    await db.customStatement('PRAGMA user_version = 92');
+    await db.close();
+    db = await openAndInit();
+    try {
+      expect(await columnsOf(db, 'customers'), contains('shopper_account_id'));
+      final keys = await db.customSelect(
+          "SELECT key FROM permissions WHERE key LIKE 'online_orders.%'").get();
+      expect(keys.map((r) => r.read<String>('key')).toSet(),
+          {'online_orders.view', 'online_orders.answer'});
+      final idx = await db.customSelect("SELECT name FROM sqlite_master "
+          "WHERE name = 'uq_customers_business_shopper_account'").get();
+      expect(idx, hasLength(1));
+      await db.customStatement('PRAGMA user_version = 92');
+      await db.close();
+      db = await openAndInit(); // idempotent re-upgrade
+    } finally { await db.close(); }
+  });
 }

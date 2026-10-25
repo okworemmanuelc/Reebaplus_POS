@@ -10,7 +10,10 @@ import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/features/orders/widgets/online_orders_tab.dart';
+import 'package:reebaplus_pos/features/orders/widgets/online_order_parts.dart';
 import 'package:reebaplus_pos/features/orders/widgets/orders_parts.dart';
+import 'package:reebaplus_pos/core/providers/online_order_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/icon_tile.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/tag_pill.dart';
@@ -58,6 +61,9 @@ const String kOrderRowKeyPrefix = 'order-card-';
 Key orderRowKey(String orderId) => ValueKey('$kOrderRowKeyPrefix$orderId');
 
 class OrdersScreen extends ConsumerStatefulWidget {
+  /// The tab to open on, counted over the VISIBLE tabs: Pending · Online ·
+  /// Completed · Cancelled with `online_orders.view` (#427), else Pending ·
+  /// Completed · Cancelled.
   final int initialIndex;
   const OrdersScreen({super.key, this.initialIndex = 0});
 
@@ -131,14 +137,37 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
   AppFixedColors get _fixed =>
       Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light;
 
+  /// Whether the Online tab (#427) is in the tab set — `online_orders.view`.
+  late bool _showOnline;
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(
-      length: 3,
+    _showOnline = Gates.viewOnlineOrders.allowsNow(ref);
+    _tabController = _newTabController(widget.initialIndex);
+  }
+
+  TabController _newTabController(int index) {
+    final length = _showOnline ? 4 : 3;
+    return TabController(
+      length: length,
       vsync: this,
-      initialIndex: widget.initialIndex,
+      initialIndex: index.clamp(0, length - 1),
     );
+  }
+
+  /// The view permission changed under the open screen: rebuild the tab set,
+  /// keeping the same tab selected (Online falls back to Pending).
+  void _syncOnlineTab(bool showOnline) {
+    if (showOnline == _showOnline) return;
+    final old = _tabController;
+    final index = old.index;
+    final next = showOnline
+        ? (index >= 1 ? index + 1 : index)
+        : (index == 1 ? 0 : (index > 1 ? index - 1 : index));
+    _showOnline = showOnline;
+    _tabController = _newTabController(next);
+    WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
   }
 
   @override
@@ -184,6 +213,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     ref.watch(
       currencySymbolProvider,
     ); // rebuild money displays when currency changes
+    _syncOnlineTab(Gates.viewOnlineOrders.allows(ref));
     return SharedScaffold(
       activeRoute: 'orders',
       backgroundColor: _bg,
@@ -218,6 +248,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                 ref.invalidate(pendingOrdersProvider(activeStoreId));
               },
               child: TabbedSliverScaffold(
+                key: ValueKey('orders-tabs-$_showOnline'),
                 controller: _tabController,
                 tabBarExtent: math.max(
                   kMinInteractiveDimension,
@@ -229,6 +260,11 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                     storageKey: 'orders-pending',
                     slivers: _pendingTabSlivers(context, activeStoreId),
                   ),
+                  if (_showOnline)
+                    const TabSliverView(
+                      storageKey: 'orders-online',
+                      slivers: [OnlineOrdersTabSliver()],
+                    ),
                   TabSliverView(
                     storageKey: 'orders-completed',
                     slivers: _completedTabSlivers(context, activeStoreId),
@@ -263,6 +299,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
   Widget _buildTabBar(BuildContext context) {
     final t = Theme.of(context);
     final iconSize = context.getRSize(18);
+    final newOnline = _showOnline ? ref.watch(newOnlineOrderCountProvider) : 0;
     return Material(
       key: OrdersKeys.tabBar,
       color: surfaceCol,
@@ -284,6 +321,17 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
               icon: Icon(AppIcons.box, size: iconSize),
               text: 'Pending',
             ),
+            if (_showOnline)
+              Tab(
+                key: OnlineOrderKeys.tab,
+                icon: Badge(
+                  key: OnlineOrderKeys.tabBadge,
+                  label: Text('$newOnline'),
+                  isLabelVisible: newOnline > 0,
+                  child: Icon(AppIcons.public, size: iconSize),
+                ),
+                text: 'Online',
+              ),
             Tab(
               icon: Icon(AppIcons.auditCheck, size: iconSize),
               text: 'Completed',

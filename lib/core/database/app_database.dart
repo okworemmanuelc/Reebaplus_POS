@@ -920,6 +920,12 @@ class Customers extends Table {
   DateTimeColumn get lastUpdatedAt =>
       dateTime().withDefault(currentDateAndTime)();
 
+  /// #427 (v93 / cloud 0208): the Shopper login this Customer is linked to.
+  /// Set only by a staff choice on the first accepted Online Order (ADR 0030,
+  /// never a phone match). At most one live Customer per Shopper per business
+  /// (partial unique index `uq_customers_business_shopper_account`).
+  TextColumn get shopperAccountId => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 
@@ -3094,6 +3100,7 @@ class MigrationEvents extends Table {
     UserBusinessesDao,
     InviteCodesDao,
     UserStoresDao,
+    OnlineOrdersDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -3128,7 +3135,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 92;
+  int get schemaVersion => 93;
 
   /// The v90 (#473) listing columns, pinned to their defaults in every older
   /// products rebuild: TableMigration copies from the CURRENT schema, so a
@@ -3657,7 +3664,16 @@ class AppDatabase extends _$AppDatabase {
         // already exists after the RENAME above). Rebuilding drops the
         // table's indexes + bump trigger, so recreate them to match
         // onCreate exactly.
-        await m.alterTable(TableMigration(customers));
+        // #427 (v93) added `shopper_account_id`; a pre-v15 table lacks it, so
+        // pin it to NULL (the TableMigration stale-column trap).
+        await m.alterTable(
+          TableMigration(
+            customers,
+            columnTransformer: {
+              customers.shopperAccountId: const Constant<String>(null),
+            },
+          ),
+        );
         await customStatement(
           'CREATE INDEX idx_customers_business_lua ON customers (business_id, last_updated_at)',
         );
@@ -6775,6 +6791,31 @@ class AppDatabase extends _$AppDatabase {
           await m.createTable(onlineOrderLines);
         }
       }
+      if (from < 93) {
+        // ── v93 — #427: the shop answers Online Orders ────────────────────
+        //
+        // Mirrors supabase/migrations/0208_online_order_answer.sql: the
+        // Customer ↔ Shopper link column + its partial unique index, and the
+        // two permission keys (catalogue only — role grants arrive from the
+        // cloud). Cloud 0208 must deploy first. Guarded so a re-upgrade is
+        // idempotent; the only older customers rebuild (v15) pins the column.
+        final customerCols = {
+          for (final r in await customSelect(
+            "SELECT name FROM pragma_table_info('customers')",
+          ).get())
+            r.read<String>('name'),
+        };
+        if (!customerCols.contains('shopper_account_id')) {
+          await m.addColumn(customers, customers.shopperAccountId);
+        }
+        await customStatement(kCustomersShopperAccountIndex);
+        await customStatement(
+          "INSERT OR IGNORE INTO permissions (key, description, category) VALUES "
+          "('online_orders.view', 'See online orders', 'Online store'), "
+          "('online_orders.answer', 'Accept or decline online orders', "
+          "'Online store')",
+        );
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -7244,6 +7285,9 @@ const List<List<String>> _defaultPermissionRows = [
   // Stores — rendered first on the role page (§10.2). CEO-only by default.
   ['stores.manage', 'Add, edit, and remove stores', 'Stores'],
   ['stores.online_ordering', "Switch a store's online ordering on/off", 'Online store'],
+  // #427: Online Orders. CEO / Manager / Cashier by default (cloud 0208).
+  ['online_orders.view', 'See online orders', 'Online store'],
+  ['online_orders.answer', 'Accept or decline online orders', 'Online store'],
   [
     'stores.receive_transfer',
     'Confirm receipt of incoming stock transfers',
@@ -7709,8 +7753,17 @@ const List<String> _crateDepositPaymentIndexStatements = [
       'ON payment_transactions (business_id, crate_deposit_id)',
 ];
 
+/// #427: one live Customer per Shopper per business (mirrors cloud 0208's
+/// `customers_business_shopper_account`). Run at create time and by the v93
+/// step; IF NOT EXISTS keeps a re-upgrade idempotent.
+const String kCustomersShopperAccountIndex =
+    'CREATE UNIQUE INDEX IF NOT EXISTS uq_customers_business_shopper_account '
+    'ON customers (business_id, shopper_account_id) '
+    'WHERE shopper_account_id IS NOT NULL AND is_deleted = 0';
+
 List<String> get _postCreateStatements {
   final stmts = <String>[];
+  stmts.add(kCustomersShopperAccountIndex);
 
   // -- Sync indexes --
   stmts.add(
