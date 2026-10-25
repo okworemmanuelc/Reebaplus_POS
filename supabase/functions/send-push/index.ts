@@ -10,8 +10,10 @@
 // sends a shared secret in `x-push-hook-secret` (PUSH_HOOK_SECRET); that secret
 // is the only gate — reject anything that doesn't match.
 //
-// What it does: resolve every live FCM Device Token for the broadcast's
-// business (service_role), send one hybrid notification+data message per token
+// What it does: resolve every live FCM Device Token for the record's
+// recipient (service_role) — a console broadcast goes to its business; a
+// Shopper push (#476, type `shopper_*`, keyed by `auth_user_id`, no business)
+// goes to that login's phones — send one hybrid notification+data message per token
 // over FCM HTTP v1, prune tokens FCM reports dead, and stamp
 // notifications.push_sent_at (observability). Push is an alert only — it never
 // writes the notification row of record; that arrives via the Sync Engine
@@ -27,15 +29,17 @@ import { errorResponse, okResponse } from "../_shared/errors.ts";
 import { getServiceClient } from "../_shared/db.ts";
 import {
   buildFcmMessages,
-  type BroadcastRecord,
   type FcmMessage,
   type FcmSender,
   type FcmSendResult,
+  type PushRecord,
+  resolveRecipient,
   sendAll,
+  tokenFilterFor,
 } from "./fcm.ts";
 
 interface HookPayload {
-  record?: Partial<BroadcastRecord> | null;
+  record?: Partial<PushRecord> | null;
 }
 
 interface ServiceAccount {
@@ -135,15 +139,6 @@ const httpFcmSender: FcmSender = async (
 
 // ── Request handler ──────────────────────────────────────────────────────────
 
-function isBroadcastRecord(r: unknown): r is BroadcastRecord {
-  return !!r && typeof r === "object" &&
-    typeof (r as BroadcastRecord).id === "string" &&
-    typeof (r as BroadcastRecord).business_id === "string" &&
-    typeof (r as BroadcastRecord).type === "string" &&
-    typeof (r as BroadcastRecord).message === "string" &&
-    typeof (r as BroadcastRecord).severity === "string";
-}
-
 Deno.serve(async (req: Request): Promise<Response> => {
   const preflight = handlePreflight(req);
   if (preflight) return preflight;
@@ -165,13 +160,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   const record = payload?.record;
-  if (!isBroadcastRecord(record)) return errorResponse("invalid_payload");
-
-  // Defence in depth: the trigger only fires for console_broadcast, but never
-  // push a non-broadcast type even if this is ever invoked directly.
-  if (record.type !== "console_broadcast") {
-    return okResponse({ skipped: "not_broadcast" });
+  if (!record || typeof record !== "object") {
+    return errorResponse("invalid_payload");
   }
+
+  // Defence in depth: only console broadcasts (by business) and Shopper pushes
+  // (by auth user, never a business) route. Anything else — or a record that
+  // is missing its routing key — is skipped, never sent.
+  const recipient = resolveRecipient(record);
+  if (!recipient) return okResponse({ skipped: "not_routable" });
+  const push = record as PushRecord;
 
   // Firebase not configured yet → degrade to "no push" (the broadcast still
   // appears in the bell on the next pull). Never a 500 for a config gap.
@@ -190,12 +188,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   const service = getServiceClient();
 
-  // Resolve every live token for this business (dedup — one push per device,
+  // Resolve every live token for the recipient (dedup — one push per device,
   // and a token maps to one row by the 0159 uniqueness trigger anyway).
+  const filter = tokenFilterFor(recipient);
   const { data: rows, error: tokenErr } = await service
     .from("devices")
     .select("fcm_token")
-    .eq("business_id", record.business_id)
+    .eq(filter.column, filter.value)
     .not("fcm_token", "is", null);
   if (tokenErr) {
     console.error("token lookup failed", tokenErr.message);
@@ -218,7 +217,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return errorResponse("internal");
   }
 
-  const messages = buildFcmMessages(record, tokens);
+  const messages = buildFcmMessages(push, tokens, recipient.audience);
   const { sent, prune } = await sendAll(
     httpFcmSender,
     accessToken,
@@ -226,7 +225,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     messages,
   );
 
-  // Prune dead tokens so a business's token set stays live.
+  // Prune dead tokens so the recipient's token set stays live.
   if (prune.length > 0) {
     const { error: pruneErr } = await service
       .from("devices")
@@ -235,13 +234,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (pruneErr) console.error("token prune failed", pruneErr.message);
   }
 
-  // Stamp observability (never read by the client; a re-push upsert can't
-  // clobber it — the column is absent from the Drift schema).
-  const { error: stampErr } = await service
-    .from("notifications")
-    .update({ push_sent_at: new Date().toISOString() })
-    .eq("id", record.id);
-  if (stampErr) console.error("push_sent_at stamp failed", stampErr.message);
+  // Stamp observability on the broadcast's notifications row (never read by
+  // the client; a re-push upsert can't clobber it — the column is absent from
+  // the Drift schema). Shopper records are not notifications rows.
+  if (recipient.audience === "staff") {
+    const { error: stampErr } = await service
+      .from("notifications")
+      .update({ push_sent_at: new Date().toISOString() })
+      .eq("id", push.id);
+    if (stampErr) console.error("push_sent_at stamp failed", stampErr.message);
+  }
 
   return okResponse({ sent, pruned: prune.length });
 });
