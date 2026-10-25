@@ -54,7 +54,7 @@ AS $function$
      AND ub.status = 'active'
     JOIN public.roles r ON r.id = ub.role_id
    WHERE u.business_id = p_business_id
-     AND NOT u.is_deleted
+     -- users has no soft-delete; removal is user_businesses.status above.
      -- Works at this store.
      AND (
        r.slug = 'ceo'
