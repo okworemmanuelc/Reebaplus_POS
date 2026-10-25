@@ -902,3 +902,10 @@ price, stock words, deposit note, the order rule ("Order at least 2, in steps
 of 2, up to 20", #473), the shop's online description and "See this store".
 Goldens: `test/redesign/goldens/browse_{feed,offline,store}_{390x844,844x390}_{light,dark}.png`
 and `browse_product_sheet_390x844_light` / `_844x390_dark`.
+
+**18+ confirmation** (`AgeConfirmationDialog`, #479, agent-designed — no Claude
+Design file): theme `AlertDialog(scrollable: true)`, content capped at 420dp,
+centred: danger `IconTile` (verified-person icon) + red "18+" `TagPill`,
+ExtraBold 17 "Are you 18 or older?", muted 14 body, full-width primary
+"I am 18 or older" and outline "Not now" `AppButton`s. Goldens
+`age_confirmation_390x844_light` / `_844x390_dark`.

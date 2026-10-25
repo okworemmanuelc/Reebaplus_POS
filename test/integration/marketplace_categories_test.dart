@@ -30,6 +30,6 @@ void main() {
       },
     ]);
   }, skip: url == null || key == null
-      ? 'Set TEST_SUPABASE_URL and TEST_SUPABASE_ANON_KEY on a test backend with0190.'
+      ? 'Set TEST_SUPABASE_URL and TEST_SUPABASE_ANON_KEY on a test backend with 0190 + 0206 (#479).'
       : false);
 }

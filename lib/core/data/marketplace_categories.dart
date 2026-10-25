@@ -58,6 +58,8 @@ const marketplaceCategories = <MarketplaceCategory>[
   MarketplaceCategory(slug: 'footwear', name: 'Footwear', parentSlug: 'fashion', sort: 43, restricted: null),
   MarketplaceCategory(slug: 'phone-accessories', name: 'Phone accessories', parentSlug: 'electronics', sort: 44, restricted: null),
   MarketplaceCategory(slug: 'fashion-accessories', name: 'Fashion accessories', parentSlug: 'fashion', sort: 45, restricted: null),
+  // #479 (cloud 0206): prescription-only medicines are never listed online.
+  MarketplaceCategory(slug: 'prescription-medicines', name: 'Prescription medicines', parentSlug: 'health', sort: 46, restricted: 'prescription'),
 ];
 
 /// An absent mapping is deliberately shown under Other in the storefront.

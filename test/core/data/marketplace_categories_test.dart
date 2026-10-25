@@ -6,8 +6,11 @@ import 'package:reebaplus_pos/core/industry/industry.dart';
 
 void main() {
   test('bundled public catalogue exactly matches SQL seed, including metadata', () {
-    final sql = File('supabase/migrations/0190_marketplace_categories.sql')
-        .readAsStringSync();
+    // 0190 seeds the catalogue; 0206 (#479) adds Prescription medicines.
+    final sql = [
+      'supabase/migrations/0190_marketplace_categories.sql',
+      'supabase/migrations/0206_restricted_goods.sql',
+    ].map((path) => File(path).readAsStringSync()).join('\n');
     final rows = RegExp(r"\('([^']+)', '([^']+)', (NULL|'[^']+'), (\d+), (NULL|'[^']+')\)")
         .allMatches(sql).map((m) => [
           m[1], m[2], m[3] == 'NULL' ? null : m[3]!.replaceAll("'", ''),
@@ -22,6 +25,20 @@ void main() {
         expect(marketplaceCategories.any((p) => p.slug == c.parentSlug), isTrue);
       }
     }
+  });
+
+  test('restricted metadata: beer/spirits/wine 18+, prescription medicines (#479)', () {
+    final restricted = {
+      for (final c in marketplaceCategories)
+        if (c.restricted != null) c.slug: c.restricted,
+    };
+    expect(restricted, {
+      'beer': 'age_18',
+      'spirits': 'age_18',
+      'wine': 'age_18',
+      'prescription-medicines': 'prescription',
+    });
+    expect(marketplaceCategoryFor('prescription-medicines').parentSlug, 'health');
   });
 
   test('exact child names pre-map without any industry starter suggestions', () {
