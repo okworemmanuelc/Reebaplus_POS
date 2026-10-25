@@ -7,6 +7,18 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #476: Shopper push tokens (2026-10-25, ready for review)
+- Branch `feat/476-shopper-push-tokens`, worktree `../drinkPosApp-wt-476`.
+  Cloud 0200 only, no Drift bump. `devices.business_id` nullable,
+  `devices.auth_user_id` server-stamped; Shopper-only rows written only by the
+  `register_shopper_push_token` / `clear_shopper_push_token` definer RPCs.
+- `send-push` routes console broadcasts by business (unchanged) and `shopper_*`
+  types by auth user; pushes carry `audience`. Client: `onShopperSignedIn/Out`,
+  `bindShopperTapAction` (both wired by #426/#434, nothing calls them yet).
+- Tier-2 SQL companion `test/integration/rpcs/shopper_push_tokens.sql` not yet
+  run live (dev run declined this session). Parity: reebaplus-web#144.
+- Open: Shopper data deletion (#438) should delete business-less `devices` rows.
+
 ### Issue #423: A store can go online (2026-10-25, ready for review)
 Cloud `0199_store_online_ordering.sql` + Drift schema89. `stores` gains
 country/state/lga, public phone, online note (≤280) and

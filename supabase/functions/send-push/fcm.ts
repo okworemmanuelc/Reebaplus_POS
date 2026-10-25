@@ -16,6 +16,68 @@ export interface BroadcastRecord {
   severity: string;
 }
 
+/// Any record the hook may deliver. Staff pushes carry `business_id`; Shopper
+/// pushes (#476) carry `auth_user_id` and no business. `title` is optional
+/// (Shopper senders supply their own; staff titles come from severity).
+export interface PushRecord {
+  id: string;
+  type: string;
+  message: string;
+  severity: string;
+  business_id?: string | null;
+  auth_user_id?: string | null;
+  title?: string | null;
+}
+
+/// Who a push goes to. Staff = every live token of a business (unchanged
+/// console-broadcast routing). Shopper = every live token of one login — its
+/// Shopper-only row, or the business row of a phone that also shops (one row
+/// per token, migration 0200).
+export type PushRecipient =
+  | { audience: "staff"; businessId: string }
+  | { audience: "shopper"; authUserId: string };
+
+/// Shopper push types share this prefix (senders arrive with #434). The hook
+/// secret is the trust boundary; the prefix keeps a mis-addressed record from
+/// ever reaching a phone.
+export const SHOPPER_PUSH_TYPE_PREFIX = "shopper_";
+
+const nonEmpty = (v: unknown): v is string =>
+  typeof v === "string" && v.length > 0;
+
+/// Route a hook record to its recipient, or null to skip it. A record never
+/// routes by BOTH keys: a Shopper push carrying a business_id is rejected, so
+/// a Shopper message can never fan out to a whole business.
+export function resolveRecipient(r: unknown): PushRecipient | null {
+  if (!r || typeof r !== "object") return null;
+  const rec = r as Partial<PushRecord>;
+  if (
+    !nonEmpty(rec.id) || !nonEmpty(rec.type) ||
+    typeof rec.message !== "string" || typeof rec.severity !== "string"
+  ) return null;
+  if (rec.type === "console_broadcast") {
+    return nonEmpty(rec.business_id)
+      ? { audience: "staff", businessId: rec.business_id }
+      : null;
+  }
+  if (rec.type.startsWith(SHOPPER_PUSH_TYPE_PREFIX)) {
+    if (rec.business_id != null) return null;
+    return nonEmpty(rec.auth_user_id)
+      ? { audience: "shopper", authUserId: rec.auth_user_id }
+      : null;
+  }
+  return null;
+}
+
+/// The `devices` column + value whose live tokens address [recipient].
+export function tokenFilterFor(
+  recipient: PushRecipient,
+): { column: "business_id" | "auth_user_id"; value: string } {
+  return recipient.audience === "staff"
+    ? { column: "business_id", value: recipient.businessId }
+    : { column: "auth_user_id", value: recipient.authUserId };
+}
+
 /// One FCM HTTP v1 message envelope (POST body to messages:send).
 export interface FcmMessage {
   message: {
@@ -60,17 +122,25 @@ export function titleForSeverity(severity: string): string {
 
 /// Build one hybrid notification+data message per device token. Empty tokens →
 /// empty result (no send). `data` values are all strings, as FCM v1 requires.
+/// `audience` tells the client which side of a shared phone a tap belongs to;
+/// a Shopper push never carries a business_id.
 export function buildFcmMessages(
-  record: BroadcastRecord,
+  record: PushRecord,
   tokens: string[],
+  audience: PushRecipient["audience"] = "staff",
 ): FcmMessage[] {
-  const title = titleForSeverity(record.severity);
+  const title = audience === "shopper"
+    ? (nonEmpty(record.title) ? record.title : "Reebaplus")
+    : titleForSeverity(record.severity);
   const data: Record<string, string> = {
     notification_id: record.id,
     type: record.type,
     severity: record.severity,
-    business_id: record.business_id,
+    audience,
   };
+  if (audience === "staff" && nonEmpty(record.business_id)) {
+    data.business_id = record.business_id;
+  }
   return tokens.map((token) => ({
     message: {
       token,

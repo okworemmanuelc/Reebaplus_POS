@@ -420,6 +420,17 @@ This is an **alert channel only** — it never carries or persists business data
   auto-show foreground pushes); a tap in any state (foreground, background, or a
   killed-app cold start replayed after `MainLayout` mounts) opens the in-app bell
   and marks the row read.
+- **Shopper tokens (#476, migration `0200`).** `devices.business_id` is nullable
+  and `devices.auth_user_id` is **server-stamped** (`auth.uid()`, BEFORE trigger,
+  direct `authenticated` writes only — the app never sends it). A Shopper-only
+  phone registers via the `register_shopper_push_token` / `clear_shopper_push_token`
+  definer RPCs onto a business-less row (one per device + login); Shoppers get no
+  direct `devices` access. A business phone that shops keeps **one** row: its
+  business row carries the same login, so `send-push` routes staff pushes by
+  `business_id` (console broadcasts unchanged) and Shopper pushes (`shopper_*`
+  types, senders in #434) by `auth_user_id`. One token → one row still holds.
+  Each push carries `audience` (`staff`/`shopper`) so a tap goes to the bell or
+  the Shopper tap action, never the wrong side.
 - **Severity.** The push title and the in-app card colour both derive from the
   broadcast's `severity` (`info` / `warning` / `alert`) — `severityColor` and the
   edge function's `titleForSeverity` are kept in lockstep.
