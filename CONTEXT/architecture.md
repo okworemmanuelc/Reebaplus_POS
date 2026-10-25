@@ -103,6 +103,21 @@ path):
   clients). `lookupOutcome` is the lookup that says why nothing came back
   (nothing shared / unreachable / failed) for that sheet.
 
+- **`StorefrontService` (`lib/core/storefront/storefront_service.dart`, #425)**
+  — the Shopper read path (ADR 0031): the four signed-out definer RPCs
+  `storefront_feed`, `storefront_search`, `storefront_store` and
+  `storefront_store_products` (migration 0202), read-only, online only (15 s,
+  a connectivity check first), nothing kept in Drift or the outbox. The
+  Shopper's browsing area is a device key-value (`SharedPreferences`) value.
+  Product photos load from their public URLs with `Image.network`, never the
+  member-only Storage download. Every eligibility rule, the stock label and
+  the ranking are server-side; the app only shapes rows. The Browse-first
+  front door is behind `kBrowseFirstEnabled` (`lib/core/storefront/browse_switch.dart`,
+  off until #426/#427): `entryScreenWithoutSignedInUser` (main.dart) gives a
+  phone with a device user the PIN screen always, otherwise Browse (switch on)
+  or Welcome. "Sell on Reebaplus" pushes the unchanged Welcome; sign-in
+  regenerates the navigator, so nothing of Browse survives into the till.
+
 All ordinary business writes still go to Drift first and drain through the
 `sync_queue`.
 
@@ -156,6 +171,19 @@ switched on; vans never. Writes go through `StoreOnlineService` (fire-time
 `Gates.manageOnlineStore`, key `stores.online_ordering`) → `StoresDao` → outbox.
 Storefront reads (#425) must require `online_ordering_enabled`; switching off
 hides the store at once, while placed online orders are separate rows.
+
+**Storefront browse (#425).** Cloud0202 only, no Drift change. Signed-out
+definer RPCs over server-only helpers (see the sanctioned-exceptions list);
+`pg_trgm` + `unaccent` in `extensions`, a trigram partial index on
+`storefront_search_key(products.name)` for listable products and
+`inventory (store_id, last_updated_at)` for freshness. Hidden: products off
+for sale / archived / deleted / prescription category; offline, van or
+deleted stores; deleted, tombstoned, Inactive or trial-ended businesses;
+stores not synced for 7 days (72 h = demoted + "Stock may be out of date").
+"Last synced" is approximated as the newest of the store row, its inventory
+rows and the business's `devices.last_seen_at` (devices are per business,
+not per store). Admin blocking (#478) and tier prices (#429) and Sponsored
+slots (#461) plug into `_storefront_cards`.
 
 | What | Where | Why | Synced to cloud? |
 |---|---|---|---|

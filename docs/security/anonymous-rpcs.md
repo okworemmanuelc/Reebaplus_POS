@@ -19,6 +19,7 @@ Remaining anonymous functions, left unchanged by this migration:
 | accept_invite_preview_by_code(text) | Broken legacy function; cleanup tracked in #506 |
 | lookup_invite_code(text) | Mobile staff signup validates a code before OTP |
 | console_get_trial_days() | Scalar trial-duration bootstrap setting |
+| storefront_feed / storefront_search / storefront_store / storefront_store_products | #425 (0202): signed-out Browse. Public listing fields only; every hide rule server-side; helpers `_storefront_*` are server-only |
 
 The legacy first two previews have a pre-existing defect: their functions refer
 to `public.invites` and `public.warehouses`, both absent in the live catalogue and

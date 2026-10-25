@@ -23,6 +23,15 @@ flutter test test/integration/rpcs/shopper_isolation_test.dart --reporter expand
 See `docs/security/0422-shopper-isolation.md` for the deliberate tombstone
 exception, standalone #467/#468 prerequisites, and outstanding owner decisions.
 
+## Storefront browse (#425)
+
+`rpcs/storefront_browse_test.dart` calls the four storefront RPCs as a
+signed-out client against throwaway fixtures (a made-up state per run, so the
+feed only sees this run's shops). Needs migration 0202 on reebaplus-dev, the
+three `TEST_SUPABASE_*` variables and `TEST_STOREFRONT_ALLOW_WRITES=1`; any URL
+but reebaplus-dev fails closed. `sql/storefront_browse.sql` (rollback-only)
+checks EXECUTE boundaries and records `EXPLAIN ANALYZE` for feed and search.
+
 Hits real dev Supabase. Verifies the v2 domain RPCs end-to-end:
 round-trip (response ↔ cloud row), idempotent replay, and atomicity
 (tenant guard + validation).
