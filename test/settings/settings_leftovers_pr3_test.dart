@@ -14,6 +14,8 @@ import 'package:reebaplus_pos/core/settings/activity_logs_access_screen.dart';
 import 'package:reebaplus_pos/core/settings/delete_business_screen.dart';
 import 'package:reebaplus_pos/core/settings/security_settings_screen.dart';
 import 'package:reebaplus_pos/core/settings/subscription_screen.dart';
+import 'package:reebaplus_pos/features/subscription/billing/play_billing_providers.dart';
+import 'package:reebaplus_pos/features/subscription/billing/plans_paywall.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
 import 'package:reebaplus_pos/shared/widgets/activity_log_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
@@ -68,7 +70,7 @@ void main() {
   });
 
   group('Subscription page', () {
-    testWidgets('shows the plan, status and renewal; Subscribe is info only', (
+    testWidgets('shows the plan, status and renewal; paywall is non-Android here', (
       tester,
     ) async {
       await seedSubscription(
@@ -82,6 +84,7 @@ void main() {
         screen: const SubscriptionScreen(),
         size: const Size(390, 844),
         overrides: [
+          billingSupportedProvider.overrideWithValue(false),
           currentBusinessSubscriptionProvider.overrideWithValue(
             SubscriptionAccess.active,
           ),
@@ -91,11 +94,7 @@ void main() {
       expect(find.text('ACTIVE'), findsOneWidget);
       expect(find.text('Renews'), findsOneWidget);
       expect(find.text('14 Apr 2026'), findsOneWidget);
-      await tester.tap(find.text('Subscribe / Renew'));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('In-app payment is coming soon'), findsOne);
-      await tester.tap(find.text('Got it'));
-      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('paywall-non-android')), findsOneWidget);
       // Read-only: the cloud-owned columns are untouched.
       final b = await (env.db.select(
         env.db.businesses,
@@ -134,7 +133,7 @@ void main() {
         roleSlug: 'cashier',
         roleName: 'Cashier',
       );
-      expect(find.text('Subscribe / Renew'), findsNothing);
+      expect(find.byType(PlansPaywall), findsNothing);
       await disposeScreen(tester);
     });
   });

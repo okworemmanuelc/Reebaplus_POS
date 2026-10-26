@@ -11,15 +11,15 @@ import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/subscription/billing/plans_paywall.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
-import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
 /// CEO Settings → Subscription (master plan §32). A READ-ONLY view of the
 /// business's plan, status, and trial-countdown / renewal date. Status is
 /// console-controlled (the app is blocked from writing it), so this screen does
 /// not edit anything — the "Subscribe / Renew" button is a placeholder until the
-/// in-app Paystack flow lands (next task).
+/// Google Play Billing paywall ([PlansPaywall], #90).
 class SubscriptionScreen extends ConsumerWidget {
   const SubscriptionScreen({super.key});
 
@@ -45,11 +45,7 @@ class SubscriptionScreen extends ConsumerWidget {
                   SizedBox(height: context.getRSize(10)),
                   _statusCard(context, ref),
                   SizedBox(height: context.getRSize(24)),
-                  AppButton(
-                    text: 'Subscribe / Renew',
-                    icon: AppIcons.premium,
-                    onPressed: () => _showRenewInfo(context),
-                  ),
+                  const PlansPaywall(),
                   SizedBox(height: context.getRSize(12)),
                   Text(
                     'Your subscription is managed by Reebaplus. Changes from the '
@@ -187,26 +183,6 @@ class SubscriptionScreen extends ConsumerWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showRenewInfo(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Subscribe / Renew'),
-        content: const Text(
-          'In-app payment is coming soon. For now, your Reebaplus subscription '
-          'is renewed from the admin console — reach out to renew or change '
-          'your plan.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Got it'),
           ),
         ],
       ),

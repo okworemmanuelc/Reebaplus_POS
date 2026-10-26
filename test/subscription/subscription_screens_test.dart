@@ -17,6 +17,7 @@ import 'package:reebaplus_pos/features/subscription/widgets/subscription_parts.d
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../helpers/screen_harness.dart';
+import 'package:reebaplus_pos/core/settings/subscription_screen.dart';
 import 'subscription_fixture.dart';
 
 void main() {
@@ -105,25 +106,17 @@ void main() {
       await disposeScreen(tester);
     });
 
-    testWidgets('Subscribe opens the info pop-up and Got it closes it', (
-      tester,
-    ) async {
+    testWidgets('Subscribe opens the Subscription (plans) page', (tester) async {
       await pump(
         tester,
         const SubscriptionLockedScreen(access: SubscriptionAccess.trialExpired),
       );
       await tester.tap(find.text('Subscribe'));
-      await tester.pump(const Duration(milliseconds: 400));
-      expect(
-        find.textContaining('In-app payment is coming soon'),
-        findsOneWidget,
-      );
-      await tester.tap(find.text('Got it'));
-      await tester.pump(const Duration(milliseconds: 400));
-      expect(
-        find.textContaining('In-app payment is coming soon'),
-        findsNothing,
-      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pump(const Duration(milliseconds: 600));
+      final ex = tester.takeException();
+      expect(find.byType(SubscriptionScreen), findsOneWidget, reason: '$ex');
       await disposeScreen(tester);
     });
 

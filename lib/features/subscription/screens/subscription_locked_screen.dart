@@ -7,6 +7,7 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/core/settings/subscription_screen.dart';
 import 'package:reebaplus_pos/features/subscription/widgets/subscription_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
@@ -36,26 +37,11 @@ class _SubscriptionLockedScreenState
     extends ConsumerState<SubscriptionLockedScreen> {
   bool get _isTrial => widget.access == SubscriptionAccess.trialExpired;
 
-  // In-app payment isn't built yet (§32.2) — reactivation happens in the admin
-  // console and this screen unlocks on its own (realtime + the 60s re-pull in
-  // main.dart). Until Paystack lands, "Subscribe" explains that.
-  void _showSubscribeInfo() {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Subscribe'),
-        content: const Text(
-          'In-app payment is coming soon. For now, your Reebaplus subscription '
-          'is renewed from the admin console — reach out to renew. Once it has '
-          'been renewed, this screen unlocks automatically.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Got it'),
-          ),
-        ],
-      ),
+  // Opens Settings > Subscription (the Play Billing paywall). Reached from the
+  // lock screen so a locked owner can pay without the app shell.
+  void _openPlans() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const SubscriptionScreen()),
     );
   }
 
@@ -125,7 +111,7 @@ class _SubscriptionLockedScreenState
           AppButton(
             text: 'Subscribe',
             icon: AppIcons.premium,
-            onPressed: _showSubscribeInfo,
+            onPressed: _openPlans,
           ),
           SizedBox(height: context.getRSize(12)),
           AppButton(
