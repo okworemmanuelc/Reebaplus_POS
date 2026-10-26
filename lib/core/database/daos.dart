@@ -26,6 +26,7 @@ import 'package:reebaplus_pos/core/data/marketplace_categories.dart';
 import 'package:reebaplus_pos/core/industry/industry.dart';
 // #427: the Online Order answer vocabulary (decline reasons, link choice).
 import 'package:reebaplus_pos/core/online_orders/online_order_answer.dart';
+import 'package:reebaplus_pos/core/online_orders/online_order_slip.dart';
 import 'package:reebaplus_pos/core/online_orders/online_order_till.dart';
 import 'package:reebaplus_pos/core/online_orders/pay_on_delivery.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
