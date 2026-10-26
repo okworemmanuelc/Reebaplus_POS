@@ -13,6 +13,7 @@ import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/notifications_modal.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
@@ -24,6 +25,7 @@ abstract final class StoresKeys {
   static const empty = ValueKey<String>('stores-empty');
   static const sheetFrame = ValueKey<String>('stores-sheet-frame');
   static const detailsBody = ValueKey<String>('store-details-body');
+  static const onlineCard = ValueKey<String>('store-details-online');
   static const restricted = ValueKey<String>('store-details-restricted');
   static const settingsList = ValueKey<String>('stores-settings-list');
   static const detailsTopBar = ValueKey<String>('store-details-top-bar');
@@ -693,6 +695,156 @@ class _StoresExpansionTileState extends State<StoresExpansionTile> {
         ),
         children: widget.children,
       ),
+    );
+  }
+}
+
+/// Store Details' online card (#423): status, area, public phone (store phone
+/// or the business phone) and the shopper note. [onManage] opens the store's
+/// online page; null hides the action (no `stores.online_ordering`).
+class StoreOnlineCard extends StatelessWidget {
+  const StoreOnlineCard({
+    super.key,
+    required this.online,
+    required this.area,
+    required this.phone,
+    required this.note,
+    required this.onManage,
+  });
+
+  final bool online;
+  final String? area;
+  final String? phone;
+  final String? note;
+  final VoidCallback? onManage;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    Widget line(IconData icon, String text) => Padding(
+      padding: EdgeInsets.only(top: context.getRSize(8)),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: muted),
+          SizedBox(width: context.getRSize(8)),
+          Expanded(
+            child: Text(
+              text,
+              style: context.regularStyle(13).copyWith(color: t.colorScheme.onSurface),
+            ),
+          ),
+        ],
+      ),
+    );
+    return DecoratedBox(
+      decoration: AppDecorations.card(context),
+      child: Padding(
+        padding: EdgeInsets.all(context.getRSize(16)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const IconTile(icon: AppIcons.public, tone: IconTileTone.info, size: 40),
+                SizedBox(width: context.getRSize(12)),
+                Expanded(
+                  child: Text(
+                    'Online store',
+                    style: context.boldStyle(15).copyWith(color: t.colorScheme.onSurface),
+                  ),
+                ),
+                TagPill(
+                  label: online ? 'Online' : 'Offline',
+                  tone: online ? TagPillTone.green : TagPillTone.neutral,
+                ),
+              ],
+            ),
+            line(AppIcons.location, area ?? 'Area not set'),
+            line(AppIcons.phone, (phone ?? '').trim().isEmpty ? 'No phone' : phone!),
+            if ((note ?? '').trim().isNotEmpty) line(AppIcons.infoCircle, note!.trim()),
+            if (onManage != null) ...[
+              SizedBox(height: context.getRSize(12)),
+              AppButton(
+                key: const ValueKey<String>('store-details-manage-online'),
+                text: 'Manage online store',
+                variant: AppButtonVariant.outline,
+                height: kMinInteractiveDimension,
+                onPressed: onManage,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The "State and local government area" field of the New Store sheet (#423).
+/// Tapping opens the shared AreaPicker; [label] is the current choice, and
+/// [missing] shows the required-field message.
+class StoreAreaField extends StatelessWidget {
+  const StoreAreaField({
+    super.key,
+    required this.label,
+    required this.missing,
+    required this.onTap,
+  });
+
+  final String? label;
+  final bool missing;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    final radius = BorderRadius.circular(AppSpacing.borderRadiusM);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Material(
+          color: t.inputDecorationTheme.fillColor ?? t.colorScheme.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: radius,
+            side: BorderSide(color: missing ? t.colorScheme.error : t.dividerColor),
+          ),
+          child: InkWell(
+            borderRadius: radius,
+            onTap: onTap,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: kMinInteractiveDimension + 8),
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: context.getRSize(12)),
+                child: Row(
+                  children: [
+                    Icon(AppIcons.location, size: 20, color: muted),
+                    SizedBox(width: context.getRSize(12)),
+                    Expanded(
+                      child: Text(
+                        label ?? 'State and local government area',
+                        style: context.regularStyle(14).copyWith(
+                          color: label == null ? muted : t.colorScheme.onSurface,
+                        ),
+                      ),
+                    ),
+                    Icon(AppIcons.chevronRight, color: muted),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (missing)
+          Padding(
+            padding: EdgeInsets.only(top: context.getRSize(6), left: context.getRSize(12)),
+            child: Text(
+              'Choose the store\'s state and local government area',
+              style: context.regularStyle(12).copyWith(color: t.colorScheme.error),
+            ),
+          ),
+      ],
     );
   }
 }

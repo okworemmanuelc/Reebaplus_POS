@@ -188,7 +188,7 @@ void main() {
             currentPeriodEnd: localNow.add(const Duration(days: 30)),
           ),
           // stores
-          StoreData(
+          StoreData(onlineOrderingEnabled: false, 
             id: UuidV7.generate(),
             businessId: 'biz-1',
             name: 'Main Store',
@@ -224,6 +224,9 @@ void main() {
             wholesalerPriceKobo: 48000,
             buyingPriceKobo: 40000,
             isAvailable: true,
+            showOnline: true,
+            minOrderQty: 1,
+            orderStep: 1,
             isDeleted: false,
             lowStockThreshold: 10,
             avgDailySales: 5,

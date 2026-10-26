@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:reebaplus_pos/core/listings/listing_content.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
@@ -12,6 +13,7 @@ import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/product_unit.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/listing_content_fields.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/product_detail_figures.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
@@ -912,6 +914,9 @@ class ProductManageCard extends StatelessWidget {
     required this.sideBySide,
     this.onArchiveToggle,
     this.onDelete,
+    this.showOnline = true,
+    this.listingBusy = false,
+    this.onShowOnlineChanged,
   });
 
   final bool archived;
@@ -924,6 +929,11 @@ class ProductManageCard extends StatelessWidget {
 
   /// Null hides the Delete button.
   final VoidCallback? onDelete;
+
+  final bool showOnline;
+  final bool listingBusy;
+  /// Null hides the listing control when its independent grant is absent.
+  final ValueChanged<bool>? onShowOnlineChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -982,12 +992,34 @@ class ProductManageCard extends StatelessWidget {
                 .copyWith(color: t.colorScheme.onSurface),
           ),
           SizedBox(height: context.getRSize(12)),
-          buttons,
-          SizedBox(height: context.getRSize(10)),
-          Text(
-            'Archiving hides it from sale. Its sales history is kept.',
-            style: context.regularStyle(13).copyWith(color: _muted(context)),
-          ),
+          if (onShowOnlineChanged != null) ...[
+            Material(
+              type: MaterialType.transparency,
+              child: SwitchListTile(
+                key: const ValueKey('product-show-online'),
+                value: showOnline,
+                onChanged: listingBusy ? null : onShowOnlineChanged,
+                contentPadding: EdgeInsets.zero,
+                activeThumbColor: t.colorScheme.primary,
+                activeTrackColor: t.colorScheme.primary.withValues(alpha: 0.35),
+                title: Text('Show online', style: context.boldStyle(15)),
+                subtitle: Text(
+                  archived ? 'Archived products stay hidden online.'
+                    : 'Let shoppers see this product in your online store.',
+                  style: context.regularStyle(13).copyWith(color: _muted(context)),
+                ),
+              ),
+            ),
+            SizedBox(height: gap),
+          ],
+          if (archive != null || delete != null) buttons,
+          if (archive != null) ...[
+            SizedBox(height: context.getRSize(10)),
+            Text(
+              'Archiving hides it from sale. Its sales history is kept.',
+              style: context.regularStyle(13).copyWith(color: _muted(context)),
+            ),
+          ],
         ],
       ),
     );
@@ -1116,6 +1148,178 @@ class _ProductEditDialogState extends State<ProductEditDialog> {
           onPressed: _saving ? null : () => Navigator.pop(context),
         ),
         AppButton(
+          text: 'Save',
+          isFullWidth: false,
+          isLoading: _saving,
+          onPressed: _save,
+        ),
+      ],
+    );
+  }
+}
+
+// ── Online listing (#473) ─────────────────────────────────────────────────────
+
+/// The shop's online words and order limits for this product. Shown only to a
+/// viewer holding `products.manage_listing`; [onEdit] null hides the pencil.
+class ProductListingCard extends StatelessWidget {
+  const ProductListingCard({super.key, required this.content, this.onEdit});
+
+  final ListingContent content;
+  final VoidCallback? onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final description = content.onlineDescription?.trim() ?? '';
+    Widget row(String label, String value, {bool muted = false}) => Padding(
+      padding: EdgeInsets.only(top: context.getRSize(8)),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: context.regularStyle(14).copyWith(color: _muted(context)),
+          ),
+          SizedBox(width: context.getRSize(12)),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: context.boldStyle(14).copyWith(
+                color: muted ? _muted(context) : t.colorScheme.onSurface,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    return DetailPanel(
+      key: const ValueKey('product-listing-card'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          DetailPanelHeader(
+            icon: AppIcons.storefront,
+            title: 'Online listing',
+            subtitle: 'What shoppers see in your online store.',
+            trailing: onEdit == null
+                ? null
+                : DetailPencil(tooltip: 'Edit online listing', onTap: onEdit!),
+          ),
+          SizedBox(height: context.getRSize(8)),
+          Text(
+            description.isEmpty ? 'No online description yet' : description,
+            style: context.regularStyle(15).copyWith(
+              color: description.isEmpty
+                  ? _muted(context)
+                  : t.colorScheme.onSurface,
+              height: 1.4,
+            ),
+          ),
+          row('Brand', content.brand ?? 'Not set', muted: content.brand == null),
+          row('Online orders', orderLimitsSummary(content.rule)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Pop-up that edits the online listing. [onSave] gets the shaped content and
+/// returns an error message, or null when saved.
+class ProductListingDialog extends StatefulWidget {
+  const ProductListingDialog({
+    super.key,
+    required this.initial,
+    required this.onSave,
+  });
+
+  final ListingContent initial;
+  final Future<String?> Function(ListingContent content) onSave;
+
+  @override
+  State<ProductListingDialog> createState() => _ProductListingDialogState();
+}
+
+class _ProductListingDialogState extends State<ProductListingDialog> {
+  final _controllers = ListingControllers();
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _controllers.seed(widget.initial);
+  }
+
+  @override
+  void dispose() {
+    _controllers.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final parsed = _controllers.parse();
+    final content = parsed.content;
+    if (content == null) {
+      setState(() => _error = parsed.message);
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    final error = await widget.onSave(content);
+    if (!mounted) return;
+    if (error == null) {
+      Navigator.pop(context);
+    } else {
+      setState(() {
+        _saving = false;
+        _error = error;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    return AlertDialog(
+      scrollable: true,
+      backgroundColor: t.colorScheme.surface,
+      title: Text(
+        'Online listing',
+        style: context.screenTitleStyle.copyWith(color: t.colorScheme.onSurface),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ListingContentFields(controllers: _controllers),
+          SizedBox(height: context.getRSize(8)),
+          Text(
+            'Leave the order boxes blank to let shoppers order any amount.',
+            style: context.regularStyle(13).copyWith(color: _muted(context)),
+          ),
+          if (_error != null) ...[
+            SizedBox(height: context.getRSize(8)),
+            Text(
+              _error!,
+              key: const ValueKey('listing-error'),
+              style: context.regularStyle(13).copyWith(color: _fixed(context).danger),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        AppButton(
+          text: 'Cancel',
+          variant: AppButtonVariant.ghost,
+          isFullWidth: false,
+          onPressed: _saving ? null : () => Navigator.pop(context),
+        ),
+        AppButton(
+          key: const ValueKey('listing-save'),
           text: 'Save',
           isFullWidth: false,
           isLoading: _saving,

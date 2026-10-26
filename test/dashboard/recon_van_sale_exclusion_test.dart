@@ -55,7 +55,7 @@ const _van = 'van';
 const _trip = 'trip-1';
 final _day = DateTime(2026, 7, 26, 10);
 
-StoreData _store(String id, {String kind = kStoreKindStore}) => StoreData(
+StoreData _store(String id, {String kind = kStoreKindStore}) => StoreData(onlineOrderingEnabled: false, 
   id: id,
   businessId: _biz,
   name: 'Location $id',
@@ -75,6 +75,9 @@ ProductData _product(String id) => ProductData(
   retailerPriceKobo: 1150000,
   wholesalerPriceKobo: 1100000,
   isAvailable: true,
+  showOnline: true,
+  minOrderQty: 1,
+  orderStep: 1,
   isDeleted: false,
   lowStockThreshold: 0,
   avgDailySales: 0,

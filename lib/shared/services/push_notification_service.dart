@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
 
 import 'package:reebaplus_pos/core/services/push_messaging_port.dart';
 import 'package:reebaplus_pos/shared/services/device_registry_service.dart';
@@ -33,6 +34,12 @@ class PushNotificationService {
   // through these; they stay null until the app shell binds them.
   void Function()? _openNotifications;
   void Function(String notificationId)? _markRead;
+  // Shopper push taps (#476); bound by the Shopper surface (#434). Null until
+  // then, so a Shopper tap is a no-op rather than opening the business bell.
+  void Function(PushMessage message)? _openShopperPush;
+
+  // New-online-order push taps (#433); bound by the app shell.
+  void Function(String? onlineOrderId)? _openOnlineOrder;
 
   StreamSubscription<PushMessage>? _foregroundSub;
   StreamSubscription<PushMessage>? _tapSub;
@@ -43,6 +50,11 @@ class PushNotificationService {
   /// clear the cloud token, and so a reconnect/token-refresh can re-register,
   /// without reaching back into the auth layer.
   String? _currentBusinessId;
+
+  /// A Shopper login is signed in on this phone (#476). Only used when no
+  /// business is bound: a business phone's `devices` row already carries the
+  /// same login, so it receives Shopper pushes without a second row.
+  bool _shopperSignedIn = false;
   bool _online = true;
   bool _started = false;
 
@@ -68,8 +80,7 @@ class PushNotificationService {
 
     // A returning device may already be signed in before start() runs; register
     // now that the port is live.
-    final businessId = _currentBusinessId;
-    if (businessId != null) await _registerIfPermitted(businessId);
+    await _registerIfPermitted();
   }
 
   /// Bind the UI actions a broadcast tap triggers: open the in-app bell and mark
@@ -82,12 +93,26 @@ class PushNotificationService {
     _markRead = markRead;
   }
 
+  /// Bind what a "New online order" tap opens (#433): the order's detail when
+  /// it is already in Drift, else the Online tab. Null until the shell binds.
+  void bindOnlineOrderTapAction(
+    void Function(String? onlineOrderId) openOnlineOrder,
+  ) {
+    _openOnlineOrder = openOnlineOrder;
+  }
+
+  /// Bind what a Shopper push tap opens (#434's Shopper surface). Until bound,
+  /// a Shopper tap does nothing — it never opens the business bell.
+  void bindShopperTapAction(void Function(PushMessage message) openShopperPush) {
+    _openShopperPush = openShopperPush;
+  }
+
   // ── Sign-in / sign-out (driven by the app shell) ────────────────────────────
   /// A user signed in on this device (or app-open re-auth). Registers the token
   /// if OS permission is already granted; otherwise the soft-ask flow will.
   Future<void> onSignedIn(String businessId) async {
     _currentBusinessId = businessId;
-    await _registerIfPermitted(businessId);
+    await _registerIfPermitted();
   }
 
   /// The device signed out — clear the token client-side (Firebase) AND null it
@@ -95,6 +120,24 @@ class PushNotificationService {
   Future<void> onSignedOut(String businessId) async {
     if (_currentBusinessId == businessId) _currentBusinessId = null;
     await clearToken(businessId);
+  }
+
+  /// A Shopper signed in on this phone (#476). With no business bound this
+  /// registers the token on a business-less `devices` row (by auth user). With
+  /// a business bound it does nothing extra: that row already routes both.
+  Future<void> onShopperSignedIn() async {
+    _shopperSignedIn = true;
+    await _registerIfPermitted();
+  }
+
+  /// The Shopper signed out. Clears the token only when no business is bound —
+  /// a business phone keeps its token so staff pushes keep arriving.
+  Future<void> onShopperSignedOut() async {
+    final wasSignedIn = _shopperSignedIn;
+    _shopperSignedIn = false;
+    if (!wasSignedIn || _currentBusinessId != null) return;
+    await _port.deleteToken();
+    await _deviceRegistry.clearShopperPushToken();
   }
 
   // ── Permission + registration ───────────────────────────────────────────────
@@ -105,9 +148,13 @@ class PushNotificationService {
   /// OS settings screen.
   Future<PushPermissionStatus> requestPermissionAndRegister() async {
     final status = await _port.requestPermission();
-    final businessId = _currentBusinessId;
-    if (status == PushPermissionStatus.granted && businessId != null) {
-      await registerToken(businessId, permissionGranted: true);
+    if (status == PushPermissionStatus.granted) {
+      final businessId = _currentBusinessId;
+      if (businessId != null) {
+        await registerToken(businessId, permissionGranted: true);
+      } else if (_shopperSignedIn) {
+        await _registerShopperToken(permissionGranted: true);
+      }
     }
     return status;
   }
@@ -122,6 +169,16 @@ class PushNotificationService {
     if (token == null || token.isEmpty) return;
     await _deviceRegistry.recordPushToken(
       businessId: businessId,
+      token: token,
+      permissionGranted: permissionGranted,
+    );
+  }
+
+  /// Business-less phone: register the token by auth user (#476).
+  Future<void> _registerShopperToken({required bool permissionGranted}) async {
+    final token = await _port.getToken();
+    if (token == null || token.isEmpty) return;
+    await _deviceRegistry.recordShopperPushToken(
       token: token,
       permissionGranted: permissionGranted,
     );
@@ -148,10 +205,24 @@ class PushNotificationService {
     unawaited(_port.showLocalNotification(message));
   }
 
-  /// A tapped notification (foreground, background, or cold-start). Only console
-  /// broadcasts route today: open the in-app bell and mark the row read. Public
-  /// for the cold-start replay + tests.
+  /// A tapped notification (foreground, background, or cold-start). A console
+  /// broadcast opens the in-app bell and marks the row read; a Shopper push
+  /// (#476) goes to the Shopper tap action and never to the business bell.
+  /// Public for the cold-start replay + tests.
   void handleTap(PushMessage message) {
+    if (message.isShopperPush) {
+      _openShopperPush?.call(message);
+      return;
+    }
+    if (message.isOnlineOrder) {
+      if (_currentBusinessId == null) return; // not signed in — ignore.
+      try {
+        _openOnlineOrder?.call(message.onlineOrderId);
+      } catch (e) {
+        debugPrint('[Push] online order tap failed: $e');
+      }
+      return;
+    }
     if (!message.isConsoleBroadcast) return;
     if (_currentBusinessId == null) return; // not signed in — ignore.
     _openNotifications?.call();
@@ -161,19 +232,33 @@ class PushNotificationService {
 
   Future<void> _onTokenRefresh(String token) async {
     final businessId = _currentBusinessId;
-    if (businessId == null) return;
+    if (businessId == null && !_shopperSignedIn) return;
     final granted =
         await _port.currentPermission() == PushPermissionStatus.granted;
-    await _deviceRegistry.recordPushToken(
-      businessId: businessId,
-      token: token,
-      permissionGranted: granted,
-    );
+    if (businessId != null) {
+      await _deviceRegistry.recordPushToken(
+        businessId: businessId,
+        token: token,
+        permissionGranted: granted,
+      );
+    } else {
+      await _deviceRegistry.recordShopperPushToken(
+        token: token,
+        permissionGranted: granted,
+      );
+    }
   }
 
-  Future<void> _registerIfPermitted(String businessId) async {
-    if (await _port.currentPermission() == PushPermissionStatus.granted) {
+  /// Register for whoever is signed in: the business row wins (it also routes
+  /// Shopper pushes for the same login); otherwise a signed-in Shopper.
+  Future<void> _registerIfPermitted() async {
+    final businessId = _currentBusinessId;
+    if (businessId == null && !_shopperSignedIn) return;
+    if (await _port.currentPermission() != PushPermissionStatus.granted) return;
+    if (businessId != null) {
       await registerToken(businessId, permissionGranted: true);
+    } else {
+      await _registerShopperToken(permissionGranted: true);
     }
   }
 
@@ -181,12 +266,9 @@ class PushNotificationService {
     final online = results.any((r) => r != ConnectivityResult.none);
     final wasOnline = _online;
     _online = online;
-    final businessId = _currentBusinessId;
     // Re-register only on the offline→online edge — a device that signed in
     // offline lands its token the moment a connection returns.
-    if (online && !wasOnline && businessId != null) {
-      unawaited(_registerIfPermitted(businessId));
-    }
+    if (online && !wasOnline) unawaited(_registerIfPermitted());
   }
 
   void dispose() {

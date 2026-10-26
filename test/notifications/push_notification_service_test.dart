@@ -42,6 +42,20 @@ class _FakeDeviceRegistry implements DeviceRegistryService {
     cleared.add(businessId);
   }
 
+  final List<_RecordedToken> shopperRecorded = [];
+  int shopperCleared = 0;
+
+  @override
+  Future<void> recordShopperPushToken({
+    required String token,
+    required bool permissionGranted,
+  }) async {
+    shopperRecorded.add(_RecordedToken('', token, permissionGranted));
+  }
+
+  @override
+  Future<void> clearShopperPushToken() async => shopperCleared++;
+
   @override
   Future<void> recordPresence({
     required String businessId,
@@ -142,6 +156,37 @@ void main() {
     });
   });
 
+  group('online order tap (#433)', () {
+    const tap = PushMessage(data: {
+      'type': 'online_order',
+      'online_order_id': 'oo-1',
+      'store_id': 's-1',
+    });
+
+    test('routes to the bound action with the order id when signed in',
+        () async {
+      String? opened;
+      service.bindOnlineOrderTapAction((id) => opened = id);
+      await service.onSignedIn('biz-1');
+      service.handleTap(tap);
+      expect(opened, 'oo-1');
+      expect(openCount, 0); // never the broadcast bell
+    });
+
+    test('ignored when signed out; a throwing action never escapes', () async {
+      var calls = 0;
+      service.bindOnlineOrderTapAction((_) {
+        calls++;
+        throw StateError('boom');
+      });
+      service.handleTap(tap);
+      expect(calls, 0);
+      await service.onSignedIn('biz-1');
+      service.handleTap(tap);
+      expect(calls, 1);
+    });
+  });
+
   group('token lifecycle', () {
     test('sign-in with permission granted registers the token', () async {
       port.permission = PushPermissionStatus.granted;
@@ -204,6 +249,115 @@ void main() {
 
       expect(registry.recorded, isNotEmpty);
       expect(registry.recorded.last.token, 'tok-1');
+    });
+  });
+
+  // #476: a Shopper-only phone registers by auth user (no business); a
+  // business phone that shops keeps ONE token on its business row, and taps of
+  // the two roles route to different places.
+  group('Shopper push tokens (#476)', () {
+    PushMessage shopperPush() => const PushMessage(
+          title: 'Order accepted',
+          body: 'Your order was accepted.',
+          data: {
+            'notification_id': 'push-1',
+            'type': 'shopper_order_update',
+            'severity': 'info',
+            'audience': 'shopper',
+          },
+        );
+
+    test('a Shopper-only phone registers its token with no business', () async {
+      port.permission = PushPermissionStatus.granted;
+      port.token = 'tok-s';
+      await service.onShopperSignedIn();
+      expect(registry.recorded, isEmpty);
+      expect(registry.shopperRecorded.single.token, 'tok-s');
+      expect(registry.shopperRecorded.single.permissionGranted, isTrue);
+    });
+
+    test('a Shopper without permission registers after the soft-ask', () async {
+      port.token = 'tok-s';
+      await service.onShopperSignedIn();
+      expect(registry.shopperRecorded, isEmpty);
+      port.permission = PushPermissionStatus.granted;
+      await service.requestPermissionAndRegister();
+      expect(registry.shopperRecorded.single.token, 'tok-s');
+    });
+
+    test('a Shopper token refresh and reconnect re-register by auth user',
+        () async {
+      port.permission = PushPermissionStatus.granted;
+      port.token = 'tok-1';
+      await service.onShopperSignedIn();
+      port.emitTokenRefresh('tok-2');
+      await flush();
+      expect(registry.shopperRecorded.last.token, 'tok-2');
+
+      registry.shopperRecorded.clear();
+      connectivity.add([ConnectivityResult.none]);
+      await flush();
+      connectivity.add([ConnectivityResult.wifi]);
+      await flush();
+      expect(registry.shopperRecorded, isNotEmpty);
+      expect(registry.recorded, isEmpty);
+    });
+
+    test('a business phone that shops keeps one token on its business row',
+        () async {
+      port.permission = PushPermissionStatus.granted;
+      port.token = 'tok-1';
+      await service.onSignedIn('biz-1');
+      await service.onShopperSignedIn();
+      port.emitTokenRefresh('tok-2');
+      await flush();
+      expect(registry.shopperRecorded, isEmpty);
+      expect(registry.recorded.map((r) => r.businessId).toSet(), {'biz-1'});
+      expect(registry.recorded.last.token, 'tok-2');
+
+      // Shopper sign-out must not drop the token staff pushes still need.
+      await service.onShopperSignedOut();
+      expect(port.deleteTokenCalls, 0);
+      expect(registry.shopperCleared, 0);
+    });
+
+    test('Shopper sign-out on a Shopper-only phone clears the token', () async {
+      port.permission = PushPermissionStatus.granted;
+      port.token = 'tok-s';
+      await service.onShopperSignedIn();
+      await service.onShopperSignedOut();
+      expect(port.deleteTokenCalls, 1);
+      expect(registry.shopperCleared, 1);
+      // A second sign-out is a no-op.
+      await service.onShopperSignedOut();
+      expect(registry.shopperCleared, 1);
+    });
+
+    test('on one token, staff and Shopper taps each route to their own place',
+        () async {
+      final shopperTaps = <PushMessage>[];
+      service.bindShopperTapAction(shopperTaps.add);
+      await service.onSignedIn('biz-1');
+      await service.onShopperSignedIn();
+
+      port.emitTap(shopperPush());
+      await flush();
+      expect(shopperTaps.single.notificationId, 'push-1');
+      expect(openCount, 0);
+      expect(lastMarkReadId, isNull);
+
+      port.emitTap(broadcast(id: 'notif-7'));
+      await flush();
+      expect(openCount, 1);
+      expect(lastMarkReadId, 'notif-7');
+      expect(shopperTaps, hasLength(1));
+    });
+
+    test('an unbound Shopper tap never opens the business bell', () async {
+      await service.onSignedIn('biz-1');
+      port.emitTap(shopperPush());
+      await flush();
+      expect(openCount, 0);
     });
   });
 }

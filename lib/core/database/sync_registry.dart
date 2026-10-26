@@ -190,19 +190,24 @@ abstract final class Restore {
   /// resolved; every other transition (including the normal cross-device
   /// `pending` → terminal convergence, and terminal → terminal) applies exactly
   /// as [plain].
+  ///
+  /// [openStatus] is the table's single non-terminal starting state: `pending`
+  /// for the approval queues, `new` for Online Orders (#426) — a stale `new`
+  /// must never overwrite an order the shop already accepted or declined.
   static RestoreFn monotonicStatus<T extends Table, D extends Insertable<D>>(
     TableInfo<T, D> Function(AppDatabase db) tableOf,
     D Function(Map<String, dynamic> json) fromJson, {
     bool resilient = true,
+    String openStatus = 'pending',
   }) => (ex, table, rows, fkSkipped) async {
     final t = tableOf(ex.db);
     for (final r in rows) {
       final data = fromJson(r);
       Future<void> doInsert() async {
         final id = r['id'];
-        if (r['status'] == 'pending' && id is String) {
+        if (r['status'] == openStatus && id is String) {
           final local = await ex.localStatusFor(table, id);
-          if (local != null && local != 'pending') {
+          if (local != null && local != openStatus) {
             // Resolved locally — a stale/duplicate pending snapshot must not
             // revert it back into the pending set.
             return;
@@ -558,7 +563,22 @@ final List<SyncedTable> kSyncRegistry = [
       // supabase/migrations/0161 is applied, and what any legacy/web/RPC-
       // authored row that omits the column would produce afterwards. Defaulting
       // to a normal store is both the right value and the deploy-order fuse.
-      defaults: {'kind': kStoreKindStore},
+      // #423: older snapshots (pre-0199) omit the online switch, which is
+      // NOT NULL locally; absent means off. Nullable area/phone/note columns
+      // need no default.
+      defaults: {'kind': kStoreKindStore, 'onlineOrderingEnabled': false},
+    ),
+  ),
+  // #423: per-store delivery areas, after their parent `stores`. Soft-deleted
+  // (is_deleted) and never hard-deleted, so no hard-delete reconcile.
+  SyncedTable(
+    name: 'store_delivery_areas',
+    tenantScoped: true,
+    restore: Restore.plain(
+      (db) => db.storeDeliveryAreas,
+      StoreDeliveryAreaData.fromJson,
+      resilient: true,
+      defaults: {'country': 'Nigeria', 'isDeleted': false},
     ),
   ),
   const SyncedTable(
@@ -739,6 +759,24 @@ final List<SyncedTable> kSyncRegistry = [
       (db) => db.products,
       ProductData.fromJson,
       resilient: true,
+      // #424: older snapshots omit this column; preserve explicit opt-outs.
+      // #473: listing content defaults for snapshots older than cloud 0201
+      // (nullable text/max columns simply restore as null).
+      defaults: {'showOnline': true, 'minOrderQty': 1, 'orderStep': 1},
+    ),
+  ),
+  // #474: product gallery photos (positions 2–5; the cover stays in
+  // products.image_url). Deterministic slot ids per (product, position);
+  // soft-deleted, never hard-deleted, so no hard-delete reconcile. FK →
+  // products, so a RESILIENT restore (a slot can land before its product).
+  SyncedTable(
+    name: 'product_photos',
+    tenantScoped: true,
+    restore: Restore.plain(
+      (db) => db.productPhotos,
+      ProductPhotoData.fromJson,
+      resilient: true,
+      defaults: {'isDeleted': false},
     ),
   ),
   SyncedTable(
@@ -882,6 +920,66 @@ final List<SyncedTable> kSyncRegistry = [
           t.orderId.equals(p.orderId) &
           t.manufacturerId.equals(p.manufacturerId) &
           t.id.equals(p.id).not(),
+    ),
+  ),
+  // #426: Online Orders, after stores/products/orders. Written in the cloud
+  // by `shopper_place_orders`; shop answers (#427) push as full-row upserts.
+  // Never hard-deleted. Monotonic status: a stale `new` snapshot must never
+  // overwrite an order the shop has already answered.
+  SyncedTable(
+    name: 'online_orders',
+    tenantScoped: true,
+    // #427: the shop's answer pushes only what a shop may change, plus the
+    // NOT NULL placement columns the upsert's INSERT tuple needs (exact text,
+    // unchanged). The cloud-owned snapshots stay off the wire: Drift keeps
+    // timestamps to the second, so a round-tripped `placed_at` / `created_at`
+    // would differ from the cloud's and trip the 0205 placement guard (42501).
+    pushColumns: {
+      'id',
+      'business_id',
+      'store_id',
+      'reference',
+      'shopper_name',
+      'delivery_phone',
+      'delivery_state',
+      'delivery_lga',
+      'delivery_street',
+      'status',
+      'customer_id',
+      'decline_reason',
+      'cancel_reason',
+      'linked_order_id',
+      'responded_at',
+      'last_updated_at',
+    },
+    restore: Restore.monotonicStatus(
+      (db) => db.onlineOrders,
+      OnlineOrderData.fromJson,
+      resilient: true,
+      openStatus: 'new',
+    ),
+  ),
+  SyncedTable(
+    name: 'online_order_lines',
+    tenantScoped: true,
+    // #427: same rule as online_orders — only accepted_qty is the shop's; the
+    // snapshots (and created_at) never cross the wire from a phone.
+    pushColumns: {
+      'id',
+      'business_id',
+      'online_order_id',
+      'product_id',
+      'product_name',
+      'unit_price_kobo',
+      'requested_qty',
+      'accepted_qty',
+      'last_updated_at',
+    },
+    restore: Restore.plain(
+      (db) => db.onlineOrderLines,
+      OnlineOrderLineData.fromJson,
+      resilient: true,
+      defaults: {'priceTier': 'retailer'},
     ),
   ),
   SyncedTable(

@@ -14,11 +14,14 @@ import 'dart:io';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/permissions/gate.dart';
+import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/services/product_gallery_images.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/features/inventory/screens/product_detail_screen.dart';
 
@@ -167,6 +170,7 @@ void main() {
     ...kInventorySampleGrants,
     'products.edit_buying_price',
     'products.delete',
+    'products.manage_listing',
   };
 
   Future<void> shoot(
@@ -178,6 +182,8 @@ void main() {
     Set<String> grants = ceoKeys,
     String roleSlug = 'ceo',
     int roleRank = GateTier.ceo,
+    Future<void> Function(WidgetTester tester)? before,
+    List<Override> overrides = const [],
   }) async {
     tester.view.padding = insets;
     tester.view.viewPadding = insets;
@@ -195,6 +201,7 @@ void main() {
       ),
       followView: true,
       settle: false,
+      overrides: overrides,
       grantedKeys: grants,
       roleSlug: roleSlug,
       roleRank: roleRank,
@@ -208,6 +215,7 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 250));
     }
+    if (before != null) await before(tester);
     expect(tester.takeException(), isNull);
     await expectLater(
       find.byType(MaterialApp),
@@ -260,4 +268,73 @@ void main() {
       roleRank: GateTier.cashier,
     );
   });
+
+  // #473: the Online listing pop-up, phone and sideways.
+  for (final (sizeName, size, insets) in const [
+    ('390x844', Size(390, 844), FakeViewPadding(top: 24, bottom: 24)),
+    ('844x390', Size(844, 390), FakeViewPadding(top: 24, right: 48)),
+  ]) {
+    testWidgets('product detail, online listing pop-up, $sizeName light', (
+      tester,
+    ) async {
+      await seedDetailSample(env, sample);
+      await shoot(
+        tester,
+        name: 'listing_dialog_${sizeName}_light',
+        size: size,
+        insets: insets,
+        brightness: Brightness.light,
+        before: (tester) async {
+          await tester.ensureVisible(find.byTooltip('Edit online listing'));
+          await tester.pump();
+          await tester.tap(find.byTooltip('Edit online listing'));
+          await tester.pumpAndSettle();
+        },
+      );
+    });
+  }
+
+  // #474: the Photos card with three gallery photos after the cover, phone
+  // and sideways. Thumbnails resolve through a fake Storage (no copies), so
+  // they show the placeholder tile.
+  for (final (sizeName, size, insets) in const [
+    ('390x844', Size(390, 844), FakeViewPadding(top: 24, bottom: 24)),
+    ('844x390', Size(844, 390), FakeViewPadding(top: 24, right: 48)),
+  ]) {
+    testWidgets('product detail, photos card, $sizeName light', (tester) async {
+      await seedDetailSample(env, sample);
+      final productId = sample.productIds['Gulder']!;
+      String url(String photo) =>
+          'https://x.supabase.co/storage/v1/object/public/product-images/'
+          '${env.businessId}/$productId/$photo.jpg';
+      await env.db.catalogDao.setProductGallery(
+          productId: productId, imageUrls: [url('a'), url('b'), url('c')]);
+      final gallery = ProductGalleryImages(
+        directory: () async => Directory('${docs.path}/gallery_fake'),
+        upload: (_, __) async {},
+        download: (_) async => null,
+        remove: (_) async {},
+        publicUrl: (path) => path,
+      );
+      await shoot(
+        tester,
+        name: 'photos_${sizeName}_light',
+        size: size,
+        insets: insets,
+        brightness: Brightness.light,
+        overrides: [productGalleryImagesProvider.overrideWithValue(gallery)],
+        before: (tester) async {
+          // Card top at the top of the view, so the whole card shows.
+          await Scrollable.ensureVisible(
+            tester.element(find.byKey(const ValueKey('product-photos-card'))),
+            alignment: 0.02,
+          );
+          await tester.pump();
+          await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 50)));
+          await tester.pump(const Duration(milliseconds: 250));
+        },
+      );
+    });
+  }
 }

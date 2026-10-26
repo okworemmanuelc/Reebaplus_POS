@@ -19,9 +19,11 @@ import 'package:reebaplus_pos/core/diagnostics/overflow_route_reporter.dart';
 import 'package:reebaplus_pos/shared/widgets/error_fallback.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/core/storefront/browse_switch.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
 import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/welcome_screen.dart';
+import 'package:reebaplus_pos/features/browse/screens/browse_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/otp_verification_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart'
@@ -36,6 +38,9 @@ import 'package:reebaplus_pos/shared/widgets/force_update_wrapper.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/services/push_notification_service.dart';
 import 'package:reebaplus_pos/shared/widgets/notifications_modal.dart';
+import 'package:reebaplus_pos/features/orders/screens/online_order_detail_screen.dart';
+import 'package:reebaplus_pos/features/orders/screens/orders_screen.dart';
+import 'package:reebaplus_pos/shared/services/online_order_push_route.dart';
 import 'package:reebaplus_pos/features/auth/membership_status_reaction.dart';
 import 'package:reebaplus_pos/features/sync/widgets/resolve_unsynced_data_dialog.dart';
 import 'package:reebaplus_pos/features/auth/screens/success_dashboard_entry_screen.dart';
@@ -361,11 +366,38 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
         unawaited(ref.read(notificationProvider).markAsRead(id));
       },
     );
+    // #433: a "New online order" tap opens that order if it is already local,
+    // else the Online tab. Never waits on a pull and never throws.
+    _pushService.bindOnlineOrderTapAction((onlineOrderId) {
+      if (_auth.currentUser == null) return;
+      unawaited(routeOnlineOrderTap(
+        onlineOrderId: onlineOrderId,
+        isLocal: (id) => ref.read(databaseProvider).onlineOrdersDao.existsById(id),
+        openDetail: (id) {
+          final nav = _navigatorKey.currentState;
+          nav?.push(MaterialPageRoute<void>(
+            builder: (_) => OnlineOrderDetailScreen(onlineOrderId: id),
+          ));
+        },
+        openOnlineTab: () {
+          final nav = _navigatorKey.currentState;
+          nav?.push(MaterialPageRoute<void>(
+            builder: (_) => const OrdersScreen(initialIndex: 1),
+          ));
+        },
+      ));
+    });
     await supabaseReady;
     if (!mounted) return;
     await _pushService.start();
     // Seed registration from the already-signed-in state (warm launch).
     _syncPushSignIn();
+    // #426: a Shopper-only phone (no business user) restored its persisted
+    // Shopper session — register its push token by auth user (#476).
+    if (await _auth.getDeviceUserId() == null &&
+        Supabase.instance.client.auth.currentUser != null) {
+      unawaited(_pushService.onShopperSignedIn());
+    }
   }
 
   /// The sign-in edge: a business became bound (login or app-open unlock).
@@ -688,6 +720,21 @@ class _SessionExpiredScreenState extends ConsumerState<_SessionExpiredScreen> {
 Widget buildSessionExpiredScreenForTest(UserData user) =>
     _SessionExpiredScreen(user: user);
 
+/// The entry screen while no user is signed in on this run (#425):
+/// a phone with a business user (a device user) always gets the PIN screen,
+/// offline too (invariant #11); a phone without one gets Browse when the
+/// Browse-first switch is on, otherwise today's Welcome screen.
+@visibleForTesting
+Widget entryScreenWithoutSignedInUser({
+  required bool hasDeviceUser,
+  bool? browseFirst,
+}) {
+  if (hasDeviceUser) return const LoginScreen();
+  return (browseFirst ?? isBrowseFirstEnabled())
+      ? const BrowseScreen()
+      : const WelcomeScreen();
+}
+
 // ---------------------------------------------------------------------------
 // Home routing widget — extracted from _ReebaplusPosAppState so all
 // ref.watch calls live at the top of a dedicated build() (code-standards.md)
@@ -754,11 +801,15 @@ class _HomeRouter extends ConsumerWidget {
       // — the new wizard commits atomically at PIN, so abandonment
       // can't leave a half-state to resume into. Users in that
       // transitional bucket re-enter via EmailEntry / LoginScreen.
-      if (!hasDeviceUser!) return const WelcomeScreen();
+      //
+      // #425: with the Browse-first switch on, a phone with no business user
+      // (fresh install, or after a logout — logout always wipes) opens on
+      // Browse instead; its "Sell on Reebaplus" pushes today's Welcome.
+      //
       // Known device — cold start, the drawer lock button, and auto-lock all
       // land on the device user's PIN screen. Another staff member on a
       // shared till signs in through its "Not you? Switch account" link.
-      return const LoginScreen();
+      return entryScreenWithoutSignedInUser(hasDeviceUser: hasDeviceUser!);
     }
 
     // Session-gate. Local user is set but Supabase has no JWT —

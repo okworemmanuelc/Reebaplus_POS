@@ -41,6 +41,8 @@ const Map<String, String> kPermissionParent = {
   'staff.change_role': 'staff.invite',
   // Suppliers — incoming shipments come from suppliers.
   'shipments.manage': 'suppliers.manage',
+  // Online Orders (#427) — answering happens on the order you can see.
+  'online_orders.answer': 'online_orders.view',
 };
 
 /// The direct parent of [key], or null if it has none.

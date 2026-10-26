@@ -45,7 +45,7 @@ const _biz = 'biz';
 const _store = 'store-1';
 final _day = DateTime(2026, 7, 29, 10);
 
-StoreData _storeRow(String id) => StoreData(
+StoreData _storeRow(String id) => StoreData(onlineOrderingEnabled: false, 
   id: id,
   businessId: _biz,
   name: 'Location $id',

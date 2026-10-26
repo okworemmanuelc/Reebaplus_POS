@@ -61,7 +61,7 @@ const _cost = 600000; // ₦6,000 a crate
 const _warehouseStock = 10;
 const _branchStock = 4;
 
-StoreData _store(String id, {String kind = kStoreKindStore}) => StoreData(
+StoreData _store(String id, {String kind = kStoreKindStore}) => StoreData(onlineOrderingEnabled: false, 
   id: id,
   businessId: _biz,
   name: 'Location $id',
@@ -81,6 +81,9 @@ ProductData _product() => ProductData(
   retailerPriceKobo: _price,
   wholesalerPriceKobo: _price,
   isAvailable: true,
+  showOnline: true,
+  minOrderQty: 1,
+  orderStep: 1,
   isDeleted: false,
   lowStockThreshold: 0,
   avgDailySales: 0,

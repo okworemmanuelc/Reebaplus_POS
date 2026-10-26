@@ -65,7 +65,7 @@ const _chidiCrates = 20;
 const _adeKobo = _adeCrates * _rateKobo; // ₦210,000
 const _chidiKobo = _chidiCrates * _rateKobo; // ₦70,000
 
-StoreData _store(String id) => StoreData(
+StoreData _store(String id) => StoreData(onlineOrderingEnabled: false, 
   id: id,
   businessId: _biz,
   name: 'Branch $id',

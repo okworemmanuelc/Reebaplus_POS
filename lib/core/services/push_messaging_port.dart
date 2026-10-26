@@ -24,7 +24,8 @@ enum PushPermissionStatus {
 ///
 /// [data] values are all strings (an FCM v1 requirement); the accessors name
 /// the keys the send-push edge function sets (`fcm.ts buildFcmMessages`):
-/// `notification_id`, `type`, `severity`, `business_id`.
+/// `notification_id`, `type`, `severity`, `audience`, `business_id` (staff
+/// pushes only — a Shopper push never carries a business).
 class PushMessage {
   final String? title;
   final String? body;
@@ -43,7 +44,23 @@ class PushMessage {
 
   String? get businessId => data['business_id'];
 
-  bool get isConsoleBroadcast => type == 'console_broadcast';
+  /// A "New online order" staff push (#433): `online_order_id` + `store_id`.
+  bool get isOnlineOrder => type == 'online_order' && !isShopperPush;
+
+  String? get onlineOrderId => data['online_order_id'];
+
+  String? get storeId => data['store_id'];
+
+  bool get isConsoleBroadcast => type == 'console_broadcast' && !isShopperPush;
+
+  /// `staff` or `shopper` (#476): which role of a phone a push belongs to — a
+  /// business phone that also shops receives both on one token. Pushes sent
+  /// before #476 carry no audience and are staff pushes.
+  String get audience => data['audience'] ?? 'staff';
+
+  /// A push for this login as a Shopper (routed by auth user id, not business).
+  bool get isShopperPush =>
+      audience == 'shopper' || (type?.startsWith('shopper_') ?? false);
 }
 
 /// The seam between the app and the OS push stack (FCM + local notifications),

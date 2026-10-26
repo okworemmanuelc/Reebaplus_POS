@@ -42,7 +42,7 @@ final _day = DateTime(2026, 7, 26, 10);
 final _julStart = DateTime(2026, 7, 1);
 final _augStart = DateTime(2026, 8, 1);
 
-StoreData _storeRow(String id) => StoreData(
+StoreData _storeRow(String id) => StoreData(onlineOrderingEnabled: false, 
   id: id,
   businessId: _biz,
   name: 'Location $id',
@@ -62,6 +62,9 @@ ProductData _product({required int buyingPriceKobo}) => ProductData(
   retailerPriceKobo: 1150000,
   wholesalerPriceKobo: 1100000,
   isAvailable: true,
+  showOnline: true,
+  minOrderQty: 1,
+  orderStep: 1,
   isDeleted: false,
   lowStockThreshold: 0,
   avgDailySales: 0,

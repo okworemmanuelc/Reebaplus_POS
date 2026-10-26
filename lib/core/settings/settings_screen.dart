@@ -15,6 +15,7 @@ import 'package:reebaplus_pos/core/settings/activity_logs_access_screen.dart';
 import 'package:reebaplus_pos/core/settings/appearance_settings_screen.dart';
 import 'package:reebaplus_pos/core/settings/business_info_screen.dart';
 import 'package:reebaplus_pos/core/settings/delete_business_screen.dart';
+import 'package:reebaplus_pos/core/settings/online_store_settings_screen.dart';
 import 'package:reebaplus_pos/core/settings/receipt_printer_settings_screen.dart';
 import 'package:reebaplus_pos/core/settings/roles_permissions_screen.dart';
 import 'package:reebaplus_pos/core/settings/security_settings_screen.dart';
@@ -89,6 +90,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           title: 'Stores',
           subtitle: 'Your store locations',
           screen: StoresSettingsScreen(),
+        ),
+        (
+          icon: AppIcons.public,
+          tone: IconTileTone.info,
+          title: 'Online store',
+          subtitle: 'Online ordering, areas and delivery',
+          screen: OnlineStoreSettingsScreen(),
         ),
       ],
     ),

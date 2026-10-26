@@ -15,7 +15,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 
-StoreData _store(String id, {String kind = kStoreKindStore}) => StoreData(
+StoreData _store(String id, {String kind = kStoreKindStore}) => StoreData(onlineOrderingEnabled: false, 
       id: id,
       businessId: 'biz',
       name: 'Store $id',

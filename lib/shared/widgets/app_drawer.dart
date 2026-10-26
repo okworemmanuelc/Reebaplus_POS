@@ -5,13 +5,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/online_order_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/settings_screen.dart';
+import 'package:reebaplus_pos/core/storefront/browse_switch.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/theme_settings_screen.dart';
 import 'package:reebaplus_pos/core/utils/frame_safe.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/browse/shop_from_till.dart';
 import 'package:reebaplus_pos/features/profile/screens/profile_screen.dart';
 import 'package:reebaplus_pos/features/settings/screens/staff_settings_screen.dart';
 import 'package:reebaplus_pos/features/staff/screens/staff_management_screen.dart';
@@ -178,16 +181,33 @@ class AppDrawer extends ConsumerWidget {
               // Pop the drawer first — mirrors the Log Out pattern below so
               // the watched currentUser flipping to null doesn't trip
               // tenant-scoped widgets while the drawer is still painting.
+              final auth = ref.read(authProvider);
               Navigator.pop(context);
-              // Drop any stale paused-time marker so a rapid
-              // background→resume right after lock doesn't double-fire the
-              // auto-lock branch.
-              final prefs = await SharedPreferences.getInstance();
-              await prefs.remove('app_paused_time');
-              ref.read(authProvider).lockApp();
+              await _lockTill(auth);
             },
       banner: _buildSyncBanner(context, ref, isSignedIn: user != null),
     );
+  }
+
+  /// Locks the till back to the PIN screen (UI-only, never a logout).
+  static Future<void> _lockTill(AuthService auth) async {
+    // Already locked (or logged out) — nothing to do.
+    if (auth.currentUser == null) return;
+    // Drop any stale paused-time marker so a rapid background→resume right
+    // after lock doesn't double-fire the auto-lock branch.
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('app_paused_time');
+    auth.lockApp();
+  }
+
+  /// Shop (#437): opens Browse over the till with this phone's business
+  /// sign-in; leaving it locks the till, so the PIN is needed to get back.
+  void _openShop(BuildContext context, WidgetRef ref) {
+    // Capture before the drawer closes — `ref`/`context` die with it.
+    final auth = ref.read(authProvider);
+    final root = Navigator.of(context, rootNavigator: true);
+    Navigator.pop(context); // close the drawer
+    openShopFromTill(root, lockTill: () => _lockTill(auth));
   }
 
   /// Sync status banner. Three signals nested so it reflects pending, failed,
@@ -305,11 +325,15 @@ class AppDrawer extends ConsumerWidget {
                 isActive: activeRoute == 'inventory',
                 onTap: () => _navigateTo(context, ref, 'inventory'),
               ),
-            // Orders — visible to all four roles (§27.3).
+            // Orders — visible to all four roles (§27.3). The badge counts New
+            // online orders in the active store scope (#427; 0 without
+            // `online_orders.view`).
             DrawerNavTile(
+              key: const Key('drawer-orders'),
               icon: AppIcons.orders,
               label: 'Orders',
               isActive: activeRoute == 'orders',
+              badgeCount: ref.watch(newOnlineOrderCountProvider),
               onTap: () => _navigateTo(context, ref, 'orders'),
             ),
             // Customers — hidden for Stock keeper (§27.3). customers.add is
@@ -427,6 +451,18 @@ class AppDrawer extends ConsumerWidget {
                 label: 'Sync Issues',
                 onTap: () => _pushRoute(context, ref, const SyncIssuesScreen()),
               ),
+            // Shop (#437) — every role: a business sign-in can shop like any
+            // Shopper (an owner sees their own stores as "Your store").
+            // Behind the marketplace switch until Browse-first launches.
+            if (isBrowseFirstEnabled()) ...[
+              sectionBreak(),
+              DrawerNavTile(
+                key: AppDrawerKeys.shop,
+                icon: AppIcons.storefront,
+                label: 'Shop',
+                onTap: () => _openShop(context, ref),
+              ),
+            ],
             // Pro Tips removed from the sidebar (decision Q7 — not surfaced in
             // Phase 1; UserTipsModal stays in code for Phase 2).
           ],

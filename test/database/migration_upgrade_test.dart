@@ -81,6 +81,211 @@ void main() {
     }
   });
 
+  test('v88 to v89 adds store online fields off, the delivery table and the key',
+      () async {
+    var db = await openAndInit();
+    final businessId = UuidV7.generate();
+    final storeId = UuidV7.generate();
+    await db.into(db.businesses).insert(
+      BusinessesCompanion.insert(id: Value(businessId), name: 'Online shop'));
+    await db.into(db.stores).insert(StoresCompanion.insert(
+      id: Value(storeId), businessId: businessId, name: 'Main',
+      location: const Value('1 Road, Nigeria')));
+    for (final col in ['country', 'state', 'lga', 'phone', 'online_note',
+        'online_ordering_enabled']) {
+      await db.customStatement('ALTER TABLE stores DROP COLUMN $col');
+    }
+    await db.customStatement('DROP TABLE store_delivery_areas');
+    await db.customStatement(
+        "DELETE FROM permissions WHERE key = 'stores.online_ordering'");
+    await db.customStatement('PRAGMA user_version = 88');
+    await db.close();
+    db = await openAndInit();
+    try {
+      final store = await (db.select(db.stores)
+        ..where((s) => s.id.equals(storeId))).getSingle();
+      expect(store.onlineOrderingEnabled, isFalse);
+      expect(store.state, isNull);
+      expect(store.lga, isNull);
+      expect(store.location, '1 Road, Nigeria');
+      expect(await columnsOf(db, 'store_delivery_areas'),
+          containsAll(['store_id', 'state', 'lga', 'is_deleted']));
+      expect((await db.customSelect(
+        "SELECT category FROM permissions WHERE key = 'stores.online_ordering'",
+      ).getSingle()).read<String>('category'), 'Online store');
+      // Re-running the step is idempotent.
+      await db.customStatement('PRAGMA user_version = 88');
+      await db.close();
+      db = await openAndInit();
+      expect((await db.select(db.stores).get()).single.id, storeId);
+    } finally { await db.close(); }
+  });
+
+  test('v90 to v91 adds product_photos with its trigger and live-slot index',
+      () async {
+    var db = await openAndInit();
+    final businessId = UuidV7.generate();
+    final productId = UuidV7.generate();
+    await db.into(db.businesses).insert(
+      BusinessesCompanion.insert(id: Value(businessId), name: 'Photo shop'));
+    await db.into(db.products).insert(ProductsCompanion.insert(
+        id: Value(productId), businessId: businessId, name: 'Shoe'));
+    await db.customStatement('DROP TABLE product_photos');
+    await db.customStatement('PRAGMA user_version = 90');
+    await db.close();
+    db = await openAndInit();
+    try {
+      expect(await columnsOf(db, 'product_photos'),
+          containsAll(['product_id', 'position', 'image_url', 'is_deleted']));
+      Future<Set<String>> objects(String type) async => {
+        for (final r in await db.customSelect(
+          "SELECT name FROM sqlite_master WHERE type = '$type' "
+          "AND tbl_name = 'product_photos'",
+        ).get())
+          r.read<String>('name'),
+      };
+      expect(await objects('trigger'),
+          contains('bump_product_photos_last_updated_at'));
+      expect(await objects('index'), containsAll([
+        'uq_product_photos_live_position',
+        'idx_product_photos_business_lua',
+      ]));
+      expect((await db.select(db.products).get()).single.id, productId);
+      // Re-running the step is idempotent.
+      await db.customStatement('PRAGMA user_version = 90');
+      await db.close();
+      db = await openAndInit();
+      expect(await db.select(db.productPhotos).get(), isEmpty);
+    } finally { await db.close(); }
+  });
+
+  test('v89 to v90 adds listing content with defaults, keeping product data', () async {
+    var db = await openAndInit();
+    final businessId = UuidV7.generate();
+    final productId = UuidV7.generate();
+    await db.into(db.businesses).insert(
+      BusinessesCompanion.insert(id: Value(businessId), name: 'Listing shop'));
+    await db.into(db.products).insert(ProductsCompanion.insert(
+      id: Value(productId), businessId: businessId, name: 'Older product',
+      isAvailable: const Value(false), showOnline: const Value(false),
+      unitsPerPack: const Value(12)));
+    // max_order_qty's CHECK reads min_order_qty, so it goes first.
+    for (final c in ['max_order_qty', 'order_step', 'min_order_qty', 'brand',
+      'online_description']) {
+      await db.customStatement('ALTER TABLE products DROP COLUMN $c');
+    }
+    await db.customStatement('PRAGMA user_version = 89');
+    await db.close();
+    db = await openAndInit();
+    try {
+      final p = await (db.select(db.products)
+        ..where((x) => x.id.equals(productId))).getSingle();
+      expect((p.onlineDescription, p.brand, p.minOrderQty, p.orderStep, p.maxOrderQty),
+        (null, null, 1, 1, null));
+      expect((p.isAvailable, p.showOnline, p.unitsPerPack), (false, false, 12));
+      await expectLater((db.update(db.products)..where((x) => x.id.equals(productId)))
+        .write(const ProductsCompanion(minOrderQty: Value(5), maxOrderQty: Value(4))),
+        throwsA(anything));
+    } finally { await db.close(); }
+  });
+
+  test('v84 to v90 rebuild keeps set listing values and defaults absent ones', () async {
+    var db = await openAndInit();
+    final businessId = UuidV7.generate();
+    final productId = UuidV7.generate();
+    await db.into(db.businesses).insert(
+      BusinessesCompanion.insert(id: Value(businessId), name: 'Older shop'));
+    await db.into(db.products).insert(ProductsCompanion.insert(
+      id: Value(productId), businessId: businessId, name: 'Older product',
+      brand: const Value('Kept'), orderStep: const Value(12)));
+    await db.customStatement('PRAGMA user_version = 84');
+    await db.close();
+    db = await openAndInit();
+    try {
+      final p = await (db.select(db.products)
+        ..where((x) => x.id.equals(productId))).getSingle();
+      expect((p.brand, p.orderStep, p.minOrderQty, p.onlineDescription),
+        ('Kept', 12, 1, null));
+    } finally { await db.close(); }
+  });
+
+  test('v87 to v88 preserves archived products and defaults listing on', () async {
+    var db = await openAndInit();
+    final businessId = UuidV7.generate();
+    final productId = UuidV7.generate();
+    await db.into(db.businesses).insert(
+      BusinessesCompanion.insert(id: Value(businessId), name: 'Listing shop'));
+    await db.into(db.products).insert(ProductsCompanion.insert(
+      id: Value(productId), businessId: businessId, name: 'Archived listing',
+      isAvailable: const Value(false), unitsPerPack: const Value(12)));
+    await db.customStatement('ALTER TABLE products DROP COLUMN show_online');
+    await db.customStatement("DELETE FROM permissions WHERE key = 'products.manage_listing'");
+    expect(await columnsOf(db, 'products'), isNot(contains('show_online')));
+    await db.customStatement('PRAGMA user_version = 87');
+    await db.close();
+    db = await openAndInit();
+    try {
+      final product = await (db.select(db.products)
+        ..where((p) => p.id.equals(productId))).getSingle();
+      expect(product.showOnline, isTrue);
+      expect(product.isAvailable, isFalse);
+      expect(product.unitsPerPack, 12);
+      expect((await db.customSelect(
+        "SELECT category FROM permissions WHERE key = 'products.manage_listing'",
+      ).getSingle()).read<String>('category'), 'Online store');
+      await db.into(db.products).insert(ProductsCompanion.insert(
+        businessId: businessId, name: 'New listing'));
+      expect((await (db.select(db.products)..where((p) => p.name.equals('New listing')))
+        .getSingle()).showOnline, isTrue);
+      expect(await columnsOf(db, 'categories'), contains('marketplace_category'));
+      await (db.update(db.products)..where((p) => p.id.equals(productId)))
+        .write(const ProductsCompanion(showOnline: Value(false)));
+      await db.customStatement('PRAGMA user_version = 87');
+      await db.close();
+      db = await openAndInit();
+      expect((await (db.select(db.products)
+        ..where((p) => p.id.equals(productId))).getSingle()).showOnline, isFalse);
+    } finally { await db.close(); }
+  });
+
+
+  test('v84 to v88 carries products through unit, shop pricing, category and listing upgrades', () async {
+    var db = await openAndInit();
+    final businessId = UuidV7.generate();
+    final categoryId = UuidV7.generate();
+    final productId = UuidV7.generate();
+    await db.into(db.businesses).insert(
+      BusinessesCompanion.insert(id: Value(businessId), name: 'Older shop'));
+    await db.into(db.categories).insert(CategoriesCompanion.insert(
+      id: Value(categoryId), businessId: businessId, name: 'Water'));
+    await db.into(db.products).insert(ProductsCompanion.insert(
+      id: Value(productId), businessId: businessId, name: 'Older product',
+      categoryId: Value(categoryId), unit: const Value('Bottle'),
+      unitsPerPack: const Value(12), isAvailable: const Value(false)));
+    await db.customStatement('ALTER TABLE products DROP COLUMN show_online');
+    await db.customStatement('ALTER TABLE categories DROP COLUMN marketplace_category');
+    await db.customStatement('ALTER TABLE businesses DROP COLUMN sells_one_price');
+    await db.customStatement('PRAGMA user_version = 84');
+    await db.close();
+    db = await openAndInit();
+    try {
+      final product = await (db.select(db.products)
+        ..where((p) => p.id.equals(productId))).getSingle();
+      expect(product.showOnline, isTrue);
+      expect(product.isAvailable, isFalse);
+      expect(product.unit, 'Bottle');
+      expect(product.unitsPerPack, 12);
+      expect(product.categoryId, categoryId);
+      final category = await (db.select(db.categories)
+        ..where((c) => c.id.equals(categoryId))).getSingle();
+      expect(category.name, 'Water');
+      expect(category.marketplaceCategory, isNull);
+      expect((await (db.select(db.businesses)
+        ..where((b) => b.id.equals(businessId))).getSingle()).sellsOnePrice, isFalse);
+      await db.into(db.products).insert(ProductsCompanion.insert(
+        businessId: businessId, name: 'Oil', unit: const Value('Litre')));
+    } finally { await db.close(); }
+  });
 
   // Reverts the v20 (Funds Register) delta: drop the three funds tables (their
   // indexes + triggers drop with them). Shared by the scenarios below.
@@ -4128,5 +4333,53 @@ void main() {
       )..where((b) => b.id.equals(biz))).getSingle();
       expect(row.sellsOnePrice, isTrue);
     });
+  });
+
+  test('v90 to v92 creates the Online Orders tables (#426), idempotently',
+      () async {
+    var db = await openAndInit();
+    await db.customStatement('DROP TABLE online_order_lines');
+    await db.customStatement('DROP TABLE online_orders');
+    await db.customStatement('PRAGMA user_version = 90');
+    await db.close();
+    db = await openAndInit();
+    try {
+      expect(await columnsOf(db, 'online_orders'),
+          containsAll(['status', 'reference', 'shopper_account_id',
+              'estimated_total_kobo', 'delivery_lga', 'linked_order_id']));
+      expect(await columnsOf(db, 'online_order_lines'),
+          containsAll(['online_order_id', 'unit_price_kobo', 'requested_qty',
+              'accepted_qty', 'price_tier']));
+      await db.customStatement('PRAGMA user_version = 90');
+      await db.close();
+      db = await openAndInit();
+      expect(await db.select(db.onlineOrders).get(), isEmpty);
+    } finally { await db.close(); }
+  });
+
+  test('v92 to v93 adds the Shopper link + online order keys (#427)',
+      () async {
+    var db = await openAndInit();
+    await db.customStatement(
+        'DROP INDEX IF EXISTS uq_customers_business_shopper_account');
+    await db.customStatement('ALTER TABLE customers DROP COLUMN shopper_account_id');
+    await db.customStatement(
+        "DELETE FROM permissions WHERE key LIKE 'online_orders.%'");
+    await db.customStatement('PRAGMA user_version = 92');
+    await db.close();
+    db = await openAndInit();
+    try {
+      expect(await columnsOf(db, 'customers'), contains('shopper_account_id'));
+      final keys = await db.customSelect(
+          "SELECT key FROM permissions WHERE key LIKE 'online_orders.%'").get();
+      expect(keys.map((r) => r.read<String>('key')).toSet(),
+          {'online_orders.view', 'online_orders.answer'});
+      final idx = await db.customSelect("SELECT name FROM sqlite_master "
+          "WHERE name = 'uq_customers_business_shopper_account'").get();
+      expect(idx, hasLength(1));
+      await db.customStatement('PRAGMA user_version = 92');
+      await db.close();
+      db = await openAndInit(); // idempotent re-upgrade
+    } finally { await db.close(); }
   });
 }

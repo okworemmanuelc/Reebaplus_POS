@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/data/area_selection.dart';
 import 'package:reebaplus_pos/core/data/countries.dart';
+import 'package:reebaplus_pos/shared/widgets/area_picker.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -111,6 +113,10 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
     final formKey = GlobalKey<FormState>();
     bool saving = false;
     String countryValue = kDefaultCountry;
+    // #423: the store's state + LGA, asked at creation so it is ready to go
+    // online. Required; picked with the shared AreaPicker.
+    AreaSelection? area;
+    bool areaMissing = false;
 
     showStoresSheet<void>(
       context,
@@ -132,12 +138,43 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                     countryValue: countryValue,
                     onCountry: (v) => setSheet(() => countryValue = v),
                   ),
+                  StoreAreaField(
+                    key: const ValueKey<String>('new-store-area'),
+                    label: area == null
+                        ? null
+                        : (area!.lga == null
+                            ? area!.state
+                            : '${area!.lga}, ${area!.state}'),
+                    missing: areaMissing,
+                    onTap: () async {
+                      final picked = await showAreaPicker(
+                        ctx,
+                        initialValue: area ??
+                            (countryValue.trim().isEmpty ||
+                                    countryValue.trim() == kDefaultCountry
+                                ? null
+                                : AreaSelection(
+                                    country: countryValue.trim(), state: '')),
+                      );
+                      if (picked == null) return;
+                      setSheet(() {
+                        area = picked;
+                        areaMissing = false;
+                        countryValue = picked.country;
+                      });
+                    },
+                  ),
+                  SizedBox(height: ctx.getRSize(24)),
                   AppButton(
                     text: 'Save Store',
                     onPressed: saving
                         ? null
                         : () async {
-                            if (!formKey.currentState!.validate()) return;
+                            final formOk = formKey.currentState!.validate();
+                            if (area == null) {
+                              setSheet(() => areaMissing = true);
+                            }
+                            if (!formOk || area == null) return;
                             // Re-check at the write boundary (hard rule #6).
                             if (!Gates.manageStores.allowsNow(ref)) {
                               showGateDenied(ctx, Gates.manageStores);
@@ -159,6 +196,9 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                                 name: toNameCase(nameCtrl.text),
                                 location: combinedLocation,
                                 userId: currentUserId,
+                                country: area!.country,
+                                state: area!.state,
+                                lga: area!.lga,
                               );
                               try {
                                 await ref

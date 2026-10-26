@@ -193,6 +193,50 @@ class Stores extends Table {
   /// parent of most of the schema. The client only ever writes the two
   /// [kStoreKinds] constants (`StoresDao.createStore`).
   TextColumn get kind => text().withDefault(const Constant(kStoreKindStore))();
+
+  /// The store's own area (#423): Nigeria from the bundled state/LGA lists
+  /// (matching cloud `ng_areas`), free text elsewhere. Required before the
+  /// store can go online.
+  TextColumn get country => text().nullable()();
+  TextColumn get state => text().nullable()();
+  TextColumn get lga => text().nullable()();
+
+  /// Public store phone for order slips / accepted orders (#423). Null falls
+  /// back to the business phone.
+  TextColumn get phone => text().nullable()();
+
+  /// Short note shown to shoppers, at most [kStoreOnlineNoteMaxLength]
+  /// characters (delivery fee, pickup/delivery days as plain text, #423).
+  TextColumn get onlineNote => text().nullable()();
+
+  /// Online ordering switch (#423), default off. Only `kind = 'store'` rows
+  /// with state + LGA may be on (cloud CHECK in 0199 is the backstop).
+  BoolColumn get onlineOrderingEnabled =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Longest online note a store may show shoppers (#423; cloud CHECK in 0199).
+const int kStoreOnlineNoteMaxLength = 280;
+
+/// The states / LGAs one store delivers to (#423). A null [lga] covers the
+/// whole state. Synced; soft-deleted via [isDeleted], never hard-deleted. Ids
+/// are deterministic per (store, country, state, lga) so re-adding an area
+/// revives the same row and two devices converge on it.
+@DataClassName('StoreDeliveryAreaData')
+class StoreDeliveryAreas extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get storeId => text().references(Stores, #id)();
+  TextColumn get country => text().withDefault(const Constant('Nigeria'))();
+  TextColumn get state => text()();
+  TextColumn get lga => text().nullable()();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
@@ -727,6 +771,8 @@ class Products extends Table {
   IntColumn get iconCodePoint => integer().nullable()();
   TextColumn get colorHex => text().nullable()();
   BoolColumn get isAvailable => boolean().withDefault(const Constant(true))();
+  // Independent online listing preference (#424); archive still hides online.
+  BoolColumn get showOnline => boolean().withDefault(const Constant(true))();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
   IntColumn get lowStockThreshold => integer().withDefault(const Constant(5))();
   RealColumn get avgDailySales => real().withDefault(const Constant(0.0))();
@@ -762,6 +808,31 @@ class Products extends Table {
   IntColumn get unitsPerPack => integer().nullable().check(
     const CustomExpression<bool>('units_per_pack > 0'),
   )();
+  // Online listing content (schema v90, #473). The shop's own words for its
+  // online store — never shared through the barcode catalogue. Column CHECKs
+  // mirror supabase/migrations/0201_product_listing_content.sql and ride the
+  // plain ADD COLUMN of the v90 step (no rebuild). Order quantities are whole
+  // units: at least [minOrderQty], a multiple of [orderStep] (12 = whole crates
+  // only), and at most [maxOrderQty] when set. See OrderQuantityRule.
+  TextColumn get onlineDescription => text().nullable().check(
+    const CustomExpression<bool>(
+      'online_description IS NULL OR length(online_description) <= 2000',
+    ),
+  )();
+  TextColumn get brand => text().nullable().check(
+    const CustomExpression<bool>('brand IS NULL OR length(brand) <= 60'),
+  )();
+  IntColumn get minOrderQty => integer()
+      .withDefault(const Constant(1))
+      .check(const CustomExpression<bool>('min_order_qty >= 1'))();
+  IntColumn get orderStep => integer()
+      .withDefault(const Constant(1))
+      .check(const CustomExpression<bool>('order_step >= 1'))();
+  IntColumn get maxOrderQty => integer().nullable().check(
+    const CustomExpression<bool>(
+      'max_order_qty IS NULL OR max_order_qty >= min_order_qty',
+    ),
+  )();
   IntColumn get version => integer().withDefault(const Constant(1))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
@@ -778,6 +849,41 @@ class Products extends Table {
     "CHECK (unit IS NULL OR unit IN ('Bottle','Can','PET','Sachet','Keg','Crate','Pack','Carton','Piece','Bag','Box','Tin','Other','Kg','Litre'))",
   ];
 }
+
+/// Most photos one product shows (#474): the cover plus four gallery photos.
+const int kMaxProductPhotos = 5;
+
+/// Gallery photos of a product, positions 2–5 (#474; cloud 0204). Position 1
+/// is the cover and stays in `products.image_url`, so nothing that reads the
+/// cover changes. Each (product, position) is a slot with a deterministic id
+/// ([productPhotoSlotId]); a reorder or removal moves [imageUrl] between slots
+/// and soft-deletes the leftovers — a row's position never changes. Synced;
+/// soft-deleted via [isDeleted], never hard-deleted.
+@DataClassName('ProductPhotoData')
+class ProductPhotos extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get productId => text().references(Products, #id)();
+  IntColumn get position => integer()();
+  TextColumn get imageUrl => text()();
+  BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    'CHECK (position BETWEEN 2 AND 5)',
+  ];
+}
+
+/// The deterministic id of a product's gallery slot (#474): the same
+/// (product, position) is always the same row on every phone.
+String productPhotoSlotId(String productId, int position) =>
+    UuidV7.deterministic('product_photo:$productId:$position');
 
 @DataClassName('PriceListData')
 class PriceLists extends Table {
@@ -813,6 +919,12 @@ class Customers extends Table {
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
       dateTime().withDefault(currentDateAndTime)();
+
+  /// #427 (v93 / cloud 0208): the Shopper login this Customer is linked to.
+  /// Set only by a staff choice on the first accepted Online Order (ADR 0030,
+  /// never a phone match). At most one live Customer per Shopper per business
+  /// (partial unique index `uq_customers_business_shopper_account`).
+  TextColumn get shopperAccountId => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -1975,6 +2087,86 @@ class Orders extends Table {
   ];
 }
 
+/// Online Order statuses (#426, cloud CHECK + transition guard in 0205).
+/// `new` is the only open state a Shopper can cancel; the shop answers it.
+const List<String> kOnlineOrderStatuses = [
+  'new',
+  'accepted',
+  'declined',
+  'cancelled_by_customer',
+  'cancelled_by_shop',
+  'fulfilled',
+  'expired',
+];
+
+/// A Shopper's request to one store (#426, PRD #421). NOT a Sale: it moves no
+/// stock, revenue, money or crates. Created only in the cloud by
+/// `shopper_place_orders` and pulled to shop phones; the shop's answers
+/// (#427) are status changes pushed through the outbox, checked by the cloud
+/// transition guard. [customerId] / [linkedOrderId] are plain ids (no local
+/// FK) so a pulled order never waits on a Customer or Order row.
+@DataClassName('OnlineOrderData')
+class OnlineOrders extends Table {
+  TextColumn get id => text()();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get storeId => text().references(Stores, #id)();
+  TextColumn get shopperAccountId => text().nullable()();
+  TextColumn get customerId => text().nullable()();
+  TextColumn get status => text().withDefault(const Constant('new'))();
+  TextColumn get reference => text()();
+  TextColumn get currency => text().withDefault(const Constant('NGN'))();
+  IntColumn get estimatedTotalKobo =>
+      integer().withDefault(const Constant(0))();
+  TextColumn get shopperName => text()();
+  TextColumn get deliveryPhone => text()();
+  TextColumn get deliveryCountry =>
+      text().withDefault(const Constant('Nigeria'))();
+  TextColumn get deliveryState => text()();
+  TextColumn get deliveryLga => text()();
+  TextColumn get deliveryStreet => text()();
+  TextColumn get note => text().nullable()();
+  TextColumn get declineReason => text().nullable()();
+  TextColumn get cancelReason => text().nullable()();
+  TextColumn get linkedOrderId => text().nullable()();
+  DateTimeColumn get placedAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get respondedAt => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    "CHECK (status IN ('new','accepted','declined','cancelled_by_customer',"
+        "'cancelled_by_shop','fulfilled','expired'))",
+  ];
+}
+
+/// One line of an [OnlineOrders] row (#426): the price, tier and name the
+/// Shopper saw at placement, the quantity asked and (after #427) the quantity
+/// the shop accepted (only ever lowered; 0 = removed).
+@DataClassName('OnlineOrderLineData')
+class OnlineOrderLines extends Table {
+  TextColumn get id => text()();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get onlineOrderId => text().references(OnlineOrders, #id)();
+  TextColumn get productId => text().references(Products, #id)();
+  TextColumn get productName => text()();
+  TextColumn get unit => text().nullable()();
+  IntColumn get unitPriceKobo => integer()();
+  TextColumn get priceTier => text().withDefault(const Constant('retailer'))();
+  IntColumn get requestedQty => integer()();
+  IntColumn get acceptedQty => integer().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 @DataClassName('OrderItemData')
 class OrderItems extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
@@ -2793,6 +2985,7 @@ class MigrationEvents extends Table {
     CrateSizeGroups,
     Manufacturers,
     Stores,
+    StoreDeliveryAreas,
     Users,
     Categories,
     Suppliers,
@@ -2803,6 +2996,7 @@ class MigrationEvents extends Table {
     SupplierCrateDeposits,
     CrateShortfallWriteoffs,
     Products,
+    ProductPhotos,
     PriceLists,
     Customers,
     CustomerWallets,
@@ -2821,6 +3015,8 @@ class MigrationEvents extends Table {
     Orders,
     OrderItems,
     OrderCrateLines,
+    OnlineOrders,
+    OnlineOrderLines,
     Shipments,
     PurchaseItems,
     ExpenseCategories,
@@ -2904,6 +3100,7 @@ class MigrationEvents extends Table {
     UserBusinessesDao,
     InviteCodesDao,
     UserStoresDao,
+    OnlineOrdersDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -2938,7 +3135,19 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 87;
+  int get schemaVersion => 93;
+
+  /// The v90 (#473) listing columns, pinned to their defaults in every older
+  /// products rebuild: TableMigration copies from the CURRENT schema, so a
+  /// column the old table lacks would otherwise be copied as its own name
+  /// (the stale-column trap).
+  Map<GeneratedColumn, Expression> get _listingContentPins => {
+    products.onlineDescription: const Constant<String>(null),
+    products.brand: const Constant<String>(null),
+    products.minOrderQty: const Constant(1),
+    products.orderStep: const Constant(1),
+    products.maxOrderQty: const Constant<int>(null),
+  };
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -3455,7 +3664,16 @@ class AppDatabase extends _$AppDatabase {
         // already exists after the RENAME above). Rebuilding drops the
         // table's indexes + bump trigger, so recreate them to match
         // onCreate exactly.
-        await m.alterTable(TableMigration(customers));
+        // #427 (v93) added `shopper_account_id`; a pre-v15 table lacks it, so
+        // pin it to NULL (the TableMigration stale-column trap).
+        await m.alterTable(
+          TableMigration(
+            customers,
+            columnTransformer: {
+              customers.shopperAccountId: const Constant<String>(null),
+            },
+          ),
+        );
         await customStatement(
           'CREATE INDEX idx_customers_business_lua ON customers (business_id, last_updated_at)',
         );
@@ -3781,6 +3999,8 @@ class AppDatabase extends _$AppDatabase {
             products,
             columnTransformer: {
               products.unitsPerPack: const Constant<int>(null),
+              products.showOnline: const Constant(true),
+              ..._listingContentPins, // v90, #473
             },
           ),
         );
@@ -5166,6 +5386,8 @@ class AppDatabase extends _$AppDatabase {
             products,
             columnTransformer: {
               products.unitsPerPack: const Constant<int>(null),
+              products.showOnline: const Constant(true),
+              ..._listingContentPins, // v90, #473
             },
           ),
         );
@@ -6430,7 +6652,17 @@ class AppDatabase extends _$AppDatabase {
         // Widens customConstraints on products to admit 'Kg' and 'Litre'
         // alongside the 13 legacy units. TableMigration rebuilds the table
         // to update the SQLite table-level CHECK constraint.
-        await m.alterTable(TableMigration(products));
+        final hasShowOnline = (await customSelect(
+          "SELECT 1 FROM pragma_table_info('products') WHERE name = 'show_online'",
+        ).get()).isNotEmpty;
+        // #473: v90 listing columns did not exist at v85 either.
+        final hasListing = (await customSelect(
+          "SELECT 1 FROM pragma_table_info('products') WHERE name = 'min_order_qty'",
+        ).get()).isNotEmpty;
+        await m.alterTable(TableMigration(products, columnTransformer: {
+          if (!hasShowOnline) products.showOnline: const Constant(true),
+          if (!hasListing) ..._listingContentPins,
+        }));
       }
       if (from < 86) {
         // ── v86 — #493: businesses.sells_one_price ("We sell at one price") ──
@@ -6457,6 +6689,132 @@ class AppDatabase extends _$AppDatabase {
         if (exists.isEmpty) {
           await m.addColumn(categories, categories.marketplaceCategory);
         }
+      }
+      if (from < 88) {
+        // #424: old product rebuilds already include the current column.
+        final exists = await customSelect(
+          "SELECT 1 FROM pragma_table_info('products') WHERE name = 'show_online'",
+        ).get();
+        if (exists.isEmpty) await m.addColumn(products, products.showOnline);
+        await customStatement(
+          "INSERT OR IGNORE INTO permissions (key, description, category) VALUES "
+          "('products.manage_listing', 'Manage online product listings', 'Online store')",
+        );
+      }
+      if (from < 89) {
+        // #423: store area + online fields, the delivery-area table and the
+        // online-ordering permission key. Cloud 0199 must deploy first.
+        // No older step rebuilds `stores` (no TableMigration(stores)), so the
+        // stale-column trap does not apply; guards keep re-upgrades idempotent.
+        final storeCols = (await customSelect(
+          "SELECT name FROM pragma_table_info('stores')",
+        ).get()).map((r) => r.read<String>('name')).toSet();
+        if (!storeCols.contains('country')) {
+          await m.addColumn(stores, stores.country);
+        }
+        if (!storeCols.contains('state')) await m.addColumn(stores, stores.state);
+        if (!storeCols.contains('lga')) await m.addColumn(stores, stores.lga);
+        if (!storeCols.contains('phone')) await m.addColumn(stores, stores.phone);
+        if (!storeCols.contains('online_note')) {
+          await m.addColumn(stores, stores.onlineNote);
+        }
+        if (!storeCols.contains('online_ordering_enabled')) {
+          await m.addColumn(stores, stores.onlineOrderingEnabled);
+        }
+        final hasAreas = (await customSelect(
+          "SELECT 1 FROM sqlite_master WHERE type = 'table' "
+          "AND name = 'store_delivery_areas'",
+        ).get()).isNotEmpty;
+        if (!hasAreas) await m.createTable(storeDeliveryAreas);
+        await customStatement(
+          "INSERT OR IGNORE INTO permissions (key, description, category) VALUES "
+          "('stores.online_ordering', 'Switch a store''s online ordering on/off', "
+          "'Online store')",
+        );
+      }
+      if (from < 90) {
+        // ── v90 — #473: products online listing content ──────────────────
+        //
+        // Mirrors supabase/migrations/0201_product_listing_content.sql. Five
+        // columns whose CHECKs are column constraints, so plain ADD COLUMNs
+        // carry them (no rebuild). Added in order — max_order_qty's CHECK reads
+        // min_order_qty. Guarded per column, because a DB that came through an
+        // older products rebuild already has them (each pins the defaults).
+        final existing = {
+          for (final r in await customSelect(
+            "SELECT name FROM pragma_table_info('products')",
+          ).get())
+            r.read<String>('name'),
+        };
+        for (final column in <GeneratedColumn>[
+          products.onlineDescription,
+          products.brand,
+          products.minOrderQty,
+          products.orderStep,
+          products.maxOrderQty,
+        ]) {
+          if (!existing.contains(column.name)) {
+            await m.addColumn(products, column);
+          }
+        }
+      }
+      if (from < 91) {
+        // ── v91 — #474: product gallery photos ───────────────────────────
+        //
+        // Mirrors supabase/migrations/0204_product_photos.sql. A new table
+        // only (no products column, so no TableMigration pins). Guarded so a
+        // re-upgrade is idempotent; the sync-index, bump trigger and live-slot
+        // unique index match what onCreate builds for a fresh install.
+        final hasPhotos = (await customSelect(
+          "SELECT 1 FROM sqlite_master WHERE type = 'table' "
+          "AND name = 'product_photos'",
+        ).get()).isNotEmpty;
+        if (!hasPhotos) await m.createTable(productPhotos);
+        for (final stmt in _productPhotoUpgradeStatements) {
+          await customStatement(stmt);
+        }
+      }
+      if (from < 92) {
+        // ── v92 — #426: Online Orders pulled to shop phones ───────────────
+        //
+        // Mirrors supabase/migrations/0205_online_orders.sql. Two new tables,
+        // created only when absent so a re-upgrade is idempotent.
+        final names = {
+          for (final r in await customSelect(
+            "SELECT name FROM sqlite_master WHERE type = 'table' "
+            "AND name IN ('online_orders', 'online_order_lines')",
+          ).get())
+            r.read<String>('name'),
+        };
+        if (!names.contains('online_orders')) await m.createTable(onlineOrders);
+        if (!names.contains('online_order_lines')) {
+          await m.createTable(onlineOrderLines);
+        }
+      }
+      if (from < 93) {
+        // ── v93 — #427: the shop answers Online Orders ────────────────────
+        //
+        // Mirrors supabase/migrations/0208_online_order_answer.sql: the
+        // Customer ↔ Shopper link column + its partial unique index, and the
+        // two permission keys (catalogue only — role grants arrive from the
+        // cloud). Cloud 0208 must deploy first. Guarded so a re-upgrade is
+        // idempotent; the only older customers rebuild (v15) pins the column.
+        final customerCols = {
+          for (final r in await customSelect(
+            "SELECT name FROM pragma_table_info('customers')",
+          ).get())
+            r.read<String>('name'),
+        };
+        if (!customerCols.contains('shopper_account_id')) {
+          await m.addColumn(customers, customers.shopperAccountId);
+        }
+        await customStatement(kCustomersShopperAccountIndex);
+        await customStatement(
+          "INSERT OR IGNORE INTO permissions (key, description, category) VALUES "
+          "('online_orders.view', 'See online orders', 'Online store'), "
+          "('online_orders.answer', 'Accept or decline online orders', "
+          "'Online store')",
+        );
       }
     },
     beforeOpen: (details) async {
@@ -6926,6 +7284,10 @@ const List<String> _v13HotPathIndexStatements = [
 const List<List<String>> _defaultPermissionRows = [
   // Stores — rendered first on the role page (§10.2). CEO-only by default.
   ['stores.manage', 'Add, edit, and remove stores', 'Stores'],
+  ['stores.online_ordering', "Switch a store's online ordering on/off", 'Online store'],
+  // #427: Online Orders. CEO / Manager / Cashier by default (cloud 0208).
+  ['online_orders.view', 'See online orders', 'Online store'],
+  ['online_orders.answer', 'Accept or decline online orders', 'Online store'],
   [
     'stores.receive_transfer',
     'Confirm receipt of incoming stock transfers',
@@ -6951,6 +7313,7 @@ const List<List<String>> _defaultPermissionRows = [
   // Products
   ['products.add', 'Add a new product', 'Products'],
   ['products.edit_price', 'Edit product', 'Products'],
+  ['products.manage_listing', 'Manage online product listings', 'Online store'],
   ['products.edit_buying_price', 'View buying price', 'Products'],
   ['products.delete', 'Delete a product', 'Products'],
   // Stock
@@ -7346,6 +7709,29 @@ const List<String> _crateDepositIndexStatements = [
 /// it would try to create the same index twice on a fresh install. The v80
 /// upgrade step creates it explicitly instead, exactly as v79 does for the
 /// Placed Deposit ledger.
+/// One live gallery photo per (product, position) (#474; cloud 0204's
+/// `uq_product_photos_live_position`). Slot ids are deterministic, so this
+/// only guards against a hand-written row.
+const String _productPhotoLivePositionIndex =
+    'CREATE UNIQUE INDEX IF NOT EXISTS uq_product_photos_live_position '
+    'ON product_photos (product_id, position) WHERE is_deleted = 0';
+
+/// The v91 upgrade's extras for `product_photos` — the same sync index and
+/// bump trigger the onCreate loops build for every synced tenant table, plus
+/// the live-slot index. All IF NOT EXISTS (re-upgrade safe).
+const List<String> _productPhotoUpgradeStatements = [
+  'CREATE INDEX IF NOT EXISTS idx_product_photos_business_lua '
+      'ON product_photos (business_id, last_updated_at)',
+  'CREATE TRIGGER IF NOT EXISTS bump_product_photos_last_updated_at '
+      'AFTER UPDATE ON product_photos '
+      'FOR EACH ROW '
+      'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+      'BEGIN '
+      "UPDATE product_photos SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+      'END',
+  _productPhotoLivePositionIndex,
+];
+
 const List<String> _crateShortfallIndexStatements = [
   // The two reads there are: the brand's net written-off COUNT (which nets out
   // of the derived shortfall on the card) and the period's booked LOSS (which
@@ -7367,8 +7753,17 @@ const List<String> _crateDepositPaymentIndexStatements = [
       'ON payment_transactions (business_id, crate_deposit_id)',
 ];
 
+/// #427: one live Customer per Shopper per business (mirrors cloud 0208's
+/// `customers_business_shopper_account`). Run at create time and by the v93
+/// step; IF NOT EXISTS keeps a re-upgrade idempotent.
+const String kCustomersShopperAccountIndex =
+    'CREATE UNIQUE INDEX IF NOT EXISTS uq_customers_business_shopper_account '
+    'ON customers (business_id, shopper_account_id) '
+    'WHERE shopper_account_id IS NOT NULL AND is_deleted = 0';
+
 List<String> get _postCreateStatements {
   final stmts = <String>[];
+  stmts.add(kCustomersShopperAccountIndex);
 
   // -- Sync indexes --
   stmts.add(
@@ -7434,6 +7829,8 @@ List<String> get _postCreateStatements {
     ..._crateDepositPaymentIndexStatements,
     // v80 (#216 PRD #203) — the Crate Shortfall write-off ledger.
     ..._crateShortfallIndexStatements,
+    // v91 (#474) — one live gallery photo per (product, position).
+    _productPhotoLivePositionIndex,
     // v31 (Expenses budget) — one live goal per (business, store-or-null).
     'CREATE UNIQUE INDEX uq_expense_budgets_business ON expense_budgets '
         '(business_id) WHERE store_id IS NULL AND is_deleted = 0',

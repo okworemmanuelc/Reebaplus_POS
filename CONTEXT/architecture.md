@@ -2,7 +2,22 @@
 
 ## Overview
 
-Reebaplus POS is an offline-first Flutter application backed by Supabase. The device is the source of truth for the active session: every read and write hits a local Drift (SQLite) database first, and a background sync engine reconciles that local state with Postgres on Supabase. The app is built so that a cashier can run the entire selling loop — cart, checkout, receipt, wallet update — with no network at all, and have it converge with every other device in the same business once a connection returns. This document defines the technology stack, the folder-level boundaries, the storage model, the auth and access model, the sync (background task) model, and the invariants the codebase must never violate.
+Reebaplus POS is an offline-first Flutter application backed by Supabase. The device is the source of truth for the active business session: every business read and write hits a local Drift (SQLite) database first, and a background sync engine reconciles that local state with Postgres on Supabase. The app is built so that a cashier can run the entire selling loop — cart, checkout, receipt, wallet update — with no network at all, and have it converge with every other device in the same business once a connection returns. This document defines the technology stack, the folder-level boundaries, the storage model, the auth and access model, the sync (background task) model, and the invariants the codebase must never violate.
+
+## Approved Shopper boundary — #422 (2026-10-23)
+
+Online ordering adds a Shopper surface alongside the offline-first business till.
+The owner-approved decisions are [ADR 0030: identity](../docs/adr/0030-shopper-identity.md)
+and [ADR 0031: storefront boundary](../docs/adr/0031-shopper-storefront-boundary.md).
+They record the approved invariant wording/scope, eligibility rules and release
+gate. The Invariants below include these scoped exceptions;
+#422 introduces no Shopper screens, routing or storefront RPCs.
+
+The [Shopper isolation audit](../docs/security/0422-shopper-isolation.md) records
+the deployed access paths, migration and outstanding release blockers. In
+particular, current_user_business_ids() currently reads profiles.business_id;
+a membership-less identity must not be able to forge that pointer. Treat
+authenticated identity and business membership as separate checks.
 
 ## Stack
 
@@ -73,6 +88,14 @@ path):
   in the `pending_product_image_uploads` list (not the outbox) until
   `PendingPhotoUploads.upload` flushes it; the logout wipe gate counts these
   (see invariant #12).
+  **Gallery photos (#474)** — positions 2–5 after the cover — go through
+  `ProductGalleryImages` (`lib/core/services/product_gallery_images.dart`):
+  objects `<businessId>/<productId>/<photoId>.jpg` (fresh photoId, never
+  overwritten, so no `?v=`), device copies under
+  `<appDocs>/product_images/gallery/<productId>/`, offline uploads waiting in
+  `pending_product_gallery_uploads`. `PendingPhotoUploads` counts and flushes
+  them with the cover photos (invariant #12), and both `LocalPhotoFiles` wipes
+  remove them.
 - **`BarcodeCatalogueService` (`lib/core/services/barcode_catalogue_service.dart`)**
   — the shared barcode catalogue lookup (ADR 0029 §8, #332). The lookup is read-only: it
   calls the definer RPC `barcode_suggestion(p_barcode)` and fetches the public
@@ -88,8 +111,41 @@ path):
   clients). `lookupOutcome` is the lookup that says why nothing came back
   (nothing shared / unreachable / failed) for that sheet.
 
+- **`StorefrontService` (`lib/core/storefront/storefront_service.dart`, #425)**
+  — the Shopper read path (ADR 0031): the four signed-out definer RPCs
+  `storefront_feed`, `storefront_search`, `storefront_store` and
+  `storefront_store_products` (migration 0202), read-only, online only (15 s,
+  a connectivity check first), nothing kept in Drift or the outbox. The
+  Shopper's browsing area is a device key-value (`SharedPreferences`) value.
+  Product photos load from their public URLs with `Image.network`, never the
+  member-only Storage download. Every eligibility rule, the stock label and
+  the ranking are server-side; the app only shapes rows. The Browse-first
+  front door is behind `kBrowseFirstEnabled` (`lib/core/storefront/browse_switch.dart`,
+  off until #426/#427): `entryScreenWithoutSignedInUser` (main.dart) gives a
+  phone with a device user the PIN screen always, otherwise Browse (switch on)
+  or Welcome. "Sell on Reebaplus" pushes the unchanged Welcome; sign-in
+  regenerates the navigator, so nothing of Browse survives into the till.
+  The same switch shows **Shop** in the till's side menu (#437): it pushes
+  `BrowseScreen(fromTill: true)` on the root navigator with the business's
+  own Supabase session as the Shopper login, and leaving it runs `lockApp()`,
+  so the PIN screen guards the way back. "Your store" (owner only) is decided
+  on the phone (`ownStoreIdsProvider`: the business's local store ids when
+  `businesses.owner_id` is the signed-in login) — no storefront RPC exposes a
+  business id; the cloud's `own_business` refusal remains the authority.
+
 All ordinary business writes still go to Drift first and drain through the
 `sync_queue`.
+
+## Nigeria area reference (#471)
+
+`ng_areas(state, lga)` is a cloud-only, public read-only reference with a
+composite primary key and 774 rows (including the six FCT area councils).
+Only the service role writes. It is not tenant data, is not mirrored in Drift,
+and is never in the sync registry or outbox. The shared AreaPicker reads the
+bundled Dart reference offline and returns a plain AreaSelection; callers own
+persistence. Later store/address/delivery migrations can validate against the
+cloud table. See `docs/data/nigerian-areas.md`; migration 0189 is verified on the isolated
+`reebaplus-dev` project and not deployed to production. No invariant changes.
 
 ## Storage Model
 
@@ -104,6 +160,128 @@ not Lexicon starter suggestions. General maps to Other; Accessories is resolved
 only for the phone/fashion industries. Other parent or unmatched names stay null.
 
 Four storage locations, with a strict rule for what lives where. Business data goes to Drift (and syncs); secrets and pointers go to secure storage (and never sync); sync engine state goes to Drift (and never syncs); operator audit records go to Supabase only (and never reach the client). Nothing durable lives only in memory.
+
+**Online listing (#424).** Cloud0195 and Drift88 add
+`products.show_online` defaulting true independently of archive state. Local
+upgrades retain units85, shop pricing86 and category mapping87; older product rebuilds supply
+the new default when the column is absent. Listing permission is seeded as
+`products.manage_listing` under Online store and enforced by `Gates.manageListing`,
+independently of price editing. The Product Details Manage Product card renders
+the switch only with that grant and rechecks it at tap time. The core listing
+service rechecks the effective context before a tenant-scoped transaction writes
+the flag and a complete outbox row (including cleared/null fields). Stock,
+prices and archive state are unchanged. Product restore uses
+the shared helper's default for older rows missing showOnline, preserving an
+explicit false. Storefront reads (#425) must require show_online AND is_available
+AND NOT is_deleted; the listing preference cannot unarchive a product.
+
+**Online Orders (#426).** Cloud 0205 / Drift 92. Shopper details live
+cloud-only in `shopper_profiles` / `shopper_phones` / `shopper_addresses`
+(keyed by auth user; RLS on, no policies, no table grants — only the
+`shopper_*` definer RPCs touch them). `online_orders` + `online_order_lines`
+are business-scoped and synced to shop phones (registry entries after
+`order_crate_lines`; `online_orders` restores with `Restore.monotonicStatus`
+(`openStatus: 'new'`) so a stale `new` never overwrites an answered order;
+`zz_broadcast_sync_signal`; in `pos_pull_snapshot`). They are created only by
+`shopper_place_orders` (one order per store, each in its own sub-transaction,
+re-priced from the product row, every storefront hide rule + delivery area +
+`order_quantity_allowed` + real stock re-checked, idempotent on the
+client-generated id, at most 20 per Shopper per hour, no stock movement). A
+transition-guard trigger enforces the status machine
+(`new→accepted|declined(reason)|cancelled_by_customer(RPC only)|expired(system)`,
+`accepted→cancelled_by_shop(reason)|fulfilled(linked order)`; anything else is
+P0001 `online_order_transition_rejected`) and keeps placement snapshots fixed
+for client writes; a client may upsert an EXISTING row (the #427 outbox path)
+but never create one. The Shopper reads only `shopper_my_orders()`. The cart
+is device key-value storage (`shopperCartProvider`, `storefront_cart_v1`);
+`ShopperService` / `ShopperSessionNotifier` (`lib/core/storefront/`) are the
+sanctioned direct-RPC Shopper seam. Shopper sign-in is email OTP
+(`shouldCreateUser: true`) and never runs the business post-verify routing;
+sign-out is a local `signOut` with no wipe gate. On a phone with a business
+user the Shopper side shops with the business session: no Shopper OTP, no
+Shopper sign-out (ADR 0030).
+
+**Answering Online Orders (#427).** Cloud 0208 / Drift 93. Shop phones accept
+or decline only `new` orders (`OnlineOrdersDao`, Drift + outbox; gates
+`Gates.viewOnlineOrders` / `Gates.answerOnlineOrders` plus a store the user
+works in; the cloud guard re-checks the key). A refused answer (P0001
+`online_order_transition_rejected`) is settled by the push path — answer
+dropped, cloud row restored over LWW — never orphaned. The first accepted order
+from a Shopper links a Customer by staff choice (`customers.shopper_account_id`,
+one live Customer per Shopper per business); later orders attach automatically;
+never by phone match.
+
+**Send to till (#431).** No schema change. An accepted order's lines
+(accepted_qty > 0) load into the Cart of the order's store at the agreed
+`unit_price_kobo` (charged) with the catalogue price kept for the
+catalogue-vs-charged capture, the linked Customer attached, and each line
+tagged with the online order id (the tag travels in `saved_carts.cart_data`).
+Checkout of a tagged Cart marks the order `fulfilled` + `linked_order_id`
+inside `OrdersDao.createOrder`'s transaction (Drift + outbox; held by the
+order on the v2 envelope path). Stock, money and crates are a till sale's.
+
+**Online store setup (#423).** Cloud0199 / Drift89. Each `stores` row carries
+its own area (`country`, `state`, `lga` — Nigeria values from the bundled lists
+that match `ng_areas`, free text elsewhere), a public `phone` (falls back to the
+business phone), a shopper `online_note` (≤280) and `online_ordering_enabled`
+(default off). The synced `store_delivery_areas` table lists the states/LGAs a
+store delivers to (null `lga` = whole state; soft-deleted, deterministic ids).
+Only `kind='store'` rows with state + LGA and at least one delivery area may be
+switched on; vans never. Writes go through `StoreOnlineService` (fire-time
+`Gates.manageOnlineStore`, key `stores.online_ordering`) → `StoresDao` → outbox.
+Storefront reads (#425) must require `online_ordering_enabled`; switching off
+hides the store at once, while placed online orders are separate rows.
+
+**Storefront browse (#425).** Cloud0202 only, no Drift change. Signed-out
+definer RPCs over server-only helpers (see the sanctioned-exceptions list);
+`pg_trgm` + `unaccent` in `extensions`, a trigram partial index on
+`storefront_search_key(products.name)` for listable products and
+`inventory (store_id, last_updated_at)` for freshness. Hidden: products off
+for sale / archived / deleted / prescription category; offline, van or
+deleted stores; deleted, tombstoned, Inactive or trial-ended businesses;
+stores not synced for 7 days (72 h = demoted + "Stock may be out of date").
+"Last synced" is approximated as the newest of the store row, its inventory
+rows and the business's `devices.last_seen_at` (devices are per business,
+not per store). Admin blocking (#478) and tier prices (#429) and Sponsored
+slots (#461) plug into `_storefront_cards`. Cards also carry the #473 listing
+content (`online_description`, `brand`) and the order quantity rule
+(`min_order_qty`, `order_step`, `max_order_qty`) for the #426 cart; 0202 must
+deploy after 0201.
+
+**Restricted goods (#479).** Cloud 0206 only, no Drift change. The public
+category `prescription-medicines` (Health) is restricted 'prescription'; Beer,
+Spirits and Wine are 'age_18'. `product_online_restriction(product)` is the
+single server-only classification (category or parent). Prescription items are
+never returned by any storefront RPC or accepted by place-order. 18+: the
+Shopper confirms once before the first age-restricted item enters the cart
+(`ensureShopperAgeConfirmed`); signed out it is a device key-value flag, signed
+in it is recorded in the RPC-only `shopper_age_confirmations` via
+`shopper_confirm_age()`. Place order re-checks it server-side
+(`shopper_age_confirmation_missing`, store code `age_confirmation_required`).
+
+**Listing content (#473).** Cloud 0201 and Drift 90 add `products.online_description`
+(≤2000), `brand` (≤60), `min_order_qty`, `order_step` (both default 1) and
+`max_order_qty` (null = no limit, ≥ min), with CHECKs mirrored on both sides.
+There is no separate listing record: a listing is the product plus these columns.
+Only `Gates.manageListing` holders edit them, through
+`ProductListingService.saveContent`. They are never shared through the barcode
+catalogue. An online order quantity must obey `OrderQuantityRule` (≥ min, a
+multiple of step, ≤ max). The cloud twin is `order_quantity_allowed()`, which the
+storefront cart and the place-order RPC (#425/#426) must enforce.
+
+**Product photos (#474).** Cloud 0204 / Drift 91. Gallery position 1 is the
+cover and stays `products.image_url` (till, barcode share, storefront cards
+unchanged). The synced, soft-deleted `product_photos` table holds positions 2–5
+(CHECK 2..5, ≤5 photos in all) as slots with deterministic ids
+(`productPhotoSlotId(product, position)`): a reorder or removal moves
+`image_url` between slots and soft-deletes leftovers — a row's position never
+changes, so the live (product, position) unique index cannot collide inside a
+batched upsert. A photo's row is written offline with its final public url;
+the bytes follow. Writes go through `ProductGalleryService` (fire-time
+`Gates.manageListing`) → `CatalogDao.setProductGallery` → outbox; the cover keeps
+its own photo flow. The signed-out `storefront_product_photos(store, product)`
+returns cover + live slots in order, only once each slot's Storage object
+exists; the Browse product sheet shows them as a swipeable gallery.
 
 | What | Where | Why | Synced to cloud? |
 |---|---|---|---|
@@ -256,7 +434,7 @@ Realtime is a **signal that triggers a pull, never the transport for the data it
    - **Authorize** (`0148_realtime_broadcast_authorization.sql`): a single `SELECT` RLS policy on `realtime.messages` scopes topic `store_<business_id>` to the caller's own businesses (`current_user_business_ids()`), so a client can only ever subscribe to its own tenant's topic — no cross-tenant signal leak (invariant #5's spirit). There is **no** `INSERT` (send) policy: clients only receive; the trigger emits as a definer and cannot be spoofed by a client.
    - **Subscribe** (client): `CloudTransport.startBroadcast(businessId, {onSignal})` opens one **private** channel on `store_<businessId>` (`realtime.setAuth` before subscribe, as with `postgres_changes`), on the **same lifecycle as realtime** (sign-in / resume / connectivity handoff / logout). Any signal → a **debounced `catchUpPull(reason: 'broadcast')`** (shares the 20 s catch-up debounce, so a burst from one multi-row write collapses to one pull).
 
-**Invariants this preserves.** A Broadcast signal **MUST NOT write Drift** — its only effect is to schedule a pull (the signal callback is handed no row data by construction). Broadcast is **ephemeral (no replay)**: a device that misses a signal (asleep/offline/backgrounded) converges on the next **periodic / reconnect pull**, which is why the periodic pull is retained as the safety net (Workstream C). Adding a new synced tenant table auto-inherits the trigger (the attach loop is DB-driven), so "add a synced table = one registry entry" still holds.
+**Invariants this preserves.** A Broadcast signal **MUST NOT write Drift** — its only effect is to schedule a pull (the signal callback is handed no row data by construction). Broadcast is **ephemeral (no replay)**: a device that misses a signal (asleep/offline/backgrounded) converges on the next **periodic / reconnect pull**, which is why the periodic pull is retained as the safety net (Workstream C). A new tenant table does **not** auto-inherit the trigger: 0147's attach loop ran once, over the tables that existed then (#470 found nine later tables without it; `0198_broadcast_trigger_gap.sql` backfilled them). Every migration that creates a business-scoped table must attach `zz_broadcast_sync_signal` itself (AFTER INSERT OR UPDATE OR DELETE, FOR EACH ROW) — or re-run 0198, which is idempotent. The tier-2 guard `test/integration/rpcs/broadcast_trigger_coverage_test.dart` calls the service-role helper `broadcast_trigger_missing_tables()` (0198) and fails if any `kSyncedTenantTables` table, or any `public` table with `business_id`, lacks the trigger.
 
 ### Sync progress and UI feedback (Fix 4)
 
@@ -318,6 +496,13 @@ test pins the derived accessors against their frozen historical values. This
 retires the recurring "forgot to register the table in one of the switches →
 peer devices silently drop its rows" bug-class.
 
+**New synced tenant table checklist (cloud side).** The registry entry is the
+only *client* step, but the cloud migration that creates the table must also
+attach the live-sync trigger `zz_broadcast_sync_signal` (see "Live signal" above;
+0147 does not cover tables created after it). `0198`'s helper
+`broadcast_trigger_missing_tables()` and the tier-2 test
+`test/integration/rpcs/broadcast_trigger_coverage_test.dart` enforce it (#470).
+
 Restore strategies are built from helpers (`Restore.plain` / `.naturalKey` /
 `.dedup` / `.ledger`, with a hand-written closure for the genuinely bespoke
 tables like `users`). The central pre-insert guards — timestamp-LWW, the
@@ -361,6 +546,17 @@ This is an **alert channel only** — it never carries or persists business data
   auto-show foreground pushes); a tap in any state (foreground, background, or a
   killed-app cold start replayed after `MainLayout` mounts) opens the in-app bell
   and marks the row read.
+- **Shopper tokens (#476, migration `0200`).** `devices.business_id` is nullable
+  and `devices.auth_user_id` is **server-stamped** (`auth.uid()`, BEFORE trigger,
+  direct `authenticated` writes only — the app never sends it). A Shopper-only
+  phone registers via the `register_shopper_push_token` / `clear_shopper_push_token`
+  definer RPCs onto a business-less row (one per device + login); Shoppers get no
+  direct `devices` access. A business phone that shops keeps **one** row: its
+  business row carries the same login, so `send-push` routes staff pushes by
+  `business_id` (console broadcasts unchanged) and Shopper pushes (`shopper_*`
+  types, senders in #434) by `auth_user_id`. One token → one row still holds.
+  Each push carries `audience` (`staff`/`shopper`) so a tap goes to the bell or
+  the Shopper tap action, never the wrong side.
 - **Severity.** The push title and the in-app card colour both derive from the
   broadcast's `severity` (`info` / `warning` / `alert`) — `severityColor` and the
   edge function's `titleForSeverity` are kept in lockstep.
@@ -374,23 +570,23 @@ This is an **alert channel only** — it never carries or persists business data
 
 These are rules, not guidelines. Code that breaks one of these is wrong even if it compiles and the feature appears to work.
 
-1. **The local database is the source of truth for the running app.** Every screen reads from Drift and every user write commits to Drift first. No widget, view model, or repository method may block the UI on a network call or read live data directly from Supabase to render a screen.
+1. **The local database is the source of truth for the running business till.** Every business screen reads from Drift and every business write commits to Drift first. No widget, view model, or repository method may block the UI on a network call or read live data directly from Supabase to render a screen. **Shopper exception (ADR 0031, owner-approved 2026-10-23):** the online-only Shopper surface uses restricted storefront RPCs and a device-local cart, never tenant Drift tables. The business till remains offline-first.
 
 2. **PINs never leave the device.** A PIN (or its hash) is written only to `flutter_secure_storage`. It must never be placed in Drift, in an outbox row, in a network request, in a log line, or in Postgres. Identity and recovery run only through Supabase Auth (email + OTP or Google OAuth) — never through the PIN.
 
 3. **Wallet and supplier ledgers are append-only.** A balance is always derived by summing ledger rows, never stored as a single mutable number and never edited in place. Corrections are new compensating rows. This is what makes "the wallet is the source of truth" true and conflict-free under sync.
 
-4. **Every cloud write goes through the outbox.** A repository that needs to change cloud state writes to Drift and enqueues an outbox entry; it must not call Supabase directly. This guarantees offline durability, ordered delivery, idempotent retries, and adaptive batching through one and only one write path.
+4. **Every business cloud write goes through the outbox.** A repository that needs to change cloud state writes to Drift and enqueues an outbox entry; it must not call Supabase directly. This guarantees offline durability, ordered delivery, idempotent retries, and adaptive batching through one and only one write path. **Shopper exception (ADR 0031):** Shopper commands call restricted storefront RPCs directly; identity comes from auth.uid() and validation is server-side. Business writes still use Drift + outbox.
 
-5. **Cross-business data access is impossible, and is enforced on the server.** Every business-scoped row carries a `business_id`, and Postgres Row-Level Security is the authority — the client is never trusted to scope its own queries. No code path may read or write a row outside the caller's `business_id`. **Exception (ADR 0029, #322):** the shared barcode catalogue. One read-only definer RPC (`barcode_suggestion`) returns a consensus name, unit and photo for a factory barcode, computed across businesses, with no business identity; Add Product reads it through `BarcodeCatalogueService` (#332). No row of another business ever becomes readable.
+5. **Cross-business data access is impossible, and is enforced on the server.** Every business-scoped row carries a `business_id`, and Postgres Row-Level Security is the authority — the client is never trusted to scope its own queries. No code path may read or write a row outside the caller's `business_id`. **Exception (ADR 0029, #322):** the shared barcode catalogue. One read-only definer RPC (`barcode_suggestion`) returns a consensus name, unit and photo for a factory barcode, computed across businesses, with no business identity; Add Product reads it through `BarcodeCatalogueService` (#332). No row of another business ever becomes readable. **Storefront exception (ADR 0031):** approved public listing projections may cross businesses through restricted RPCs. Shoppers cannot read base tenant rows, buying prices, cost batches or other customers' data.
 
 6. **Permissions are read from data, never hard-coded.** Gating decisions come exclusively from role and override rows via `lib/core/permissions/`. No feature may branch on a hard-coded role name (e.g. `if (role == 'Cashier')`); it must ask `can(action)`.
 
 7. **A caught error never destroys in-progress work or shows a raw error screen.** The global handler shows a calm fallback, preserves the current cart and any uncommitted local state, and queues a crash log. A red/blank framework error screen reaching the user is a defect.
 
-8. **Layer dependencies point one direction only.** `lib/features/<feature>` depends on `lib/core/` (database/DAOs, services, permissions, providers) and `lib/shared/`, never the reverse. Features must not reach into another feature's internal widgets; cross-feature data flows through core/shared providers and DAOs. `lib/core/services/` (the sync service) must not import widget/UI code. Ordinary business writes go through Drift DAOs and the `sync_queue`, not direct Supabase calls — the only sanctioned exceptions are the `redeem_invite_code` RPC (auth bootstrap) and the Sync Issues diagnostic screen. A cycle or an upward import is an architecture violation.
+8. **Layer dependencies point one direction only.** `lib/features/<feature>` depends on `lib/core/` (database/DAOs, services, permissions, providers) and `lib/shared/`, never the reverse. Features must not reach into another feature's internal widgets; cross-feature data flows through core/shared providers and DAOs. `lib/core/services/` (the sync service) must not import widget/UI code. Ordinary business writes go through Drift DAOs and the `sync_queue`, not direct Supabase calls — the only sanctioned exceptions are the `redeem_invite_code` RPC (auth bootstrap) and the Sync Issues diagnostic screen. A cycle or an upward import is an architecture violation. **Shopper exception (ADR 0031):** core/shared storefront services may call the restricted cloud RPCs directly; feature widgets consume that service contract and one-way dependencies remain unchanged.
 
-9. **One email is one identity is one business.** The resolved email — not the auth provider — is the identity key: signing in by email OTP or by Google with the same address must map to the same user, never create a second account. An email is bound to exactly one business; "Create a new business" with an already-registered email (including any staff member's email) must be rejected, not silently allowed to create a duplicate or orphan tenant.
+9. **One email is one identity with at most one business membership.** Email OTP and Google with the same resolved email identify the same login. A Shopper is not a business membership and may create or join their first business with that email. A login already linked to a business, including a staff login, cannot create or join a second business. Shopping never changes that restriction. (ADR 0030, owner-approved 2026-10-23.)
 
 10. **The pull cursor never advances past an uncommitted page.** The cursor stored in `sync_meta` is updated only after a pull page is fully reconciled into Drift and the transaction commits successfully. A failed or partial reconciliation must retry that page before the cursor moves. This rule is what makes both regular pulls and onboarding pulls resumable after an app kill.
 

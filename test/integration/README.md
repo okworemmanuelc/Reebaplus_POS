@@ -1,5 +1,44 @@
 # Tier-2 integration tests
 
+## Shopper isolation (#422)
+
+`rpcs/shopper_isolation_test.dart` discovers tenant tables and business-ID RPCs
+from the service-role OpenAPI schema, then uses a new, membership-less login
+and a separate signed-out client. It also tests profile-pointer forgery and
+internal-helper execution. The migration must be deployed on a **dedicated test
+project** first. The shared live dev/production project is not a test fixture.
+
+This suite needs `TEST_SUPABASE_URL`, `TEST_SUPABASE_ANON_KEY`,
+`TEST_SUPABASE_SERVICE_ROLE_KEY`, and the explicit opt-in
+`TEST_SHOPPER_ISOLATION_ALLOW_WRITES=1`. It does not need the existing test
+user's refresh token. Without these it compiles and skips, which is **not** a
+passing live security audit. It creates only its own login and throwaway tenant
+and deletes them on teardown. A failed run interrupted before teardown may
+require removing its `shopper-isolation-…@example.com` login and test business.
+
+```sh
+flutter test test/integration/rpcs/shopper_isolation_test.dart --reporter expanded
+```
+
+See `docs/security/0422-shopper-isolation.md` for the deliberate tombstone
+exception, standalone #467/#468 prerequisites, and outstanding owner decisions.
+
+## Storefront browse (#425)
+
+`rpcs/storefront_browse_test.dart` calls the four storefront RPCs as a
+signed-out client against throwaway fixtures (a made-up state per run, so the
+feed only sees this run's shops). Needs migration 0202 on reebaplus-dev, the
+three `TEST_SUPABASE_*` variables and `TEST_STOREFRONT_ALLOW_WRITES=1`; any URL
+but reebaplus-dev fails closed. `sql/storefront_browse.sql` (rollback-only)
+checks EXECUTE boundaries and records `EXPLAIN ANALYZE` for feed and search.
+
+## Restricted goods (#479)
+
+`sql/restricted_goods.sql` (rollback-only, reebaplus-dev after 0202 + 0204 +
+0206): EXECUTE boundaries, the classification and 18+ placement rule, that no
+storefront RPC returns a prescription item (child or parent category), and a
+signed-in Shopper's idempotent age confirmation.
+
 Hits real dev Supabase. Verifies the v2 domain RPCs end-to-end:
 round-trip (response ↔ cloud row), idempotent replay, and atomicity
 (tenant guard + validation).
@@ -136,3 +175,12 @@ Use the existing files as templates. For `pos_record_sale_v2` and
 mid-flight rollback test — `pos_record_sale_v2` exercises insufficient
 stock partway through a multi-item sale; `pos_cancel_order` exercises a
 partial-state cancel where some items have already been refunded.
+
+## Nigeria area reference (#471)
+
+`flutter test test/integration/nigerian_areas_test.dart` needs only
+`TEST_SUPABASE_URL` and `TEST_SUPABASE_ANON_KEY`. Deploy `0189_nigerian_areas.sql`
+on that test backend first. This test is read-only, needs no tenant fixture or
+refresh token, and compares all 774 pairs through the public anonymous role
+with explicit pagination. A missing table or partial seed is a failure when
+configured; absent environment variables are a visible skip.

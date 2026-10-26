@@ -2223,6 +2223,70 @@ class $StoresTable extends Stores with TableInfo<$StoresTable, StoreData> {
     requiredDuringInsert: false,
     defaultValue: const Constant(kStoreKindStore),
   );
+  static const VerificationMeta _countryMeta = const VerificationMeta(
+    'country',
+  );
+  @override
+  late final GeneratedColumn<String> country = GeneratedColumn<String>(
+    'country',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _stateMeta = const VerificationMeta('state');
+  @override
+  late final GeneratedColumn<String> state = GeneratedColumn<String>(
+    'state',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lgaMeta = const VerificationMeta('lga');
+  @override
+  late final GeneratedColumn<String> lga = GeneratedColumn<String>(
+    'lga',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _phoneMeta = const VerificationMeta('phone');
+  @override
+  late final GeneratedColumn<String> phone = GeneratedColumn<String>(
+    'phone',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _onlineNoteMeta = const VerificationMeta(
+    'onlineNote',
+  );
+  @override
+  late final GeneratedColumn<String> onlineNote = GeneratedColumn<String>(
+    'online_note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _onlineOrderingEnabledMeta =
+      const VerificationMeta('onlineOrderingEnabled');
+  @override
+  late final GeneratedColumn<bool> onlineOrderingEnabled =
+      GeneratedColumn<bool>(
+        'online_ordering_enabled',
+        aliasedName,
+        false,
+        type: DriftSqlType.bool,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("online_ordering_enabled" IN (0, 1))',
+        ),
+        defaultValue: const Constant(false),
+      );
   static const VerificationMeta _isDeletedMeta = const VerificationMeta(
     'isDeleted',
   );
@@ -2270,6 +2334,12 @@ class $StoresTable extends Stores with TableInfo<$StoresTable, StoreData> {
     name,
     location,
     kind,
+    country,
+    state,
+    lga,
+    phone,
+    onlineNote,
+    onlineOrderingEnabled,
     isDeleted,
     createdAt,
     lastUpdatedAt,
@@ -2315,6 +2385,45 @@ class $StoresTable extends Stores with TableInfo<$StoresTable, StoreData> {
       context.handle(
         _kindMeta,
         kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    }
+    if (data.containsKey('country')) {
+      context.handle(
+        _countryMeta,
+        country.isAcceptableOrUnknown(data['country']!, _countryMeta),
+      );
+    }
+    if (data.containsKey('state')) {
+      context.handle(
+        _stateMeta,
+        state.isAcceptableOrUnknown(data['state']!, _stateMeta),
+      );
+    }
+    if (data.containsKey('lga')) {
+      context.handle(
+        _lgaMeta,
+        lga.isAcceptableOrUnknown(data['lga']!, _lgaMeta),
+      );
+    }
+    if (data.containsKey('phone')) {
+      context.handle(
+        _phoneMeta,
+        phone.isAcceptableOrUnknown(data['phone']!, _phoneMeta),
+      );
+    }
+    if (data.containsKey('online_note')) {
+      context.handle(
+        _onlineNoteMeta,
+        onlineNote.isAcceptableOrUnknown(data['online_note']!, _onlineNoteMeta),
+      );
+    }
+    if (data.containsKey('online_ordering_enabled')) {
+      context.handle(
+        _onlineOrderingEnabledMeta,
+        onlineOrderingEnabled.isAcceptableOrUnknown(
+          data['online_ordering_enabled']!,
+          _onlineOrderingEnabledMeta,
+        ),
       );
     }
     if (data.containsKey('is_deleted')) {
@@ -2367,6 +2476,30 @@ class $StoresTable extends Stores with TableInfo<$StoresTable, StoreData> {
         DriftSqlType.string,
         data['${effectivePrefix}kind'],
       )!,
+      country: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}country'],
+      ),
+      state: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}state'],
+      ),
+      lga: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}lga'],
+      ),
+      phone: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}phone'],
+      ),
+      onlineNote: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}online_note'],
+      ),
+      onlineOrderingEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}online_ordering_enabled'],
+      )!,
       isDeleted: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_deleted'],
@@ -2402,6 +2535,25 @@ class StoreData extends DataClass implements Insertable<StoreData> {
   /// parent of most of the schema. The client only ever writes the two
   /// [kStoreKinds] constants (`StoresDao.createStore`).
   final String kind;
+
+  /// The store's own area (#423): Nigeria from the bundled state/LGA lists
+  /// (matching cloud `ng_areas`), free text elsewhere. Required before the
+  /// store can go online.
+  final String? country;
+  final String? state;
+  final String? lga;
+
+  /// Public store phone for order slips / accepted orders (#423). Null falls
+  /// back to the business phone.
+  final String? phone;
+
+  /// Short note shown to shoppers, at most [kStoreOnlineNoteMaxLength]
+  /// characters (delivery fee, pickup/delivery days as plain text, #423).
+  final String? onlineNote;
+
+  /// Online ordering switch (#423), default off. Only `kind = 'store'` rows
+  /// with state + LGA may be on (cloud CHECK in 0199 is the backstop).
+  final bool onlineOrderingEnabled;
   final bool isDeleted;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
@@ -2411,6 +2563,12 @@ class StoreData extends DataClass implements Insertable<StoreData> {
     required this.name,
     this.location,
     required this.kind,
+    this.country,
+    this.state,
+    this.lga,
+    this.phone,
+    this.onlineNote,
+    required this.onlineOrderingEnabled,
     required this.isDeleted,
     required this.createdAt,
     required this.lastUpdatedAt,
@@ -2425,6 +2583,22 @@ class StoreData extends DataClass implements Insertable<StoreData> {
       map['location'] = Variable<String>(location);
     }
     map['kind'] = Variable<String>(kind);
+    if (!nullToAbsent || country != null) {
+      map['country'] = Variable<String>(country);
+    }
+    if (!nullToAbsent || state != null) {
+      map['state'] = Variable<String>(state);
+    }
+    if (!nullToAbsent || lga != null) {
+      map['lga'] = Variable<String>(lga);
+    }
+    if (!nullToAbsent || phone != null) {
+      map['phone'] = Variable<String>(phone);
+    }
+    if (!nullToAbsent || onlineNote != null) {
+      map['online_note'] = Variable<String>(onlineNote);
+    }
+    map['online_ordering_enabled'] = Variable<bool>(onlineOrderingEnabled);
     map['is_deleted'] = Variable<bool>(isDeleted);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
@@ -2440,6 +2614,20 @@ class StoreData extends DataClass implements Insertable<StoreData> {
           ? const Value.absent()
           : Value(location),
       kind: Value(kind),
+      country: country == null && nullToAbsent
+          ? const Value.absent()
+          : Value(country),
+      state: state == null && nullToAbsent
+          ? const Value.absent()
+          : Value(state),
+      lga: lga == null && nullToAbsent ? const Value.absent() : Value(lga),
+      phone: phone == null && nullToAbsent
+          ? const Value.absent()
+          : Value(phone),
+      onlineNote: onlineNote == null && nullToAbsent
+          ? const Value.absent()
+          : Value(onlineNote),
+      onlineOrderingEnabled: Value(onlineOrderingEnabled),
       isDeleted: Value(isDeleted),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
@@ -2457,6 +2645,14 @@ class StoreData extends DataClass implements Insertable<StoreData> {
       name: serializer.fromJson<String>(json['name']),
       location: serializer.fromJson<String?>(json['location']),
       kind: serializer.fromJson<String>(json['kind']),
+      country: serializer.fromJson<String?>(json['country']),
+      state: serializer.fromJson<String?>(json['state']),
+      lga: serializer.fromJson<String?>(json['lga']),
+      phone: serializer.fromJson<String?>(json['phone']),
+      onlineNote: serializer.fromJson<String?>(json['onlineNote']),
+      onlineOrderingEnabled: serializer.fromJson<bool>(
+        json['onlineOrderingEnabled'],
+      ),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
@@ -2471,6 +2667,12 @@ class StoreData extends DataClass implements Insertable<StoreData> {
       'name': serializer.toJson<String>(name),
       'location': serializer.toJson<String?>(location),
       'kind': serializer.toJson<String>(kind),
+      'country': serializer.toJson<String?>(country),
+      'state': serializer.toJson<String?>(state),
+      'lga': serializer.toJson<String?>(lga),
+      'phone': serializer.toJson<String?>(phone),
+      'onlineNote': serializer.toJson<String?>(onlineNote),
+      'onlineOrderingEnabled': serializer.toJson<bool>(onlineOrderingEnabled),
       'isDeleted': serializer.toJson<bool>(isDeleted),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
@@ -2483,6 +2685,12 @@ class StoreData extends DataClass implements Insertable<StoreData> {
     String? name,
     Value<String?> location = const Value.absent(),
     String? kind,
+    Value<String?> country = const Value.absent(),
+    Value<String?> state = const Value.absent(),
+    Value<String?> lga = const Value.absent(),
+    Value<String?> phone = const Value.absent(),
+    Value<String?> onlineNote = const Value.absent(),
+    bool? onlineOrderingEnabled,
     bool? isDeleted,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
@@ -2492,6 +2700,12 @@ class StoreData extends DataClass implements Insertable<StoreData> {
     name: name ?? this.name,
     location: location.present ? location.value : this.location,
     kind: kind ?? this.kind,
+    country: country.present ? country.value : this.country,
+    state: state.present ? state.value : this.state,
+    lga: lga.present ? lga.value : this.lga,
+    phone: phone.present ? phone.value : this.phone,
+    onlineNote: onlineNote.present ? onlineNote.value : this.onlineNote,
+    onlineOrderingEnabled: onlineOrderingEnabled ?? this.onlineOrderingEnabled,
     isDeleted: isDeleted ?? this.isDeleted,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -2505,6 +2719,16 @@ class StoreData extends DataClass implements Insertable<StoreData> {
       name: data.name.present ? data.name.value : this.name,
       location: data.location.present ? data.location.value : this.location,
       kind: data.kind.present ? data.kind.value : this.kind,
+      country: data.country.present ? data.country.value : this.country,
+      state: data.state.present ? data.state.value : this.state,
+      lga: data.lga.present ? data.lga.value : this.lga,
+      phone: data.phone.present ? data.phone.value : this.phone,
+      onlineNote: data.onlineNote.present
+          ? data.onlineNote.value
+          : this.onlineNote,
+      onlineOrderingEnabled: data.onlineOrderingEnabled.present
+          ? data.onlineOrderingEnabled.value
+          : this.onlineOrderingEnabled,
       isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       lastUpdatedAt: data.lastUpdatedAt.present
@@ -2521,6 +2745,12 @@ class StoreData extends DataClass implements Insertable<StoreData> {
           ..write('name: $name, ')
           ..write('location: $location, ')
           ..write('kind: $kind, ')
+          ..write('country: $country, ')
+          ..write('state: $state, ')
+          ..write('lga: $lga, ')
+          ..write('phone: $phone, ')
+          ..write('onlineNote: $onlineNote, ')
+          ..write('onlineOrderingEnabled: $onlineOrderingEnabled, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
@@ -2535,6 +2765,12 @@ class StoreData extends DataClass implements Insertable<StoreData> {
     name,
     location,
     kind,
+    country,
+    state,
+    lga,
+    phone,
+    onlineNote,
+    onlineOrderingEnabled,
     isDeleted,
     createdAt,
     lastUpdatedAt,
@@ -2548,6 +2784,12 @@ class StoreData extends DataClass implements Insertable<StoreData> {
           other.name == this.name &&
           other.location == this.location &&
           other.kind == this.kind &&
+          other.country == this.country &&
+          other.state == this.state &&
+          other.lga == this.lga &&
+          other.phone == this.phone &&
+          other.onlineNote == this.onlineNote &&
+          other.onlineOrderingEnabled == this.onlineOrderingEnabled &&
           other.isDeleted == this.isDeleted &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
@@ -2559,6 +2801,12 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
   final Value<String> name;
   final Value<String?> location;
   final Value<String> kind;
+  final Value<String?> country;
+  final Value<String?> state;
+  final Value<String?> lga;
+  final Value<String?> phone;
+  final Value<String?> onlineNote;
+  final Value<bool> onlineOrderingEnabled;
   final Value<bool> isDeleted;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
@@ -2569,6 +2817,12 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
     this.name = const Value.absent(),
     this.location = const Value.absent(),
     this.kind = const Value.absent(),
+    this.country = const Value.absent(),
+    this.state = const Value.absent(),
+    this.lga = const Value.absent(),
+    this.phone = const Value.absent(),
+    this.onlineNote = const Value.absent(),
+    this.onlineOrderingEnabled = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -2580,6 +2834,12 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
     required String name,
     this.location = const Value.absent(),
     this.kind = const Value.absent(),
+    this.country = const Value.absent(),
+    this.state = const Value.absent(),
+    this.lga = const Value.absent(),
+    this.phone = const Value.absent(),
+    this.onlineNote = const Value.absent(),
+    this.onlineOrderingEnabled = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -2592,6 +2852,12 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
     Expression<String>? name,
     Expression<String>? location,
     Expression<String>? kind,
+    Expression<String>? country,
+    Expression<String>? state,
+    Expression<String>? lga,
+    Expression<String>? phone,
+    Expression<String>? onlineNote,
+    Expression<bool>? onlineOrderingEnabled,
     Expression<bool>? isDeleted,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
@@ -2603,6 +2869,13 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
       if (name != null) 'name': name,
       if (location != null) 'location': location,
       if (kind != null) 'kind': kind,
+      if (country != null) 'country': country,
+      if (state != null) 'state': state,
+      if (lga != null) 'lga': lga,
+      if (phone != null) 'phone': phone,
+      if (onlineNote != null) 'online_note': onlineNote,
+      if (onlineOrderingEnabled != null)
+        'online_ordering_enabled': onlineOrderingEnabled,
       if (isDeleted != null) 'is_deleted': isDeleted,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
@@ -2616,6 +2889,12 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
     Value<String>? name,
     Value<String?>? location,
     Value<String>? kind,
+    Value<String?>? country,
+    Value<String?>? state,
+    Value<String?>? lga,
+    Value<String?>? phone,
+    Value<String?>? onlineNote,
+    Value<bool>? onlineOrderingEnabled,
     Value<bool>? isDeleted,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
@@ -2627,6 +2906,13 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
       name: name ?? this.name,
       location: location ?? this.location,
       kind: kind ?? this.kind,
+      country: country ?? this.country,
+      state: state ?? this.state,
+      lga: lga ?? this.lga,
+      phone: phone ?? this.phone,
+      onlineNote: onlineNote ?? this.onlineNote,
+      onlineOrderingEnabled:
+          onlineOrderingEnabled ?? this.onlineOrderingEnabled,
       isDeleted: isDeleted ?? this.isDeleted,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -2652,6 +2938,26 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
     if (kind.present) {
       map['kind'] = Variable<String>(kind.value);
     }
+    if (country.present) {
+      map['country'] = Variable<String>(country.value);
+    }
+    if (state.present) {
+      map['state'] = Variable<String>(state.value);
+    }
+    if (lga.present) {
+      map['lga'] = Variable<String>(lga.value);
+    }
+    if (phone.present) {
+      map['phone'] = Variable<String>(phone.value);
+    }
+    if (onlineNote.present) {
+      map['online_note'] = Variable<String>(onlineNote.value);
+    }
+    if (onlineOrderingEnabled.present) {
+      map['online_ordering_enabled'] = Variable<bool>(
+        onlineOrderingEnabled.value,
+      );
+    }
     if (isDeleted.present) {
       map['is_deleted'] = Variable<bool>(isDeleted.value);
     }
@@ -2675,6 +2981,576 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
           ..write('name: $name, ')
           ..write('location: $location, ')
           ..write('kind: $kind, ')
+          ..write('country: $country, ')
+          ..write('state: $state, ')
+          ..write('lga: $lga, ')
+          ..write('phone: $phone, ')
+          ..write('onlineNote: $onlineNote, ')
+          ..write('onlineOrderingEnabled: $onlineOrderingEnabled, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $StoreDeliveryAreasTable extends StoreDeliveryAreas
+    with TableInfo<$StoreDeliveryAreasTable, StoreDeliveryAreaData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $StoreDeliveryAreasTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: () => UuidV7.generate(),
+  );
+  static const VerificationMeta _businessIdMeta = const VerificationMeta(
+    'businessId',
+  );
+  @override
+  late final GeneratedColumn<String> businessId = GeneratedColumn<String>(
+    'business_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES businesses (id)',
+    ),
+  );
+  static const VerificationMeta _storeIdMeta = const VerificationMeta(
+    'storeId',
+  );
+  @override
+  late final GeneratedColumn<String> storeId = GeneratedColumn<String>(
+    'store_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES stores (id)',
+    ),
+  );
+  static const VerificationMeta _countryMeta = const VerificationMeta(
+    'country',
+  );
+  @override
+  late final GeneratedColumn<String> country = GeneratedColumn<String>(
+    'country',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('Nigeria'),
+  );
+  static const VerificationMeta _stateMeta = const VerificationMeta('state');
+  @override
+  late final GeneratedColumn<String> state = GeneratedColumn<String>(
+    'state',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _lgaMeta = const VerificationMeta('lga');
+  @override
+  late final GeneratedColumn<String> lga = GeneratedColumn<String>(
+    'lga',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _isDeletedMeta = const VerificationMeta(
+    'isDeleted',
+  );
+  @override
+  late final GeneratedColumn<bool> isDeleted = GeneratedColumn<bool>(
+    'is_deleted',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_deleted" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _lastUpdatedAtMeta = const VerificationMeta(
+    'lastUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'last_updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    businessId,
+    storeId,
+    country,
+    state,
+    lga,
+    isDeleted,
+    createdAt,
+    lastUpdatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'store_delivery_areas';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<StoreDeliveryAreaData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('business_id')) {
+      context.handle(
+        _businessIdMeta,
+        businessId.isAcceptableOrUnknown(data['business_id']!, _businessIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_businessIdMeta);
+    }
+    if (data.containsKey('store_id')) {
+      context.handle(
+        _storeIdMeta,
+        storeId.isAcceptableOrUnknown(data['store_id']!, _storeIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_storeIdMeta);
+    }
+    if (data.containsKey('country')) {
+      context.handle(
+        _countryMeta,
+        country.isAcceptableOrUnknown(data['country']!, _countryMeta),
+      );
+    }
+    if (data.containsKey('state')) {
+      context.handle(
+        _stateMeta,
+        state.isAcceptableOrUnknown(data['state']!, _stateMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_stateMeta);
+    }
+    if (data.containsKey('lga')) {
+      context.handle(
+        _lgaMeta,
+        lga.isAcceptableOrUnknown(data['lga']!, _lgaMeta),
+      );
+    }
+    if (data.containsKey('is_deleted')) {
+      context.handle(
+        _isDeletedMeta,
+        isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('last_updated_at')) {
+      context.handle(
+        _lastUpdatedAtMeta,
+        lastUpdatedAt.isAcceptableOrUnknown(
+          data['last_updated_at']!,
+          _lastUpdatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  StoreDeliveryAreaData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return StoreDeliveryAreaData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      businessId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}business_id'],
+      )!,
+      storeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}store_id'],
+      )!,
+      country: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}country'],
+      )!,
+      state: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}state'],
+      )!,
+      lga: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}lga'],
+      ),
+      isDeleted: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_deleted'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $StoreDeliveryAreasTable createAlias(String alias) {
+    return $StoreDeliveryAreasTable(attachedDatabase, alias);
+  }
+}
+
+class StoreDeliveryAreaData extends DataClass
+    implements Insertable<StoreDeliveryAreaData> {
+  final String id;
+  final String businessId;
+  final String storeId;
+  final String country;
+  final String state;
+  final String? lga;
+  final bool isDeleted;
+  final DateTime createdAt;
+  final DateTime lastUpdatedAt;
+  const StoreDeliveryAreaData({
+    required this.id,
+    required this.businessId,
+    required this.storeId,
+    required this.country,
+    required this.state,
+    this.lga,
+    required this.isDeleted,
+    required this.createdAt,
+    required this.lastUpdatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['business_id'] = Variable<String>(businessId);
+    map['store_id'] = Variable<String>(storeId);
+    map['country'] = Variable<String>(country);
+    map['state'] = Variable<String>(state);
+    if (!nullToAbsent || lga != null) {
+      map['lga'] = Variable<String>(lga);
+    }
+    map['is_deleted'] = Variable<bool>(isDeleted);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    return map;
+  }
+
+  StoreDeliveryAreasCompanion toCompanion(bool nullToAbsent) {
+    return StoreDeliveryAreasCompanion(
+      id: Value(id),
+      businessId: Value(businessId),
+      storeId: Value(storeId),
+      country: Value(country),
+      state: Value(state),
+      lga: lga == null && nullToAbsent ? const Value.absent() : Value(lga),
+      isDeleted: Value(isDeleted),
+      createdAt: Value(createdAt),
+      lastUpdatedAt: Value(lastUpdatedAt),
+    );
+  }
+
+  factory StoreDeliveryAreaData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return StoreDeliveryAreaData(
+      id: serializer.fromJson<String>(json['id']),
+      businessId: serializer.fromJson<String>(json['businessId']),
+      storeId: serializer.fromJson<String>(json['storeId']),
+      country: serializer.fromJson<String>(json['country']),
+      state: serializer.fromJson<String>(json['state']),
+      lga: serializer.fromJson<String?>(json['lga']),
+      isDeleted: serializer.fromJson<bool>(json['isDeleted']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'businessId': serializer.toJson<String>(businessId),
+      'storeId': serializer.toJson<String>(storeId),
+      'country': serializer.toJson<String>(country),
+      'state': serializer.toJson<String>(state),
+      'lga': serializer.toJson<String?>(lga),
+      'isDeleted': serializer.toJson<bool>(isDeleted),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+    };
+  }
+
+  StoreDeliveryAreaData copyWith({
+    String? id,
+    String? businessId,
+    String? storeId,
+    String? country,
+    String? state,
+    Value<String?> lga = const Value.absent(),
+    bool? isDeleted,
+    DateTime? createdAt,
+    DateTime? lastUpdatedAt,
+  }) => StoreDeliveryAreaData(
+    id: id ?? this.id,
+    businessId: businessId ?? this.businessId,
+    storeId: storeId ?? this.storeId,
+    country: country ?? this.country,
+    state: state ?? this.state,
+    lga: lga.present ? lga.value : this.lga,
+    isDeleted: isDeleted ?? this.isDeleted,
+    createdAt: createdAt ?? this.createdAt,
+    lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+  );
+  StoreDeliveryAreaData copyWithCompanion(StoreDeliveryAreasCompanion data) {
+    return StoreDeliveryAreaData(
+      id: data.id.present ? data.id.value : this.id,
+      businessId: data.businessId.present
+          ? data.businessId.value
+          : this.businessId,
+      storeId: data.storeId.present ? data.storeId.value : this.storeId,
+      country: data.country.present ? data.country.value : this.country,
+      state: data.state.present ? data.state.value : this.state,
+      lga: data.lga.present ? data.lga.value : this.lga,
+      isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastUpdatedAt: data.lastUpdatedAt.present
+          ? data.lastUpdatedAt.value
+          : this.lastUpdatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StoreDeliveryAreaData(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('storeId: $storeId, ')
+          ..write('country: $country, ')
+          ..write('state: $state, ')
+          ..write('lga: $lga, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    businessId,
+    storeId,
+    country,
+    state,
+    lga,
+    isDeleted,
+    createdAt,
+    lastUpdatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is StoreDeliveryAreaData &&
+          other.id == this.id &&
+          other.businessId == this.businessId &&
+          other.storeId == this.storeId &&
+          other.country == this.country &&
+          other.state == this.state &&
+          other.lga == this.lga &&
+          other.isDeleted == this.isDeleted &&
+          other.createdAt == this.createdAt &&
+          other.lastUpdatedAt == this.lastUpdatedAt);
+}
+
+class StoreDeliveryAreasCompanion
+    extends UpdateCompanion<StoreDeliveryAreaData> {
+  final Value<String> id;
+  final Value<String> businessId;
+  final Value<String> storeId;
+  final Value<String> country;
+  final Value<String> state;
+  final Value<String?> lga;
+  final Value<bool> isDeleted;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> lastUpdatedAt;
+  final Value<int> rowid;
+  const StoreDeliveryAreasCompanion({
+    this.id = const Value.absent(),
+    this.businessId = const Value.absent(),
+    this.storeId = const Value.absent(),
+    this.country = const Value.absent(),
+    this.state = const Value.absent(),
+    this.lga = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  StoreDeliveryAreasCompanion.insert({
+    this.id = const Value.absent(),
+    required String businessId,
+    required String storeId,
+    this.country = const Value.absent(),
+    required String state,
+    this.lga = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : businessId = Value(businessId),
+       storeId = Value(storeId),
+       state = Value(state);
+  static Insertable<StoreDeliveryAreaData> custom({
+    Expression<String>? id,
+    Expression<String>? businessId,
+    Expression<String>? storeId,
+    Expression<String>? country,
+    Expression<String>? state,
+    Expression<String>? lga,
+    Expression<bool>? isDeleted,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastUpdatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (businessId != null) 'business_id': businessId,
+      if (storeId != null) 'store_id': storeId,
+      if (country != null) 'country': country,
+      if (state != null) 'state': state,
+      if (lga != null) 'lga': lga,
+      if (isDeleted != null) 'is_deleted': isDeleted,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  StoreDeliveryAreasCompanion copyWith({
+    Value<String>? id,
+    Value<String>? businessId,
+    Value<String>? storeId,
+    Value<String>? country,
+    Value<String>? state,
+    Value<String?>? lga,
+    Value<bool>? isDeleted,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? lastUpdatedAt,
+    Value<int>? rowid,
+  }) {
+    return StoreDeliveryAreasCompanion(
+      id: id ?? this.id,
+      businessId: businessId ?? this.businessId,
+      storeId: storeId ?? this.storeId,
+      country: country ?? this.country,
+      state: state ?? this.state,
+      lga: lga ?? this.lga,
+      isDeleted: isDeleted ?? this.isDeleted,
+      createdAt: createdAt ?? this.createdAt,
+      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (businessId.present) {
+      map['business_id'] = Variable<String>(businessId.value);
+    }
+    if (storeId.present) {
+      map['store_id'] = Variable<String>(storeId.value);
+    }
+    if (country.present) {
+      map['country'] = Variable<String>(country.value);
+    }
+    if (state.present) {
+      map['state'] = Variable<String>(state.value);
+    }
+    if (lga.present) {
+      map['lga'] = Variable<String>(lga.value);
+    }
+    if (isDeleted.present) {
+      map['is_deleted'] = Variable<bool>(isDeleted.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lastUpdatedAt.present) {
+      map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StoreDeliveryAreasCompanion(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('storeId: $storeId, ')
+          ..write('country: $country, ')
+          ..write('state: $state, ')
+          ..write('lga: $lga, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
@@ -10627,6 +11503,21 @@ class $ProductsTable extends Products
     ),
     defaultValue: const Constant(true),
   );
+  static const VerificationMeta _showOnlineMeta = const VerificationMeta(
+    'showOnline',
+  );
+  @override
+  late final GeneratedColumn<bool> showOnline = GeneratedColumn<bool>(
+    'show_online',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("show_online" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
   static const VerificationMeta _isDeletedMeta = const VerificationMeta(
     'isDeleted',
   );
@@ -10797,6 +11688,72 @@ class $ProductsTable extends Products
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _onlineDescriptionMeta = const VerificationMeta(
+    'onlineDescription',
+  );
+  @override
+  late final GeneratedColumn<String> onlineDescription =
+      GeneratedColumn<String>(
+        'online_description',
+        aliasedName,
+        true,
+        check: () => const CustomExpression<bool>(
+          'online_description IS NULL OR length(online_description) <= 2000',
+        ),
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _brandMeta = const VerificationMeta('brand');
+  @override
+  late final GeneratedColumn<String> brand = GeneratedColumn<String>(
+    'brand',
+    aliasedName,
+    true,
+    check: () =>
+        const CustomExpression<bool>('brand IS NULL OR length(brand) <= 60'),
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _minOrderQtyMeta = const VerificationMeta(
+    'minOrderQty',
+  );
+  @override
+  late final GeneratedColumn<int> minOrderQty = GeneratedColumn<int>(
+    'min_order_qty',
+    aliasedName,
+    false,
+    check: () => const CustomExpression<bool>('min_order_qty >= 1'),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _orderStepMeta = const VerificationMeta(
+    'orderStep',
+  );
+  @override
+  late final GeneratedColumn<int> orderStep = GeneratedColumn<int>(
+    'order_step',
+    aliasedName,
+    false,
+    check: () => const CustomExpression<bool>('order_step >= 1'),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _maxOrderQtyMeta = const VerificationMeta(
+    'maxOrderQty',
+  );
+  @override
+  late final GeneratedColumn<int> maxOrderQty = GeneratedColumn<int>(
+    'max_order_qty',
+    aliasedName,
+    true,
+    check: () => const CustomExpression<bool>(
+      'max_order_qty IS NULL OR max_order_qty >= min_order_qty',
+    ),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _versionMeta = const VerificationMeta(
     'version',
   );
@@ -10853,6 +11810,7 @@ class $ProductsTable extends Products
     iconCodePoint,
     colorHex,
     isAvailable,
+    showOnline,
     isDeleted,
     lowStockThreshold,
     avgDailySales,
@@ -10867,6 +11825,11 @@ class $ProductsTable extends Products
     imagePath,
     imageUrl,
     unitsPerPack,
+    onlineDescription,
+    brand,
+    minOrderQty,
+    orderStep,
+    maxOrderQty,
     version,
     createdAt,
     lastUpdatedAt,
@@ -11007,6 +11970,12 @@ class $ProductsTable extends Products
         ),
       );
     }
+    if (data.containsKey('show_online')) {
+      context.handle(
+        _showOnlineMeta,
+        showOnline.isAcceptableOrUnknown(data['show_online']!, _showOnlineMeta),
+      );
+    }
     if (data.containsKey('is_deleted')) {
       context.handle(
         _isDeletedMeta,
@@ -11118,6 +12087,45 @@ class $ProductsTable extends Products
         ),
       );
     }
+    if (data.containsKey('online_description')) {
+      context.handle(
+        _onlineDescriptionMeta,
+        onlineDescription.isAcceptableOrUnknown(
+          data['online_description']!,
+          _onlineDescriptionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('brand')) {
+      context.handle(
+        _brandMeta,
+        brand.isAcceptableOrUnknown(data['brand']!, _brandMeta),
+      );
+    }
+    if (data.containsKey('min_order_qty')) {
+      context.handle(
+        _minOrderQtyMeta,
+        minOrderQty.isAcceptableOrUnknown(
+          data['min_order_qty']!,
+          _minOrderQtyMeta,
+        ),
+      );
+    }
+    if (data.containsKey('order_step')) {
+      context.handle(
+        _orderStepMeta,
+        orderStep.isAcceptableOrUnknown(data['order_step']!, _orderStepMeta),
+      );
+    }
+    if (data.containsKey('max_order_qty')) {
+      context.handle(
+        _maxOrderQtyMeta,
+        maxOrderQty.isAcceptableOrUnknown(
+          data['max_order_qty']!,
+          _maxOrderQtyMeta,
+        ),
+      );
+    }
     if (data.containsKey('version')) {
       context.handle(
         _versionMeta,
@@ -11216,6 +12224,10 @@ class $ProductsTable extends Products
         DriftSqlType.bool,
         data['${effectivePrefix}is_available'],
       )!,
+      showOnline: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}show_online'],
+      )!,
       isDeleted: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_deleted'],
@@ -11272,6 +12284,26 @@ class $ProductsTable extends Products
         DriftSqlType.int,
         data['${effectivePrefix}units_per_pack'],
       ),
+      onlineDescription: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}online_description'],
+      ),
+      brand: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}brand'],
+      ),
+      minOrderQty: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}min_order_qty'],
+      )!,
+      orderStep: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}order_step'],
+      )!,
+      maxOrderQty: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}max_order_qty'],
+      ),
       version: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}version'],
@@ -11311,6 +12343,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
   final int? iconCodePoint;
   final String? colorHex;
   final bool isAvailable;
+  final bool showOnline;
   final bool isDeleted;
   final int lowStockThreshold;
   final double avgDailySales;
@@ -11325,6 +12358,11 @@ class ProductData extends DataClass implements Insertable<ProductData> {
   final String? imagePath;
   final String? imageUrl;
   final int? unitsPerPack;
+  final String? onlineDescription;
+  final String? brand;
+  final int minOrderQty;
+  final int orderStep;
+  final int? maxOrderQty;
   final int version;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
@@ -11346,6 +12384,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     this.iconCodePoint,
     this.colorHex,
     required this.isAvailable,
+    required this.showOnline,
     required this.isDeleted,
     required this.lowStockThreshold,
     required this.avgDailySales,
@@ -11360,6 +12399,11 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     this.imagePath,
     this.imageUrl,
     this.unitsPerPack,
+    this.onlineDescription,
+    this.brand,
+    required this.minOrderQty,
+    required this.orderStep,
+    this.maxOrderQty,
     required this.version,
     required this.createdAt,
     required this.lastUpdatedAt,
@@ -11404,6 +12448,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       map['color_hex'] = Variable<String>(colorHex);
     }
     map['is_available'] = Variable<bool>(isAvailable);
+    map['show_online'] = Variable<bool>(showOnline);
     map['is_deleted'] = Variable<bool>(isDeleted);
     map['low_stock_threshold'] = Variable<int>(lowStockThreshold);
     map['avg_daily_sales'] = Variable<double>(avgDailySales);
@@ -11427,6 +12472,17 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     }
     if (!nullToAbsent || unitsPerPack != null) {
       map['units_per_pack'] = Variable<int>(unitsPerPack);
+    }
+    if (!nullToAbsent || onlineDescription != null) {
+      map['online_description'] = Variable<String>(onlineDescription);
+    }
+    if (!nullToAbsent || brand != null) {
+      map['brand'] = Variable<String>(brand);
+    }
+    map['min_order_qty'] = Variable<int>(minOrderQty);
+    map['order_step'] = Variable<int>(orderStep);
+    if (!nullToAbsent || maxOrderQty != null) {
+      map['max_order_qty'] = Variable<int>(maxOrderQty);
     }
     map['version'] = Variable<int>(version);
     map['created_at'] = Variable<DateTime>(createdAt);
@@ -11467,6 +12523,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
           ? const Value.absent()
           : Value(colorHex),
       isAvailable: Value(isAvailable),
+      showOnline: Value(showOnline),
       isDeleted: Value(isDeleted),
       lowStockThreshold: Value(lowStockThreshold),
       avgDailySales: Value(avgDailySales),
@@ -11491,6 +12548,17 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       unitsPerPack: unitsPerPack == null && nullToAbsent
           ? const Value.absent()
           : Value(unitsPerPack),
+      onlineDescription: onlineDescription == null && nullToAbsent
+          ? const Value.absent()
+          : Value(onlineDescription),
+      brand: brand == null && nullToAbsent
+          ? const Value.absent()
+          : Value(brand),
+      minOrderQty: Value(minOrderQty),
+      orderStep: Value(orderStep),
+      maxOrderQty: maxOrderQty == null && nullToAbsent
+          ? const Value.absent()
+          : Value(maxOrderQty),
       version: Value(version),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
@@ -11522,6 +12590,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       iconCodePoint: serializer.fromJson<int?>(json['iconCodePoint']),
       colorHex: serializer.fromJson<String?>(json['colorHex']),
       isAvailable: serializer.fromJson<bool>(json['isAvailable']),
+      showOnline: serializer.fromJson<bool>(json['showOnline']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
       lowStockThreshold: serializer.fromJson<int>(json['lowStockThreshold']),
       avgDailySales: serializer.fromJson<double>(json['avgDailySales']),
@@ -11540,6 +12609,13 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       imagePath: serializer.fromJson<String?>(json['imagePath']),
       imageUrl: serializer.fromJson<String?>(json['imageUrl']),
       unitsPerPack: serializer.fromJson<int?>(json['unitsPerPack']),
+      onlineDescription: serializer.fromJson<String?>(
+        json['onlineDescription'],
+      ),
+      brand: serializer.fromJson<String?>(json['brand']),
+      minOrderQty: serializer.fromJson<int>(json['minOrderQty']),
+      orderStep: serializer.fromJson<int>(json['orderStep']),
+      maxOrderQty: serializer.fromJson<int?>(json['maxOrderQty']),
       version: serializer.fromJson<int>(json['version']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
@@ -11566,6 +12642,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       'iconCodePoint': serializer.toJson<int?>(iconCodePoint),
       'colorHex': serializer.toJson<String?>(colorHex),
       'isAvailable': serializer.toJson<bool>(isAvailable),
+      'showOnline': serializer.toJson<bool>(showOnline),
       'isDeleted': serializer.toJson<bool>(isDeleted),
       'lowStockThreshold': serializer.toJson<int>(lowStockThreshold),
       'avgDailySales': serializer.toJson<double>(avgDailySales),
@@ -11580,6 +12657,11 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       'imagePath': serializer.toJson<String?>(imagePath),
       'imageUrl': serializer.toJson<String?>(imageUrl),
       'unitsPerPack': serializer.toJson<int?>(unitsPerPack),
+      'onlineDescription': serializer.toJson<String?>(onlineDescription),
+      'brand': serializer.toJson<String?>(brand),
+      'minOrderQty': serializer.toJson<int>(minOrderQty),
+      'orderStep': serializer.toJson<int>(orderStep),
+      'maxOrderQty': serializer.toJson<int?>(maxOrderQty),
       'version': serializer.toJson<int>(version),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
@@ -11604,6 +12686,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     Value<int?> iconCodePoint = const Value.absent(),
     Value<String?> colorHex = const Value.absent(),
     bool? isAvailable,
+    bool? showOnline,
     bool? isDeleted,
     int? lowStockThreshold,
     double? avgDailySales,
@@ -11618,6 +12701,11 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     Value<String?> imagePath = const Value.absent(),
     Value<String?> imageUrl = const Value.absent(),
     Value<int?> unitsPerPack = const Value.absent(),
+    Value<String?> onlineDescription = const Value.absent(),
+    Value<String?> brand = const Value.absent(),
+    int? minOrderQty,
+    int? orderStep,
+    Value<int?> maxOrderQty = const Value.absent(),
     int? version,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
@@ -11645,6 +12733,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
         : this.iconCodePoint,
     colorHex: colorHex.present ? colorHex.value : this.colorHex,
     isAvailable: isAvailable ?? this.isAvailable,
+    showOnline: showOnline ?? this.showOnline,
     isDeleted: isDeleted ?? this.isDeleted,
     lowStockThreshold: lowStockThreshold ?? this.lowStockThreshold,
     avgDailySales: avgDailySales ?? this.avgDailySales,
@@ -11659,6 +12748,13 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     imagePath: imagePath.present ? imagePath.value : this.imagePath,
     imageUrl: imageUrl.present ? imageUrl.value : this.imageUrl,
     unitsPerPack: unitsPerPack.present ? unitsPerPack.value : this.unitsPerPack,
+    onlineDescription: onlineDescription.present
+        ? onlineDescription.value
+        : this.onlineDescription,
+    brand: brand.present ? brand.value : this.brand,
+    minOrderQty: minOrderQty ?? this.minOrderQty,
+    orderStep: orderStep ?? this.orderStep,
+    maxOrderQty: maxOrderQty.present ? maxOrderQty.value : this.maxOrderQty,
     version: version ?? this.version,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -11702,6 +12798,9 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       isAvailable: data.isAvailable.present
           ? data.isAvailable.value
           : this.isAvailable,
+      showOnline: data.showOnline.present
+          ? data.showOnline.value
+          : this.showOnline,
       isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
       lowStockThreshold: data.lowStockThreshold.present
           ? data.lowStockThreshold.value
@@ -11736,6 +12835,17 @@ class ProductData extends DataClass implements Insertable<ProductData> {
       unitsPerPack: data.unitsPerPack.present
           ? data.unitsPerPack.value
           : this.unitsPerPack,
+      onlineDescription: data.onlineDescription.present
+          ? data.onlineDescription.value
+          : this.onlineDescription,
+      brand: data.brand.present ? data.brand.value : this.brand,
+      minOrderQty: data.minOrderQty.present
+          ? data.minOrderQty.value
+          : this.minOrderQty,
+      orderStep: data.orderStep.present ? data.orderStep.value : this.orderStep,
+      maxOrderQty: data.maxOrderQty.present
+          ? data.maxOrderQty.value
+          : this.maxOrderQty,
       version: data.version.present ? data.version.value : this.version,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       lastUpdatedAt: data.lastUpdatedAt.present
@@ -11764,6 +12874,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
           ..write('iconCodePoint: $iconCodePoint, ')
           ..write('colorHex: $colorHex, ')
           ..write('isAvailable: $isAvailable, ')
+          ..write('showOnline: $showOnline, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('lowStockThreshold: $lowStockThreshold, ')
           ..write('avgDailySales: $avgDailySales, ')
@@ -11778,6 +12889,11 @@ class ProductData extends DataClass implements Insertable<ProductData> {
           ..write('imagePath: $imagePath, ')
           ..write('imageUrl: $imageUrl, ')
           ..write('unitsPerPack: $unitsPerPack, ')
+          ..write('onlineDescription: $onlineDescription, ')
+          ..write('brand: $brand, ')
+          ..write('minOrderQty: $minOrderQty, ')
+          ..write('orderStep: $orderStep, ')
+          ..write('maxOrderQty: $maxOrderQty, ')
           ..write('version: $version, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
@@ -11804,6 +12920,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     iconCodePoint,
     colorHex,
     isAvailable,
+    showOnline,
     isDeleted,
     lowStockThreshold,
     avgDailySales,
@@ -11818,6 +12935,11 @@ class ProductData extends DataClass implements Insertable<ProductData> {
     imagePath,
     imageUrl,
     unitsPerPack,
+    onlineDescription,
+    brand,
+    minOrderQty,
+    orderStep,
+    maxOrderQty,
     version,
     createdAt,
     lastUpdatedAt,
@@ -11843,6 +12965,7 @@ class ProductData extends DataClass implements Insertable<ProductData> {
           other.iconCodePoint == this.iconCodePoint &&
           other.colorHex == this.colorHex &&
           other.isAvailable == this.isAvailable &&
+          other.showOnline == this.showOnline &&
           other.isDeleted == this.isDeleted &&
           other.lowStockThreshold == this.lowStockThreshold &&
           other.avgDailySales == this.avgDailySales &&
@@ -11857,6 +12980,11 @@ class ProductData extends DataClass implements Insertable<ProductData> {
           other.imagePath == this.imagePath &&
           other.imageUrl == this.imageUrl &&
           other.unitsPerPack == this.unitsPerPack &&
+          other.onlineDescription == this.onlineDescription &&
+          other.brand == this.brand &&
+          other.minOrderQty == this.minOrderQty &&
+          other.orderStep == this.orderStep &&
+          other.maxOrderQty == this.maxOrderQty &&
           other.version == this.version &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
@@ -11880,6 +13008,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
   final Value<int?> iconCodePoint;
   final Value<String?> colorHex;
   final Value<bool> isAvailable;
+  final Value<bool> showOnline;
   final Value<bool> isDeleted;
   final Value<int> lowStockThreshold;
   final Value<double> avgDailySales;
@@ -11894,6 +13023,11 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
   final Value<String?> imagePath;
   final Value<String?> imageUrl;
   final Value<int?> unitsPerPack;
+  final Value<String?> onlineDescription;
+  final Value<String?> brand;
+  final Value<int> minOrderQty;
+  final Value<int> orderStep;
+  final Value<int?> maxOrderQty;
   final Value<int> version;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
@@ -11916,6 +13050,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     this.iconCodePoint = const Value.absent(),
     this.colorHex = const Value.absent(),
     this.isAvailable = const Value.absent(),
+    this.showOnline = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.lowStockThreshold = const Value.absent(),
     this.avgDailySales = const Value.absent(),
@@ -11930,6 +13065,11 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     this.imagePath = const Value.absent(),
     this.imageUrl = const Value.absent(),
     this.unitsPerPack = const Value.absent(),
+    this.onlineDescription = const Value.absent(),
+    this.brand = const Value.absent(),
+    this.minOrderQty = const Value.absent(),
+    this.orderStep = const Value.absent(),
+    this.maxOrderQty = const Value.absent(),
     this.version = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -11953,6 +13093,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     this.iconCodePoint = const Value.absent(),
     this.colorHex = const Value.absent(),
     this.isAvailable = const Value.absent(),
+    this.showOnline = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.lowStockThreshold = const Value.absent(),
     this.avgDailySales = const Value.absent(),
@@ -11967,6 +13108,11 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     this.imagePath = const Value.absent(),
     this.imageUrl = const Value.absent(),
     this.unitsPerPack = const Value.absent(),
+    this.onlineDescription = const Value.absent(),
+    this.brand = const Value.absent(),
+    this.minOrderQty = const Value.absent(),
+    this.orderStep = const Value.absent(),
+    this.maxOrderQty = const Value.absent(),
     this.version = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -11991,6 +13137,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     Expression<int>? iconCodePoint,
     Expression<String>? colorHex,
     Expression<bool>? isAvailable,
+    Expression<bool>? showOnline,
     Expression<bool>? isDeleted,
     Expression<int>? lowStockThreshold,
     Expression<double>? avgDailySales,
@@ -12005,6 +13152,11 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     Expression<String>? imagePath,
     Expression<String>? imageUrl,
     Expression<int>? unitsPerPack,
+    Expression<String>? onlineDescription,
+    Expression<String>? brand,
+    Expression<int>? minOrderQty,
+    Expression<int>? orderStep,
+    Expression<int>? maxOrderQty,
     Expression<int>? version,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
@@ -12029,6 +13181,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
       if (iconCodePoint != null) 'icon_code_point': iconCodePoint,
       if (colorHex != null) 'color_hex': colorHex,
       if (isAvailable != null) 'is_available': isAvailable,
+      if (showOnline != null) 'show_online': showOnline,
       if (isDeleted != null) 'is_deleted': isDeleted,
       if (lowStockThreshold != null) 'low_stock_threshold': lowStockThreshold,
       if (avgDailySales != null) 'avg_daily_sales': avgDailySales,
@@ -12046,6 +13199,11 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
       if (imagePath != null) 'image_path': imagePath,
       if (imageUrl != null) 'image_url': imageUrl,
       if (unitsPerPack != null) 'units_per_pack': unitsPerPack,
+      if (onlineDescription != null) 'online_description': onlineDescription,
+      if (brand != null) 'brand': brand,
+      if (minOrderQty != null) 'min_order_qty': minOrderQty,
+      if (orderStep != null) 'order_step': orderStep,
+      if (maxOrderQty != null) 'max_order_qty': maxOrderQty,
       if (version != null) 'version': version,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
@@ -12071,6 +13229,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     Value<int?>? iconCodePoint,
     Value<String?>? colorHex,
     Value<bool>? isAvailable,
+    Value<bool>? showOnline,
     Value<bool>? isDeleted,
     Value<int>? lowStockThreshold,
     Value<double>? avgDailySales,
@@ -12085,6 +13244,11 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     Value<String?>? imagePath,
     Value<String?>? imageUrl,
     Value<int?>? unitsPerPack,
+    Value<String?>? onlineDescription,
+    Value<String?>? brand,
+    Value<int>? minOrderQty,
+    Value<int>? orderStep,
+    Value<int?>? maxOrderQty,
     Value<int>? version,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
@@ -12108,6 +13272,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
       iconCodePoint: iconCodePoint ?? this.iconCodePoint,
       colorHex: colorHex ?? this.colorHex,
       isAvailable: isAvailable ?? this.isAvailable,
+      showOnline: showOnline ?? this.showOnline,
       isDeleted: isDeleted ?? this.isDeleted,
       lowStockThreshold: lowStockThreshold ?? this.lowStockThreshold,
       avgDailySales: avgDailySales ?? this.avgDailySales,
@@ -12122,6 +13287,11 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
       imagePath: imagePath ?? this.imagePath,
       imageUrl: imageUrl ?? this.imageUrl,
       unitsPerPack: unitsPerPack ?? this.unitsPerPack,
+      onlineDescription: onlineDescription ?? this.onlineDescription,
+      brand: brand ?? this.brand,
+      minOrderQty: minOrderQty ?? this.minOrderQty,
+      orderStep: orderStep ?? this.orderStep,
+      maxOrderQty: maxOrderQty ?? this.maxOrderQty,
       version: version ?? this.version,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -12183,6 +13353,9 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     if (isAvailable.present) {
       map['is_available'] = Variable<bool>(isAvailable.value);
     }
+    if (showOnline.present) {
+      map['show_online'] = Variable<bool>(showOnline.value);
+    }
     if (isDeleted.present) {
       map['is_deleted'] = Variable<bool>(isDeleted.value);
     }
@@ -12227,6 +13400,21 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
     if (unitsPerPack.present) {
       map['units_per_pack'] = Variable<int>(unitsPerPack.value);
     }
+    if (onlineDescription.present) {
+      map['online_description'] = Variable<String>(onlineDescription.value);
+    }
+    if (brand.present) {
+      map['brand'] = Variable<String>(brand.value);
+    }
+    if (minOrderQty.present) {
+      map['min_order_qty'] = Variable<int>(minOrderQty.value);
+    }
+    if (orderStep.present) {
+      map['order_step'] = Variable<int>(orderStep.value);
+    }
+    if (maxOrderQty.present) {
+      map['max_order_qty'] = Variable<int>(maxOrderQty.value);
+    }
     if (version.present) {
       map['version'] = Variable<int>(version.value);
     }
@@ -12262,6 +13450,7 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
           ..write('iconCodePoint: $iconCodePoint, ')
           ..write('colorHex: $colorHex, ')
           ..write('isAvailable: $isAvailable, ')
+          ..write('showOnline: $showOnline, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('lowStockThreshold: $lowStockThreshold, ')
           ..write('avgDailySales: $avgDailySales, ')
@@ -12276,7 +13465,534 @@ class ProductsCompanion extends UpdateCompanion<ProductData> {
           ..write('imagePath: $imagePath, ')
           ..write('imageUrl: $imageUrl, ')
           ..write('unitsPerPack: $unitsPerPack, ')
+          ..write('onlineDescription: $onlineDescription, ')
+          ..write('brand: $brand, ')
+          ..write('minOrderQty: $minOrderQty, ')
+          ..write('orderStep: $orderStep, ')
+          ..write('maxOrderQty: $maxOrderQty, ')
           ..write('version: $version, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ProductPhotosTable extends ProductPhotos
+    with TableInfo<$ProductPhotosTable, ProductPhotoData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ProductPhotosTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: () => UuidV7.generate(),
+  );
+  static const VerificationMeta _businessIdMeta = const VerificationMeta(
+    'businessId',
+  );
+  @override
+  late final GeneratedColumn<String> businessId = GeneratedColumn<String>(
+    'business_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES businesses (id)',
+    ),
+  );
+  static const VerificationMeta _productIdMeta = const VerificationMeta(
+    'productId',
+  );
+  @override
+  late final GeneratedColumn<String> productId = GeneratedColumn<String>(
+    'product_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES products (id)',
+    ),
+  );
+  static const VerificationMeta _positionMeta = const VerificationMeta(
+    'position',
+  );
+  @override
+  late final GeneratedColumn<int> position = GeneratedColumn<int>(
+    'position',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _imageUrlMeta = const VerificationMeta(
+    'imageUrl',
+  );
+  @override
+  late final GeneratedColumn<String> imageUrl = GeneratedColumn<String>(
+    'image_url',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _isDeletedMeta = const VerificationMeta(
+    'isDeleted',
+  );
+  @override
+  late final GeneratedColumn<bool> isDeleted = GeneratedColumn<bool>(
+    'is_deleted',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_deleted" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _lastUpdatedAtMeta = const VerificationMeta(
+    'lastUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'last_updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    businessId,
+    productId,
+    position,
+    imageUrl,
+    isDeleted,
+    createdAt,
+    lastUpdatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'product_photos';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ProductPhotoData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('business_id')) {
+      context.handle(
+        _businessIdMeta,
+        businessId.isAcceptableOrUnknown(data['business_id']!, _businessIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_businessIdMeta);
+    }
+    if (data.containsKey('product_id')) {
+      context.handle(
+        _productIdMeta,
+        productId.isAcceptableOrUnknown(data['product_id']!, _productIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_productIdMeta);
+    }
+    if (data.containsKey('position')) {
+      context.handle(
+        _positionMeta,
+        position.isAcceptableOrUnknown(data['position']!, _positionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_positionMeta);
+    }
+    if (data.containsKey('image_url')) {
+      context.handle(
+        _imageUrlMeta,
+        imageUrl.isAcceptableOrUnknown(data['image_url']!, _imageUrlMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_imageUrlMeta);
+    }
+    if (data.containsKey('is_deleted')) {
+      context.handle(
+        _isDeletedMeta,
+        isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('last_updated_at')) {
+      context.handle(
+        _lastUpdatedAtMeta,
+        lastUpdatedAt.isAcceptableOrUnknown(
+          data['last_updated_at']!,
+          _lastUpdatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ProductPhotoData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ProductPhotoData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      businessId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}business_id'],
+      )!,
+      productId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}product_id'],
+      )!,
+      position: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}position'],
+      )!,
+      imageUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}image_url'],
+      )!,
+      isDeleted: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_deleted'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $ProductPhotosTable createAlias(String alias) {
+    return $ProductPhotosTable(attachedDatabase, alias);
+  }
+}
+
+class ProductPhotoData extends DataClass
+    implements Insertable<ProductPhotoData> {
+  final String id;
+  final String businessId;
+  final String productId;
+  final int position;
+  final String imageUrl;
+  final bool isDeleted;
+  final DateTime createdAt;
+  final DateTime lastUpdatedAt;
+  const ProductPhotoData({
+    required this.id,
+    required this.businessId,
+    required this.productId,
+    required this.position,
+    required this.imageUrl,
+    required this.isDeleted,
+    required this.createdAt,
+    required this.lastUpdatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['business_id'] = Variable<String>(businessId);
+    map['product_id'] = Variable<String>(productId);
+    map['position'] = Variable<int>(position);
+    map['image_url'] = Variable<String>(imageUrl);
+    map['is_deleted'] = Variable<bool>(isDeleted);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    return map;
+  }
+
+  ProductPhotosCompanion toCompanion(bool nullToAbsent) {
+    return ProductPhotosCompanion(
+      id: Value(id),
+      businessId: Value(businessId),
+      productId: Value(productId),
+      position: Value(position),
+      imageUrl: Value(imageUrl),
+      isDeleted: Value(isDeleted),
+      createdAt: Value(createdAt),
+      lastUpdatedAt: Value(lastUpdatedAt),
+    );
+  }
+
+  factory ProductPhotoData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ProductPhotoData(
+      id: serializer.fromJson<String>(json['id']),
+      businessId: serializer.fromJson<String>(json['businessId']),
+      productId: serializer.fromJson<String>(json['productId']),
+      position: serializer.fromJson<int>(json['position']),
+      imageUrl: serializer.fromJson<String>(json['imageUrl']),
+      isDeleted: serializer.fromJson<bool>(json['isDeleted']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'businessId': serializer.toJson<String>(businessId),
+      'productId': serializer.toJson<String>(productId),
+      'position': serializer.toJson<int>(position),
+      'imageUrl': serializer.toJson<String>(imageUrl),
+      'isDeleted': serializer.toJson<bool>(isDeleted),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+    };
+  }
+
+  ProductPhotoData copyWith({
+    String? id,
+    String? businessId,
+    String? productId,
+    int? position,
+    String? imageUrl,
+    bool? isDeleted,
+    DateTime? createdAt,
+    DateTime? lastUpdatedAt,
+  }) => ProductPhotoData(
+    id: id ?? this.id,
+    businessId: businessId ?? this.businessId,
+    productId: productId ?? this.productId,
+    position: position ?? this.position,
+    imageUrl: imageUrl ?? this.imageUrl,
+    isDeleted: isDeleted ?? this.isDeleted,
+    createdAt: createdAt ?? this.createdAt,
+    lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+  );
+  ProductPhotoData copyWithCompanion(ProductPhotosCompanion data) {
+    return ProductPhotoData(
+      id: data.id.present ? data.id.value : this.id,
+      businessId: data.businessId.present
+          ? data.businessId.value
+          : this.businessId,
+      productId: data.productId.present ? data.productId.value : this.productId,
+      position: data.position.present ? data.position.value : this.position,
+      imageUrl: data.imageUrl.present ? data.imageUrl.value : this.imageUrl,
+      isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastUpdatedAt: data.lastUpdatedAt.present
+          ? data.lastUpdatedAt.value
+          : this.lastUpdatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ProductPhotoData(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('productId: $productId, ')
+          ..write('position: $position, ')
+          ..write('imageUrl: $imageUrl, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    businessId,
+    productId,
+    position,
+    imageUrl,
+    isDeleted,
+    createdAt,
+    lastUpdatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ProductPhotoData &&
+          other.id == this.id &&
+          other.businessId == this.businessId &&
+          other.productId == this.productId &&
+          other.position == this.position &&
+          other.imageUrl == this.imageUrl &&
+          other.isDeleted == this.isDeleted &&
+          other.createdAt == this.createdAt &&
+          other.lastUpdatedAt == this.lastUpdatedAt);
+}
+
+class ProductPhotosCompanion extends UpdateCompanion<ProductPhotoData> {
+  final Value<String> id;
+  final Value<String> businessId;
+  final Value<String> productId;
+  final Value<int> position;
+  final Value<String> imageUrl;
+  final Value<bool> isDeleted;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> lastUpdatedAt;
+  final Value<int> rowid;
+  const ProductPhotosCompanion({
+    this.id = const Value.absent(),
+    this.businessId = const Value.absent(),
+    this.productId = const Value.absent(),
+    this.position = const Value.absent(),
+    this.imageUrl = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ProductPhotosCompanion.insert({
+    this.id = const Value.absent(),
+    required String businessId,
+    required String productId,
+    required int position,
+    required String imageUrl,
+    this.isDeleted = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : businessId = Value(businessId),
+       productId = Value(productId),
+       position = Value(position),
+       imageUrl = Value(imageUrl);
+  static Insertable<ProductPhotoData> custom({
+    Expression<String>? id,
+    Expression<String>? businessId,
+    Expression<String>? productId,
+    Expression<int>? position,
+    Expression<String>? imageUrl,
+    Expression<bool>? isDeleted,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastUpdatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (businessId != null) 'business_id': businessId,
+      if (productId != null) 'product_id': productId,
+      if (position != null) 'position': position,
+      if (imageUrl != null) 'image_url': imageUrl,
+      if (isDeleted != null) 'is_deleted': isDeleted,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ProductPhotosCompanion copyWith({
+    Value<String>? id,
+    Value<String>? businessId,
+    Value<String>? productId,
+    Value<int>? position,
+    Value<String>? imageUrl,
+    Value<bool>? isDeleted,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? lastUpdatedAt,
+    Value<int>? rowid,
+  }) {
+    return ProductPhotosCompanion(
+      id: id ?? this.id,
+      businessId: businessId ?? this.businessId,
+      productId: productId ?? this.productId,
+      position: position ?? this.position,
+      imageUrl: imageUrl ?? this.imageUrl,
+      isDeleted: isDeleted ?? this.isDeleted,
+      createdAt: createdAt ?? this.createdAt,
+      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (businessId.present) {
+      map['business_id'] = Variable<String>(businessId.value);
+    }
+    if (productId.present) {
+      map['product_id'] = Variable<String>(productId.value);
+    }
+    if (position.present) {
+      map['position'] = Variable<int>(position.value);
+    }
+    if (imageUrl.present) {
+      map['image_url'] = Variable<String>(imageUrl.value);
+    }
+    if (isDeleted.present) {
+      map['is_deleted'] = Variable<bool>(isDeleted.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lastUpdatedAt.present) {
+      map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ProductPhotosCompanion(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('productId: $productId, ')
+          ..write('position: $position, ')
+          ..write('imageUrl: $imageUrl, ')
+          ..write('isDeleted: $isDeleted, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
           ..write('rowid: $rowid')
@@ -13013,6 +14729,17 @@ class $CustomersTable extends Customers
         requiredDuringInsert: false,
         defaultValue: currentDateAndTime,
       );
+  static const VerificationMeta _shopperAccountIdMeta = const VerificationMeta(
+    'shopperAccountId',
+  );
+  @override
+  late final GeneratedColumn<String> shopperAccountId = GeneratedColumn<String>(
+    'shopper_account_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -13028,6 +14755,7 @@ class $CustomersTable extends Customers
     isDeleted,
     createdAt,
     lastUpdatedAt,
+    shopperAccountId,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -13129,6 +14857,15 @@ class $CustomersTable extends Customers
         ),
       );
     }
+    if (data.containsKey('shopper_account_id')) {
+      context.handle(
+        _shopperAccountIdMeta,
+        shopperAccountId.isAcceptableOrUnknown(
+          data['shopper_account_id']!,
+          _shopperAccountIdMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -13190,6 +14927,10 @@ class $CustomersTable extends Customers
         DriftSqlType.dateTime,
         data['${effectivePrefix}last_updated_at'],
       )!,
+      shopperAccountId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}shopper_account_id'],
+      ),
     );
   }
 
@@ -13213,6 +14954,12 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
   final bool isDeleted;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
+
+  /// #427 (v93 / cloud 0208): the Shopper login this Customer is linked to.
+  /// Set only by a staff choice on the first accepted Online Order (ADR 0030,
+  /// never a phone match). At most one live Customer per Shopper per business
+  /// (partial unique index `uq_customers_business_shopper_account`).
+  final String? shopperAccountId;
   const CustomerData({
     required this.id,
     required this.businessId,
@@ -13227,6 +14974,7 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
     required this.isDeleted,
     required this.createdAt,
     required this.lastUpdatedAt,
+    this.shopperAccountId,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -13254,6 +15002,9 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
     map['is_deleted'] = Variable<bool>(isDeleted);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    if (!nullToAbsent || shopperAccountId != null) {
+      map['shopper_account_id'] = Variable<String>(shopperAccountId);
+    }
     return map;
   }
 
@@ -13282,6 +15033,9 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
       isDeleted: Value(isDeleted),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
+      shopperAccountId: shopperAccountId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(shopperAccountId),
     );
   }
 
@@ -13306,6 +15060,7 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+      shopperAccountId: serializer.fromJson<String?>(json['shopperAccountId']),
     );
   }
   @override
@@ -13325,6 +15080,7 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
       'isDeleted': serializer.toJson<bool>(isDeleted),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+      'shopperAccountId': serializer.toJson<String?>(shopperAccountId),
     };
   }
 
@@ -13342,6 +15098,7 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
     bool? isDeleted,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
+    Value<String?> shopperAccountId = const Value.absent(),
   }) => CustomerData(
     id: id ?? this.id,
     businessId: businessId ?? this.businessId,
@@ -13358,6 +15115,9 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
     isDeleted: isDeleted ?? this.isDeleted,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+    shopperAccountId: shopperAccountId.present
+        ? shopperAccountId.value
+        : this.shopperAccountId,
   );
   CustomerData copyWithCompanion(CustomersCompanion data) {
     return CustomerData(
@@ -13382,6 +15142,9 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
       lastUpdatedAt: data.lastUpdatedAt.present
           ? data.lastUpdatedAt.value
           : this.lastUpdatedAt,
+      shopperAccountId: data.shopperAccountId.present
+          ? data.shopperAccountId.value
+          : this.shopperAccountId,
     );
   }
 
@@ -13400,7 +15163,8 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
           ..write('walletLimitKobo: $walletLimitKobo, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('createdAt: $createdAt, ')
-          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('shopperAccountId: $shopperAccountId')
           ..write(')'))
         .toString();
   }
@@ -13420,6 +15184,7 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
     isDeleted,
     createdAt,
     lastUpdatedAt,
+    shopperAccountId,
   );
   @override
   bool operator ==(Object other) =>
@@ -13437,7 +15202,8 @@ class CustomerData extends DataClass implements Insertable<CustomerData> {
           other.walletLimitKobo == this.walletLimitKobo &&
           other.isDeleted == this.isDeleted &&
           other.createdAt == this.createdAt &&
-          other.lastUpdatedAt == this.lastUpdatedAt);
+          other.lastUpdatedAt == this.lastUpdatedAt &&
+          other.shopperAccountId == this.shopperAccountId);
 }
 
 class CustomersCompanion extends UpdateCompanion<CustomerData> {
@@ -13454,6 +15220,7 @@ class CustomersCompanion extends UpdateCompanion<CustomerData> {
   final Value<bool> isDeleted;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
+  final Value<String?> shopperAccountId;
   final Value<int> rowid;
   const CustomersCompanion({
     this.id = const Value.absent(),
@@ -13469,6 +15236,7 @@ class CustomersCompanion extends UpdateCompanion<CustomerData> {
     this.isDeleted = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
+    this.shopperAccountId = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   CustomersCompanion.insert({
@@ -13485,6 +15253,7 @@ class CustomersCompanion extends UpdateCompanion<CustomerData> {
     this.isDeleted = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
+    this.shopperAccountId = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : businessId = Value(businessId),
        name = Value(name);
@@ -13502,6 +15271,7 @@ class CustomersCompanion extends UpdateCompanion<CustomerData> {
     Expression<bool>? isDeleted,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
+    Expression<String>? shopperAccountId,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -13519,6 +15289,7 @@ class CustomersCompanion extends UpdateCompanion<CustomerData> {
       if (isDeleted != null) 'is_deleted': isDeleted,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (shopperAccountId != null) 'shopper_account_id': shopperAccountId,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -13537,6 +15308,7 @@ class CustomersCompanion extends UpdateCompanion<CustomerData> {
     Value<bool>? isDeleted,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
+    Value<String?>? shopperAccountId,
     Value<int>? rowid,
   }) {
     return CustomersCompanion(
@@ -13553,6 +15325,7 @@ class CustomersCompanion extends UpdateCompanion<CustomerData> {
       isDeleted: isDeleted ?? this.isDeleted,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      shopperAccountId: shopperAccountId ?? this.shopperAccountId,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -13599,6 +15372,9 @@ class CustomersCompanion extends UpdateCompanion<CustomerData> {
     if (lastUpdatedAt.present) {
       map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
     }
+    if (shopperAccountId.present) {
+      map['shopper_account_id'] = Variable<String>(shopperAccountId.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -13621,6 +15397,7 @@ class CustomersCompanion extends UpdateCompanion<CustomerData> {
           ..write('isDeleted: $isDeleted, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('shopperAccountId: $shopperAccountId, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -28339,6 +30116,2046 @@ class OrderCrateLinesCompanion extends UpdateCompanion<OrderCrateLineData> {
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
           ..write('settledAt: $settledAt, ')
           ..write('settledBy: $settledBy, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $OnlineOrdersTable extends OnlineOrders
+    with TableInfo<$OnlineOrdersTable, OnlineOrderData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $OnlineOrdersTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _businessIdMeta = const VerificationMeta(
+    'businessId',
+  );
+  @override
+  late final GeneratedColumn<String> businessId = GeneratedColumn<String>(
+    'business_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES businesses (id)',
+    ),
+  );
+  static const VerificationMeta _storeIdMeta = const VerificationMeta(
+    'storeId',
+  );
+  @override
+  late final GeneratedColumn<String> storeId = GeneratedColumn<String>(
+    'store_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES stores (id)',
+    ),
+  );
+  static const VerificationMeta _shopperAccountIdMeta = const VerificationMeta(
+    'shopperAccountId',
+  );
+  @override
+  late final GeneratedColumn<String> shopperAccountId = GeneratedColumn<String>(
+    'shopper_account_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _customerIdMeta = const VerificationMeta(
+    'customerId',
+  );
+  @override
+  late final GeneratedColumn<String> customerId = GeneratedColumn<String>(
+    'customer_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('new'),
+  );
+  static const VerificationMeta _referenceMeta = const VerificationMeta(
+    'reference',
+  );
+  @override
+  late final GeneratedColumn<String> reference = GeneratedColumn<String>(
+    'reference',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _currencyMeta = const VerificationMeta(
+    'currency',
+  );
+  @override
+  late final GeneratedColumn<String> currency = GeneratedColumn<String>(
+    'currency',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('NGN'),
+  );
+  static const VerificationMeta _estimatedTotalKoboMeta =
+      const VerificationMeta('estimatedTotalKobo');
+  @override
+  late final GeneratedColumn<int> estimatedTotalKobo = GeneratedColumn<int>(
+    'estimated_total_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _shopperNameMeta = const VerificationMeta(
+    'shopperName',
+  );
+  @override
+  late final GeneratedColumn<String> shopperName = GeneratedColumn<String>(
+    'shopper_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _deliveryPhoneMeta = const VerificationMeta(
+    'deliveryPhone',
+  );
+  @override
+  late final GeneratedColumn<String> deliveryPhone = GeneratedColumn<String>(
+    'delivery_phone',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _deliveryCountryMeta = const VerificationMeta(
+    'deliveryCountry',
+  );
+  @override
+  late final GeneratedColumn<String> deliveryCountry = GeneratedColumn<String>(
+    'delivery_country',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('Nigeria'),
+  );
+  static const VerificationMeta _deliveryStateMeta = const VerificationMeta(
+    'deliveryState',
+  );
+  @override
+  late final GeneratedColumn<String> deliveryState = GeneratedColumn<String>(
+    'delivery_state',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _deliveryLgaMeta = const VerificationMeta(
+    'deliveryLga',
+  );
+  @override
+  late final GeneratedColumn<String> deliveryLga = GeneratedColumn<String>(
+    'delivery_lga',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _deliveryStreetMeta = const VerificationMeta(
+    'deliveryStreet',
+  );
+  @override
+  late final GeneratedColumn<String> deliveryStreet = GeneratedColumn<String>(
+    'delivery_street',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _declineReasonMeta = const VerificationMeta(
+    'declineReason',
+  );
+  @override
+  late final GeneratedColumn<String> declineReason = GeneratedColumn<String>(
+    'decline_reason',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _cancelReasonMeta = const VerificationMeta(
+    'cancelReason',
+  );
+  @override
+  late final GeneratedColumn<String> cancelReason = GeneratedColumn<String>(
+    'cancel_reason',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _linkedOrderIdMeta = const VerificationMeta(
+    'linkedOrderId',
+  );
+  @override
+  late final GeneratedColumn<String> linkedOrderId = GeneratedColumn<String>(
+    'linked_order_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _placedAtMeta = const VerificationMeta(
+    'placedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> placedAt = GeneratedColumn<DateTime>(
+    'placed_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _respondedAtMeta = const VerificationMeta(
+    'respondedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> respondedAt = GeneratedColumn<DateTime>(
+    'responded_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _lastUpdatedAtMeta = const VerificationMeta(
+    'lastUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'last_updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    businessId,
+    storeId,
+    shopperAccountId,
+    customerId,
+    status,
+    reference,
+    currency,
+    estimatedTotalKobo,
+    shopperName,
+    deliveryPhone,
+    deliveryCountry,
+    deliveryState,
+    deliveryLga,
+    deliveryStreet,
+    note,
+    declineReason,
+    cancelReason,
+    linkedOrderId,
+    placedAt,
+    respondedAt,
+    createdAt,
+    lastUpdatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'online_orders';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<OnlineOrderData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('business_id')) {
+      context.handle(
+        _businessIdMeta,
+        businessId.isAcceptableOrUnknown(data['business_id']!, _businessIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_businessIdMeta);
+    }
+    if (data.containsKey('store_id')) {
+      context.handle(
+        _storeIdMeta,
+        storeId.isAcceptableOrUnknown(data['store_id']!, _storeIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_storeIdMeta);
+    }
+    if (data.containsKey('shopper_account_id')) {
+      context.handle(
+        _shopperAccountIdMeta,
+        shopperAccountId.isAcceptableOrUnknown(
+          data['shopper_account_id']!,
+          _shopperAccountIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('customer_id')) {
+      context.handle(
+        _customerIdMeta,
+        customerId.isAcceptableOrUnknown(data['customer_id']!, _customerIdMeta),
+      );
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('reference')) {
+      context.handle(
+        _referenceMeta,
+        reference.isAcceptableOrUnknown(data['reference']!, _referenceMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_referenceMeta);
+    }
+    if (data.containsKey('currency')) {
+      context.handle(
+        _currencyMeta,
+        currency.isAcceptableOrUnknown(data['currency']!, _currencyMeta),
+      );
+    }
+    if (data.containsKey('estimated_total_kobo')) {
+      context.handle(
+        _estimatedTotalKoboMeta,
+        estimatedTotalKobo.isAcceptableOrUnknown(
+          data['estimated_total_kobo']!,
+          _estimatedTotalKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('shopper_name')) {
+      context.handle(
+        _shopperNameMeta,
+        shopperName.isAcceptableOrUnknown(
+          data['shopper_name']!,
+          _shopperNameMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_shopperNameMeta);
+    }
+    if (data.containsKey('delivery_phone')) {
+      context.handle(
+        _deliveryPhoneMeta,
+        deliveryPhone.isAcceptableOrUnknown(
+          data['delivery_phone']!,
+          _deliveryPhoneMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_deliveryPhoneMeta);
+    }
+    if (data.containsKey('delivery_country')) {
+      context.handle(
+        _deliveryCountryMeta,
+        deliveryCountry.isAcceptableOrUnknown(
+          data['delivery_country']!,
+          _deliveryCountryMeta,
+        ),
+      );
+    }
+    if (data.containsKey('delivery_state')) {
+      context.handle(
+        _deliveryStateMeta,
+        deliveryState.isAcceptableOrUnknown(
+          data['delivery_state']!,
+          _deliveryStateMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_deliveryStateMeta);
+    }
+    if (data.containsKey('delivery_lga')) {
+      context.handle(
+        _deliveryLgaMeta,
+        deliveryLga.isAcceptableOrUnknown(
+          data['delivery_lga']!,
+          _deliveryLgaMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_deliveryLgaMeta);
+    }
+    if (data.containsKey('delivery_street')) {
+      context.handle(
+        _deliveryStreetMeta,
+        deliveryStreet.isAcceptableOrUnknown(
+          data['delivery_street']!,
+          _deliveryStreetMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_deliveryStreetMeta);
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
+    if (data.containsKey('decline_reason')) {
+      context.handle(
+        _declineReasonMeta,
+        declineReason.isAcceptableOrUnknown(
+          data['decline_reason']!,
+          _declineReasonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('cancel_reason')) {
+      context.handle(
+        _cancelReasonMeta,
+        cancelReason.isAcceptableOrUnknown(
+          data['cancel_reason']!,
+          _cancelReasonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('linked_order_id')) {
+      context.handle(
+        _linkedOrderIdMeta,
+        linkedOrderId.isAcceptableOrUnknown(
+          data['linked_order_id']!,
+          _linkedOrderIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('placed_at')) {
+      context.handle(
+        _placedAtMeta,
+        placedAt.isAcceptableOrUnknown(data['placed_at']!, _placedAtMeta),
+      );
+    }
+    if (data.containsKey('responded_at')) {
+      context.handle(
+        _respondedAtMeta,
+        respondedAt.isAcceptableOrUnknown(
+          data['responded_at']!,
+          _respondedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('last_updated_at')) {
+      context.handle(
+        _lastUpdatedAtMeta,
+        lastUpdatedAt.isAcceptableOrUnknown(
+          data['last_updated_at']!,
+          _lastUpdatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  OnlineOrderData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return OnlineOrderData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      businessId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}business_id'],
+      )!,
+      storeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}store_id'],
+      )!,
+      shopperAccountId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}shopper_account_id'],
+      ),
+      customerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}customer_id'],
+      ),
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      reference: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reference'],
+      )!,
+      currency: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}currency'],
+      )!,
+      estimatedTotalKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}estimated_total_kobo'],
+      )!,
+      shopperName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}shopper_name'],
+      )!,
+      deliveryPhone: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}delivery_phone'],
+      )!,
+      deliveryCountry: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}delivery_country'],
+      )!,
+      deliveryState: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}delivery_state'],
+      )!,
+      deliveryLga: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}delivery_lga'],
+      )!,
+      deliveryStreet: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}delivery_street'],
+      )!,
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      ),
+      declineReason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}decline_reason'],
+      ),
+      cancelReason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}cancel_reason'],
+      ),
+      linkedOrderId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}linked_order_id'],
+      ),
+      placedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}placed_at'],
+      )!,
+      respondedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}responded_at'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $OnlineOrdersTable createAlias(String alias) {
+    return $OnlineOrdersTable(attachedDatabase, alias);
+  }
+}
+
+class OnlineOrderData extends DataClass implements Insertable<OnlineOrderData> {
+  final String id;
+  final String businessId;
+  final String storeId;
+  final String? shopperAccountId;
+  final String? customerId;
+  final String status;
+  final String reference;
+  final String currency;
+  final int estimatedTotalKobo;
+  final String shopperName;
+  final String deliveryPhone;
+  final String deliveryCountry;
+  final String deliveryState;
+  final String deliveryLga;
+  final String deliveryStreet;
+  final String? note;
+  final String? declineReason;
+  final String? cancelReason;
+  final String? linkedOrderId;
+  final DateTime placedAt;
+  final DateTime? respondedAt;
+  final DateTime createdAt;
+  final DateTime lastUpdatedAt;
+  const OnlineOrderData({
+    required this.id,
+    required this.businessId,
+    required this.storeId,
+    this.shopperAccountId,
+    this.customerId,
+    required this.status,
+    required this.reference,
+    required this.currency,
+    required this.estimatedTotalKobo,
+    required this.shopperName,
+    required this.deliveryPhone,
+    required this.deliveryCountry,
+    required this.deliveryState,
+    required this.deliveryLga,
+    required this.deliveryStreet,
+    this.note,
+    this.declineReason,
+    this.cancelReason,
+    this.linkedOrderId,
+    required this.placedAt,
+    this.respondedAt,
+    required this.createdAt,
+    required this.lastUpdatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['business_id'] = Variable<String>(businessId);
+    map['store_id'] = Variable<String>(storeId);
+    if (!nullToAbsent || shopperAccountId != null) {
+      map['shopper_account_id'] = Variable<String>(shopperAccountId);
+    }
+    if (!nullToAbsent || customerId != null) {
+      map['customer_id'] = Variable<String>(customerId);
+    }
+    map['status'] = Variable<String>(status);
+    map['reference'] = Variable<String>(reference);
+    map['currency'] = Variable<String>(currency);
+    map['estimated_total_kobo'] = Variable<int>(estimatedTotalKobo);
+    map['shopper_name'] = Variable<String>(shopperName);
+    map['delivery_phone'] = Variable<String>(deliveryPhone);
+    map['delivery_country'] = Variable<String>(deliveryCountry);
+    map['delivery_state'] = Variable<String>(deliveryState);
+    map['delivery_lga'] = Variable<String>(deliveryLga);
+    map['delivery_street'] = Variable<String>(deliveryStreet);
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
+    }
+    if (!nullToAbsent || declineReason != null) {
+      map['decline_reason'] = Variable<String>(declineReason);
+    }
+    if (!nullToAbsent || cancelReason != null) {
+      map['cancel_reason'] = Variable<String>(cancelReason);
+    }
+    if (!nullToAbsent || linkedOrderId != null) {
+      map['linked_order_id'] = Variable<String>(linkedOrderId);
+    }
+    map['placed_at'] = Variable<DateTime>(placedAt);
+    if (!nullToAbsent || respondedAt != null) {
+      map['responded_at'] = Variable<DateTime>(respondedAt);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    return map;
+  }
+
+  OnlineOrdersCompanion toCompanion(bool nullToAbsent) {
+    return OnlineOrdersCompanion(
+      id: Value(id),
+      businessId: Value(businessId),
+      storeId: Value(storeId),
+      shopperAccountId: shopperAccountId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(shopperAccountId),
+      customerId: customerId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(customerId),
+      status: Value(status),
+      reference: Value(reference),
+      currency: Value(currency),
+      estimatedTotalKobo: Value(estimatedTotalKobo),
+      shopperName: Value(shopperName),
+      deliveryPhone: Value(deliveryPhone),
+      deliveryCountry: Value(deliveryCountry),
+      deliveryState: Value(deliveryState),
+      deliveryLga: Value(deliveryLga),
+      deliveryStreet: Value(deliveryStreet),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      declineReason: declineReason == null && nullToAbsent
+          ? const Value.absent()
+          : Value(declineReason),
+      cancelReason: cancelReason == null && nullToAbsent
+          ? const Value.absent()
+          : Value(cancelReason),
+      linkedOrderId: linkedOrderId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(linkedOrderId),
+      placedAt: Value(placedAt),
+      respondedAt: respondedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(respondedAt),
+      createdAt: Value(createdAt),
+      lastUpdatedAt: Value(lastUpdatedAt),
+    );
+  }
+
+  factory OnlineOrderData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return OnlineOrderData(
+      id: serializer.fromJson<String>(json['id']),
+      businessId: serializer.fromJson<String>(json['businessId']),
+      storeId: serializer.fromJson<String>(json['storeId']),
+      shopperAccountId: serializer.fromJson<String?>(json['shopperAccountId']),
+      customerId: serializer.fromJson<String?>(json['customerId']),
+      status: serializer.fromJson<String>(json['status']),
+      reference: serializer.fromJson<String>(json['reference']),
+      currency: serializer.fromJson<String>(json['currency']),
+      estimatedTotalKobo: serializer.fromJson<int>(json['estimatedTotalKobo']),
+      shopperName: serializer.fromJson<String>(json['shopperName']),
+      deliveryPhone: serializer.fromJson<String>(json['deliveryPhone']),
+      deliveryCountry: serializer.fromJson<String>(json['deliveryCountry']),
+      deliveryState: serializer.fromJson<String>(json['deliveryState']),
+      deliveryLga: serializer.fromJson<String>(json['deliveryLga']),
+      deliveryStreet: serializer.fromJson<String>(json['deliveryStreet']),
+      note: serializer.fromJson<String?>(json['note']),
+      declineReason: serializer.fromJson<String?>(json['declineReason']),
+      cancelReason: serializer.fromJson<String?>(json['cancelReason']),
+      linkedOrderId: serializer.fromJson<String?>(json['linkedOrderId']),
+      placedAt: serializer.fromJson<DateTime>(json['placedAt']),
+      respondedAt: serializer.fromJson<DateTime?>(json['respondedAt']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'businessId': serializer.toJson<String>(businessId),
+      'storeId': serializer.toJson<String>(storeId),
+      'shopperAccountId': serializer.toJson<String?>(shopperAccountId),
+      'customerId': serializer.toJson<String?>(customerId),
+      'status': serializer.toJson<String>(status),
+      'reference': serializer.toJson<String>(reference),
+      'currency': serializer.toJson<String>(currency),
+      'estimatedTotalKobo': serializer.toJson<int>(estimatedTotalKobo),
+      'shopperName': serializer.toJson<String>(shopperName),
+      'deliveryPhone': serializer.toJson<String>(deliveryPhone),
+      'deliveryCountry': serializer.toJson<String>(deliveryCountry),
+      'deliveryState': serializer.toJson<String>(deliveryState),
+      'deliveryLga': serializer.toJson<String>(deliveryLga),
+      'deliveryStreet': serializer.toJson<String>(deliveryStreet),
+      'note': serializer.toJson<String?>(note),
+      'declineReason': serializer.toJson<String?>(declineReason),
+      'cancelReason': serializer.toJson<String?>(cancelReason),
+      'linkedOrderId': serializer.toJson<String?>(linkedOrderId),
+      'placedAt': serializer.toJson<DateTime>(placedAt),
+      'respondedAt': serializer.toJson<DateTime?>(respondedAt),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+    };
+  }
+
+  OnlineOrderData copyWith({
+    String? id,
+    String? businessId,
+    String? storeId,
+    Value<String?> shopperAccountId = const Value.absent(),
+    Value<String?> customerId = const Value.absent(),
+    String? status,
+    String? reference,
+    String? currency,
+    int? estimatedTotalKobo,
+    String? shopperName,
+    String? deliveryPhone,
+    String? deliveryCountry,
+    String? deliveryState,
+    String? deliveryLga,
+    String? deliveryStreet,
+    Value<String?> note = const Value.absent(),
+    Value<String?> declineReason = const Value.absent(),
+    Value<String?> cancelReason = const Value.absent(),
+    Value<String?> linkedOrderId = const Value.absent(),
+    DateTime? placedAt,
+    Value<DateTime?> respondedAt = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? lastUpdatedAt,
+  }) => OnlineOrderData(
+    id: id ?? this.id,
+    businessId: businessId ?? this.businessId,
+    storeId: storeId ?? this.storeId,
+    shopperAccountId: shopperAccountId.present
+        ? shopperAccountId.value
+        : this.shopperAccountId,
+    customerId: customerId.present ? customerId.value : this.customerId,
+    status: status ?? this.status,
+    reference: reference ?? this.reference,
+    currency: currency ?? this.currency,
+    estimatedTotalKobo: estimatedTotalKobo ?? this.estimatedTotalKobo,
+    shopperName: shopperName ?? this.shopperName,
+    deliveryPhone: deliveryPhone ?? this.deliveryPhone,
+    deliveryCountry: deliveryCountry ?? this.deliveryCountry,
+    deliveryState: deliveryState ?? this.deliveryState,
+    deliveryLga: deliveryLga ?? this.deliveryLga,
+    deliveryStreet: deliveryStreet ?? this.deliveryStreet,
+    note: note.present ? note.value : this.note,
+    declineReason: declineReason.present
+        ? declineReason.value
+        : this.declineReason,
+    cancelReason: cancelReason.present ? cancelReason.value : this.cancelReason,
+    linkedOrderId: linkedOrderId.present
+        ? linkedOrderId.value
+        : this.linkedOrderId,
+    placedAt: placedAt ?? this.placedAt,
+    respondedAt: respondedAt.present ? respondedAt.value : this.respondedAt,
+    createdAt: createdAt ?? this.createdAt,
+    lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+  );
+  OnlineOrderData copyWithCompanion(OnlineOrdersCompanion data) {
+    return OnlineOrderData(
+      id: data.id.present ? data.id.value : this.id,
+      businessId: data.businessId.present
+          ? data.businessId.value
+          : this.businessId,
+      storeId: data.storeId.present ? data.storeId.value : this.storeId,
+      shopperAccountId: data.shopperAccountId.present
+          ? data.shopperAccountId.value
+          : this.shopperAccountId,
+      customerId: data.customerId.present
+          ? data.customerId.value
+          : this.customerId,
+      status: data.status.present ? data.status.value : this.status,
+      reference: data.reference.present ? data.reference.value : this.reference,
+      currency: data.currency.present ? data.currency.value : this.currency,
+      estimatedTotalKobo: data.estimatedTotalKobo.present
+          ? data.estimatedTotalKobo.value
+          : this.estimatedTotalKobo,
+      shopperName: data.shopperName.present
+          ? data.shopperName.value
+          : this.shopperName,
+      deliveryPhone: data.deliveryPhone.present
+          ? data.deliveryPhone.value
+          : this.deliveryPhone,
+      deliveryCountry: data.deliveryCountry.present
+          ? data.deliveryCountry.value
+          : this.deliveryCountry,
+      deliveryState: data.deliveryState.present
+          ? data.deliveryState.value
+          : this.deliveryState,
+      deliveryLga: data.deliveryLga.present
+          ? data.deliveryLga.value
+          : this.deliveryLga,
+      deliveryStreet: data.deliveryStreet.present
+          ? data.deliveryStreet.value
+          : this.deliveryStreet,
+      note: data.note.present ? data.note.value : this.note,
+      declineReason: data.declineReason.present
+          ? data.declineReason.value
+          : this.declineReason,
+      cancelReason: data.cancelReason.present
+          ? data.cancelReason.value
+          : this.cancelReason,
+      linkedOrderId: data.linkedOrderId.present
+          ? data.linkedOrderId.value
+          : this.linkedOrderId,
+      placedAt: data.placedAt.present ? data.placedAt.value : this.placedAt,
+      respondedAt: data.respondedAt.present
+          ? data.respondedAt.value
+          : this.respondedAt,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastUpdatedAt: data.lastUpdatedAt.present
+          ? data.lastUpdatedAt.value
+          : this.lastUpdatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('OnlineOrderData(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('storeId: $storeId, ')
+          ..write('shopperAccountId: $shopperAccountId, ')
+          ..write('customerId: $customerId, ')
+          ..write('status: $status, ')
+          ..write('reference: $reference, ')
+          ..write('currency: $currency, ')
+          ..write('estimatedTotalKobo: $estimatedTotalKobo, ')
+          ..write('shopperName: $shopperName, ')
+          ..write('deliveryPhone: $deliveryPhone, ')
+          ..write('deliveryCountry: $deliveryCountry, ')
+          ..write('deliveryState: $deliveryState, ')
+          ..write('deliveryLga: $deliveryLga, ')
+          ..write('deliveryStreet: $deliveryStreet, ')
+          ..write('note: $note, ')
+          ..write('declineReason: $declineReason, ')
+          ..write('cancelReason: $cancelReason, ')
+          ..write('linkedOrderId: $linkedOrderId, ')
+          ..write('placedAt: $placedAt, ')
+          ..write('respondedAt: $respondedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hashAll([
+    id,
+    businessId,
+    storeId,
+    shopperAccountId,
+    customerId,
+    status,
+    reference,
+    currency,
+    estimatedTotalKobo,
+    shopperName,
+    deliveryPhone,
+    deliveryCountry,
+    deliveryState,
+    deliveryLga,
+    deliveryStreet,
+    note,
+    declineReason,
+    cancelReason,
+    linkedOrderId,
+    placedAt,
+    respondedAt,
+    createdAt,
+    lastUpdatedAt,
+  ]);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is OnlineOrderData &&
+          other.id == this.id &&
+          other.businessId == this.businessId &&
+          other.storeId == this.storeId &&
+          other.shopperAccountId == this.shopperAccountId &&
+          other.customerId == this.customerId &&
+          other.status == this.status &&
+          other.reference == this.reference &&
+          other.currency == this.currency &&
+          other.estimatedTotalKobo == this.estimatedTotalKobo &&
+          other.shopperName == this.shopperName &&
+          other.deliveryPhone == this.deliveryPhone &&
+          other.deliveryCountry == this.deliveryCountry &&
+          other.deliveryState == this.deliveryState &&
+          other.deliveryLga == this.deliveryLga &&
+          other.deliveryStreet == this.deliveryStreet &&
+          other.note == this.note &&
+          other.declineReason == this.declineReason &&
+          other.cancelReason == this.cancelReason &&
+          other.linkedOrderId == this.linkedOrderId &&
+          other.placedAt == this.placedAt &&
+          other.respondedAt == this.respondedAt &&
+          other.createdAt == this.createdAt &&
+          other.lastUpdatedAt == this.lastUpdatedAt);
+}
+
+class OnlineOrdersCompanion extends UpdateCompanion<OnlineOrderData> {
+  final Value<String> id;
+  final Value<String> businessId;
+  final Value<String> storeId;
+  final Value<String?> shopperAccountId;
+  final Value<String?> customerId;
+  final Value<String> status;
+  final Value<String> reference;
+  final Value<String> currency;
+  final Value<int> estimatedTotalKobo;
+  final Value<String> shopperName;
+  final Value<String> deliveryPhone;
+  final Value<String> deliveryCountry;
+  final Value<String> deliveryState;
+  final Value<String> deliveryLga;
+  final Value<String> deliveryStreet;
+  final Value<String?> note;
+  final Value<String?> declineReason;
+  final Value<String?> cancelReason;
+  final Value<String?> linkedOrderId;
+  final Value<DateTime> placedAt;
+  final Value<DateTime?> respondedAt;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> lastUpdatedAt;
+  final Value<int> rowid;
+  const OnlineOrdersCompanion({
+    this.id = const Value.absent(),
+    this.businessId = const Value.absent(),
+    this.storeId = const Value.absent(),
+    this.shopperAccountId = const Value.absent(),
+    this.customerId = const Value.absent(),
+    this.status = const Value.absent(),
+    this.reference = const Value.absent(),
+    this.currency = const Value.absent(),
+    this.estimatedTotalKobo = const Value.absent(),
+    this.shopperName = const Value.absent(),
+    this.deliveryPhone = const Value.absent(),
+    this.deliveryCountry = const Value.absent(),
+    this.deliveryState = const Value.absent(),
+    this.deliveryLga = const Value.absent(),
+    this.deliveryStreet = const Value.absent(),
+    this.note = const Value.absent(),
+    this.declineReason = const Value.absent(),
+    this.cancelReason = const Value.absent(),
+    this.linkedOrderId = const Value.absent(),
+    this.placedAt = const Value.absent(),
+    this.respondedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  OnlineOrdersCompanion.insert({
+    required String id,
+    required String businessId,
+    required String storeId,
+    this.shopperAccountId = const Value.absent(),
+    this.customerId = const Value.absent(),
+    this.status = const Value.absent(),
+    required String reference,
+    this.currency = const Value.absent(),
+    this.estimatedTotalKobo = const Value.absent(),
+    required String shopperName,
+    required String deliveryPhone,
+    this.deliveryCountry = const Value.absent(),
+    required String deliveryState,
+    required String deliveryLga,
+    required String deliveryStreet,
+    this.note = const Value.absent(),
+    this.declineReason = const Value.absent(),
+    this.cancelReason = const Value.absent(),
+    this.linkedOrderId = const Value.absent(),
+    this.placedAt = const Value.absent(),
+    this.respondedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       businessId = Value(businessId),
+       storeId = Value(storeId),
+       reference = Value(reference),
+       shopperName = Value(shopperName),
+       deliveryPhone = Value(deliveryPhone),
+       deliveryState = Value(deliveryState),
+       deliveryLga = Value(deliveryLga),
+       deliveryStreet = Value(deliveryStreet);
+  static Insertable<OnlineOrderData> custom({
+    Expression<String>? id,
+    Expression<String>? businessId,
+    Expression<String>? storeId,
+    Expression<String>? shopperAccountId,
+    Expression<String>? customerId,
+    Expression<String>? status,
+    Expression<String>? reference,
+    Expression<String>? currency,
+    Expression<int>? estimatedTotalKobo,
+    Expression<String>? shopperName,
+    Expression<String>? deliveryPhone,
+    Expression<String>? deliveryCountry,
+    Expression<String>? deliveryState,
+    Expression<String>? deliveryLga,
+    Expression<String>? deliveryStreet,
+    Expression<String>? note,
+    Expression<String>? declineReason,
+    Expression<String>? cancelReason,
+    Expression<String>? linkedOrderId,
+    Expression<DateTime>? placedAt,
+    Expression<DateTime>? respondedAt,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastUpdatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (businessId != null) 'business_id': businessId,
+      if (storeId != null) 'store_id': storeId,
+      if (shopperAccountId != null) 'shopper_account_id': shopperAccountId,
+      if (customerId != null) 'customer_id': customerId,
+      if (status != null) 'status': status,
+      if (reference != null) 'reference': reference,
+      if (currency != null) 'currency': currency,
+      if (estimatedTotalKobo != null)
+        'estimated_total_kobo': estimatedTotalKobo,
+      if (shopperName != null) 'shopper_name': shopperName,
+      if (deliveryPhone != null) 'delivery_phone': deliveryPhone,
+      if (deliveryCountry != null) 'delivery_country': deliveryCountry,
+      if (deliveryState != null) 'delivery_state': deliveryState,
+      if (deliveryLga != null) 'delivery_lga': deliveryLga,
+      if (deliveryStreet != null) 'delivery_street': deliveryStreet,
+      if (note != null) 'note': note,
+      if (declineReason != null) 'decline_reason': declineReason,
+      if (cancelReason != null) 'cancel_reason': cancelReason,
+      if (linkedOrderId != null) 'linked_order_id': linkedOrderId,
+      if (placedAt != null) 'placed_at': placedAt,
+      if (respondedAt != null) 'responded_at': respondedAt,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  OnlineOrdersCompanion copyWith({
+    Value<String>? id,
+    Value<String>? businessId,
+    Value<String>? storeId,
+    Value<String?>? shopperAccountId,
+    Value<String?>? customerId,
+    Value<String>? status,
+    Value<String>? reference,
+    Value<String>? currency,
+    Value<int>? estimatedTotalKobo,
+    Value<String>? shopperName,
+    Value<String>? deliveryPhone,
+    Value<String>? deliveryCountry,
+    Value<String>? deliveryState,
+    Value<String>? deliveryLga,
+    Value<String>? deliveryStreet,
+    Value<String?>? note,
+    Value<String?>? declineReason,
+    Value<String?>? cancelReason,
+    Value<String?>? linkedOrderId,
+    Value<DateTime>? placedAt,
+    Value<DateTime?>? respondedAt,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? lastUpdatedAt,
+    Value<int>? rowid,
+  }) {
+    return OnlineOrdersCompanion(
+      id: id ?? this.id,
+      businessId: businessId ?? this.businessId,
+      storeId: storeId ?? this.storeId,
+      shopperAccountId: shopperAccountId ?? this.shopperAccountId,
+      customerId: customerId ?? this.customerId,
+      status: status ?? this.status,
+      reference: reference ?? this.reference,
+      currency: currency ?? this.currency,
+      estimatedTotalKobo: estimatedTotalKobo ?? this.estimatedTotalKobo,
+      shopperName: shopperName ?? this.shopperName,
+      deliveryPhone: deliveryPhone ?? this.deliveryPhone,
+      deliveryCountry: deliveryCountry ?? this.deliveryCountry,
+      deliveryState: deliveryState ?? this.deliveryState,
+      deliveryLga: deliveryLga ?? this.deliveryLga,
+      deliveryStreet: deliveryStreet ?? this.deliveryStreet,
+      note: note ?? this.note,
+      declineReason: declineReason ?? this.declineReason,
+      cancelReason: cancelReason ?? this.cancelReason,
+      linkedOrderId: linkedOrderId ?? this.linkedOrderId,
+      placedAt: placedAt ?? this.placedAt,
+      respondedAt: respondedAt ?? this.respondedAt,
+      createdAt: createdAt ?? this.createdAt,
+      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (businessId.present) {
+      map['business_id'] = Variable<String>(businessId.value);
+    }
+    if (storeId.present) {
+      map['store_id'] = Variable<String>(storeId.value);
+    }
+    if (shopperAccountId.present) {
+      map['shopper_account_id'] = Variable<String>(shopperAccountId.value);
+    }
+    if (customerId.present) {
+      map['customer_id'] = Variable<String>(customerId.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (reference.present) {
+      map['reference'] = Variable<String>(reference.value);
+    }
+    if (currency.present) {
+      map['currency'] = Variable<String>(currency.value);
+    }
+    if (estimatedTotalKobo.present) {
+      map['estimated_total_kobo'] = Variable<int>(estimatedTotalKobo.value);
+    }
+    if (shopperName.present) {
+      map['shopper_name'] = Variable<String>(shopperName.value);
+    }
+    if (deliveryPhone.present) {
+      map['delivery_phone'] = Variable<String>(deliveryPhone.value);
+    }
+    if (deliveryCountry.present) {
+      map['delivery_country'] = Variable<String>(deliveryCountry.value);
+    }
+    if (deliveryState.present) {
+      map['delivery_state'] = Variable<String>(deliveryState.value);
+    }
+    if (deliveryLga.present) {
+      map['delivery_lga'] = Variable<String>(deliveryLga.value);
+    }
+    if (deliveryStreet.present) {
+      map['delivery_street'] = Variable<String>(deliveryStreet.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (declineReason.present) {
+      map['decline_reason'] = Variable<String>(declineReason.value);
+    }
+    if (cancelReason.present) {
+      map['cancel_reason'] = Variable<String>(cancelReason.value);
+    }
+    if (linkedOrderId.present) {
+      map['linked_order_id'] = Variable<String>(linkedOrderId.value);
+    }
+    if (placedAt.present) {
+      map['placed_at'] = Variable<DateTime>(placedAt.value);
+    }
+    if (respondedAt.present) {
+      map['responded_at'] = Variable<DateTime>(respondedAt.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lastUpdatedAt.present) {
+      map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('OnlineOrdersCompanion(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('storeId: $storeId, ')
+          ..write('shopperAccountId: $shopperAccountId, ')
+          ..write('customerId: $customerId, ')
+          ..write('status: $status, ')
+          ..write('reference: $reference, ')
+          ..write('currency: $currency, ')
+          ..write('estimatedTotalKobo: $estimatedTotalKobo, ')
+          ..write('shopperName: $shopperName, ')
+          ..write('deliveryPhone: $deliveryPhone, ')
+          ..write('deliveryCountry: $deliveryCountry, ')
+          ..write('deliveryState: $deliveryState, ')
+          ..write('deliveryLga: $deliveryLga, ')
+          ..write('deliveryStreet: $deliveryStreet, ')
+          ..write('note: $note, ')
+          ..write('declineReason: $declineReason, ')
+          ..write('cancelReason: $cancelReason, ')
+          ..write('linkedOrderId: $linkedOrderId, ')
+          ..write('placedAt: $placedAt, ')
+          ..write('respondedAt: $respondedAt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $OnlineOrderLinesTable extends OnlineOrderLines
+    with TableInfo<$OnlineOrderLinesTable, OnlineOrderLineData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $OnlineOrderLinesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _businessIdMeta = const VerificationMeta(
+    'businessId',
+  );
+  @override
+  late final GeneratedColumn<String> businessId = GeneratedColumn<String>(
+    'business_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES businesses (id)',
+    ),
+  );
+  static const VerificationMeta _onlineOrderIdMeta = const VerificationMeta(
+    'onlineOrderId',
+  );
+  @override
+  late final GeneratedColumn<String> onlineOrderId = GeneratedColumn<String>(
+    'online_order_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES online_orders (id)',
+    ),
+  );
+  static const VerificationMeta _productIdMeta = const VerificationMeta(
+    'productId',
+  );
+  @override
+  late final GeneratedColumn<String> productId = GeneratedColumn<String>(
+    'product_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES products (id)',
+    ),
+  );
+  static const VerificationMeta _productNameMeta = const VerificationMeta(
+    'productName',
+  );
+  @override
+  late final GeneratedColumn<String> productName = GeneratedColumn<String>(
+    'product_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _unitMeta = const VerificationMeta('unit');
+  @override
+  late final GeneratedColumn<String> unit = GeneratedColumn<String>(
+    'unit',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _unitPriceKoboMeta = const VerificationMeta(
+    'unitPriceKobo',
+  );
+  @override
+  late final GeneratedColumn<int> unitPriceKobo = GeneratedColumn<int>(
+    'unit_price_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _priceTierMeta = const VerificationMeta(
+    'priceTier',
+  );
+  @override
+  late final GeneratedColumn<String> priceTier = GeneratedColumn<String>(
+    'price_tier',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('retailer'),
+  );
+  static const VerificationMeta _requestedQtyMeta = const VerificationMeta(
+    'requestedQty',
+  );
+  @override
+  late final GeneratedColumn<int> requestedQty = GeneratedColumn<int>(
+    'requested_qty',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _acceptedQtyMeta = const VerificationMeta(
+    'acceptedQty',
+  );
+  @override
+  late final GeneratedColumn<int> acceptedQty = GeneratedColumn<int>(
+    'accepted_qty',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _lastUpdatedAtMeta = const VerificationMeta(
+    'lastUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'last_updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    businessId,
+    onlineOrderId,
+    productId,
+    productName,
+    unit,
+    unitPriceKobo,
+    priceTier,
+    requestedQty,
+    acceptedQty,
+    createdAt,
+    lastUpdatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'online_order_lines';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<OnlineOrderLineData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('business_id')) {
+      context.handle(
+        _businessIdMeta,
+        businessId.isAcceptableOrUnknown(data['business_id']!, _businessIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_businessIdMeta);
+    }
+    if (data.containsKey('online_order_id')) {
+      context.handle(
+        _onlineOrderIdMeta,
+        onlineOrderId.isAcceptableOrUnknown(
+          data['online_order_id']!,
+          _onlineOrderIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_onlineOrderIdMeta);
+    }
+    if (data.containsKey('product_id')) {
+      context.handle(
+        _productIdMeta,
+        productId.isAcceptableOrUnknown(data['product_id']!, _productIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_productIdMeta);
+    }
+    if (data.containsKey('product_name')) {
+      context.handle(
+        _productNameMeta,
+        productName.isAcceptableOrUnknown(
+          data['product_name']!,
+          _productNameMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_productNameMeta);
+    }
+    if (data.containsKey('unit')) {
+      context.handle(
+        _unitMeta,
+        unit.isAcceptableOrUnknown(data['unit']!, _unitMeta),
+      );
+    }
+    if (data.containsKey('unit_price_kobo')) {
+      context.handle(
+        _unitPriceKoboMeta,
+        unitPriceKobo.isAcceptableOrUnknown(
+          data['unit_price_kobo']!,
+          _unitPriceKoboMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_unitPriceKoboMeta);
+    }
+    if (data.containsKey('price_tier')) {
+      context.handle(
+        _priceTierMeta,
+        priceTier.isAcceptableOrUnknown(data['price_tier']!, _priceTierMeta),
+      );
+    }
+    if (data.containsKey('requested_qty')) {
+      context.handle(
+        _requestedQtyMeta,
+        requestedQty.isAcceptableOrUnknown(
+          data['requested_qty']!,
+          _requestedQtyMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_requestedQtyMeta);
+    }
+    if (data.containsKey('accepted_qty')) {
+      context.handle(
+        _acceptedQtyMeta,
+        acceptedQty.isAcceptableOrUnknown(
+          data['accepted_qty']!,
+          _acceptedQtyMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('last_updated_at')) {
+      context.handle(
+        _lastUpdatedAtMeta,
+        lastUpdatedAt.isAcceptableOrUnknown(
+          data['last_updated_at']!,
+          _lastUpdatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  OnlineOrderLineData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return OnlineOrderLineData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      businessId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}business_id'],
+      )!,
+      onlineOrderId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}online_order_id'],
+      )!,
+      productId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}product_id'],
+      )!,
+      productName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}product_name'],
+      )!,
+      unit: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}unit'],
+      ),
+      unitPriceKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}unit_price_kobo'],
+      )!,
+      priceTier: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}price_tier'],
+      )!,
+      requestedQty: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}requested_qty'],
+      )!,
+      acceptedQty: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}accepted_qty'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $OnlineOrderLinesTable createAlias(String alias) {
+    return $OnlineOrderLinesTable(attachedDatabase, alias);
+  }
+}
+
+class OnlineOrderLineData extends DataClass
+    implements Insertable<OnlineOrderLineData> {
+  final String id;
+  final String businessId;
+  final String onlineOrderId;
+  final String productId;
+  final String productName;
+  final String? unit;
+  final int unitPriceKobo;
+  final String priceTier;
+  final int requestedQty;
+  final int? acceptedQty;
+  final DateTime createdAt;
+  final DateTime lastUpdatedAt;
+  const OnlineOrderLineData({
+    required this.id,
+    required this.businessId,
+    required this.onlineOrderId,
+    required this.productId,
+    required this.productName,
+    this.unit,
+    required this.unitPriceKobo,
+    required this.priceTier,
+    required this.requestedQty,
+    this.acceptedQty,
+    required this.createdAt,
+    required this.lastUpdatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['business_id'] = Variable<String>(businessId);
+    map['online_order_id'] = Variable<String>(onlineOrderId);
+    map['product_id'] = Variable<String>(productId);
+    map['product_name'] = Variable<String>(productName);
+    if (!nullToAbsent || unit != null) {
+      map['unit'] = Variable<String>(unit);
+    }
+    map['unit_price_kobo'] = Variable<int>(unitPriceKobo);
+    map['price_tier'] = Variable<String>(priceTier);
+    map['requested_qty'] = Variable<int>(requestedQty);
+    if (!nullToAbsent || acceptedQty != null) {
+      map['accepted_qty'] = Variable<int>(acceptedQty);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    return map;
+  }
+
+  OnlineOrderLinesCompanion toCompanion(bool nullToAbsent) {
+    return OnlineOrderLinesCompanion(
+      id: Value(id),
+      businessId: Value(businessId),
+      onlineOrderId: Value(onlineOrderId),
+      productId: Value(productId),
+      productName: Value(productName),
+      unit: unit == null && nullToAbsent ? const Value.absent() : Value(unit),
+      unitPriceKobo: Value(unitPriceKobo),
+      priceTier: Value(priceTier),
+      requestedQty: Value(requestedQty),
+      acceptedQty: acceptedQty == null && nullToAbsent
+          ? const Value.absent()
+          : Value(acceptedQty),
+      createdAt: Value(createdAt),
+      lastUpdatedAt: Value(lastUpdatedAt),
+    );
+  }
+
+  factory OnlineOrderLineData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return OnlineOrderLineData(
+      id: serializer.fromJson<String>(json['id']),
+      businessId: serializer.fromJson<String>(json['businessId']),
+      onlineOrderId: serializer.fromJson<String>(json['onlineOrderId']),
+      productId: serializer.fromJson<String>(json['productId']),
+      productName: serializer.fromJson<String>(json['productName']),
+      unit: serializer.fromJson<String?>(json['unit']),
+      unitPriceKobo: serializer.fromJson<int>(json['unitPriceKobo']),
+      priceTier: serializer.fromJson<String>(json['priceTier']),
+      requestedQty: serializer.fromJson<int>(json['requestedQty']),
+      acceptedQty: serializer.fromJson<int?>(json['acceptedQty']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'businessId': serializer.toJson<String>(businessId),
+      'onlineOrderId': serializer.toJson<String>(onlineOrderId),
+      'productId': serializer.toJson<String>(productId),
+      'productName': serializer.toJson<String>(productName),
+      'unit': serializer.toJson<String?>(unit),
+      'unitPriceKobo': serializer.toJson<int>(unitPriceKobo),
+      'priceTier': serializer.toJson<String>(priceTier),
+      'requestedQty': serializer.toJson<int>(requestedQty),
+      'acceptedQty': serializer.toJson<int?>(acceptedQty),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+    };
+  }
+
+  OnlineOrderLineData copyWith({
+    String? id,
+    String? businessId,
+    String? onlineOrderId,
+    String? productId,
+    String? productName,
+    Value<String?> unit = const Value.absent(),
+    int? unitPriceKobo,
+    String? priceTier,
+    int? requestedQty,
+    Value<int?> acceptedQty = const Value.absent(),
+    DateTime? createdAt,
+    DateTime? lastUpdatedAt,
+  }) => OnlineOrderLineData(
+    id: id ?? this.id,
+    businessId: businessId ?? this.businessId,
+    onlineOrderId: onlineOrderId ?? this.onlineOrderId,
+    productId: productId ?? this.productId,
+    productName: productName ?? this.productName,
+    unit: unit.present ? unit.value : this.unit,
+    unitPriceKobo: unitPriceKobo ?? this.unitPriceKobo,
+    priceTier: priceTier ?? this.priceTier,
+    requestedQty: requestedQty ?? this.requestedQty,
+    acceptedQty: acceptedQty.present ? acceptedQty.value : this.acceptedQty,
+    createdAt: createdAt ?? this.createdAt,
+    lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+  );
+  OnlineOrderLineData copyWithCompanion(OnlineOrderLinesCompanion data) {
+    return OnlineOrderLineData(
+      id: data.id.present ? data.id.value : this.id,
+      businessId: data.businessId.present
+          ? data.businessId.value
+          : this.businessId,
+      onlineOrderId: data.onlineOrderId.present
+          ? data.onlineOrderId.value
+          : this.onlineOrderId,
+      productId: data.productId.present ? data.productId.value : this.productId,
+      productName: data.productName.present
+          ? data.productName.value
+          : this.productName,
+      unit: data.unit.present ? data.unit.value : this.unit,
+      unitPriceKobo: data.unitPriceKobo.present
+          ? data.unitPriceKobo.value
+          : this.unitPriceKobo,
+      priceTier: data.priceTier.present ? data.priceTier.value : this.priceTier,
+      requestedQty: data.requestedQty.present
+          ? data.requestedQty.value
+          : this.requestedQty,
+      acceptedQty: data.acceptedQty.present
+          ? data.acceptedQty.value
+          : this.acceptedQty,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastUpdatedAt: data.lastUpdatedAt.present
+          ? data.lastUpdatedAt.value
+          : this.lastUpdatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('OnlineOrderLineData(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('onlineOrderId: $onlineOrderId, ')
+          ..write('productId: $productId, ')
+          ..write('productName: $productName, ')
+          ..write('unit: $unit, ')
+          ..write('unitPriceKobo: $unitPriceKobo, ')
+          ..write('priceTier: $priceTier, ')
+          ..write('requestedQty: $requestedQty, ')
+          ..write('acceptedQty: $acceptedQty, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    businessId,
+    onlineOrderId,
+    productId,
+    productName,
+    unit,
+    unitPriceKobo,
+    priceTier,
+    requestedQty,
+    acceptedQty,
+    createdAt,
+    lastUpdatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is OnlineOrderLineData &&
+          other.id == this.id &&
+          other.businessId == this.businessId &&
+          other.onlineOrderId == this.onlineOrderId &&
+          other.productId == this.productId &&
+          other.productName == this.productName &&
+          other.unit == this.unit &&
+          other.unitPriceKobo == this.unitPriceKobo &&
+          other.priceTier == this.priceTier &&
+          other.requestedQty == this.requestedQty &&
+          other.acceptedQty == this.acceptedQty &&
+          other.createdAt == this.createdAt &&
+          other.lastUpdatedAt == this.lastUpdatedAt);
+}
+
+class OnlineOrderLinesCompanion extends UpdateCompanion<OnlineOrderLineData> {
+  final Value<String> id;
+  final Value<String> businessId;
+  final Value<String> onlineOrderId;
+  final Value<String> productId;
+  final Value<String> productName;
+  final Value<String?> unit;
+  final Value<int> unitPriceKobo;
+  final Value<String> priceTier;
+  final Value<int> requestedQty;
+  final Value<int?> acceptedQty;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> lastUpdatedAt;
+  final Value<int> rowid;
+  const OnlineOrderLinesCompanion({
+    this.id = const Value.absent(),
+    this.businessId = const Value.absent(),
+    this.onlineOrderId = const Value.absent(),
+    this.productId = const Value.absent(),
+    this.productName = const Value.absent(),
+    this.unit = const Value.absent(),
+    this.unitPriceKobo = const Value.absent(),
+    this.priceTier = const Value.absent(),
+    this.requestedQty = const Value.absent(),
+    this.acceptedQty = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  OnlineOrderLinesCompanion.insert({
+    required String id,
+    required String businessId,
+    required String onlineOrderId,
+    required String productId,
+    required String productName,
+    this.unit = const Value.absent(),
+    required int unitPriceKobo,
+    this.priceTier = const Value.absent(),
+    required int requestedQty,
+    this.acceptedQty = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       businessId = Value(businessId),
+       onlineOrderId = Value(onlineOrderId),
+       productId = Value(productId),
+       productName = Value(productName),
+       unitPriceKobo = Value(unitPriceKobo),
+       requestedQty = Value(requestedQty);
+  static Insertable<OnlineOrderLineData> custom({
+    Expression<String>? id,
+    Expression<String>? businessId,
+    Expression<String>? onlineOrderId,
+    Expression<String>? productId,
+    Expression<String>? productName,
+    Expression<String>? unit,
+    Expression<int>? unitPriceKobo,
+    Expression<String>? priceTier,
+    Expression<int>? requestedQty,
+    Expression<int>? acceptedQty,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastUpdatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (businessId != null) 'business_id': businessId,
+      if (onlineOrderId != null) 'online_order_id': onlineOrderId,
+      if (productId != null) 'product_id': productId,
+      if (productName != null) 'product_name': productName,
+      if (unit != null) 'unit': unit,
+      if (unitPriceKobo != null) 'unit_price_kobo': unitPriceKobo,
+      if (priceTier != null) 'price_tier': priceTier,
+      if (requestedQty != null) 'requested_qty': requestedQty,
+      if (acceptedQty != null) 'accepted_qty': acceptedQty,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  OnlineOrderLinesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? businessId,
+    Value<String>? onlineOrderId,
+    Value<String>? productId,
+    Value<String>? productName,
+    Value<String?>? unit,
+    Value<int>? unitPriceKobo,
+    Value<String>? priceTier,
+    Value<int>? requestedQty,
+    Value<int?>? acceptedQty,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? lastUpdatedAt,
+    Value<int>? rowid,
+  }) {
+    return OnlineOrderLinesCompanion(
+      id: id ?? this.id,
+      businessId: businessId ?? this.businessId,
+      onlineOrderId: onlineOrderId ?? this.onlineOrderId,
+      productId: productId ?? this.productId,
+      productName: productName ?? this.productName,
+      unit: unit ?? this.unit,
+      unitPriceKobo: unitPriceKobo ?? this.unitPriceKobo,
+      priceTier: priceTier ?? this.priceTier,
+      requestedQty: requestedQty ?? this.requestedQty,
+      acceptedQty: acceptedQty ?? this.acceptedQty,
+      createdAt: createdAt ?? this.createdAt,
+      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (businessId.present) {
+      map['business_id'] = Variable<String>(businessId.value);
+    }
+    if (onlineOrderId.present) {
+      map['online_order_id'] = Variable<String>(onlineOrderId.value);
+    }
+    if (productId.present) {
+      map['product_id'] = Variable<String>(productId.value);
+    }
+    if (productName.present) {
+      map['product_name'] = Variable<String>(productName.value);
+    }
+    if (unit.present) {
+      map['unit'] = Variable<String>(unit.value);
+    }
+    if (unitPriceKobo.present) {
+      map['unit_price_kobo'] = Variable<int>(unitPriceKobo.value);
+    }
+    if (priceTier.present) {
+      map['price_tier'] = Variable<String>(priceTier.value);
+    }
+    if (requestedQty.present) {
+      map['requested_qty'] = Variable<int>(requestedQty.value);
+    }
+    if (acceptedQty.present) {
+      map['accepted_qty'] = Variable<int>(acceptedQty.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lastUpdatedAt.present) {
+      map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('OnlineOrderLinesCompanion(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('onlineOrderId: $onlineOrderId, ')
+          ..write('productId: $productId, ')
+          ..write('productName: $productName, ')
+          ..write('unit: $unit, ')
+          ..write('unitPriceKobo: $unitPriceKobo, ')
+          ..write('priceTier: $priceTier, ')
+          ..write('requestedQty: $requestedQty, ')
+          ..write('acceptedQty: $acceptedQty, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -48582,6 +52399,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   );
   late final $ManufacturersTable manufacturers = $ManufacturersTable(this);
   late final $StoresTable stores = $StoresTable(this);
+  late final $StoreDeliveryAreasTable storeDeliveryAreas =
+      $StoreDeliveryAreasTable(this);
   late final $UsersTable users = $UsersTable(this);
   late final $CategoriesTable categories = $CategoriesTable(this);
   late final $SuppliersTable suppliers = $SuppliersTable(this);
@@ -48598,6 +52417,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $CrateShortfallWriteoffsTable crateShortfallWriteoffs =
       $CrateShortfallWriteoffsTable(this);
   late final $ProductsTable products = $ProductsTable(this);
+  late final $ProductPhotosTable productPhotos = $ProductPhotosTable(this);
   late final $PriceListsTable priceLists = $PriceListsTable(this);
   late final $CustomersTable customers = $CustomersTable(this);
   late final $CustomerWalletsTable customerWallets = $CustomerWalletsTable(
@@ -48631,6 +52451,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $QuickSaleRequestsTable(this);
   late final $OrderItemsTable orderItems = $OrderItemsTable(this);
   late final $OrderCrateLinesTable orderCrateLines = $OrderCrateLinesTable(
+    this,
+  );
+  late final $OnlineOrdersTable onlineOrders = $OnlineOrdersTable(this);
+  late final $OnlineOrderLinesTable onlineOrderLines = $OnlineOrderLinesTable(
     this,
   );
   late final $PurchaseItemsTable purchaseItems = $PurchaseItemsTable(this);
@@ -48777,6 +52601,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     this as AppDatabase,
   );
   late final UserStoresDao userStoresDao = UserStoresDao(this as AppDatabase);
+  late final OnlineOrdersDao onlineOrdersDao = OnlineOrdersDao(
+    this as AppDatabase,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -48786,6 +52613,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     crateSizeGroups,
     manufacturers,
     stores,
+    storeDeliveryAreas,
     users,
     categories,
     suppliers,
@@ -48796,6 +52624,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     supplierCrateDeposits,
     crateShortfallWriteoffs,
     products,
+    productPhotos,
     priceLists,
     customers,
     customerWallets,
@@ -48817,6 +52646,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     quickSaleRequests,
     orderItems,
     orderCrateLines,
+    onlineOrders,
+    onlineOrderLines,
     purchaseItems,
     expenseCategories,
     expenses,
@@ -48956,6 +52787,33 @@ final class $$BusinessesTableReferences
     ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_storesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $StoreDeliveryAreasTable,
+    List<StoreDeliveryAreaData>
+  >
+  _storeDeliveryAreasRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.storeDeliveryAreas,
+        aliasName: $_aliasNameGenerator(
+          db.businesses.id,
+          db.storeDeliveryAreas.businessId,
+        ),
+      );
+
+  $$StoreDeliveryAreasTableProcessedTableManager get storeDeliveryAreasRefs {
+    final manager = $$StoreDeliveryAreasTableTableManager(
+      $_db,
+      $_db.storeDeliveryAreas,
+    ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _storeDeliveryAreasRefsTable($_db),
+    );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -49196,6 +53054,27 @@ final class $$BusinessesTableReferences
     ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_productsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$ProductPhotosTable, List<ProductPhotoData>>
+  _productPhotosRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.productPhotos,
+    aliasName: $_aliasNameGenerator(
+      db.businesses.id,
+      db.productPhotos.businessId,
+    ),
+  );
+
+  $$ProductPhotosTableProcessedTableManager get productPhotosRefs {
+    final manager = $$ProductPhotosTableTableManager(
+      $_db,
+      $_db.productPhotos,
+    ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_productPhotosRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -49673,6 +53552,50 @@ final class $$BusinessesTableReferences
 
     final cache = $_typedResult.readTableOrNull(
       _orderCrateLinesRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$OnlineOrdersTable, List<OnlineOrderData>>
+  _onlineOrdersRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.onlineOrders,
+    aliasName: $_aliasNameGenerator(
+      db.businesses.id,
+      db.onlineOrders.businessId,
+    ),
+  );
+
+  $$OnlineOrdersTableProcessedTableManager get onlineOrdersRefs {
+    final manager = $$OnlineOrdersTableTableManager(
+      $_db,
+      $_db.onlineOrders,
+    ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_onlineOrdersRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$OnlineOrderLinesTable, List<OnlineOrderLineData>>
+  _onlineOrderLinesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.onlineOrderLines,
+    aliasName: $_aliasNameGenerator(
+      db.businesses.id,
+      db.onlineOrderLines.businessId,
+    ),
+  );
+
+  $$OnlineOrderLinesTableProcessedTableManager get onlineOrderLinesRefs {
+    final manager = $$OnlineOrderLinesTableTableManager(
+      $_db,
+      $_db.onlineOrderLines,
+    ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _onlineOrderLinesRefsTable($_db),
     );
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
@@ -50426,6 +54349,31 @@ class $$BusinessesTableFilterComposer
     return f(composer);
   }
 
+  Expression<bool> storeDeliveryAreasRefs(
+    Expression<bool> Function($$StoreDeliveryAreasTableFilterComposer f) f,
+  ) {
+    final $$StoreDeliveryAreasTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.storeDeliveryAreas,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoreDeliveryAreasTableFilterComposer(
+            $db: $db,
+            $table: $db.storeDeliveryAreas,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<bool> usersRefs(
     Expression<bool> Function($$UsersTableFilterComposer f) f,
   ) {
@@ -50675,6 +54623,31 @@ class $$BusinessesTableFilterComposer
           }) => $$ProductsTableFilterComposer(
             $db: $db,
             $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> productPhotosRefs(
+    Expression<bool> Function($$ProductPhotosTableFilterComposer f) f,
+  ) {
+    final $$ProductPhotosTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.productPhotos,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductPhotosTableFilterComposer(
+            $db: $db,
+            $table: $db.productPhotos,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -51204,6 +55177,56 @@ class $$BusinessesTableFilterComposer
           }) => $$OrderCrateLinesTableFilterComposer(
             $db: $db,
             $table: $db.orderCrateLines,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> onlineOrdersRefs(
+    Expression<bool> Function($$OnlineOrdersTableFilterComposer f) f,
+  ) {
+    final $$OnlineOrdersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.onlineOrders,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$OnlineOrdersTableFilterComposer(
+            $db: $db,
+            $table: $db.onlineOrders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> onlineOrderLinesRefs(
+    Expression<bool> Function($$OnlineOrderLinesTableFilterComposer f) f,
+  ) {
+    final $$OnlineOrderLinesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.onlineOrderLines,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$OnlineOrderLinesTableFilterComposer(
+            $db: $db,
+            $table: $db.onlineOrderLines,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -52136,6 +56159,32 @@ class $$BusinessesTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> storeDeliveryAreasRefs<T extends Object>(
+    Expression<T> Function($$StoreDeliveryAreasTableAnnotationComposer a) f,
+  ) {
+    final $$StoreDeliveryAreasTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.storeDeliveryAreas,
+          getReferencedColumn: (t) => t.businessId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$StoreDeliveryAreasTableAnnotationComposer(
+                $db: $db,
+                $table: $db.storeDeliveryAreas,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<T> usersRefs<T extends Object>(
     Expression<T> Function($$UsersTableAnnotationComposer a) f,
   ) {
@@ -52387,6 +56436,31 @@ class $$BusinessesTableAnnotationComposer
           }) => $$ProductsTableAnnotationComposer(
             $db: $db,
             $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> productPhotosRefs<T extends Object>(
+    Expression<T> Function($$ProductPhotosTableAnnotationComposer a) f,
+  ) {
+    final $$ProductPhotosTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.productPhotos,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductPhotosTableAnnotationComposer(
+            $db: $db,
+            $table: $db.productPhotos,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -52922,6 +56996,56 @@ class $$BusinessesTableAnnotationComposer
           }) => $$OrderCrateLinesTableAnnotationComposer(
             $db: $db,
             $table: $db.orderCrateLines,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> onlineOrdersRefs<T extends Object>(
+    Expression<T> Function($$OnlineOrdersTableAnnotationComposer a) f,
+  ) {
+    final $$OnlineOrdersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.onlineOrders,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$OnlineOrdersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.onlineOrders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> onlineOrderLinesRefs<T extends Object>(
+    Expression<T> Function($$OnlineOrderLinesTableAnnotationComposer a) f,
+  ) {
+    final $$OnlineOrderLinesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.onlineOrderLines,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$OnlineOrderLinesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.onlineOrderLines,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -53630,6 +57754,7 @@ class $$BusinessesTableTableManager
             bool crateSizeGroupsRefs,
             bool manufacturersRefs,
             bool storesRefs,
+            bool storeDeliveryAreasRefs,
             bool usersRefs,
             bool categoriesRefs,
             bool suppliersRefs,
@@ -53640,6 +57765,7 @@ class $$BusinessesTableTableManager
             bool supplierCrateDepositsRefs,
             bool crateShortfallWriteoffsRefs,
             bool productsRefs,
+            bool productPhotosRefs,
             bool priceListsRefs,
             bool customersRefs,
             bool customerWalletsRefs,
@@ -53661,6 +57787,8 @@ class $$BusinessesTableTableManager
             bool quickSaleRequestsRefs,
             bool orderItemsRefs,
             bool orderCrateLinesRefs,
+            bool onlineOrdersRefs,
+            bool onlineOrderLinesRefs,
             bool purchaseItemsRefs,
             bool expenseCategoriesRefs,
             bool expensesRefs,
@@ -53794,6 +57922,7 @@ class $$BusinessesTableTableManager
                 crateSizeGroupsRefs = false,
                 manufacturersRefs = false,
                 storesRefs = false,
+                storeDeliveryAreasRefs = false,
                 usersRefs = false,
                 categoriesRefs = false,
                 suppliersRefs = false,
@@ -53804,6 +57933,7 @@ class $$BusinessesTableTableManager
                 supplierCrateDepositsRefs = false,
                 crateShortfallWriteoffsRefs = false,
                 productsRefs = false,
+                productPhotosRefs = false,
                 priceListsRefs = false,
                 customersRefs = false,
                 customerWalletsRefs = false,
@@ -53825,6 +57955,8 @@ class $$BusinessesTableTableManager
                 quickSaleRequestsRefs = false,
                 orderItemsRefs = false,
                 orderCrateLinesRefs = false,
+                onlineOrdersRefs = false,
+                onlineOrderLinesRefs = false,
                 purchaseItemsRefs = false,
                 expenseCategoriesRefs = false,
                 expensesRefs = false,
@@ -53859,6 +57991,7 @@ class $$BusinessesTableTableManager
                     if (crateSizeGroupsRefs) db.crateSizeGroups,
                     if (manufacturersRefs) db.manufacturers,
                     if (storesRefs) db.stores,
+                    if (storeDeliveryAreasRefs) db.storeDeliveryAreas,
                     if (usersRefs) db.users,
                     if (categoriesRefs) db.categories,
                     if (suppliersRefs) db.suppliers,
@@ -53870,6 +58003,7 @@ class $$BusinessesTableTableManager
                     if (supplierCrateDepositsRefs) db.supplierCrateDeposits,
                     if (crateShortfallWriteoffsRefs) db.crateShortfallWriteoffs,
                     if (productsRefs) db.products,
+                    if (productPhotosRefs) db.productPhotos,
                     if (priceListsRefs) db.priceLists,
                     if (customersRefs) db.customers,
                     if (customerWalletsRefs) db.customerWallets,
@@ -53892,6 +58026,8 @@ class $$BusinessesTableTableManager
                     if (quickSaleRequestsRefs) db.quickSaleRequests,
                     if (orderItemsRefs) db.orderItems,
                     if (orderCrateLinesRefs) db.orderCrateLines,
+                    if (onlineOrdersRefs) db.onlineOrders,
+                    if (onlineOrderLinesRefs) db.onlineOrderLines,
                     if (purchaseItemsRefs) db.purchaseItems,
                     if (expenseCategoriesRefs) db.expenseCategories,
                     if (expensesRefs) db.expenses,
@@ -53980,6 +58116,27 @@ class $$BusinessesTableTableManager
                                 table,
                                 p0,
                               ).storesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.businessId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (storeDeliveryAreasRefs)
+                        await $_getPrefetchedData<
+                          BusinessData,
+                          $BusinessesTable,
+                          StoreDeliveryAreaData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$BusinessesTableReferences
+                              ._storeDeliveryAreasRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$BusinessesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).storeDeliveryAreasRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.businessId == item.id,
@@ -54190,6 +58347,27 @@ class $$BusinessesTableTableManager
                                 table,
                                 p0,
                               ).productsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.businessId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (productPhotosRefs)
+                        await $_getPrefetchedData<
+                          BusinessData,
+                          $BusinessesTable,
+                          ProductPhotoData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$BusinessesTableReferences
+                              ._productPhotosRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$BusinessesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).productPhotosRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.businessId == item.id,
@@ -54631,6 +58809,48 @@ class $$BusinessesTableTableManager
                                 table,
                                 p0,
                               ).orderCrateLinesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.businessId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (onlineOrdersRefs)
+                        await $_getPrefetchedData<
+                          BusinessData,
+                          $BusinessesTable,
+                          OnlineOrderData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$BusinessesTableReferences
+                              ._onlineOrdersRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$BusinessesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).onlineOrdersRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.businessId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (onlineOrderLinesRefs)
+                        await $_getPrefetchedData<
+                          BusinessData,
+                          $BusinessesTable,
+                          OnlineOrderLineData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$BusinessesTableReferences
+                              ._onlineOrderLinesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$BusinessesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).onlineOrderLinesRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.businessId == item.id,
@@ -55228,6 +59448,7 @@ typedef $$BusinessesTableProcessedTableManager =
         bool crateSizeGroupsRefs,
         bool manufacturersRefs,
         bool storesRefs,
+        bool storeDeliveryAreasRefs,
         bool usersRefs,
         bool categoriesRefs,
         bool suppliersRefs,
@@ -55238,6 +59459,7 @@ typedef $$BusinessesTableProcessedTableManager =
         bool supplierCrateDepositsRefs,
         bool crateShortfallWriteoffsRefs,
         bool productsRefs,
+        bool productPhotosRefs,
         bool priceListsRefs,
         bool customersRefs,
         bool customerWalletsRefs,
@@ -55259,6 +59481,8 @@ typedef $$BusinessesTableProcessedTableManager =
         bool quickSaleRequestsRefs,
         bool orderItemsRefs,
         bool orderCrateLinesRefs,
+        bool onlineOrdersRefs,
+        bool onlineOrderLinesRefs,
         bool purchaseItemsRefs,
         bool expenseCategoriesRefs,
         bool expensesRefs,
@@ -57665,6 +61889,12 @@ typedef $$StoresTableCreateCompanionBuilder =
       required String name,
       Value<String?> location,
       Value<String> kind,
+      Value<String?> country,
+      Value<String?> state,
+      Value<String?> lga,
+      Value<String?> phone,
+      Value<String?> onlineNote,
+      Value<bool> onlineOrderingEnabled,
       Value<bool> isDeleted,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -57677,6 +61907,12 @@ typedef $$StoresTableUpdateCompanionBuilder =
       Value<String> name,
       Value<String?> location,
       Value<String> kind,
+      Value<String?> country,
+      Value<String?> state,
+      Value<String?> lga,
+      Value<String?> phone,
+      Value<String?> onlineNote,
+      Value<bool> onlineOrderingEnabled,
       Value<bool> isDeleted,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -57703,6 +61939,33 @@ final class $$StoresTableReferences
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $StoreDeliveryAreasTable,
+    List<StoreDeliveryAreaData>
+  >
+  _storeDeliveryAreasRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.storeDeliveryAreas,
+        aliasName: $_aliasNameGenerator(
+          db.stores.id,
+          db.storeDeliveryAreas.storeId,
+        ),
+      );
+
+  $$StoreDeliveryAreasTableProcessedTableManager get storeDeliveryAreasRefs {
+    final manager = $$StoreDeliveryAreasTableTableManager(
+      $_db,
+      $_db.storeDeliveryAreas,
+    ).filter((f) => f.storeId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _storeDeliveryAreasRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
     );
   }
 
@@ -58102,6 +62365,24 @@ final class $$StoresTableReferences
     );
   }
 
+  static MultiTypedResultKey<$OnlineOrdersTable, List<OnlineOrderData>>
+  _onlineOrdersRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.onlineOrders,
+    aliasName: $_aliasNameGenerator(db.stores.id, db.onlineOrders.storeId),
+  );
+
+  $$OnlineOrdersTableProcessedTableManager get onlineOrdersRefs {
+    final manager = $$OnlineOrdersTableTableManager(
+      $_db,
+      $_db.onlineOrders,
+    ).filter((f) => f.storeId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_onlineOrdersRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<$ExpensesTable, List<ExpenseData>>
   _expensesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.expenses,
@@ -58334,6 +62615,36 @@ class $$StoresTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get country => $composableBuilder(
+    column: $table.country,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lga => $composableBuilder(
+    column: $table.lga,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get phone => $composableBuilder(
+    column: $table.phone,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get onlineNote => $composableBuilder(
+    column: $table.onlineNote,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get onlineOrderingEnabled => $composableBuilder(
+    column: $table.onlineOrderingEnabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<bool> get isDeleted => $composableBuilder(
     column: $table.isDeleted,
     builder: (column) => ColumnFilters(column),
@@ -58370,6 +62681,31 @@ class $$StoresTableFilterComposer
           ),
     );
     return composer;
+  }
+
+  Expression<bool> storeDeliveryAreasRefs(
+    Expression<bool> Function($$StoreDeliveryAreasTableFilterComposer f) f,
+  ) {
+    final $$StoreDeliveryAreasTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.storeDeliveryAreas,
+      getReferencedColumn: (t) => t.storeId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoreDeliveryAreasTableFilterComposer(
+            $db: $db,
+            $table: $db.storeDeliveryAreas,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
   }
 
   Expression<bool> usersRefs(
@@ -58805,6 +63141,31 @@ class $$StoresTableFilterComposer
     return f(composer);
   }
 
+  Expression<bool> onlineOrdersRefs(
+    Expression<bool> Function($$OnlineOrdersTableFilterComposer f) f,
+  ) {
+    final $$OnlineOrdersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.onlineOrders,
+      getReferencedColumn: (t) => t.storeId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$OnlineOrdersTableFilterComposer(
+            $db: $db,
+            $table: $db.onlineOrders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<bool> expensesRefs(
     Expression<bool> Function($$ExpensesTableFilterComposer f) f,
   ) {
@@ -59085,6 +63446,36 @@ class $$StoresTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get country => $composableBuilder(
+    column: $table.country,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lga => $composableBuilder(
+    column: $table.lga,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get phone => $composableBuilder(
+    column: $table.phone,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get onlineNote => $composableBuilder(
+    column: $table.onlineNote,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get onlineOrderingEnabled => $composableBuilder(
+    column: $table.onlineOrderingEnabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isDeleted => $composableBuilder(
     column: $table.isDeleted,
     builder: (column) => ColumnOrderings(column),
@@ -59145,6 +63536,28 @@ class $$StoresTableAnnotationComposer
   GeneratedColumn<String> get kind =>
       $composableBuilder(column: $table.kind, builder: (column) => column);
 
+  GeneratedColumn<String> get country =>
+      $composableBuilder(column: $table.country, builder: (column) => column);
+
+  GeneratedColumn<String> get state =>
+      $composableBuilder(column: $table.state, builder: (column) => column);
+
+  GeneratedColumn<String> get lga =>
+      $composableBuilder(column: $table.lga, builder: (column) => column);
+
+  GeneratedColumn<String> get phone =>
+      $composableBuilder(column: $table.phone, builder: (column) => column);
+
+  GeneratedColumn<String> get onlineNote => $composableBuilder(
+    column: $table.onlineNote,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get onlineOrderingEnabled => $composableBuilder(
+    column: $table.onlineOrderingEnabled,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<bool> get isDeleted =>
       $composableBuilder(column: $table.isDeleted, builder: (column) => column);
 
@@ -59177,6 +63590,32 @@ class $$StoresTableAnnotationComposer
           ),
     );
     return composer;
+  }
+
+  Expression<T> storeDeliveryAreasRefs<T extends Object>(
+    Expression<T> Function($$StoreDeliveryAreasTableAnnotationComposer a) f,
+  ) {
+    final $$StoreDeliveryAreasTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.storeDeliveryAreas,
+          getReferencedColumn: (t) => t.storeId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$StoreDeliveryAreasTableAnnotationComposer(
+                $db: $db,
+                $table: $db.storeDeliveryAreas,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
   }
 
   Expression<T> usersRefs<T extends Object>(
@@ -59618,6 +64057,31 @@ class $$StoresTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> onlineOrdersRefs<T extends Object>(
+    Expression<T> Function($$OnlineOrdersTableAnnotationComposer a) f,
+  ) {
+    final $$OnlineOrdersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.onlineOrders,
+      getReferencedColumn: (t) => t.storeId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$OnlineOrdersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.onlineOrders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> expensesRefs<T extends Object>(
     Expression<T> Function($$ExpensesTableAnnotationComposer a) f,
   ) {
@@ -59886,6 +64350,7 @@ class $$StoresTableTableManager
           StoreData,
           PrefetchHooks Function({
             bool businessId,
+            bool storeDeliveryAreasRefs,
             bool usersRefs,
             bool supplierLedgerEntriesRefs,
             bool supplierCrateLedgerRefs,
@@ -59903,6 +64368,7 @@ class $$StoresTableTableManager
             bool stockAdjustmentRequestsRefs,
             bool quickSaleRequestsRefs,
             bool orderItemsRefs,
+            bool onlineOrdersRefs,
             bool expensesRefs,
             bool expenseBudgetsRefs,
             bool savedCartsRefs,
@@ -59933,6 +64399,12 @@ class $$StoresTableTableManager
                 Value<String> name = const Value.absent(),
                 Value<String?> location = const Value.absent(),
                 Value<String> kind = const Value.absent(),
+                Value<String?> country = const Value.absent(),
+                Value<String?> state = const Value.absent(),
+                Value<String?> lga = const Value.absent(),
+                Value<String?> phone = const Value.absent(),
+                Value<String?> onlineNote = const Value.absent(),
+                Value<bool> onlineOrderingEnabled = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -59943,6 +64415,12 @@ class $$StoresTableTableManager
                 name: name,
                 location: location,
                 kind: kind,
+                country: country,
+                state: state,
+                lga: lga,
+                phone: phone,
+                onlineNote: onlineNote,
+                onlineOrderingEnabled: onlineOrderingEnabled,
                 isDeleted: isDeleted,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -59955,6 +64433,12 @@ class $$StoresTableTableManager
                 required String name,
                 Value<String?> location = const Value.absent(),
                 Value<String> kind = const Value.absent(),
+                Value<String?> country = const Value.absent(),
+                Value<String?> state = const Value.absent(),
+                Value<String?> lga = const Value.absent(),
+                Value<String?> phone = const Value.absent(),
+                Value<String?> onlineNote = const Value.absent(),
+                Value<bool> onlineOrderingEnabled = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -59965,6 +64449,12 @@ class $$StoresTableTableManager
                 name: name,
                 location: location,
                 kind: kind,
+                country: country,
+                state: state,
+                lga: lga,
+                phone: phone,
+                onlineNote: onlineNote,
+                onlineOrderingEnabled: onlineOrderingEnabled,
                 isDeleted: isDeleted,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -59979,6 +64469,7 @@ class $$StoresTableTableManager
           prefetchHooksCallback:
               ({
                 businessId = false,
+                storeDeliveryAreasRefs = false,
                 usersRefs = false,
                 supplierLedgerEntriesRefs = false,
                 supplierCrateLedgerRefs = false,
@@ -59996,6 +64487,7 @@ class $$StoresTableTableManager
                 stockAdjustmentRequestsRefs = false,
                 quickSaleRequestsRefs = false,
                 orderItemsRefs = false,
+                onlineOrdersRefs = false,
                 expensesRefs = false,
                 expenseBudgetsRefs = false,
                 savedCartsRefs = false,
@@ -60010,6 +64502,7 @@ class $$StoresTableTableManager
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
+                    if (storeDeliveryAreasRefs) db.storeDeliveryAreas,
                     if (usersRefs) db.users,
                     if (supplierLedgerEntriesRefs) db.supplierLedgerEntries,
                     if (supplierCrateLedgerRefs) db.supplierCrateLedger,
@@ -60028,6 +64521,7 @@ class $$StoresTableTableManager
                     if (stockAdjustmentRequestsRefs) db.stockAdjustmentRequests,
                     if (quickSaleRequestsRefs) db.quickSaleRequests,
                     if (orderItemsRefs) db.orderItems,
+                    if (onlineOrdersRefs) db.onlineOrders,
                     if (expensesRefs) db.expenses,
                     if (expenseBudgetsRefs) db.expenseBudgets,
                     if (savedCartsRefs) db.savedCarts,
@@ -60073,6 +64567,27 @@ class $$StoresTableTableManager
                       },
                   getPrefetchedDataCallback: (items) async {
                     return [
+                      if (storeDeliveryAreasRefs)
+                        await $_getPrefetchedData<
+                          StoreData,
+                          $StoresTable,
+                          StoreDeliveryAreaData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$StoresTableReferences
+                              ._storeDeliveryAreasRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$StoresTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).storeDeliveryAreasRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.storeId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (usersRefs)
                         await $_getPrefetchedData<
                           StoreData,
@@ -60422,6 +64937,27 @@ class $$StoresTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (onlineOrdersRefs)
+                        await $_getPrefetchedData<
+                          StoreData,
+                          $StoresTable,
+                          OnlineOrderData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$StoresTableReferences
+                              ._onlineOrdersRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$StoresTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).onlineOrdersRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.storeId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (expensesRefs)
                         await $_getPrefetchedData<
                           StoreData,
@@ -60654,6 +65190,7 @@ typedef $$StoresTableProcessedTableManager =
       StoreData,
       PrefetchHooks Function({
         bool businessId,
+        bool storeDeliveryAreasRefs,
         bool usersRefs,
         bool supplierLedgerEntriesRefs,
         bool supplierCrateLedgerRefs,
@@ -60671,6 +65208,7 @@ typedef $$StoresTableProcessedTableManager =
         bool stockAdjustmentRequestsRefs,
         bool quickSaleRequestsRefs,
         bool orderItemsRefs,
+        bool onlineOrdersRefs,
         bool expensesRefs,
         bool expenseBudgetsRefs,
         bool savedCartsRefs,
@@ -60682,6 +65220,511 @@ typedef $$StoresTableProcessedTableManager =
         bool inviteCodesRefs,
         bool userStoresRefs,
       })
+    >;
+typedef $$StoreDeliveryAreasTableCreateCompanionBuilder =
+    StoreDeliveryAreasCompanion Function({
+      Value<String> id,
+      required String businessId,
+      required String storeId,
+      Value<String> country,
+      required String state,
+      Value<String?> lga,
+      Value<bool> isDeleted,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+typedef $$StoreDeliveryAreasTableUpdateCompanionBuilder =
+    StoreDeliveryAreasCompanion Function({
+      Value<String> id,
+      Value<String> businessId,
+      Value<String> storeId,
+      Value<String> country,
+      Value<String> state,
+      Value<String?> lga,
+      Value<bool> isDeleted,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+
+final class $$StoreDeliveryAreasTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $StoreDeliveryAreasTable,
+          StoreDeliveryAreaData
+        > {
+  $$StoreDeliveryAreasTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $BusinessesTable _businessIdTable(_$AppDatabase db) =>
+      db.businesses.createAlias(
+        $_aliasNameGenerator(
+          db.storeDeliveryAreas.businessId,
+          db.businesses.id,
+        ),
+      );
+
+  $$BusinessesTableProcessedTableManager get businessId {
+    final $_column = $_itemColumn<String>('business_id')!;
+
+    final manager = $$BusinessesTableTableManager(
+      $_db,
+      $_db.businesses,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $StoresTable _storeIdTable(_$AppDatabase db) => db.stores.createAlias(
+    $_aliasNameGenerator(db.storeDeliveryAreas.storeId, db.stores.id),
+  );
+
+  $$StoresTableProcessedTableManager get storeId {
+    final $_column = $_itemColumn<String>('store_id')!;
+
+    final manager = $$StoresTableTableManager(
+      $_db,
+      $_db.stores,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_storeIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$StoreDeliveryAreasTableFilterComposer
+    extends Composer<_$AppDatabase, $StoreDeliveryAreasTable> {
+  $$StoreDeliveryAreasTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get country => $composableBuilder(
+    column: $table.country,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get lga => $composableBuilder(
+    column: $table.lga,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isDeleted => $composableBuilder(
+    column: $table.isDeleted,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$BusinessesTableFilterComposer get businessId {
+    final $$BusinessesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableFilterComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableFilterComposer get storeId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableFilterComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$StoreDeliveryAreasTableOrderingComposer
+    extends Composer<_$AppDatabase, $StoreDeliveryAreasTable> {
+  $$StoreDeliveryAreasTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get country => $composableBuilder(
+    column: $table.country,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lga => $composableBuilder(
+    column: $table.lga,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isDeleted => $composableBuilder(
+    column: $table.isDeleted,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$BusinessesTableOrderingComposer get businessId {
+    final $$BusinessesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableOrderingComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableOrderingComposer get storeId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableOrderingComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$StoreDeliveryAreasTableAnnotationComposer
+    extends Composer<_$AppDatabase, $StoreDeliveryAreasTable> {
+  $$StoreDeliveryAreasTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get country =>
+      $composableBuilder(column: $table.country, builder: (column) => column);
+
+  GeneratedColumn<String> get state =>
+      $composableBuilder(column: $table.state, builder: (column) => column);
+
+  GeneratedColumn<String> get lga =>
+      $composableBuilder(column: $table.lga, builder: (column) => column);
+
+  GeneratedColumn<bool> get isDeleted =>
+      $composableBuilder(column: $table.isDeleted, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => column,
+  );
+
+  $$BusinessesTableAnnotationComposer get businessId {
+    final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableAnnotationComposer get storeId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableAnnotationComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$StoreDeliveryAreasTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $StoreDeliveryAreasTable,
+          StoreDeliveryAreaData,
+          $$StoreDeliveryAreasTableFilterComposer,
+          $$StoreDeliveryAreasTableOrderingComposer,
+          $$StoreDeliveryAreasTableAnnotationComposer,
+          $$StoreDeliveryAreasTableCreateCompanionBuilder,
+          $$StoreDeliveryAreasTableUpdateCompanionBuilder,
+          (StoreDeliveryAreaData, $$StoreDeliveryAreasTableReferences),
+          StoreDeliveryAreaData,
+          PrefetchHooks Function({bool businessId, bool storeId})
+        > {
+  $$StoreDeliveryAreasTableTableManager(
+    _$AppDatabase db,
+    $StoreDeliveryAreasTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$StoreDeliveryAreasTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$StoreDeliveryAreasTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$StoreDeliveryAreasTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> businessId = const Value.absent(),
+                Value<String> storeId = const Value.absent(),
+                Value<String> country = const Value.absent(),
+                Value<String> state = const Value.absent(),
+                Value<String?> lga = const Value.absent(),
+                Value<bool> isDeleted = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => StoreDeliveryAreasCompanion(
+                id: id,
+                businessId: businessId,
+                storeId: storeId,
+                country: country,
+                state: state,
+                lga: lga,
+                isDeleted: isDeleted,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String businessId,
+                required String storeId,
+                Value<String> country = const Value.absent(),
+                required String state,
+                Value<String?> lga = const Value.absent(),
+                Value<bool> isDeleted = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => StoreDeliveryAreasCompanion.insert(
+                id: id,
+                businessId: businessId,
+                storeId: storeId,
+                country: country,
+                state: state,
+                lga: lga,
+                isDeleted: isDeleted,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$StoreDeliveryAreasTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({businessId = false, storeId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (businessId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.businessId,
+                                referencedTable:
+                                    $$StoreDeliveryAreasTableReferences
+                                        ._businessIdTable(db),
+                                referencedColumn:
+                                    $$StoreDeliveryAreasTableReferences
+                                        ._businessIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+                    if (storeId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.storeId,
+                                referencedTable:
+                                    $$StoreDeliveryAreasTableReferences
+                                        ._storeIdTable(db),
+                                referencedColumn:
+                                    $$StoreDeliveryAreasTableReferences
+                                        ._storeIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$StoreDeliveryAreasTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $StoreDeliveryAreasTable,
+      StoreDeliveryAreaData,
+      $$StoreDeliveryAreasTableFilterComposer,
+      $$StoreDeliveryAreasTableOrderingComposer,
+      $$StoreDeliveryAreasTableAnnotationComposer,
+      $$StoreDeliveryAreasTableCreateCompanionBuilder,
+      $$StoreDeliveryAreasTableUpdateCompanionBuilder,
+      (StoreDeliveryAreaData, $$StoreDeliveryAreasTableReferences),
+      StoreDeliveryAreaData,
+      PrefetchHooks Function({bool businessId, bool storeId})
     >;
 typedef $$UsersTableCreateCompanionBuilder =
     UsersCompanion Function({
@@ -70566,6 +75609,7 @@ typedef $$ProductsTableCreateCompanionBuilder =
       Value<int?> iconCodePoint,
       Value<String?> colorHex,
       Value<bool> isAvailable,
+      Value<bool> showOnline,
       Value<bool> isDeleted,
       Value<int> lowStockThreshold,
       Value<double> avgDailySales,
@@ -70580,6 +75624,11 @@ typedef $$ProductsTableCreateCompanionBuilder =
       Value<String?> imagePath,
       Value<String?> imageUrl,
       Value<int?> unitsPerPack,
+      Value<String?> onlineDescription,
+      Value<String?> brand,
+      Value<int> minOrderQty,
+      Value<int> orderStep,
+      Value<int?> maxOrderQty,
       Value<int> version,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -70604,6 +75653,7 @@ typedef $$ProductsTableUpdateCompanionBuilder =
       Value<int?> iconCodePoint,
       Value<String?> colorHex,
       Value<bool> isAvailable,
+      Value<bool> showOnline,
       Value<bool> isDeleted,
       Value<int> lowStockThreshold,
       Value<double> avgDailySales,
@@ -70618,6 +75668,11 @@ typedef $$ProductsTableUpdateCompanionBuilder =
       Value<String?> imagePath,
       Value<String?> imageUrl,
       Value<int?> unitsPerPack,
+      Value<String?> onlineDescription,
+      Value<String?> brand,
+      Value<int> minOrderQty,
+      Value<int> orderStep,
+      Value<int?> maxOrderQty,
       Value<int> version,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -70723,6 +75778,24 @@ final class $$ProductsTableReferences
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$ProductPhotosTable, List<ProductPhotoData>>
+  _productPhotosRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.productPhotos,
+    aliasName: $_aliasNameGenerator(db.products.id, db.productPhotos.productId),
+  );
+
+  $$ProductPhotosTableProcessedTableManager get productPhotosRefs {
+    final manager = $$ProductPhotosTableTableManager(
+      $_db,
+      $_db.productPhotos,
+    ).filter((f) => f.productId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_productPhotosRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
     );
   }
 
@@ -70897,6 +75970,29 @@ final class $$ProductsTableReferences
     );
   }
 
+  static MultiTypedResultKey<$OnlineOrderLinesTable, List<OnlineOrderLineData>>
+  _onlineOrderLinesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.onlineOrderLines,
+    aliasName: $_aliasNameGenerator(
+      db.products.id,
+      db.onlineOrderLines.productId,
+    ),
+  );
+
+  $$OnlineOrderLinesTableProcessedTableManager get onlineOrderLinesRefs {
+    final manager = $$OnlineOrderLinesTableTableManager(
+      $_db,
+      $_db.onlineOrderLines,
+    ).filter((f) => f.productId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _onlineOrderLinesRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<$PurchaseItemsTable, List<PurchaseItemData>>
   _purchaseItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.purchaseItems,
@@ -71026,6 +76122,11 @@ class $$ProductsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<bool> get showOnline => $composableBuilder(
+    column: $table.showOnline,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<bool> get isDeleted => $composableBuilder(
     column: $table.isDeleted,
     builder: (column) => ColumnFilters(column),
@@ -71093,6 +76194,31 @@ class $$ProductsTableFilterComposer
 
   ColumnFilters<int> get unitsPerPack => $composableBuilder(
     column: $table.unitsPerPack,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get onlineDescription => $composableBuilder(
+    column: $table.onlineDescription,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get brand => $composableBuilder(
+    column: $table.brand,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get minOrderQty => $composableBuilder(
+    column: $table.minOrderQty,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get orderStep => $composableBuilder(
+    column: $table.orderStep,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get maxOrderQty => $composableBuilder(
+    column: $table.maxOrderQty,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -71224,6 +76350,31 @@ class $$ProductsTableFilterComposer
           ),
     );
     return composer;
+  }
+
+  Expression<bool> productPhotosRefs(
+    Expression<bool> Function($$ProductPhotosTableFilterComposer f) f,
+  ) {
+    final $$ProductPhotosTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.productPhotos,
+      getReferencedColumn: (t) => t.productId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductPhotosTableFilterComposer(
+            $db: $db,
+            $table: $db.productPhotos,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
   }
 
   Expression<bool> priceListsRefs(
@@ -71427,6 +76578,31 @@ class $$ProductsTableFilterComposer
     return f(composer);
   }
 
+  Expression<bool> onlineOrderLinesRefs(
+    Expression<bool> Function($$OnlineOrderLinesTableFilterComposer f) f,
+  ) {
+    final $$OnlineOrderLinesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.onlineOrderLines,
+      getReferencedColumn: (t) => t.productId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$OnlineOrderLinesTableFilterComposer(
+            $db: $db,
+            $table: $db.onlineOrderLines,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<bool> purchaseItemsRefs(
     Expression<bool> Function($$PurchaseItemsTableFilterComposer f) f,
   ) {
@@ -71572,6 +76748,11 @@ class $$ProductsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get showOnline => $composableBuilder(
+    column: $table.showOnline,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isDeleted => $composableBuilder(
     column: $table.isDeleted,
     builder: (column) => ColumnOrderings(column),
@@ -71639,6 +76820,31 @@ class $$ProductsTableOrderingComposer
 
   ColumnOrderings<int> get unitsPerPack => $composableBuilder(
     column: $table.unitsPerPack,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get onlineDescription => $composableBuilder(
+    column: $table.onlineDescription,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get brand => $composableBuilder(
+    column: $table.brand,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get minOrderQty => $composableBuilder(
+    column: $table.minOrderQty,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get orderStep => $composableBuilder(
+    column: $table.orderStep,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get maxOrderQty => $composableBuilder(
+    column: $table.maxOrderQty,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -71828,6 +77034,11 @@ class $$ProductsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get showOnline => $composableBuilder(
+    column: $table.showOnline,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<bool> get isDeleted =>
       $composableBuilder(column: $table.isDeleted, builder: (column) => column);
 
@@ -71887,6 +77098,27 @@ class $$ProductsTableAnnotationComposer
 
   GeneratedColumn<int> get unitsPerPack => $composableBuilder(
     column: $table.unitsPerPack,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get onlineDescription => $composableBuilder(
+    column: $table.onlineDescription,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get brand =>
+      $composableBuilder(column: $table.brand, builder: (column) => column);
+
+  GeneratedColumn<int> get minOrderQty => $composableBuilder(
+    column: $table.minOrderQty,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get orderStep =>
+      $composableBuilder(column: $table.orderStep, builder: (column) => column);
+
+  GeneratedColumn<int> get maxOrderQty => $composableBuilder(
+    column: $table.maxOrderQty,
     builder: (column) => column,
   );
 
@@ -72014,6 +77246,31 @@ class $$ProductsTableAnnotationComposer
           ),
     );
     return composer;
+  }
+
+  Expression<T> productPhotosRefs<T extends Object>(
+    Expression<T> Function($$ProductPhotosTableAnnotationComposer a) f,
+  ) {
+    final $$ProductPhotosTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.productPhotos,
+      getReferencedColumn: (t) => t.productId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductPhotosTableAnnotationComposer(
+            $db: $db,
+            $table: $db.productPhotos,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
   }
 
   Expression<T> priceListsRefs<T extends Object>(
@@ -72219,6 +77476,31 @@ class $$ProductsTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> onlineOrderLinesRefs<T extends Object>(
+    Expression<T> Function($$OnlineOrderLinesTableAnnotationComposer a) f,
+  ) {
+    final $$OnlineOrderLinesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.onlineOrderLines,
+      getReferencedColumn: (t) => t.productId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$OnlineOrderLinesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.onlineOrderLines,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> purchaseItemsRefs<T extends Object>(
     Expression<T> Function($$PurchaseItemsTableAnnotationComposer a) f,
   ) {
@@ -72314,6 +77596,7 @@ class $$ProductsTableTableManager
             bool crateSizeGroupId,
             bool supplierId,
             bool manufacturerId,
+            bool productPhotosRefs,
             bool priceListsRefs,
             bool inventoryRefs,
             bool costBatchesRefs,
@@ -72322,6 +77605,7 @@ class $$ProductsTableTableManager
             bool stockTransactionsRefs,
             bool stockAdjustmentRequestsRefs,
             bool orderItemsRefs,
+            bool onlineOrderLinesRefs,
             bool purchaseItemsRefs,
             bool vanTripLotsRefs,
             bool vanReturnEventsRefs,
@@ -72357,6 +77641,7 @@ class $$ProductsTableTableManager
                 Value<int?> iconCodePoint = const Value.absent(),
                 Value<String?> colorHex = const Value.absent(),
                 Value<bool> isAvailable = const Value.absent(),
+                Value<bool> showOnline = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<int> lowStockThreshold = const Value.absent(),
                 Value<double> avgDailySales = const Value.absent(),
@@ -72371,6 +77656,11 @@ class $$ProductsTableTableManager
                 Value<String?> imagePath = const Value.absent(),
                 Value<String?> imageUrl = const Value.absent(),
                 Value<int?> unitsPerPack = const Value.absent(),
+                Value<String?> onlineDescription = const Value.absent(),
+                Value<String?> brand = const Value.absent(),
+                Value<int> minOrderQty = const Value.absent(),
+                Value<int> orderStep = const Value.absent(),
+                Value<int?> maxOrderQty = const Value.absent(),
                 Value<int> version = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -72393,6 +77683,7 @@ class $$ProductsTableTableManager
                 iconCodePoint: iconCodePoint,
                 colorHex: colorHex,
                 isAvailable: isAvailable,
+                showOnline: showOnline,
                 isDeleted: isDeleted,
                 lowStockThreshold: lowStockThreshold,
                 avgDailySales: avgDailySales,
@@ -72407,6 +77698,11 @@ class $$ProductsTableTableManager
                 imagePath: imagePath,
                 imageUrl: imageUrl,
                 unitsPerPack: unitsPerPack,
+                onlineDescription: onlineDescription,
+                brand: brand,
+                minOrderQty: minOrderQty,
+                orderStep: orderStep,
+                maxOrderQty: maxOrderQty,
                 version: version,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -72431,6 +77727,7 @@ class $$ProductsTableTableManager
                 Value<int?> iconCodePoint = const Value.absent(),
                 Value<String?> colorHex = const Value.absent(),
                 Value<bool> isAvailable = const Value.absent(),
+                Value<bool> showOnline = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<int> lowStockThreshold = const Value.absent(),
                 Value<double> avgDailySales = const Value.absent(),
@@ -72445,6 +77742,11 @@ class $$ProductsTableTableManager
                 Value<String?> imagePath = const Value.absent(),
                 Value<String?> imageUrl = const Value.absent(),
                 Value<int?> unitsPerPack = const Value.absent(),
+                Value<String?> onlineDescription = const Value.absent(),
+                Value<String?> brand = const Value.absent(),
+                Value<int> minOrderQty = const Value.absent(),
+                Value<int> orderStep = const Value.absent(),
+                Value<int?> maxOrderQty = const Value.absent(),
                 Value<int> version = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -72467,6 +77769,7 @@ class $$ProductsTableTableManager
                 iconCodePoint: iconCodePoint,
                 colorHex: colorHex,
                 isAvailable: isAvailable,
+                showOnline: showOnline,
                 isDeleted: isDeleted,
                 lowStockThreshold: lowStockThreshold,
                 avgDailySales: avgDailySales,
@@ -72481,6 +77784,11 @@ class $$ProductsTableTableManager
                 imagePath: imagePath,
                 imageUrl: imageUrl,
                 unitsPerPack: unitsPerPack,
+                onlineDescription: onlineDescription,
+                brand: brand,
+                minOrderQty: minOrderQty,
+                orderStep: orderStep,
+                maxOrderQty: maxOrderQty,
                 version: version,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -72501,6 +77809,7 @@ class $$ProductsTableTableManager
                 crateSizeGroupId = false,
                 supplierId = false,
                 manufacturerId = false,
+                productPhotosRefs = false,
                 priceListsRefs = false,
                 inventoryRefs = false,
                 costBatchesRefs = false,
@@ -72509,6 +77818,7 @@ class $$ProductsTableTableManager
                 stockTransactionsRefs = false,
                 stockAdjustmentRequestsRefs = false,
                 orderItemsRefs = false,
+                onlineOrderLinesRefs = false,
                 purchaseItemsRefs = false,
                 vanTripLotsRefs = false,
                 vanReturnEventsRefs = false,
@@ -72516,6 +77826,7 @@ class $$ProductsTableTableManager
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
+                    if (productPhotosRefs) db.productPhotos,
                     if (priceListsRefs) db.priceLists,
                     if (inventoryRefs) db.inventory,
                     if (costBatchesRefs) db.costBatches,
@@ -72524,6 +77835,7 @@ class $$ProductsTableTableManager
                     if (stockTransactionsRefs) db.stockTransactions,
                     if (stockAdjustmentRequestsRefs) db.stockAdjustmentRequests,
                     if (orderItemsRefs) db.orderItems,
+                    if (onlineOrderLinesRefs) db.onlineOrderLines,
                     if (purchaseItemsRefs) db.purchaseItems,
                     if (vanTripLotsRefs) db.vanTripLots,
                     if (vanReturnEventsRefs) db.vanReturnEvents,
@@ -72614,6 +77926,27 @@ class $$ProductsTableTableManager
                       },
                   getPrefetchedDataCallback: (items) async {
                     return [
+                      if (productPhotosRefs)
+                        await $_getPrefetchedData<
+                          ProductData,
+                          $ProductsTable,
+                          ProductPhotoData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ProductsTableReferences
+                              ._productPhotosRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ProductsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).productPhotosRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.productId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (priceListsRefs)
                         await $_getPrefetchedData<
                           ProductData,
@@ -72782,6 +78115,27 @@ class $$ProductsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (onlineOrderLinesRefs)
+                        await $_getPrefetchedData<
+                          ProductData,
+                          $ProductsTable,
+                          OnlineOrderLineData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ProductsTableReferences
+                              ._onlineOrderLinesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ProductsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).onlineOrderLinesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.productId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (purchaseItemsRefs)
                         await $_getPrefetchedData<
                           ProductData,
@@ -72871,6 +78225,7 @@ typedef $$ProductsTableProcessedTableManager =
         bool crateSizeGroupId,
         bool supplierId,
         bool manufacturerId,
+        bool productPhotosRefs,
         bool priceListsRefs,
         bool inventoryRefs,
         bool costBatchesRefs,
@@ -72879,10 +78234,482 @@ typedef $$ProductsTableProcessedTableManager =
         bool stockTransactionsRefs,
         bool stockAdjustmentRequestsRefs,
         bool orderItemsRefs,
+        bool onlineOrderLinesRefs,
         bool purchaseItemsRefs,
         bool vanTripLotsRefs,
         bool vanReturnEventsRefs,
       })
+    >;
+typedef $$ProductPhotosTableCreateCompanionBuilder =
+    ProductPhotosCompanion Function({
+      Value<String> id,
+      required String businessId,
+      required String productId,
+      required int position,
+      required String imageUrl,
+      Value<bool> isDeleted,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+typedef $$ProductPhotosTableUpdateCompanionBuilder =
+    ProductPhotosCompanion Function({
+      Value<String> id,
+      Value<String> businessId,
+      Value<String> productId,
+      Value<int> position,
+      Value<String> imageUrl,
+      Value<bool> isDeleted,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+
+final class $$ProductPhotosTableReferences
+    extends
+        BaseReferences<_$AppDatabase, $ProductPhotosTable, ProductPhotoData> {
+  $$ProductPhotosTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $BusinessesTable _businessIdTable(_$AppDatabase db) =>
+      db.businesses.createAlias(
+        $_aliasNameGenerator(db.productPhotos.businessId, db.businesses.id),
+      );
+
+  $$BusinessesTableProcessedTableManager get businessId {
+    final $_column = $_itemColumn<String>('business_id')!;
+
+    final manager = $$BusinessesTableTableManager(
+      $_db,
+      $_db.businesses,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $ProductsTable _productIdTable(_$AppDatabase db) =>
+      db.products.createAlias(
+        $_aliasNameGenerator(db.productPhotos.productId, db.products.id),
+      );
+
+  $$ProductsTableProcessedTableManager get productId {
+    final $_column = $_itemColumn<String>('product_id')!;
+
+    final manager = $$ProductsTableTableManager(
+      $_db,
+      $_db.products,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_productIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$ProductPhotosTableFilterComposer
+    extends Composer<_$AppDatabase, $ProductPhotosTable> {
+  $$ProductPhotosTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get imageUrl => $composableBuilder(
+    column: $table.imageUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isDeleted => $composableBuilder(
+    column: $table.isDeleted,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$BusinessesTableFilterComposer get businessId {
+    final $$BusinessesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableFilterComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductsTableFilterComposer get productId {
+    final $$ProductsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableFilterComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ProductPhotosTableOrderingComposer
+    extends Composer<_$AppDatabase, $ProductPhotosTable> {
+  $$ProductPhotosTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get imageUrl => $composableBuilder(
+    column: $table.imageUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isDeleted => $composableBuilder(
+    column: $table.isDeleted,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$BusinessesTableOrderingComposer get businessId {
+    final $$BusinessesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableOrderingComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductsTableOrderingComposer get productId {
+    final $$ProductsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableOrderingComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ProductPhotosTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ProductPhotosTable> {
+  $$ProductPhotosTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get position =>
+      $composableBuilder(column: $table.position, builder: (column) => column);
+
+  GeneratedColumn<String> get imageUrl =>
+      $composableBuilder(column: $table.imageUrl, builder: (column) => column);
+
+  GeneratedColumn<bool> get isDeleted =>
+      $composableBuilder(column: $table.isDeleted, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => column,
+  );
+
+  $$BusinessesTableAnnotationComposer get businessId {
+    final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductsTableAnnotationComposer get productId {
+    final $$ProductsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ProductPhotosTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ProductPhotosTable,
+          ProductPhotoData,
+          $$ProductPhotosTableFilterComposer,
+          $$ProductPhotosTableOrderingComposer,
+          $$ProductPhotosTableAnnotationComposer,
+          $$ProductPhotosTableCreateCompanionBuilder,
+          $$ProductPhotosTableUpdateCompanionBuilder,
+          (ProductPhotoData, $$ProductPhotosTableReferences),
+          ProductPhotoData,
+          PrefetchHooks Function({bool businessId, bool productId})
+        > {
+  $$ProductPhotosTableTableManager(_$AppDatabase db, $ProductPhotosTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ProductPhotosTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ProductPhotosTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ProductPhotosTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> businessId = const Value.absent(),
+                Value<String> productId = const Value.absent(),
+                Value<int> position = const Value.absent(),
+                Value<String> imageUrl = const Value.absent(),
+                Value<bool> isDeleted = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ProductPhotosCompanion(
+                id: id,
+                businessId: businessId,
+                productId: productId,
+                position: position,
+                imageUrl: imageUrl,
+                isDeleted: isDeleted,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String businessId,
+                required String productId,
+                required int position,
+                required String imageUrl,
+                Value<bool> isDeleted = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ProductPhotosCompanion.insert(
+                id: id,
+                businessId: businessId,
+                productId: productId,
+                position: position,
+                imageUrl: imageUrl,
+                isDeleted: isDeleted,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$ProductPhotosTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({businessId = false, productId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (businessId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.businessId,
+                                referencedTable: $$ProductPhotosTableReferences
+                                    ._businessIdTable(db),
+                                referencedColumn: $$ProductPhotosTableReferences
+                                    ._businessIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+                    if (productId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.productId,
+                                referencedTable: $$ProductPhotosTableReferences
+                                    ._productIdTable(db),
+                                referencedColumn: $$ProductPhotosTableReferences
+                                    ._productIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$ProductPhotosTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ProductPhotosTable,
+      ProductPhotoData,
+      $$ProductPhotosTableFilterComposer,
+      $$ProductPhotosTableOrderingComposer,
+      $$ProductPhotosTableAnnotationComposer,
+      $$ProductPhotosTableCreateCompanionBuilder,
+      $$ProductPhotosTableUpdateCompanionBuilder,
+      (ProductPhotoData, $$ProductPhotosTableReferences),
+      ProductPhotoData,
+      PrefetchHooks Function({bool businessId, bool productId})
     >;
 typedef $$PriceListsTableCreateCompanionBuilder =
     PriceListsCompanion Function({
@@ -73386,6 +79213,7 @@ typedef $$CustomersTableCreateCompanionBuilder =
       Value<bool> isDeleted,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
+      Value<String?> shopperAccountId,
       Value<int> rowid,
     });
 typedef $$CustomersTableUpdateCompanionBuilder =
@@ -73403,6 +79231,7 @@ typedef $$CustomersTableUpdateCompanionBuilder =
       Value<bool> isDeleted,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
+      Value<String?> shopperAccountId,
       Value<int> rowid,
     });
 
@@ -73669,6 +79498,11 @@ class $$CustomersTableFilterComposer
 
   ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
     column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get shopperAccountId => $composableBuilder(
+    column: $table.shopperAccountId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -73959,6 +79793,11 @@ class $$CustomersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get shopperAccountId => $composableBuilder(
+    column: $table.shopperAccountId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$BusinessesTableOrderingComposer get businessId {
     final $$BusinessesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -74051,6 +79890,11 @@ class $$CustomersTableAnnotationComposer
 
   GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
     column: $table.lastUpdatedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get shopperAccountId => $composableBuilder(
+    column: $table.shopperAccountId,
     builder: (column) => column,
   );
 
@@ -74330,6 +80174,7 @@ class $$CustomersTableTableManager
                 Value<bool> isDeleted = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<String?> shopperAccountId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CustomersCompanion(
                 id: id,
@@ -74345,6 +80190,7 @@ class $$CustomersTableTableManager
                 isDeleted: isDeleted,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
+                shopperAccountId: shopperAccountId,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -74362,6 +80208,7 @@ class $$CustomersTableTableManager
                 Value<bool> isDeleted = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<String?> shopperAccountId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CustomersCompanion.insert(
                 id: id,
@@ -74377,6 +80224,7 @@ class $$CustomersTableTableManager
                 isDeleted: isDeleted,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
+                shopperAccountId: shopperAccountId,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -92320,6 +98168,1563 @@ typedef $$OrderCrateLinesTableProcessedTableManager =
         bool orderId,
         bool manufacturerId,
         bool settledBy,
+      })
+    >;
+typedef $$OnlineOrdersTableCreateCompanionBuilder =
+    OnlineOrdersCompanion Function({
+      required String id,
+      required String businessId,
+      required String storeId,
+      Value<String?> shopperAccountId,
+      Value<String?> customerId,
+      Value<String> status,
+      required String reference,
+      Value<String> currency,
+      Value<int> estimatedTotalKobo,
+      required String shopperName,
+      required String deliveryPhone,
+      Value<String> deliveryCountry,
+      required String deliveryState,
+      required String deliveryLga,
+      required String deliveryStreet,
+      Value<String?> note,
+      Value<String?> declineReason,
+      Value<String?> cancelReason,
+      Value<String?> linkedOrderId,
+      Value<DateTime> placedAt,
+      Value<DateTime?> respondedAt,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+typedef $$OnlineOrdersTableUpdateCompanionBuilder =
+    OnlineOrdersCompanion Function({
+      Value<String> id,
+      Value<String> businessId,
+      Value<String> storeId,
+      Value<String?> shopperAccountId,
+      Value<String?> customerId,
+      Value<String> status,
+      Value<String> reference,
+      Value<String> currency,
+      Value<int> estimatedTotalKobo,
+      Value<String> shopperName,
+      Value<String> deliveryPhone,
+      Value<String> deliveryCountry,
+      Value<String> deliveryState,
+      Value<String> deliveryLga,
+      Value<String> deliveryStreet,
+      Value<String?> note,
+      Value<String?> declineReason,
+      Value<String?> cancelReason,
+      Value<String?> linkedOrderId,
+      Value<DateTime> placedAt,
+      Value<DateTime?> respondedAt,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+
+final class $$OnlineOrdersTableReferences
+    extends BaseReferences<_$AppDatabase, $OnlineOrdersTable, OnlineOrderData> {
+  $$OnlineOrdersTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $BusinessesTable _businessIdTable(_$AppDatabase db) =>
+      db.businesses.createAlias(
+        $_aliasNameGenerator(db.onlineOrders.businessId, db.businesses.id),
+      );
+
+  $$BusinessesTableProcessedTableManager get businessId {
+    final $_column = $_itemColumn<String>('business_id')!;
+
+    final manager = $$BusinessesTableTableManager(
+      $_db,
+      $_db.businesses,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $StoresTable _storeIdTable(_$AppDatabase db) => db.stores.createAlias(
+    $_aliasNameGenerator(db.onlineOrders.storeId, db.stores.id),
+  );
+
+  $$StoresTableProcessedTableManager get storeId {
+    final $_column = $_itemColumn<String>('store_id')!;
+
+    final manager = $$StoresTableTableManager(
+      $_db,
+      $_db.stores,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_storeIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$OnlineOrderLinesTable, List<OnlineOrderLineData>>
+  _onlineOrderLinesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.onlineOrderLines,
+    aliasName: $_aliasNameGenerator(
+      db.onlineOrders.id,
+      db.onlineOrderLines.onlineOrderId,
+    ),
+  );
+
+  $$OnlineOrderLinesTableProcessedTableManager get onlineOrderLinesRefs {
+    final manager = $$OnlineOrderLinesTableTableManager(
+      $_db,
+      $_db.onlineOrderLines,
+    ).filter((f) => f.onlineOrderId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _onlineOrderLinesRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$OnlineOrdersTableFilterComposer
+    extends Composer<_$AppDatabase, $OnlineOrdersTable> {
+  $$OnlineOrdersTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get shopperAccountId => $composableBuilder(
+    column: $table.shopperAccountId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get customerId => $composableBuilder(
+    column: $table.customerId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get reference => $composableBuilder(
+    column: $table.reference,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get currency => $composableBuilder(
+    column: $table.currency,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get estimatedTotalKobo => $composableBuilder(
+    column: $table.estimatedTotalKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get shopperName => $composableBuilder(
+    column: $table.shopperName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get deliveryPhone => $composableBuilder(
+    column: $table.deliveryPhone,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get deliveryCountry => $composableBuilder(
+    column: $table.deliveryCountry,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get deliveryState => $composableBuilder(
+    column: $table.deliveryState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get deliveryLga => $composableBuilder(
+    column: $table.deliveryLga,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get deliveryStreet => $composableBuilder(
+    column: $table.deliveryStreet,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get declineReason => $composableBuilder(
+    column: $table.declineReason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get cancelReason => $composableBuilder(
+    column: $table.cancelReason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get linkedOrderId => $composableBuilder(
+    column: $table.linkedOrderId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get placedAt => $composableBuilder(
+    column: $table.placedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get respondedAt => $composableBuilder(
+    column: $table.respondedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$BusinessesTableFilterComposer get businessId {
+    final $$BusinessesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableFilterComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableFilterComposer get storeId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableFilterComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> onlineOrderLinesRefs(
+    Expression<bool> Function($$OnlineOrderLinesTableFilterComposer f) f,
+  ) {
+    final $$OnlineOrderLinesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.onlineOrderLines,
+      getReferencedColumn: (t) => t.onlineOrderId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$OnlineOrderLinesTableFilterComposer(
+            $db: $db,
+            $table: $db.onlineOrderLines,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$OnlineOrdersTableOrderingComposer
+    extends Composer<_$AppDatabase, $OnlineOrdersTable> {
+  $$OnlineOrdersTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get shopperAccountId => $composableBuilder(
+    column: $table.shopperAccountId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get customerId => $composableBuilder(
+    column: $table.customerId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get reference => $composableBuilder(
+    column: $table.reference,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get currency => $composableBuilder(
+    column: $table.currency,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get estimatedTotalKobo => $composableBuilder(
+    column: $table.estimatedTotalKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get shopperName => $composableBuilder(
+    column: $table.shopperName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get deliveryPhone => $composableBuilder(
+    column: $table.deliveryPhone,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get deliveryCountry => $composableBuilder(
+    column: $table.deliveryCountry,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get deliveryState => $composableBuilder(
+    column: $table.deliveryState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get deliveryLga => $composableBuilder(
+    column: $table.deliveryLga,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get deliveryStreet => $composableBuilder(
+    column: $table.deliveryStreet,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get declineReason => $composableBuilder(
+    column: $table.declineReason,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get cancelReason => $composableBuilder(
+    column: $table.cancelReason,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get linkedOrderId => $composableBuilder(
+    column: $table.linkedOrderId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get placedAt => $composableBuilder(
+    column: $table.placedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get respondedAt => $composableBuilder(
+    column: $table.respondedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$BusinessesTableOrderingComposer get businessId {
+    final $$BusinessesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableOrderingComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableOrderingComposer get storeId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableOrderingComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$OnlineOrdersTableAnnotationComposer
+    extends Composer<_$AppDatabase, $OnlineOrdersTable> {
+  $$OnlineOrdersTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get shopperAccountId => $composableBuilder(
+    column: $table.shopperAccountId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get customerId => $composableBuilder(
+    column: $table.customerId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get reference =>
+      $composableBuilder(column: $table.reference, builder: (column) => column);
+
+  GeneratedColumn<String> get currency =>
+      $composableBuilder(column: $table.currency, builder: (column) => column);
+
+  GeneratedColumn<int> get estimatedTotalKobo => $composableBuilder(
+    column: $table.estimatedTotalKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get shopperName => $composableBuilder(
+    column: $table.shopperName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get deliveryPhone => $composableBuilder(
+    column: $table.deliveryPhone,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get deliveryCountry => $composableBuilder(
+    column: $table.deliveryCountry,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get deliveryState => $composableBuilder(
+    column: $table.deliveryState,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get deliveryLga => $composableBuilder(
+    column: $table.deliveryLga,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get deliveryStreet => $composableBuilder(
+    column: $table.deliveryStreet,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<String> get declineReason => $composableBuilder(
+    column: $table.declineReason,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get cancelReason => $composableBuilder(
+    column: $table.cancelReason,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get linkedOrderId => $composableBuilder(
+    column: $table.linkedOrderId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get placedAt =>
+      $composableBuilder(column: $table.placedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get respondedAt => $composableBuilder(
+    column: $table.respondedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => column,
+  );
+
+  $$BusinessesTableAnnotationComposer get businessId {
+    final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableAnnotationComposer get storeId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableAnnotationComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> onlineOrderLinesRefs<T extends Object>(
+    Expression<T> Function($$OnlineOrderLinesTableAnnotationComposer a) f,
+  ) {
+    final $$OnlineOrderLinesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.onlineOrderLines,
+      getReferencedColumn: (t) => t.onlineOrderId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$OnlineOrderLinesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.onlineOrderLines,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$OnlineOrdersTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $OnlineOrdersTable,
+          OnlineOrderData,
+          $$OnlineOrdersTableFilterComposer,
+          $$OnlineOrdersTableOrderingComposer,
+          $$OnlineOrdersTableAnnotationComposer,
+          $$OnlineOrdersTableCreateCompanionBuilder,
+          $$OnlineOrdersTableUpdateCompanionBuilder,
+          (OnlineOrderData, $$OnlineOrdersTableReferences),
+          OnlineOrderData,
+          PrefetchHooks Function({
+            bool businessId,
+            bool storeId,
+            bool onlineOrderLinesRefs,
+          })
+        > {
+  $$OnlineOrdersTableTableManager(_$AppDatabase db, $OnlineOrdersTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$OnlineOrdersTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$OnlineOrdersTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$OnlineOrdersTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> businessId = const Value.absent(),
+                Value<String> storeId = const Value.absent(),
+                Value<String?> shopperAccountId = const Value.absent(),
+                Value<String?> customerId = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<String> reference = const Value.absent(),
+                Value<String> currency = const Value.absent(),
+                Value<int> estimatedTotalKobo = const Value.absent(),
+                Value<String> shopperName = const Value.absent(),
+                Value<String> deliveryPhone = const Value.absent(),
+                Value<String> deliveryCountry = const Value.absent(),
+                Value<String> deliveryState = const Value.absent(),
+                Value<String> deliveryLga = const Value.absent(),
+                Value<String> deliveryStreet = const Value.absent(),
+                Value<String?> note = const Value.absent(),
+                Value<String?> declineReason = const Value.absent(),
+                Value<String?> cancelReason = const Value.absent(),
+                Value<String?> linkedOrderId = const Value.absent(),
+                Value<DateTime> placedAt = const Value.absent(),
+                Value<DateTime?> respondedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => OnlineOrdersCompanion(
+                id: id,
+                businessId: businessId,
+                storeId: storeId,
+                shopperAccountId: shopperAccountId,
+                customerId: customerId,
+                status: status,
+                reference: reference,
+                currency: currency,
+                estimatedTotalKobo: estimatedTotalKobo,
+                shopperName: shopperName,
+                deliveryPhone: deliveryPhone,
+                deliveryCountry: deliveryCountry,
+                deliveryState: deliveryState,
+                deliveryLga: deliveryLga,
+                deliveryStreet: deliveryStreet,
+                note: note,
+                declineReason: declineReason,
+                cancelReason: cancelReason,
+                linkedOrderId: linkedOrderId,
+                placedAt: placedAt,
+                respondedAt: respondedAt,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String businessId,
+                required String storeId,
+                Value<String?> shopperAccountId = const Value.absent(),
+                Value<String?> customerId = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                required String reference,
+                Value<String> currency = const Value.absent(),
+                Value<int> estimatedTotalKobo = const Value.absent(),
+                required String shopperName,
+                required String deliveryPhone,
+                Value<String> deliveryCountry = const Value.absent(),
+                required String deliveryState,
+                required String deliveryLga,
+                required String deliveryStreet,
+                Value<String?> note = const Value.absent(),
+                Value<String?> declineReason = const Value.absent(),
+                Value<String?> cancelReason = const Value.absent(),
+                Value<String?> linkedOrderId = const Value.absent(),
+                Value<DateTime> placedAt = const Value.absent(),
+                Value<DateTime?> respondedAt = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => OnlineOrdersCompanion.insert(
+                id: id,
+                businessId: businessId,
+                storeId: storeId,
+                shopperAccountId: shopperAccountId,
+                customerId: customerId,
+                status: status,
+                reference: reference,
+                currency: currency,
+                estimatedTotalKobo: estimatedTotalKobo,
+                shopperName: shopperName,
+                deliveryPhone: deliveryPhone,
+                deliveryCountry: deliveryCountry,
+                deliveryState: deliveryState,
+                deliveryLga: deliveryLga,
+                deliveryStreet: deliveryStreet,
+                note: note,
+                declineReason: declineReason,
+                cancelReason: cancelReason,
+                linkedOrderId: linkedOrderId,
+                placedAt: placedAt,
+                respondedAt: respondedAt,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$OnlineOrdersTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                businessId = false,
+                storeId = false,
+                onlineOrderLinesRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (onlineOrderLinesRefs) db.onlineOrderLines,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (businessId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.businessId,
+                                    referencedTable:
+                                        $$OnlineOrdersTableReferences
+                                            ._businessIdTable(db),
+                                    referencedColumn:
+                                        $$OnlineOrdersTableReferences
+                                            ._businessIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (storeId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.storeId,
+                                    referencedTable:
+                                        $$OnlineOrdersTableReferences
+                                            ._storeIdTable(db),
+                                    referencedColumn:
+                                        $$OnlineOrdersTableReferences
+                                            ._storeIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (onlineOrderLinesRefs)
+                        await $_getPrefetchedData<
+                          OnlineOrderData,
+                          $OnlineOrdersTable,
+                          OnlineOrderLineData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$OnlineOrdersTableReferences
+                              ._onlineOrderLinesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$OnlineOrdersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).onlineOrderLinesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.onlineOrderId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$OnlineOrdersTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $OnlineOrdersTable,
+      OnlineOrderData,
+      $$OnlineOrdersTableFilterComposer,
+      $$OnlineOrdersTableOrderingComposer,
+      $$OnlineOrdersTableAnnotationComposer,
+      $$OnlineOrdersTableCreateCompanionBuilder,
+      $$OnlineOrdersTableUpdateCompanionBuilder,
+      (OnlineOrderData, $$OnlineOrdersTableReferences),
+      OnlineOrderData,
+      PrefetchHooks Function({
+        bool businessId,
+        bool storeId,
+        bool onlineOrderLinesRefs,
+      })
+    >;
+typedef $$OnlineOrderLinesTableCreateCompanionBuilder =
+    OnlineOrderLinesCompanion Function({
+      required String id,
+      required String businessId,
+      required String onlineOrderId,
+      required String productId,
+      required String productName,
+      Value<String?> unit,
+      required int unitPriceKobo,
+      Value<String> priceTier,
+      required int requestedQty,
+      Value<int?> acceptedQty,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+typedef $$OnlineOrderLinesTableUpdateCompanionBuilder =
+    OnlineOrderLinesCompanion Function({
+      Value<String> id,
+      Value<String> businessId,
+      Value<String> onlineOrderId,
+      Value<String> productId,
+      Value<String> productName,
+      Value<String?> unit,
+      Value<int> unitPriceKobo,
+      Value<String> priceTier,
+      Value<int> requestedQty,
+      Value<int?> acceptedQty,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+
+final class $$OnlineOrderLinesTableReferences
+    extends
+        BaseReferences<
+          _$AppDatabase,
+          $OnlineOrderLinesTable,
+          OnlineOrderLineData
+        > {
+  $$OnlineOrderLinesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $BusinessesTable _businessIdTable(_$AppDatabase db) =>
+      db.businesses.createAlias(
+        $_aliasNameGenerator(db.onlineOrderLines.businessId, db.businesses.id),
+      );
+
+  $$BusinessesTableProcessedTableManager get businessId {
+    final $_column = $_itemColumn<String>('business_id')!;
+
+    final manager = $$BusinessesTableTableManager(
+      $_db,
+      $_db.businesses,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $OnlineOrdersTable _onlineOrderIdTable(_$AppDatabase db) =>
+      db.onlineOrders.createAlias(
+        $_aliasNameGenerator(
+          db.onlineOrderLines.onlineOrderId,
+          db.onlineOrders.id,
+        ),
+      );
+
+  $$OnlineOrdersTableProcessedTableManager get onlineOrderId {
+    final $_column = $_itemColumn<String>('online_order_id')!;
+
+    final manager = $$OnlineOrdersTableTableManager(
+      $_db,
+      $_db.onlineOrders,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_onlineOrderIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $ProductsTable _productIdTable(_$AppDatabase db) =>
+      db.products.createAlias(
+        $_aliasNameGenerator(db.onlineOrderLines.productId, db.products.id),
+      );
+
+  $$ProductsTableProcessedTableManager get productId {
+    final $_column = $_itemColumn<String>('product_id')!;
+
+    final manager = $$ProductsTableTableManager(
+      $_db,
+      $_db.products,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_productIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$OnlineOrderLinesTableFilterComposer
+    extends Composer<_$AppDatabase, $OnlineOrderLinesTable> {
+  $$OnlineOrderLinesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get productName => $composableBuilder(
+    column: $table.productName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get unit => $composableBuilder(
+    column: $table.unit,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get unitPriceKobo => $composableBuilder(
+    column: $table.unitPriceKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get priceTier => $composableBuilder(
+    column: $table.priceTier,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get requestedQty => $composableBuilder(
+    column: $table.requestedQty,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get acceptedQty => $composableBuilder(
+    column: $table.acceptedQty,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$BusinessesTableFilterComposer get businessId {
+    final $$BusinessesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableFilterComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$OnlineOrdersTableFilterComposer get onlineOrderId {
+    final $$OnlineOrdersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.onlineOrderId,
+      referencedTable: $db.onlineOrders,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$OnlineOrdersTableFilterComposer(
+            $db: $db,
+            $table: $db.onlineOrders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductsTableFilterComposer get productId {
+    final $$ProductsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableFilterComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$OnlineOrderLinesTableOrderingComposer
+    extends Composer<_$AppDatabase, $OnlineOrderLinesTable> {
+  $$OnlineOrderLinesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get productName => $composableBuilder(
+    column: $table.productName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get unit => $composableBuilder(
+    column: $table.unit,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get unitPriceKobo => $composableBuilder(
+    column: $table.unitPriceKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get priceTier => $composableBuilder(
+    column: $table.priceTier,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get requestedQty => $composableBuilder(
+    column: $table.requestedQty,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get acceptedQty => $composableBuilder(
+    column: $table.acceptedQty,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$BusinessesTableOrderingComposer get businessId {
+    final $$BusinessesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableOrderingComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$OnlineOrdersTableOrderingComposer get onlineOrderId {
+    final $$OnlineOrdersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.onlineOrderId,
+      referencedTable: $db.onlineOrders,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$OnlineOrdersTableOrderingComposer(
+            $db: $db,
+            $table: $db.onlineOrders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductsTableOrderingComposer get productId {
+    final $$ProductsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableOrderingComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$OnlineOrderLinesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $OnlineOrderLinesTable> {
+  $$OnlineOrderLinesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get productName => $composableBuilder(
+    column: $table.productName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get unit =>
+      $composableBuilder(column: $table.unit, builder: (column) => column);
+
+  GeneratedColumn<int> get unitPriceKobo => $composableBuilder(
+    column: $table.unitPriceKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get priceTier =>
+      $composableBuilder(column: $table.priceTier, builder: (column) => column);
+
+  GeneratedColumn<int> get requestedQty => $composableBuilder(
+    column: $table.requestedQty,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get acceptedQty => $composableBuilder(
+    column: $table.acceptedQty,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => column,
+  );
+
+  $$BusinessesTableAnnotationComposer get businessId {
+    final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$OnlineOrdersTableAnnotationComposer get onlineOrderId {
+    final $$OnlineOrdersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.onlineOrderId,
+      referencedTable: $db.onlineOrders,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$OnlineOrdersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.onlineOrders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProductsTableAnnotationComposer get productId {
+    final $$ProductsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.productId,
+      referencedTable: $db.products,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProductsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.products,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$OnlineOrderLinesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $OnlineOrderLinesTable,
+          OnlineOrderLineData,
+          $$OnlineOrderLinesTableFilterComposer,
+          $$OnlineOrderLinesTableOrderingComposer,
+          $$OnlineOrderLinesTableAnnotationComposer,
+          $$OnlineOrderLinesTableCreateCompanionBuilder,
+          $$OnlineOrderLinesTableUpdateCompanionBuilder,
+          (OnlineOrderLineData, $$OnlineOrderLinesTableReferences),
+          OnlineOrderLineData,
+          PrefetchHooks Function({
+            bool businessId,
+            bool onlineOrderId,
+            bool productId,
+          })
+        > {
+  $$OnlineOrderLinesTableTableManager(
+    _$AppDatabase db,
+    $OnlineOrderLinesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$OnlineOrderLinesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$OnlineOrderLinesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$OnlineOrderLinesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> businessId = const Value.absent(),
+                Value<String> onlineOrderId = const Value.absent(),
+                Value<String> productId = const Value.absent(),
+                Value<String> productName = const Value.absent(),
+                Value<String?> unit = const Value.absent(),
+                Value<int> unitPriceKobo = const Value.absent(),
+                Value<String> priceTier = const Value.absent(),
+                Value<int> requestedQty = const Value.absent(),
+                Value<int?> acceptedQty = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => OnlineOrderLinesCompanion(
+                id: id,
+                businessId: businessId,
+                onlineOrderId: onlineOrderId,
+                productId: productId,
+                productName: productName,
+                unit: unit,
+                unitPriceKobo: unitPriceKobo,
+                priceTier: priceTier,
+                requestedQty: requestedQty,
+                acceptedQty: acceptedQty,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String businessId,
+                required String onlineOrderId,
+                required String productId,
+                required String productName,
+                Value<String?> unit = const Value.absent(),
+                required int unitPriceKobo,
+                Value<String> priceTier = const Value.absent(),
+                required int requestedQty,
+                Value<int?> acceptedQty = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => OnlineOrderLinesCompanion.insert(
+                id: id,
+                businessId: businessId,
+                onlineOrderId: onlineOrderId,
+                productId: productId,
+                productName: productName,
+                unit: unit,
+                unitPriceKobo: unitPriceKobo,
+                priceTier: priceTier,
+                requestedQty: requestedQty,
+                acceptedQty: acceptedQty,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$OnlineOrderLinesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({businessId = false, onlineOrderId = false, productId = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (businessId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.businessId,
+                                    referencedTable:
+                                        $$OnlineOrderLinesTableReferences
+                                            ._businessIdTable(db),
+                                    referencedColumn:
+                                        $$OnlineOrderLinesTableReferences
+                                            ._businessIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (onlineOrderId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.onlineOrderId,
+                                    referencedTable:
+                                        $$OnlineOrderLinesTableReferences
+                                            ._onlineOrderIdTable(db),
+                                    referencedColumn:
+                                        $$OnlineOrderLinesTableReferences
+                                            ._onlineOrderIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (productId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.productId,
+                                    referencedTable:
+                                        $$OnlineOrderLinesTableReferences
+                                            ._productIdTable(db),
+                                    referencedColumn:
+                                        $$OnlineOrderLinesTableReferences
+                                            ._productIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$OnlineOrderLinesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $OnlineOrderLinesTable,
+      OnlineOrderLineData,
+      $$OnlineOrderLinesTableFilterComposer,
+      $$OnlineOrderLinesTableOrderingComposer,
+      $$OnlineOrderLinesTableAnnotationComposer,
+      $$OnlineOrderLinesTableCreateCompanionBuilder,
+      $$OnlineOrderLinesTableUpdateCompanionBuilder,
+      (OnlineOrderLineData, $$OnlineOrderLinesTableReferences),
+      OnlineOrderLineData,
+      PrefetchHooks Function({
+        bool businessId,
+        bool onlineOrderId,
+        bool productId,
       })
     >;
 typedef $$PurchaseItemsTableCreateCompanionBuilder =
@@ -111155,6 +118560,8 @@ class $AppDatabaseManager {
       $$ManufacturersTableTableManager(_db, _db.manufacturers);
   $$StoresTableTableManager get stores =>
       $$StoresTableTableManager(_db, _db.stores);
+  $$StoreDeliveryAreasTableTableManager get storeDeliveryAreas =>
+      $$StoreDeliveryAreasTableTableManager(_db, _db.storeDeliveryAreas);
   $$UsersTableTableManager get users =>
       $$UsersTableTableManager(_db, _db.users);
   $$CategoriesTableTableManager get categories =>
@@ -111182,6 +118589,8 @@ class $AppDatabaseManager {
       );
   $$ProductsTableTableManager get products =>
       $$ProductsTableTableManager(_db, _db.products);
+  $$ProductPhotosTableTableManager get productPhotos =>
+      $$ProductPhotosTableTableManager(_db, _db.productPhotos);
   $$PriceListsTableTableManager get priceLists =>
       $$PriceListsTableTableManager(_db, _db.priceLists);
   $$CustomersTableTableManager get customers =>
@@ -111230,6 +118639,10 @@ class $AppDatabaseManager {
       $$OrderItemsTableTableManager(_db, _db.orderItems);
   $$OrderCrateLinesTableTableManager get orderCrateLines =>
       $$OrderCrateLinesTableTableManager(_db, _db.orderCrateLines);
+  $$OnlineOrdersTableTableManager get onlineOrders =>
+      $$OnlineOrdersTableTableManager(_db, _db.onlineOrders);
+  $$OnlineOrderLinesTableTableManager get onlineOrderLines =>
+      $$OnlineOrderLinesTableTableManager(_db, _db.onlineOrderLines);
   $$PurchaseItemsTableTableManager get purchaseItems =>
       $$PurchaseItemsTableTableManager(_db, _db.purchaseItems);
   $$ExpenseCategoriesTableTableManager get expenseCategories =>

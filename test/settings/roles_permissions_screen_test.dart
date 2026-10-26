@@ -84,7 +84,7 @@ void main() {
             permissionKey: 'settings.manage',
           ),
         );
-    // Cashier: two grants → its card subtitle should read "2 of 37 permissions".
+    // Cashier: two grants → its card subtitle should read "2 of 41 permissions".
     for (final key in ['sales.make', 'stock.view']) {
       await db.into(db.rolePermissions).insert(
             RolePermissionsCompanion.insert(
@@ -122,9 +122,9 @@ void main() {
     expect(find.text('Cashier'), findsOneWidget);
     expect(find.text('Stock keeper'), findsOneWidget);
 
-    // 42 seeded keys − 3 hidden (#140 added van.manage + van.sell), less those
+    // 46 seeded keys (#423 stores.online_ordering, #427 online_orders.*) − 3 hidden, less those
     // two van keys while Van Sales is switched off.
-    final shown = isVanSalesEnabled() ? 39 : 37;
+    final shown = isVanSalesEnabled() ? 43 : 41;
     expect(find.text('All $shown permissions'), findsOneWidget); // CEO, locked
     expect(find.text('2 of $shown permissions'), findsOneWidget); // Cashier
   });

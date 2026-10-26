@@ -893,7 +893,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       if (id == null || id.isEmpty) continue; // Quick-sale: no DB product
       // A hand-set custom price (§13.4) is intentional — never flag it as stale
       // against the catalog price or revert it.
-      if (item['customPriceKobo'] != null) continue;
+      // So is an Online Order's agreed price (#431).
+      if (CartService.holdsPrice(item)) continue;
       final version = item['version'] as int?;
       final unitPriceKobo =
           (item['unitPriceKobo'] as int?) ??
@@ -1206,6 +1207,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             // (0 for a credit sale) credits the wallet, netting against the total.
             paymentSubType: paymentSubType,
             walletBalanceKobo: oldWalletKobo,
+            // #431 — a Cart sent to the till from an accepted Online Order:
+            // the sale marks it Sent out, in the same transaction.
+            onlineOrderId: CartService.onlineOrderIdOf(widget.cart),
           );
 
       // ── Success Flow ────────────────────────────────────────────────

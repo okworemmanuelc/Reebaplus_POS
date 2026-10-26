@@ -67,6 +67,14 @@ abstract final class Gates {
     rule: Gate.key('products.edit_price'),
   );
 
+  /// Online listing visibility/content (#424, #473–#475). Independent of price
+  /// editing; defaults are granted by cloud migration0195, never by role here.
+  static const NamedGate manageListing = NamedGate(
+    name: 'manageListing',
+    action: 'Manage online listings',
+    rule: Gate.key('products.manage_listing'),
+  );
+
   /// Add a manufacturer from Inventory → Manufacturers (#292; moved off the
   /// Empty Crates tab by #389). CEO or Manager holding
   /// `products.edit_price` — the tier keeps a custom grant of the key to a
@@ -306,6 +314,35 @@ abstract final class Gates {
     name: 'manageStores',
     action: 'Manage Stores',
     rule: Gate.key('stores.manage'),
+  );
+
+  /// Settings → Online store hub and each store's online page (#423): store
+  /// area, delivery areas, the Online ordering switch, public phone and note.
+  /// Its own key (CEO by default, cloud 0199), not `settings.manage` or the
+  /// unfinished `stores.manage`.
+  static const NamedGate manageOnlineStore = NamedGate(
+    name: 'manageOnlineStore',
+    action: 'Manage online store',
+    rule: Gate.key('stores.online_ordering'),
+  );
+
+  /// See Online Orders (#427): the Orders screen's Online tab, its New-orders
+  /// badge (tab + side menu) and the order detail. CEO / Manager / Cashier by
+  /// default (cloud 0208).
+  static const NamedGate viewOnlineOrders = NamedGate(
+    name: 'viewOnlineOrders',
+    action: 'See online orders',
+    rule: Gate.key('online_orders.view'),
+  );
+
+  /// Accept / decline an Online Order (#427). The key alone is not enough:
+  /// the order's store must also be one the user works in
+  /// (`canAnswerOnlineOrderProvider`); the cloud guard (0208) re-checks the
+  /// key.
+  static const NamedGate answerOnlineOrders = NamedGate(
+    name: 'answerOnlineOrders',
+    action: 'Accept or decline online orders',
+    rule: Gate.key('online_orders.answer'),
   );
 
   /// Request a stock transfer from another store (§16.8.2) — store details,
@@ -557,7 +594,8 @@ abstract final class Gates {
   );
 
   /// Refund a pending order (§19.7, `sales.cancel`, CEO + Manager by default) —
-  /// the Orders Pending-tab Refund action, gated at render.
+  /// the Orders Pending-tab Refund action, gated at render and re-checked by
+  /// the screen and OrderCommands.cancel before any reversal writes (#466).
   static const NamedGate refundOrder = NamedGate(
     name: 'refundOrder',
     action: 'Refund Order',
@@ -729,6 +767,7 @@ abstract final class Gates {
     receiveStock,
     addProduct,
     editProductPrice,
+    manageListing,
     addManufacturer,
     countCrates,
     editBuyingPrice,
@@ -751,6 +790,7 @@ abstract final class Gates {
     viewInventory,
     dailyStockCount,
     manageStores,
+    manageOnlineStore,
     requestStoreTransfer,
     dispatchStoreTransfer,
     receiveStoreTransfer,

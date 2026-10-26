@@ -1,0 +1,21 @@
+{
+  "@@locale": "en",
+  "areaChoose": "Choose an area",
+  "areaHelp": "Choose a state, then a local government area.",
+  "areaCountry": "Country",
+  "areaState": "State / region",
+  "areaLga": "Local government / district",
+  "areaSearchCountry": "Search or enter a country",
+  "areaSearchState": "Search states",
+  "areaSearchLga": "Search local government areas",
+  "areaWholeState": "Whole state",
+  "areaWholeStateHelp": "Includes every local government area in this state",
+  "areaNoMatches": "No areas found. Try a different spelling.",
+  "areaUseCountry": "Use this country",
+  "areaUse": "Use this area",
+  "areaFreeTextHelp": "Enter your state and district for this country.",
+  "areaRequired": "Enter a value",
+  "areaClose": "Close",
+  "areaChangeCountry": "Change country",
+  "areaChangeState": "Change state"
+}

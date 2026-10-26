@@ -51,6 +51,8 @@ void main() {
     'crate_size_groups',
     'manufacturers',
     'stores',
+    // #423: per-store delivery areas, right after their parent store.
+    'store_delivery_areas',
     'users',
     'roles',
     'role_settings',
@@ -64,6 +66,8 @@ void main() {
     'categories',
     'suppliers',
     'products',
+    // #474: gallery photos, right after their parent product.
+    'product_photos',
     'inventory',
     'cost_batches',
     'customers',
@@ -87,6 +91,9 @@ void main() {
     'orders',
     'order_items',
     'order_crate_lines',
+    // #426: Online Orders + lines, after their parents.
+    'online_orders',
+    'online_order_lines',
     'shipments',
     'purchase_items',
     'expense_categories',
@@ -137,6 +144,7 @@ void main() {
     'users',
     'sessions',
     'stores',
+    'store_delivery_areas', // #423
     'manufacturers',
     'crate_size_groups',
     'categories',
@@ -149,6 +157,7 @@ void main() {
     // #216 (PRD #203): the Crate Shortfall write-off ledger.
     'crate_shortfall_writeoffs',
     'products',
+    'product_photos', // #474
     'cost_batches',
     'price_lists',
     'customers',
@@ -163,6 +172,8 @@ void main() {
     'orders',
     'order_items',
     'order_crate_lines',
+    'online_orders', // #426
+    'online_order_lines', // #426
     'shipments',
     'purchase_items',
     'drivers',
@@ -255,6 +266,37 @@ void main() {
       'expires_at',
       'revoked_at',
       'created_at',
+      'last_updated_at',
+    },
+    // #427: the shop's answer pushes only what it may change plus the NOT
+    // NULL placement text; cloud-owned timestamps / total / note stay off.
+    'online_orders': {
+      'id',
+      'business_id',
+      'store_id',
+      'reference',
+      'shopper_name',
+      'delivery_phone',
+      'delivery_state',
+      'delivery_lga',
+      'delivery_street',
+      'status',
+      'customer_id',
+      'decline_reason',
+      'cancel_reason',
+      'linked_order_id',
+      'responded_at',
+      'last_updated_at',
+    },
+    'online_order_lines': {
+      'id',
+      'business_id',
+      'online_order_id',
+      'product_id',
+      'product_name',
+      'unit_price_kobo',
+      'requested_qty',
+      'accepted_qty',
       'last_updated_at',
     },
     'businesses': {

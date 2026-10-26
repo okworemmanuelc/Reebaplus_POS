@@ -9,7 +9,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/store_picker_sheet.dart';
 
-StoreData _store(String id, String name) => StoreData(
+StoreData _store(String id, String name) => StoreData(onlineOrderingEnabled: false, 
       id: id,
       businessId: 'biz',
       name: name,

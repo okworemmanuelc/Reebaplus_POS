@@ -844,3 +844,68 @@ Widgets must **never** reference an icon set package or icon class directly. Alw
 ### Exceptions and compatibility:
 - **Google Brand Logo**: `AppIcons.googleBrand` holds a direct `IconData(0xf1a0, fontFamily: 'FontAwesomeBrands', fontPackage: 'font_awesome_flutter')` constant until replaced by an SVG asset in Wave 2 (TODO #346).
 - **Saved Codepoints**: Legacy FontAwesome codepoints persisted in the local SQLite database or cart lines (e.g. `kStoredIconBeerMug = 0xf0fc`, `kStoredIconBox = 0xf466`, `kStoredIconBolt = 0xf0e7`, `kStoredIconWineBottle = 0xf72f`) are translated on read to the corresponding `AppIcons` constant via `productIconFromCodePoint` (`lib/shared/utils/product_icon_helper.dart`).
+
+
+## Shared area picker (#471)
+
+Owner authorised agent-designed screens on 2026-10-23, using the supplied
+Browse/product-detail images as visual references and the existing theme.
+`showAreaPicker` opens a Surface sheet (640dp cap, 90% available height), with
+rounded top corners, a handle, location IconTile, title and a 48dp close target.
+Country/state buttons lead back to searchable lists. A Nigerian LGA tap returns
+the choice; "Whole state" is present only for callers allowing it. Other
+countries use free-text state/district fields and "Use this area". State is
+required; district is required unless the allowed "Whole state" choice is on.
+Every stage is one scroll surface, including its header/search/form/results,
+so landscape and keyboard-up layouts retain reachable controls. Dismissal
+returns no choice and preserves the caller's saved value. No device location
+permission or network call. Uses `AppInput`, `AppButton`, `IconTile`, `AppIcons`,
+DM Sans/theme colours, responsive spacing and the **actual** existing radius
+token `AppSpacing.borderRadiusXL` in `design_tokens.dart` (the older AppRadius
+name in this document has no implementation). Light/dark portrait and 844×390
+landscape goldens live in `test/redesign/goldens/area_picker_*`.
+
+New picker strings live in `lib/l10n/area_en.arb`, generated with Flutter
+`gen-l10n` (`l10n.yaml`). The picker uses an installed AreaLocalizations when
+available and generated English as fallback for today's non-localised app.
+This adds only Flutter's SDK localisation dependency; existing screens are
+not converted. The caller supplies initial values and owns persistence.
+
+## Browse and store page (`lib/features/browse/`, #425)
+
+No Claude Design files for these screens were in the repo; they are built from
+this file's tokens and the shared parts (agent-designed, owner authorisation
+2026-10-23). Page fade + solid `BrowseTopBar` (surface, hairline,
+`topBarShadow`) with `ScreenHeader` — storefront tile, "Browse", the Shopper's
+area in primary — and **Sell on Reebaplus** (store icon + label, "Sell" under
+380dp, 48dp target, always tappable, pushes the unchanged Welcome). Under it:
+"Delivering to <area> · Change" (opens the shared area picker, whole state
+allowed), an `AppInput` search, and `CategoryChip`s for the top-level Reebaplus
+categories ("All" first, "Other" last). First run asks for the area ("Choose
+my area" / "Browse all of Nigeria").
+Cards (`StorefrontCardTile`) are a fixed-extent grid (2 columns on a phone,
+width / 180 above; content capped at 1100dp): photo from its public URL or the
+`categoryVisual` tint + icon, a red `TagPill` "18+" on age-restricted items,
+name, "Crate of 12", price in primary in the store's currency
+(`formatCurrencyIn`), the stock pill (green In stock, amber Low stock / Only N
+left, red Out of stock), the crate-deposit note, "Stock may be out of date" in
+warning, and the seller line "Business · LGA" in primary with a storefront
+icon (48dp, opens the store page). Out of stock: 50% opacity, nothing
+tappable but the seller. Messages (`BrowseMessage`: IconTile, ExtraBold title,
+muted text, buttons) for offline ("Connect to the internet to browse"), failed,
+no shops in the area, no search match. The store page adds a back button,
+business name + "LGA, State", a warning notice "This store doesn't deliver to
+your area", the stale note and the store's own note, then its own search.
+Tapping a card opens a read-only product sheet (`showStorefrontProductSheet`,
+640dp cap, scrolls, 48dp ✕): seller line, photo, brand, name + 18+, unit,
+price, stock words, deposit note, the order rule ("Order at least 2, in steps
+of 2, up to 20", #473), the shop's online description and "See this store".
+Goldens: `test/redesign/goldens/browse_{feed,offline,store}_{390x844,844x390}_{light,dark}.png`
+and `browse_product_sheet_390x844_light` / `_844x390_dark`.
+
+**18+ confirmation** (`AgeConfirmationDialog`, #479, agent-designed — no Claude
+Design file): theme `AlertDialog(scrollable: true)`, content capped at 420dp,
+centred: danger `IconTile` (verified-person icon) + red "18+" `TagPill`,
+ExtraBold 17 "Are you 18 or older?", muted 14 body, full-width primary
+"I am 18 or older" and outline "Not now" `AppButton`s. Goldens
+`age_confirmation_390x844_light` / `_844x390_dark`.

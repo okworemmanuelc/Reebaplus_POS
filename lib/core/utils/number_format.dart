@@ -43,3 +43,14 @@ String formatCurrency(num n) {
   final sep = _trailingLetter.hasMatch(sym) ? ' ' : '';
   return isNegative ? '-$sym$sep$formatted' : '$sym$sep$formatted';
 }
+
+/// Formats [n] in the currency [code] (ISO-4217) rather than the app-wide
+/// active one — for a store's own prices on the Shopper surface (#425, "prices
+/// shown in the store's currency"). Same spacing rule as [formatCurrency].
+String formatCurrencyIn(num n, String? code) {
+  final isNegative = n < 0;
+  final formatted = NumberFormat('#,##0', 'en_US').format(n.abs().round());
+  final sym = currencySymbolForCode(code);
+  final sep = _trailingLetter.hasMatch(sym) ? ' ' : '';
+  return isNegative ? '-$sym$sep$formatted' : '$sym$sep$formatted';
+}

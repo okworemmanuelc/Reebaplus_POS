@@ -1,4 +1,5 @@
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/permissions/gate.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 import 'package:reebaplus_pos/shared/models/order.dart' as domain;
 import 'package:reebaplus_pos/shared/services/orders/crate_return_input.dart';
@@ -15,9 +16,9 @@ import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
 ///   their invariants, cloud push via the [SaleFlusher] seam;
 /// * [OrderQueries] — read projections (live streams, paging, stats).
 ///
-/// The facade preserves the historical `OrderService` API so its call sites and
-/// `orderServiceProvider` are untouched; it sits on top of `OrdersDao`, which
-/// remains the persistence seam.
+/// The facade sits on top of `OrdersDao`, which remains the persistence seam.
+/// Refund callers additionally supply a freshly read GateContext (#466), so
+/// the command enforces the named gate before any reversal starts.
 class OrderService {
   final OrderCommands _commands;
   final OrderQueries _queries;
@@ -52,6 +53,9 @@ class OrderService {
     String paymentSubType = 'cash',
     int walletBalanceKobo = 0,
     Map<String, int> crateDepositPaidByManufacturer = const {},
+    // #431 Send to till: the accepted Online Order the Cart is tagged with. It
+    // becomes `fulfilled` (linked to the new order) in the sale's transaction.
+    String? onlineOrderId,
   }) {
     return _commands.checkout(
       customerId: customerId,
@@ -66,6 +70,7 @@ class OrderService {
       paymentSubType: paymentSubType,
       walletBalanceKobo: walletBalanceKobo,
       crateDepositPaidByManufacturer: crateDepositPaidByManufacturer,
+      onlineOrderId: onlineOrderId,
     );
   }
 
@@ -90,8 +95,12 @@ class OrderService {
   }
 
   /// **Cancel** / refund (§19.7): reverses stock, payments, credit-balance legs.
-  Future<void> markAsCancelled(String orderId, String reason, String staffId) {
-    return _commands.cancel(orderId, reason, staffId);
+  /// [gateContext] must be read when the refund runs, never cached on opening
+  /// its confirmation UI. The command enforces the named refund gate (#466).
+  Future<void> markAsCancelled(String orderId, String reason, String staffId, {
+    required GateContext gateContext,
+  }) {
+    return _commands.cancel(orderId, reason, staffId, gateContext: gateContext);
   }
 
   /// **Cancel a server-REJECTED sale** — the cashier tapped Cancel on the

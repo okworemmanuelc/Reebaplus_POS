@@ -7,6 +7,355 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #430: Print the order slip (2026-10-26, ready for review)
+- App-only (no Drift, no cloud): Print slip on accepted/fulfilled online orders (`online_orders.view`); `OnlineOrderSlip` (`lib/core/online_orders/online_order_slip.dart`) builds text + ESC/POS from `OnlineOrdersDao.slipLoad`; thermal printer, Share (text) fallback when no printer/print fails.
+### Issue #433: Staff push for new Online Orders (2026-10-25, ready for review)
+- Cloud 0215 (NOT deployed): AFTER INSERT trigger on online_orders -> pg_net -> `send-push` with explicit `user_ids` (store-assigned/CEO/manager-all-stores holding online_orders.answer, role->store->user layering); `send-push` accepts `online_order` records (deploy after the migration, --no-verify-jwt); app tap opens the order if local else the Online tab. No Drift change.
+
+### Issue #437: Business users can shop (2026-10-26, ready for review)
+- App only (no SQL, no Drift): side-menu **Shop** (behind `kBrowseFirstEnabled`, every role) opens Browse with the business sign-in; back locks the till → PIN. Owner sees "Your store" (card pill, product sheet note, store page note), no Add to cart/report; staff order normally; clearer `own_business` text. Sign-up verified unchanged (Shopper login → Create business; linked login → existing account). Gate test `test/shopper/shopper_boundary_test.dart`.
+### Issue #435: Expire unanswered Online Orders (2026-10-25, ready for review)
+- Cloud 0213: `expire_stale_online_orders()` (service_role only) + hourly pg_cron (guarded); no Drift change, no guard change. NOT deployed.
+### Issue #478: Report a listing + admin takedown (2026-10-25, ready for review)
+- Cloud 0214 (NOT deployed): `listing_reports` + `storefront_blocks` (cloud-only, service_role), `shopper_report_listing` (10/h, one open per target); `_storefront_stores`/`_storefront_cards`/`storefront_product_photos` re-issued with the block filter. App: Report on product sheet + store page. Console review screen + pos-parity filed in reebaplus-web.
+
+### Issue #431: Send to till (2026-10-25, ready for review)
+- App-only: NO Drift change (stays v93), NO cloud migration (0205/0208 guard already allows accepted -> fulfilled with linked_order_id). Online order detail: Send to till (accepted + `sales.make` + a store you work in) -> `OnlineOrdersDao.tillLoad` -> `CartService.loadOnlineOrder` (order's store, agreed price as charged, catalogue kept as `catalogPriceKobo`, linked Customer, qty lowered to stock). Tag = `onlineOrderId` + `agreedPriceKobo` keys on each cart line, so saved carts keep it and Clear drops it. Checkout passes `CartService.onlineOrderIdOf(cart)` -> `OrdersDao.createOrder(onlineOrderId)` -> `markFulfilled` in the sale txn (v2: held by the order; rejected sale reopens it). pos-parity issue filed in reebaplus-web.
+### Issue #429: Linked customers see their tier price (2026-10-25, ready for review)
+- Cloud 0211 (NOT deployed): server-only `_shopper_price_tier(business)` (wholesaler only when auth.uid() links a live Wholesaler customer and the shop does not sell one price; anon = retailer); `_storefront_cards` (0202) + `shopper_place_orders` (0207) re-issued verbatim, same signatures; lines snapshot `price_tier`. No app change (cart price is an estimate; placement re-prices). Tier-2 test `test/integration/sql/shopper_tier_price.sql` (not run).
+### Issue #477: Shopper data rights (2026-10-25, ready for review)
+- Cloud 0209 (marketing_opt_in + consent_at, `shopper_export`, `shopper_set_marketing_opt_in`, get_profile re-issued with the flag; NOT deployed) + Shopper account: Download my data, marketing switch (off), privacy note. Owner reviews the privacy wording.
+### Issue #428: Change before accepting, price flag, cancel accepted (2026-10-25, ready for review)
+- `accept(acceptedQtys)` lowers/removes lines (never raises) and writes accepted_qty on every line + outbox; `cancelAccepted(reason)`; price flag from local retail price; shopper sees store phone. Cloud `0210` = `shopper_my_orders` + `store_phone` only; NO Drift change (stays v93). pos-parity issue filed in reebaplus-web.
+
+### Issue #436: Order again (2026-10-25, ready for review)
+- Order again button on every My Orders card; re-adds lines at today's price/stock via `storefront_store_products` (no by-id RPC), skips unavailable with one note, 18+ gate, qty clamp. App-only. Logic in `lib/core/storefront/order_again.dart`.
+
+### Issue #427: Shop sees and answers Online Orders (2026-10-25, ready for review)
+- Branch `feat/427-online-tab`, worktree `../drinkPosApp-wt-427`. Cloud
+  `0208_online_order_answer.sql` + Drift 93: `customers.shopper_account_id`
+  (partial unique per business, live rows), keys `online_orders.view` /
+  `online_orders.answer` (CEO/Manager/Cashier; seed re-issued from 0195 +
+  backfill), `_online_orders_guard` re-issued from 0205 + answer-permission
+  check. No snapshot change (0205 already carries both tables).
+- App: `OnlineOrdersDao` (accept / decline / link, Drift + outbox),
+  `lib/core/providers/online_order_providers.dart`, Orders tabs Pending · Online
+  · Completed · Cancelled (Online only with the view key), New badge on the tab
+  and the drawer's Orders row, `OnlineOrderDetailScreen`, decline + link
+  pop-ups. Accept also needs a store the user works in.
+- Customer-cancelled-first: the sync push settles a P0001
+  `online_order_transition_rejected` per row (drop the answer, re-read the
+  cloud row, overwrite past LWW, notify the answerer), never a Sync Issues
+  orphan. `online_orders` / `online_order_lines` now have push whitelists so
+  cloud-owned timestamps never cross the wire.
+- Not built: lowering accepted quantities, Send to till (#431), linked tier
+  price (#429). Deploy 0208 after 0205 and BEFORE the app (every customer push
+  carries `shopper_account_id`); never with 0193.
+### Issue #426: Place orders (2026-10-25, ready for review)
+- Branch `feat/426-place-orders`, worktree `../drinkPosApp-wt-426`. Cloud
+  `0205_online_orders.sql` + Drift 92 (after #474's 91). Shopper
+  tables (cloud-only, RPC-only), synced `online_orders` / `online_order_lines`,
+  status guard, `shopper_*` RPCs, `pos_pull_snapshot` re-issued from 0204.
+- App: `lib/core/storefront/` cart (device storage), `ShopperService`,
+  `ShopperSessionNotifier`; `lib/features/browse/` cart, sign-in, details,
+  Place order, results, My Orders, account; Add to cart on the product sheet.
+  `kBrowseFirstEnabled` stays off. No Claude Design files: ui-context tokens +
+  Browse parts.
+- Not verified live: `test/integration/sql/online_orders.sql` (needs 0205 on
+  reebaplus-dev). Not built here: shop side (#427), linked tier price (#429),
+  48 h expiry job, 18+ confirmation (#479), account deletion (#438), Shop
+  menu entry for business phones.
+- Deploy 0205 after 0204 and before the app; never with 0193.
+### Issue #479: Restricted goods (2026-10-25, ready for review — Part of #479)
+- Follow-up (2026-10-25): cloud 0207 replaces `shopper_place_orders` (same signature) to refuse an 18+ line with `age_confirmation_required`; app gates Add to cart, syncs the age answer before Place order, maps the code. Not deployed (after 0205+0206).
+- Cloud 0206 only, no Drift bump; independent of 0205 (#426). Adds public
+  category `prescription-medicines` (Health, restricted 'prescription'; bundled
+  Dart row + parity test), RPC-only `shopper_age_confirmations`, server-only
+  `product_online_restriction(product)` and
+  `shopper_age_confirmation_missing(uid, product ids)`, signed-in
+  `shopper_confirm_age()` / `shopper_age_confirmed_at()`.
+- Prescription items were already excluded by every storefront RPC (0202
+  `_storefront_cards`, 0204 photos, #426's place-order); Sponsored (#461) plugs
+  into `_storefront_cards`, so it inherits the filter.
+- App: `shopperAgeConfirmationProvider` (phone memory, copied to the login;
+  `syncToCloud()` before Place order) and `ensureShopperAgeConfirmed` +
+  `AgeConfirmationDialog` (agent-designed; no Claude Design file). 18+ mark
+  already on cards/sheet (#425).
+- Left for #426 (or a follow-up): call `ensureShopperAgeConfirmed` before an
+  `ageRestricted` card first enters the cart; call `syncToCloud()` before
+  `shopper_place_orders`; in that RPC refuse a store with code
+  `age_confirmation_required` when `shopper_age_confirmation_missing(v_uid,
+  <its product ids>)`.
+- Open question (owner): pharmacy products in unmapped categories (Other) and
+  the Antibiotics category are still listed; only `prescription-medicines` is
+  blocked. Legal review of online alcohol/medicine sales is an owner action.
+- Not verified live: `test/integration/sql/restricted_goods.sql` needs 0206 on
+  reebaplus-dev. Deploy 0206 BEFORE an app build that offers the new category
+  (cloud FK on `categories.marketplace_category`).
+
+### Issue #474: Up to 5 photos per product (2026-10-25, ready for review)
+- Cloud 0204 + Drift 91: synced `product_photos` (positions 2–5; the cover stays
+  `products.image_url`), deterministic slot ids, RLS, realtime, broadcast
+  trigger, `pos_pull_snapshot` re-issued with it; `storefront_product_photos`
+  (anon) returns cover + uploaded slots in order.
+- App: `ProductGalleryImages` (Storage + device copy + pending list),
+  `ProductGalleryService` (Gates.manageListing), Product Details Photos card
+  (add / move up-down / remove), Browse product sheet swipeable gallery
+  (`ProductPhotoGallery`). Offline adds upload later; wipe gate counts them.
+- No Claude Design files exist for this screen: built from `ui-context.md` tokens
+  and the existing Product Details card patterns.
+- Deferred: making a gallery photo the cover (the cover keeps its own flow and
+  gate); store-card thumbnails stay cover-only.
+- Deploy 0204 after 0202 and before the app; never with 0193.
+
+### Issue #425: Browse is the front door (2026-10-25, ready for review)
+- Branch `feat/425-browse`, worktree `../drinkPosApp-wt-425`. Cloud 0202 only
+  (after 0201), no Drift bump. Four signed-out definer RPCs
+  (`storefront_feed/search/store/store_products`) over server-only
+  `_storefront_*` helpers; all hide rules, stock label, ranking, one card per
+  business per product and keyset paging server-side; pg_trgm + unaccent
+  trigram index. Cards carry #473 listing content + order rule (no cart).
+- App: `lib/core/storefront/` (service, models, area + list providers,
+  `kBrowseFirstEnabled` = false until #426/#427), `lib/features/browse/`
+  (Browse, store page, product sheet). `_HomeRouter` → 
+  `entryScreenWithoutSignedInUser`: device user → PIN (unchanged), else
+  Browse (switch on) / Welcome. Sell on Reebaplus pushes the unchanged Welcome.
+- No Claude Design files in the repo: built from ui-context tokens/parts.
+- Not verified live: tier-2 `test/integration/rpcs/storefront_browse_test.dart`
+  and `test/integration/sql/storefront_browse.sql` (EXECUTE boundaries +
+  EXPLAIN ANALYZE) need 0201/0202 applied on reebaplus-dev.
+- Open: "last synced" is approximated per business (devices) + per store
+  (store row, inventory writes) — a true per-store sync stamp would need a
+  column; admin blocking waits for #478; tier price for #429; Only-N wins over
+  "above threshold" when a threshold is below 3 (owner may revisit).
+### Issue #517: snapshot misses crate_shortfall_writeoffs (2026-10-25, ready for review)
+
+Migration 0203 re-issues `pos_pull_snapshot` (verbatim from 0199) with `crate_shortfall_writeoffs` added after `store_crate_balances`. New guard `test/sync/snapshot_covers_tenant_tables_test.dart` checks every `kSyncedTenantTables` entry is in the newest snapshot migration (empty allowlist). Deploy 0203 any time; never with 0193.
+
+### Issue #473: Listing content (2026-10-25, ready for review)
+- Branch `feat/473-listing-content`, worktree `../drinkPosApp-wt-473`. Cloud
+  `0201_product_listing_content.sql` + Drift schema 90 (after #423's 89).
+  `products` gains `online_description` (≤2000), `brand` (≤60),
+  `min_order_qty` (default 1), `order_step` (default 1) and `max_order_qty`
+  (null = no limit, ≥ min). The CHECKs are mirrored in Drift and the cloud.
+  Restore defaults are min/step 1. Older products rebuilds pin all five
+  (`_listingContentPins`).
+- Rule: `OrderQuantityRule` (`lib/core/listings/listing_content.dart`) allows a
+  quantity when it is ≥ min, a multiple of step and ≤ max. Its cloud twin is
+  `order_quantity_allowed()`. Writes go through
+  `ProductListingService.saveContent` → `CatalogDao.setProductListingContent`
+  (gated by `Gates.manageListing`, full-row outbox).
+- UI: an Online listing card after Prices on Product Details (only with the
+  grant; edit pop-up) and an Online listing section after Pricing on Add/Edit
+  Product. The brand is pre-filled from the manufacturer in drink shops.
+- Not built here: the storefront (#425) and the cart/place-order (#426) must read
+  these columns and call the rule. The tier-2 cloud test
+  `test/integration/rpcs/product_listing_content_test.dart` has not been run
+  live. Parity: reebaplus-web#146. No owner Claude Design files were in the
+  repo, so the UI follows ui-context tokens and the existing Product Details
+  cards.
+
+### Issue #476: Shopper push tokens (2026-10-25, ready for review)
+- Branch `feat/476-shopper-push-tokens`, worktree `../drinkPosApp-wt-476`.
+  Cloud 0200 only, no Drift bump. `devices.business_id` nullable,
+  `devices.auth_user_id` server-stamped; Shopper-only rows written only by the
+  `register_shopper_push_token` / `clear_shopper_push_token` definer RPCs.
+- `send-push` routes console broadcasts by business (unchanged) and `shopper_*`
+  types by auth user; pushes carry `audience`. Client: `onShopperSignedIn/Out`,
+  `bindShopperTapAction` (both wired by #426/#434, nothing calls them yet).
+- Tier-2 SQL companion `test/integration/rpcs/shopper_push_tokens.sql` not yet
+  run live (dev run declined this session). Parity: reebaplus-web#144.
+- Open: Shopper data deletion (#438) should delete business-less `devices` rows.
+
+### Issue #423: A store can go online (2026-10-25, ready for review)
+Cloud `0199_store_online_ordering.sql` + Drift schema89. `stores` gains
+country/state/lga, public phone, online note (≤280) and
+`online_ordering_enabled` (default off; cloud CHECK: kind=store + state + LGA).
+New synced `store_delivery_areas` (lga null = whole state; soft-delete;
+deterministic id per store/country/state/lga; RLS `current_user_business_ids()`,
+`zz_broadcast_sync_signal`, added to `pos_pull_snapshot`). Permission
+`stores.online_ordering` (Online store group, CEO default; backfilled to existing
+CEO roles) → `Gates.manageOnlineStore`. `StoresDao` online methods +
+`StoreOnlineService` (fire-time gate, Nigeria pairs validated against the bundled
+lists, foreign free text). UI: Settings → Online store hub (every store, never
+vans, Online/Offline, "Business · LGA"), per-store page (area, switch disabled with
+a prompt until state+LGA and ≥1 delivery area, delivery areas via the #471
+picker, phone + note), Store Details online card + Manage link, first-run New
+Store sheet requires state+LGA (its LGA pre-fills the delivery list). No Claude
+Design files were in the repo: built from ui-context tokens and Stores/Settings
+parts. Deploy 0199 before the app. Open: storefront reads (#425) must require
+`online_ordering_enabled` + delivery-area match; the Settings menu is still
+`settings.manage`-gated, so a non-CEO granted the key reaches the page via Store
+Details only. Pre-existing gap noticed: `crate_shortfall_writeoffs` (0175) is
+not in `pos_pull_snapshot` (fast incremental pulls skip it).
+### Issue #422: ready for review (2026-10-24)
+- Merged current main (0341e1aa); cloud numbers stay 0188/0192/0193, no Drift
+  bump. 0188 re-checked against main: helper signatures unchanged (0195's
+  `seed_default_roles_for_business` replace keeps its ACL); web console and
+  web-pos only read profiles and reach the helpers through definer RPCs.
+  0191 Storage policies use `current_user_business_ids()`, which 0188 does not
+  change. Deploy: 0188 + 0192 any time (`--include-all`); 0193 only after the
+  RPC client build is on business phones.
+
+### Issue #422: development isolation verified (2026-10-24)
+- All seven integration checks pass, zero skips, on the isolated development
+  schema after reconciling its omitted function ACLs to the read-only live
+  baseline and layering 0188/0192/0193. Production is unchanged.
+- The owner-approved deletion boolean is checked with present/missing IDs;
+  anonymous callers and direct deletion-record reads are denied. The transport
+  uses the RPC. Production rollout remains RPC, client update, then restriction.
+- Three direct adapter tests and nine seam tests pass. Full-suite verification
+  of the current change and main integration remain the next checks.
+- The resumed full suite encountered the unchanged random device-tag collision
+  test (1999 unique tags from 2000 random IDs). Its isolated rerun passed all six
+  order-number checks. Preserve the original full-suite failure in review
+  evidence; no order-number code or test changes belong in this issue.
+
+### Issue #422: Shopper groundwork prepared (2026-10-23)
+Branch `feat/422-shopper-groundwork`, isolated worktree `../drinkPosApp-wt-422`,
+base `985e80be` (latest origin/main when started). Owner authorized the remaining
+#421 implementation on 2026-10-23, with selective agents on isolated issues.
+- Continued security work: fixture-writing isolation tests now reject every URL
+  except the approved reebaplus-dev project before constructing clients. Full
+  schema bootstrap is in progress separately; no live fixture writes authorized.
+- Owner approved the specific-ID deletion boolean exception. Prepared 0192 RPC,
+  transport switch, and separately gated 0193 withdrawal of direct record reads.
+  Deploy RPC, update business clients, then restrict records; tests now include
+  tombstone positive/negative controls and enumeration denial. This is prepared
+  locally, not yet verified against the full development schema or deployed.
+- Development verification now ran against the pinned schema snapshot: six
+  isolation checks passed, including tombstone access, table reads, pointer
+  forgery and targeted writes/helpers. The complete discovered-RPC sweep remains
+  in progress. Fixed schema discovery for typeless jsonb and explicit P0002
+  `no_active_membership` rejection; increased the network sweep timeout. Three
+  direct transport tests and nine existing transport seam tests pass; analysis
+  clean. Snapshot ACLs need reconciliation before claiming production parity.
+- Owner approved ADRs 0030/0031 in chat on 2026-10-23: identity versus membership,
+  online-first storefront,
+  eligibility and release gates. Glossary adds Shopper, Online Order, Send to
+  till, Pay on delivery, Browse, Sponsored and Listing. Invariants #1/#4/#5/#8/#9
+  now record the approved scope; no runtime or deployment change.
+- Read-only live catalogue audit: 69 business_id tables; deployed through 0186.
+  RLS authority is the writable profiles pointer, not an independent membership
+  check. Prepared 0188 to constrain direct profile binding, revoke five
+  internal definer helpers from clients, and conditionally restrict the web
+  baseline's unused email-ownership probe; web handoff already occupies 0187.
+  No deployment and no live fixture writes.
+- Added repeatable catalogue audit and opt-in Tier-2 isolation tests (real
+  throwaway login, schema-discovered tables/RPCs, pointer attacks, internal
+  helper denial and direct write denial). See docs/security/0422-shopper-isolation.md.
+- Verification: full Flutter suite 5225 passed / 299 skipped / 0 failures;
+  flutter analyze clean. The six new Tier-2 tests compile and skip without
+  dedicated credentials; this is not a passing live security audit. SQL parsed
+  with pglast; policy semantics still require the dedicated migrated backend.
+- Open: staged deletion-status rollout verification; separate #467/#468;
+  live execution on a dedicated migrated test project. Do not close #422 yet.
+
+### Issue #424: Show online and listing permission (2026-10-24, ready for review)
+Current continuation:main1f3e3643 (#501 merged) integrated. Unit85, shop
+pricing86 and category87 remain intact; listing moves to88. Real87→88 and
+84→88 fixtures preserve defaults, archive state, units, shop pricing and category
+links. Drift regenerated, analyzer clean and77focused migration/restore tests
+pass. Listing switch and named permission are complete. Cloud0195 unchanged;
+deployment needs `--include-all` because0196/0197 are already on main.
+- Listing consumer added: independent `Gates.manageListing`, visible Online store
+  permission group, existing Manage Product card switch and fire-time check.
+  Core service returns typed errors; transactional DAO scopes by tenant and
+  excludes tombstones, preserves sale/archive state and queues explicit nulls.
+  Service/DAO tests cover denied/foreign/deleted writes, full payloads and
+  second-device off/on restore; widget tests cover stale grants/live updates.
+  Validation:173focused feature/permission/archive tests,77migration/restore
+  tests,42previous-failure-path checks and34golden cases pass. Analyzer clean.
+  Product phone/wide and permission visuals inspected; baselines updated only
+  for the listing control/permission addition. Final full suite ran once at
+  concurrency2:5459passed /298skipped /0failures (12m10s). PR511 targets main
+  for owner review; do not merge as part of this task. Web parity139 updated to
+  schema88 and the out-of-order0195 deployment note. No production deployment.
+The following notes record the earlier blocked draft and its prior test results.
+Branch `feat/424-show-online`, stacked on #472 (`d2e174ef`). Units stay85,
+category mapping86, listing87. Must land after #472; no version87 client may ship
+without those dependencies. Cloud0195 stays unchanged.
+- Cloud increment `0195_product_online_listing.sql` adds `products.show_online` (NOT NULL, default true) and `products.manage_listing` in the `Online store` permission group. Existing/new CEO and Manager defaults receive the key; the seed function's signature and current ACL are preserved. Storefront queries in #425 must require `show_online AND is_available AND NOT is_deleted` together.
+- Cloud applied only to approved development project: pre-existing fixture product became `show_online=true`; both existing CEO/Manager roles received the grant. Tier-2 `product_online_listing_test.dart`: **2 pass / 0 skipped**, checking new defaults, stored opt-out, availability/deletion query contract, new-business role grants and permission group. This pins the query contract; the actual public storefront boundary is #425. Fixtures cleaned. SQL parses as seven statements; analysis clean. Web parity: https://github.com/okworemmanuelc/reebaplus-web/issues/139.
+- Local increment: preserved the unfinished schema/fixture edits, moved listing
+  to87 and upgrade fixture86→87. The85 products rebuild defaults the new column
+  only when absent; an84→87 regression checks all three steps together.
+  Drift regenerated; analyzer clean and133focused tests pass (including the
+  actual86→87/84→87 upgrades and opt-out retention). Full suite exposed stale
+  permission counts and one JSON product fixture, corrected in place. Its
+  enforcement guard also requires the new inert permission to stay hidden until
+  the listing gate/switch ships; applied that existing repo convention.
+  Full suite ran once:5390passed /298skipped /36failed (30m38s). Failures
+  covered those stale fixtures/counts, eight role goldens, nine legacy restore
+  cases, and11timeout/cascade failures in Sync Issues access. Added the existing
+  restore-helper default for absent showOnline (explicit false preserved).
+  All10affected files rerun:82passed, including unchanged visual baselines,
+  legacy restore and the timed-out screen. No second full-suite run.
+  Dedicated listing write coverage/gate/UI remain unfinished;
+  publish as draft. No production deployment.
+- Final analyzer after corrections:clean. New merge blocker discovered at the
+  finish:main advanced to4b476c24 (#510/#493) and now reserves86 for
+  businesses.sells_one_price. This branch retains the owner's requested86/87
+  chain against9732ed17; do not merge/release. Both PRs must be reconciled with
+  the new main (recommended category87/listing88) in a subsequent pass.
+### #470: broadcast trigger gap (2026-10-24, ready for review)
+
+Branch fix/470-broadcast-trigger-gap (worktree drinkPosApp-wt-470). Migration
+0198 attaches zz_broadcast_sync_signal (0147 rule, same timing/events) only where
+missing — by migrations: daily_closings, van_trips, van_trip_lots,
+driver_ledger_entries, van_return_events, supplier_crate_deposit_requests,
+supplier_crate_deposits, crate_shortfall_writeoffs, barcode_catalogue_reports.
+Adds service_role-only helper broadcast_trigger_missing_tables(text[]); tier-2
+guard test/integration/rpcs/broadcast_trigger_coverage_test.dart (skips without
+env). architecture.md wording fixed + new-table checklist line. Not deployed:
+owner applies 0198 with `supabase db push --include-all`. No Drift change.
+### Issue #471: Nigeria area reference + shared picker (2026-10-23, development database verified)
+- Owner selected #471 before #423 and authorised agent-designed picker UI after
+  providing Browse/product-detail references. This authorisation covers #471;
+  consumer issues remain held until separately authorised.
+- Branch `feat/471-nigeria-area-picker`, isolated workspace under the current
+  chat's `work/reebaplus-471`, base `985e80be` (fresh origin/main).
+- Verified constitution First Schedule (FAO legal archive) and INEC counts;
+  count regression failed on the old Katsina list (32 vs 34).
+- Corrected missing entries, spurious names and clear typos; recognised historic
+  aliases stay stable. Two data tests pass: per-state counts/uniqueness (774)
+  and exact migration-seed parity. After owner approval, deployed 0189 to the
+  fresh development project and passed the previously skipped tier-2 comparison.
+- Prepared migration 0189 (0187 web and 0188 #422 reserved). POS parity issue:
+  https://github.com/okworemmanuelc/reebaplus-web/issues/135.
+- Shared UI implemented with search, caller-controlled whole-state selection,
+  free-text foreign regions, cancellation and ARB-generated strings. Eleven
+  widget checks and twelve portrait/landscape light/dark goldens pass;
+  keyboard-open cases include 360×640, 390×844 and 844×390 at 1.3 text scale.
+  Flutter analysis is clean. Full suite: **5250 passed / 294 skipped / 0 failed**
+  (6m50s), including the one unconfigured live area-reference comparison.
+- `/code-review` against starting commit `985e80be`: Standards **0 findings**;
+  Spec **0 findings** (independent reviewers). PostgreSQL parser accepts all
+  ten migration statements; this is syntax checking, not a live ACL/deploy test.
+- Re-fetched origin/main (unchanged); checked web master and its 0187 handoff;
+  no current 0189 collision. Recheck numbering before deployment.
+- Local implementation commits: `300aa17d` (reference/cloud) and `bc352a08`
+  (picker/localisation/tests). No branch push or production migration performed.
+- **Development database verification (owner approved creation):** created fresh
+  Supabase project `reebaplus-dev` (`yngwzuinxhxhzdfagcbg`, eu-west-1). Public
+  schema was empty before deployment; copied no business records. A separate
+  scratch CLI workspace is linked only to this project. Dry run listed only
+  0189; migration applied successfully and history contains only `0189`.
+- Real tier-2 test: **1 passed / 0 skipped / 0 failed**, using the development
+  URL and anon key. All 774 pairs match exactly; 37 state/FCT keys; RLS enabled.
+  Six rollback-wrapped SQL probes confirmed anon/authenticated cannot INSERT,
+  UPDATE or DELETE. Catalogue checks confirm both roles can SELECT and only
+  service_role has write grants among client/service roles.
+- The live business project `ewwyofbvfjyqqirrcaou` and the app's connection
+  settings are unchanged. Development currently has only the area reference,
+  not the full app schema. Credentials/logs stay outside this repository in the
+  private task scratch directory; no secrets committed.
+- Remaining: submit this branch for review; production rollout is separate.
+  Store setup, Browse routing, shopper addresses and delivery-area persistence
+  are subsequent issues, not enabled by this shared component.
+- Added Flutter SDK ARB/localisation support for the new picker only; existing
+  screens are outside scope. No #423/#425/#426 screen is wired yet.
+
 ### #472: shared online category reference (2026-10-24, ready for review)
 
 Branch feat/472-marketplace-categories, isolated workspace reebaplus-472.
@@ -67,6 +416,19 @@ Branch `feat/507-name-case`, worktree `../drinkPosApp-wt-507-1`.
   - Business Info: business name and typed "Other" business type run through `toNameCase`.
   - Stores settings & Stores screen: store/van creation and update run through `toNameCase`. Store name input has `textCapitalization: TextCapitalization.words`.
 - **Tests:** `test/utils/name_case_test.dart` (8 test groups), plus save-time tests in `test/settings/stores_settings_screen_test.dart` and `test/settings/business_info_shop_types_test.dart`.
+### #466: refund permission rechecked at execution (2026-10-24)
+Branch `fix/466-refund-fire-time-gate`, worktree `../drinkPosApp-wt-466`, base668f49bf.
+- Refund confirmation now requires Gates.refundOrder and uses standard denial
+  feedback. OrderService.markAsCancelled / OrderCommands.cancel also require
+  a freshly read GateContext and reject before any DAO call; no optional bypass.
+- Regression starts a real sale with stock, payments, credits, a paid deposit
+  and crate debt, revokes permission while its confirmation is open, and compares
+  every database table (including outbox) before/after. Direct command denial
+  is checked separately. Authorized refunds preserve existing reversal results.
+- Test-first screen regression reproduced the missing denial before the fix;
+  the final focused order/refund/permission suite passes87tests. Full suite:
+  5396passed/293skipped/0failures (7m19s); analyzer clean. Independent Standards
+  and Spec reviews found no issues. No database/schema/web changes.
 
 ### #492 G1: Sign-up and Business Info offer every shop type plus "Other" (2026-10-23)
 Branch `feat/492-g1-shop-types`, worktree `../drinkPosApp-wt-492-g1`.
@@ -97,6 +459,33 @@ Branch `feat/490-g4-unit-check`, worktree `../drinkPosApp-wt-490-g4`. Widens `pr
 
 ### #492 G3: one generic Lexicon for every shop (2026-10-24)
 Branch `feat/492-g3-lexicon`, worktree `../drinkPosApp-wt-492-g3`. Every trade gets generic nouns ("Product", "Category"), plain example hints ("e.g. Product name", "e.g. Short description"), no starter categories, and no unit filled in by default. Units: `kGenericUnits` (Piece, Pack, Box, Carton, Bag, Bottle, Can, Kg, Litre, Other) offered to all shops; crate-tracking shops (Bar and Beverage distributor) also get PET and Keg (`kCrateUnits`). Saved units (Sachet, Tin, Crate, …) stay valid and keep showing via `unitChoices(units, keep: [...])` in `product_unit.dart`. Updated `lexicon_test.dart`, `product_unit_test.dart`, `van_sales_trade_neutral_test.dart` and regenerated Add Product goldens.
+### Signed-out RPC surface (#468, 2026-10-23)
+- Owner review (2026-10-24): filed legacy invite-preview bug #506 and clarified
+  the two migration header entries as broken legacy functions left unchanged.
+  Migration body unchanged; no database application required for this correction.
+- Web review fixes: non-admin rejection signs out locally; account-related OTP
+  responses share one neutral code screen. Nine login regressions and all613web
+  tests pass, with build and changed-file ESLint green. Deployment checks now
+  include preserved phone sessions and identical unregistered-email feedback.
+- Prepared0194: revoke five accidental anon RPC grants, retain four documented
+  pre-auth contracts, and explicitly preserve authenticated flows. No signature
+  changes. Read-only audit, six dedicated-dev HTTP tests and a rollback SQL
+  trigger-permission test added.
+- Found required web login dependency; companion branch removes pre-OTP email
+  admin probe and retains post-OTP membership enforcement. Web parity136.
+- 2026-10-24: fresh nine-function/27-role-check dev privileges exactly match
+  read-only production baseline before0194. No legitimate email-probe callers
+  remain; helper is service-role-only in POS0194 and canonical web setup.
+-0194 applied only to development: six HTTP tests + trigger rollback SQL pass.
+  Actual fresh onboarding and a member100-kobo Quick Sale succeed in rollback
+  SQL; signed-in non-admin another-email probing is denied. Analyzer clean.
+  Web full suite607passed. Production untouched.
+- Final integrated verification (main c019ea4f): full Flutter suite5384passed,
+  299skipped, zero failures; analyzer clean. Six development HTTP tests and both
+  rollback SQL compatibility probes pass. Stop after opening the two review PRs;
+  production remains gated by the owner's web-deployment/login checkpoints.
+- Legacy accept_invite_preview* already fail42P01 because invites/warehouses
+  are absent in live metadata; documented rather than fabricated fixtures.
 
 ### #487 PR 6 / #465: scan a barcode on Add Product (2026-10-23)
 Branch `feat/465-scan-add-product`, worktree `../drinkPosApp-wt-487-6`. Scan button beside the barcode box (`barcodeScannerProvider`, camera closes after the first read; POS unchanged). `_onBarcodeChanged` now: own products first (`findProductsByBarcode`), then, factory codes only, the shared list via `lookupOutcome` (offline -> note, never blocks save). Own match offers Open it (Product Details; restock mode is gone) / Create a new product anyway. Edit mode: scan only fills the box. Tests in `add_product_catalogue_prefill_test.dart` (+1 in `add_product_form_test.dart`); Add Product goldens regenerated.

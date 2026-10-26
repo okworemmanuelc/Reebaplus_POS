@@ -7,9 +7,52 @@ when connectivity returns. The **web app** is online-first: it reads and writes 
 cloud live, through PostgREST/Realtime and server-authoritative RPCs, with no local
 source of truth (ADRs 0007–0012). The two clients share **one database schema and
 one RPC write-contract** — nothing else. The offline invariants (#1 local-source-of-
-truth, #4 every-write-through-the-outbox) are mobile-scoped, not app-wide.
+truth, #4 every-write-through-the-outbox) apply to the mobile business till.
+The mobile Shopper surface is an approved online-first exception (ADR 0031).
 
 ## Language
+
+### Online ordering (planned, #421 / #422)
+
+**Shopper**:
+A person shopping with a Reebaplus login. Shopping is not a business membership;
+a business member may also shop with the same login (ADR 0030).
+_Avoid_: Customer (the shop's own record), staff membership.
+
+**Online Order**:
+A Shopper's request to one Store. It becomes linked to an Order only when the
+shop completes Checkout. Before that it reserves no stock and moves no revenue,
+money or crates.
+Shoppers see its status in plain words: Placed (`new`), Accepted / Changed,
+Declined, Cancelled, Cancelled by the shop, Sent out (`fulfilled`), The shop
+didn't respond (`expired`). One cart across shops places one Online Order per
+shop (#426).
+_Avoid_: Sale, Order (the existing persisted sale record), reservation.
+
+**Send to till**:
+The shop action that loads an accepted Online Order's agreed items, prices and
+Customer into the Cart for normal Checkout. Loading alone is not a Sale.
+
+**Pay on delivery**:
+A sale whose payment is due when the goods arrive. The shop sees the amount to
+collect and records the payment when received; the Sale still happens at Checkout.
+_Avoid_: online payment, a promise that Reebaplus collects or delivers.
+
+**Browse**:
+The marketplace product feed across shops serving a Shopper's area, available
+without an account. The front door when no business is signed in (behind the
+Browse-first switch until ordering ships). Shows a **Stock label** (In stock /
+Low stock / Only N left / Out of stock), never a stock count.
+_Avoid_: the business POS product grid.
+
+**Sponsored**:
+A clearly labelled paid promotion in Browse or search. In v1 the admin starts it
+after payment outside the app; promoted products must remain eligible to order.
+
+**Listing**:
+A Product as Shoppers see it, with its online description, photos and ordering
+details. It is the Product itself, not a second independently managed item.
+
 
 ### Permissions
 
