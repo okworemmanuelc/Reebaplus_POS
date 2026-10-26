@@ -296,7 +296,7 @@ with the review page.
   client code at all. It comes from the products a shop already syncs, which
   also covers the web POS.
 
-**Amendment 2026-10-26 (#475, awaiting owner sign-off).** Lookups are also
+**Amendment 2026-10-26 (#475; signed off 2026-10-26 under the owner's delegated review authority).** Lookups are also
 allowed for an **existing** product that has a factory barcode and no photo,
 only on an explicit tap of "Use the shared photo" on Product Details (a viewer
 holding `products.manage_listing`). Never automatic, never on open, and only
