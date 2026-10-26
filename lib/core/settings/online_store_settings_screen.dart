@@ -5,7 +5,9 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/settings/online_store_detail_screen.dart';
+import 'package:reebaplus_pos/core/listings/listing_quality_providers.dart';
 import 'package:reebaplus_pos/core/stores/van_store.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/product_details_route.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
@@ -100,6 +102,8 @@ class _OnlineStoreSettingsScreenState
                                     ),
                                   ),
                                 ),
+                                if (Gates.manageListing.allows(ref))
+                                  StoreListingGapsNote(storeId: store.id),
                                 SizedBox(height: context.getRSize(12)),
                               ],
                             ],
@@ -185,5 +189,67 @@ class OnlineStoreRow extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Under a store in the hub (#475): how many of its in-stock online products
+/// lack a photo, a marketplace category or an online description. Tapping
+/// opens the first such product. Shown only to `products.manage_listing`.
+class StoreListingGapsNote extends ConsumerWidget {
+  const StoreListingGapsNote({super.key, required this.storeId});
+
+  final String storeId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final gaps = ref.watch(storeListingGapsProvider(storeId));
+    if (gaps.isClear) return const SizedBox.shrink();
+    final t = Theme.of(context);
+    return Padding(
+      padding: EdgeInsets.only(top: context.getRSize(8)),
+      child: DecoratedBox(
+        decoration: AppDecorations.card(context),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            key: ValueKey('store-gaps-$storeId'),
+            borderRadius: BorderRadius.circular(AppSpacing.borderRadiusXL),
+            onTap: () => _openFirst(context, ref, gaps.firstProductId),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: kMinInteractiveDimension),
+              child: Padding(
+                padding: EdgeInsets.all(context.getRSize(12)),
+                child: Row(
+                  children: [
+                    Icon(AppIcons.warning, size: 20, color: t.colorScheme.error),
+                    SizedBox(width: context.getRSize(12)),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          for (final line in gaps.lines)
+                            Text(line,
+                                style: context.regularStyle(13)
+                                    .copyWith(color: t.colorScheme.onSurface)),
+                        ],
+                      ),
+                    ),
+                    Icon(AppIcons.chevronRight,
+                        color: t.textTheme.bodySmall?.color),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openFirst(BuildContext context, WidgetRef ref, String? id) async {
+    if (id == null) return;
+    final product = await ref.read(databaseProvider).catalogDao.findById(id);
+    if (product == null || !context.mounted) return;
+    await openProductDetails(context, product, storeId: storeId);
   }
 }

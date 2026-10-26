@@ -93,3 +93,6 @@ test_checkout.txt
 # are rebuilt from skills-lock.json (which IS committed), so we track the lock,
 # not the cache — the "commit the lockfile, ignore the install" pattern.
 .agents/
+
+# Golden-test failure artefacts (never commit)
+**/failures/

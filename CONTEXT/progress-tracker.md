@@ -11,6 +11,9 @@ The human updates it when resolving open questions or making architectural decis
 - Cloud 0220: drops `accept_invite_preview(text)` + `accept_invite_preview_by_code(text)` (anon-executable, always 42P01). Caller audit clean (POS, reebaplus-web, prod catalogue). No app change.
 ### Issue #430: Print the order slip (2026-10-26, ready for review)
 - App-only (no Drift, no cloud): Print slip on accepted/fulfilled online orders (`online_orders.view`); `OnlineOrderSlip` (`lib/core/online_orders/online_order_slip.dart`) builds text + ESC/POS from `OnlineOrdersDao.slipLoad`; thermal printer, Share (text) fallback when no printer/print fails.
+### Issue #475: Listing quality checklist + shared photo (2026-10-26, ready for review)
+- App only. Pure rule `lib/core/listings/listing_quality.dart` (kept out of `core/storefront`: shopper boundary); checklist in the Online listing card, per-store gap counts on the Online store hub (both `Gates.manageListing`); "Use the shared photo" on tap only (ADR 0029 §8 amended, signed off 2026-10-26). Not done: optional brand/category sharing. `pos-parity` issue not needed (no table/status/money change).
+
 ### Issue #433: Staff push for new Online Orders (2026-10-25, ready for review)
 - Cloud 0215 (NOT deployed): AFTER INSERT trigger on online_orders -> pg_net -> `send-push` with explicit `user_ids` (store-assigned/CEO/manager-all-stores holding online_orders.answer, role->store->user layering); `send-push` accepts `online_order` records (deploy after the migration, --no-verify-jwt); app tap opens the order if local else the Online tab. No Drift change.
 
