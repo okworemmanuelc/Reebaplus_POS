@@ -15,6 +15,9 @@ import 'package:reebaplus_pos/features/stores/widgets/stores_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
+import 'package:reebaplus_pos/features/subscription/subscription_plan.dart';
+import 'package:reebaplus_pos/features/subscription/subscription_plan_providers.dart';
+import 'package:reebaplus_pos/features/subscription/widgets/plan_limit_widgets.dart';
 
 /// CEO Settings > Stores (§10.1). Registers and edits the business's stores —
 /// name + single `location` address. Name/address persist to the `stores` row
@@ -152,6 +155,18 @@ class _StoresSettingsScreenState extends ConsumerState<StoresSettingsScreen> {
       showGateDenied(context, gate);
       return;
     }
+    // Plan limit pre-check (reebaplus-web#90). The server trigger is the
+    // authority; this explains it up front instead of after a failed sync.
+    final plan = ref.read(effectivePlanProvider);
+    final limits = ref.read(planLimitsProvider);
+    final usage = ref.read(planUsageProvider);
+    final blocked = isVan
+        ? checkAddVan(limits)
+        : checkAddStore(limits, currentStores: usage.stores);
+    if (blocked != null) {
+      await showPlanLimitDialog(context, blocked, plan: plan);
+      return;
+    }
     // The sheet owns its controllers and hands the values back through `pop`,
     // so there is nothing here to dispose — see [_AddLocationSheet].
     final created = await showStoresSheet<_NewLocation>(
@@ -182,8 +197,13 @@ class _StoresSettingsScreenState extends ConsumerState<StoresSettingsScreen> {
         context,
         isVan ? 'Van added.' : 'Store added.',
       );
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
+      final limit = planLimitKindOf(e);
+      if (limit != null) {
+        await showPlanLimitDialog(context, limit, plan: plan);
+        return;
+      }
       AppNotification.showError(
         context,
         isVan ? 'Couldn\'t add the van.' : 'Couldn\'t add the store.',

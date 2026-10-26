@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/features/subscription/subscription_plan.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -96,9 +97,10 @@ class _ThankYouSubscriptionScreenState
   }
 
   /// Fixed subscription price (§32) — mirrors SubscriptionScreen.
-  String get _priceLine => widget.business.subscriptionPlan == 'international'
-      ? '\$10 per month'
-      : '₦5,000 per month';
+  String get _priceLine => planPriceLine(
+    widget.business.subscriptionPlan,
+    nigeria: pricesInNaira(widget.business.timezone),
+  );
 
   Future<void> _onContinue() async {
     if (_continuing) return;

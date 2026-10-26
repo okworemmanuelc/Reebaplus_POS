@@ -22,6 +22,7 @@ import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 import 'package:reebaplus_pos/features/auth/widgets/pin_keypad.dart';
+import 'package:reebaplus_pos/features/subscription/subscription_plan_providers.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
@@ -437,6 +438,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       AppNotification.showError(
         context,
         'Your account is suspended. Ask your manager to reactivate it.',
+      );
+      return;
+    }
+
+    // Over the plan's staff limit after a downgrade: paused, not deleted.
+    if (ref.read(pausedStaffIdsProvider).contains(user.id)) {
+      setState(() => _checking = false);
+      _pinNotifier.value = '';
+      AppNotification.showError(
+        context,
+        'Your account is paused because the plan allows fewer staff accounts. '
+        'Ask the owner to upgrade.',
       );
       return;
     }

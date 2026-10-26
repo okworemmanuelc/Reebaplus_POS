@@ -52,6 +52,7 @@ import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_thanks.dart';
 import 'package:reebaplus_pos/features/subscription/screens/thank_you_subscription_screen.dart';
 import 'package:reebaplus_pos/features/subscription/screens/subscription_locked_screen.dart';
+import 'package:reebaplus_pos/features/subscription/subscription_plan_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/reebaplus_logo.dart';
 
 import 'package:timezone/data/latest.dart' as tz;
@@ -472,6 +473,14 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
         case MembershipStatusReaction.offboard:
           unawaited(_handleSelfRemoved());
       }
+    });
+
+    // Plan downgrade (reebaplus-web#90): staff beyond the effective plan's
+    // account limit are paused (nothing deleted). Lock the app for a paused
+    // user, same UI-only lock as a suspension; the PIN screen refuses them too.
+    ref.listen(pausedStaffIdsProvider, (_, paused) {
+      final me = _auth.value?.id;
+      if (me != null && paused.contains(me)) _auth.lockApp();
     });
 
     // Keep the app-wide money formatter in sync with the CEO-chosen currency
