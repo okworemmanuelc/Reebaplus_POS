@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/diagnostics/overflow_route_reporter.dart';
 
 /// App version recorded with each crash. Mirrors `version:` in pubspec.yaml —
 /// bump both together. (There is no package_info dependency; keeping this a
@@ -30,11 +31,17 @@ class CrashReporter {
       } else {
         FlutterError.presentError(details);
       }
+      final overflow = describeOverflowContext(details);
       record(
         details.exception,
         details.stack,
-        context: details.context?.toDescription(),
-        isFatal: true,
+        // A layout overflow names its owning screen/sheet/dialog and the
+        // overflowing widget (#60); the stack is null for these, so without
+        // this the row says nothing about where to look.
+        context: overflow ?? details.context?.toDescription(),
+        // An overflow only clips content — the app keeps running — so it is
+        // not a fatal crash.
+        isFatal: overflow == null,
       );
     };
 
@@ -44,6 +51,20 @@ class CrashReporter {
       // Returning true marks it handled so the engine doesn't tear down the app.
       return true;
     };
+  }
+
+  /// The `[overflow] route=… widget=…` tag for a layout-overflow report, or
+  /// null when [details] is not an overflow. Runs in release builds too,
+  /// unlike [OverflowRouteReporter.install].
+  @visibleForTesting
+  static String? describeOverflowContext(FlutterErrorDetails details) {
+    try {
+      if (!OverflowRouteReporter.isOverflow(details)) return null;
+      return OverflowRouteReporter.describe(details)?.toString() ??
+          '${OverflowRouteReporter.tag} (unknown screen)';
+    } catch (_) {
+      return '${OverflowRouteReporter.tag} (unknown screen)';
+    }
   }
 
   /// Record a single error. Safe to call from anywhere (global handlers, the
