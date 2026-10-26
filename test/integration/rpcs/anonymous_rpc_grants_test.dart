@@ -57,9 +57,8 @@ void main() {
     ]);
   }, skip: enabled ? false : 'Requires dedicated ordering dev URL and anon key');
 
-  // Legacy accept_invite_preview* retain their grants. They cannot be claimed
-  // functional: live metadata confirms their old invites/warehouses tables are
-  // absent, and the baseline call fails42P01. See docs/security/anonymous-rpcs.md.
+  // Legacy accept_invite_preview* were dropped in 0220 (#506): they read the
+  // long-gone invites/warehouses tables. See docs/security/anonymous-rpcs.md.
 
   test('public trial duration remains a scalar', () async {
     expect(await client.rpc('console_get_trial_days'), isA<int>());
