@@ -1224,11 +1224,42 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
     for (final i in invs) {
       stockMap[i.productId] = (stockMap[i.productId] ?? 0) + i.quantity;
     }
+    // Sales speed is derived on read (#469): products.avgDailySales is never
+    // written, and a stored derived number on a synced row would fight sync.
+    // One grouped query: units sold per product at this store over the window,
+    // from recognised sales only (orderCountsAsSale), so cancelled/refunded
+    // orders are excluded.
+    final items = attachedDatabase.orderItems;
+    final ords = attachedDatabase.orders;
+    final soldQty = items.quantity.sum();
+    final salesQuery = selectOnly(items).join([
+      innerJoin(ords, ords.id.equalsExp(items.orderId)),
+    ])
+      ..addColumns([items.productId, soldQty])
+      ..where(
+        whereBusiness(items) &
+            whereBusiness(ords) &
+            items.storeId.equals(locationId) &
+            items.productId.isNotNull() &
+            ords.status.isIn(orderRevenueStatuses.toList()) &
+            ords.createdAt.isBiggerOrEqualValue(
+              DateTime.now().subtract(
+                const Duration(days: kReorderSalesWindowDays),
+              ),
+            ),
+      )
+      ..groupBy([items.productId]);
+    final unitsSold = <String, int>{};
+    for (final row in await salesQuery.get()) {
+      final pid = row.read(items.productId);
+      if (pid != null) unitsSold[pid] = row.read(soldQty) ?? 0;
+    }
     final result = <ProductBelowROP>[];
     for (final p in ps) {
       final stock = stockMap[p.id] ?? 0;
+      final avgDailySales = (unitsSold[p.id] ?? 0) / kReorderSalesWindowDays;
       // ROP = avgDailySales * leadTimeDays + safetyStockQty
-      final rop = p.avgDailySales * p.leadTimeDays + p.safetyStockQty;
+      final rop = avgDailySales * p.leadTimeDays + p.safetyStockQty;
       if (stock < rop) {
         result.add(
           ProductBelowROP(
@@ -1243,6 +1274,10 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
     return result;
   }
 }
+
+/// Look-back window (days) used to derive average daily sales for reorder
+/// points (#469).
+const int kReorderSalesWindowDays = 28;
 
 class ProductBelowROP {
   final String productId;
