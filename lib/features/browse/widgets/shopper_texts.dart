@@ -39,7 +39,9 @@ String placeOrderFailureText(PlaceOrderFailure failure, {String? productName}) {
       "This shop isn't taking online orders right now.",
     PlaceOrderFailure.outOfArea =>
       "This shop doesn't deliver to the address you chose.",
-    PlaceOrderFailure.ownBusiness => "You can't order from your own business.",
+    PlaceOrderFailure.ownBusiness =>
+      "This is your own store. You can't order from your own business — "
+          'remove these items from your cart.',
     PlaceOrderFailure.productUnavailable =>
       '${item}no longer available online.',
     PlaceOrderFailure.quantityRule =>

@@ -373,7 +373,7 @@ class BrowseMessage extends StatelessWidget {
 /// currency, stock label, crate-deposit note, "Business · LGA" (opens the
 /// store page) and the stale-stock note. Out of stock is greyed. Tapping
 /// opens the product sheet, where the Shopper adds it to the cart (#426).
-class StorefrontCardTile extends StatelessWidget {
+class StorefrontCardTile extends ConsumerWidget {
   const StorefrontCardTile({super.key, required this.card, this.onOpenStore});
 
   final StorefrontCard card;
@@ -382,8 +382,10 @@ class StorefrontCardTile extends StatelessWidget {
   final VoidCallback? onOpenStore;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final t = Theme.of(context);
+    // #437: the owner's own business — shown, never orderable.
+    final yours = ref.watch(ownStoreIdsProvider).contains(card.storeId);
     final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
     final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     final visual = categoryVisual(_categoryName(card.category), f);
@@ -438,6 +440,16 @@ class StorefrontCardTile extends StatelessWidget {
                   top: context.getRSize(6),
                   left: context.getRSize(6),
                   child: const TagPill(label: '18+', tone: TagPillTone.danger),
+                ),
+              if (yours)
+                Positioned(
+                  top: context.getRSize(6),
+                  right: context.getRSize(6),
+                  child: TagPill(
+                    key: ValueKey('browse-your-store-${card.productId}'),
+                    label: kYourStoreLabel,
+                    tone: TagPillTone.info,
+                  ),
                 ),
             ],
           ),
@@ -758,6 +770,7 @@ class _ProductSheet extends ConsumerWidget {
           color: visual.iconColor),
     );
     final unit = StorefrontCardTile._unitText(card);
+    final yours = ref.watch(ownStoreIdsProvider).contains(card.storeId);
     final rule = card.orderRuleText;
     final deposit = card.crateDepositKobo;
     return ConstrainedBox(
@@ -864,7 +877,10 @@ class _ProductSheet extends ConsumerWidget {
                   style: context.regularStyle(14)
                       .copyWith(color: t.colorScheme.onSurface)),
             ],
-            if (card.orderable) ...[
+            if (yours) ...[
+              SizedBox(height: context.getRSize(16)),
+              const YourStoreNote(),
+            ] else if (card.orderable) ...[
               SizedBox(height: context.getRSize(16)),
               AddToCartBox(
                 card: card,
@@ -883,9 +899,10 @@ class _ProductSheet extends ConsumerWidget {
                 onPressed: onOpenStore,
               ),
             ],
-            SizedBox(height: context.getRSize(8)),
-            AppButton(
-              key: const Key('browse-report-product'),
+            if (!yours) ...[
+              SizedBox(height: context.getRSize(8)),
+              AppButton(
+                key: const Key('browse-report-product'),
               text: 'Report this product',
               icon: AppIcons.flag,
               variant: AppButtonVariant.ghost,
@@ -893,12 +910,41 @@ class _ProductSheet extends ConsumerWidget {
                 context,
                 ref,
                 target: ReportTarget.product,
-                targetId: card.productId,
+                  targetId: card.productId,
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The badge on the owner's own stores and products (#437).
+const String kYourStoreLabel = 'Your store';
+
+/// Why the owner sees no Add to cart on their own business (#437).
+class YourStoreNote extends StatelessWidget {
+  const YourStoreNote({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    return Row(
+      key: const Key('browse-your-store-note'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const TagPill(label: kYourStoreLabel, tone: TagPillTone.info),
+        SizedBox(width: context.getRSize(8)),
+        Expanded(
+          child: Text(
+            "You can't order from your own business.",
+            style: context.regularStyle(13).copyWith(color: muted),
+          ),
+        ),
+      ],
     );
   }
 }

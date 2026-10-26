@@ -458,4 +458,66 @@ void main() {
 
     expect(route, isA<CreatePinRoute>());
   });
+
+  // ── #437: a Shopper login and Create business (invariant #9) ─────────────
+
+  group('#437 sign-up with a Shopper login', () {
+    test(
+      'a Shopper login (no business membership) reaches Create business',
+      () async {
+        // A Shopper has an auth login but no business: the cloud answers a
+        // positive "none" (current_user_linked_business is empty).
+        auth.lookup = const SupabaseAccountNone();
+
+        final route = await resolvePostVerifyRoute(
+          auth,
+          'ada@example.com',
+          confirmClearOtherBusiness: refuseToPrompt,
+        );
+
+        expect(route, isA<NoAccountFoundRoute>());
+        expect(auth.syncOnLoginCalls, 0);
+      },
+    );
+
+    test(
+      'a login already linked to a business (staff too) never reaches '
+      'Create business',
+      () async {
+        final employer = await seedBusiness('Stallion Global');
+        auth.lookup = SupabaseAccountFound(
+          SupabaseAccountInfo(
+            businessId: employer,
+            businessName: 'Stallion Global',
+            roleName: 'Cashier',
+            roleSlug: 'cashier',
+          ),
+        );
+
+        final route = await resolvePostVerifyRoute(
+          auth,
+          'emeka@stallion.ng',
+          confirmClearOtherBusiness: refuseToPrompt,
+        );
+
+        expect(route, isA<ExistingAccountRoute>());
+        expect(
+          (route as ExistingAccountRoute).account.businessId,
+          employer,
+        );
+      },
+    );
+
+    test('an unreachable cloud never offers Create business', () async {
+      auth.lookup = const SupabaseAccountUnavailable();
+
+      final route = await resolvePostVerifyRoute(
+        auth,
+        'ada@example.com',
+        confirmClearOtherBusiness: refuseToPrompt,
+      );
+
+      expect(route, isA<AccountLookupUnavailableRoute>());
+    });
+  });
 }
