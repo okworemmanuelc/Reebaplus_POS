@@ -128,6 +128,7 @@ class CustomerService extends ValueNotifier<List<Customer>> {
     required String staffId,
     String? storeId,
     String? note,
+    String? orderId,
   }) async {
     final customer = getById(customerId);
     await CreditLedgerService(_db).topup(
@@ -136,6 +137,7 @@ class CustomerService extends ValueNotifier<List<Customer>> {
       method: method,
       staffId: staffId,
       storeId: storeId,
+      orderId: orderId,
     );
     final naira = (amountKobo / 100).round();
     await _log.logAction(
@@ -144,6 +146,44 @@ class CustomerService extends ValueNotifier<List<Customer>> {
           '${note != null && note.isNotEmpty ? '. Note: $note' : ''}',
       customerId: customerId,
     );
+  }
+
+  /// #432 Mark as paid — the money for a Pay on delivery order has come in.
+  /// Posts exactly what Record Payment posts ([topUpWallet]: the wallet
+  /// credit, its payment row and the activity log), for what the order still
+  /// has to collect, with the wallet credit linked to the order so the order
+  /// shows Paid. Returns the amount collected (0 when already paid).
+  ///
+  /// The caller re-checks `orders.pay_on_delivery.mark_paid` first.
+  Future<int> markPayOnDeliveryPaid({
+    required String orderId,
+    required String method, // 'cash' | 'transfer'
+    required String staffId,
+    String? storeId,
+  }) async {
+    if (method != 'cash' && method != 'transfer') {
+      throw ArgumentError.value(method, 'method', 'cash or transfer only');
+    }
+    final pod = await _db.onlineOrdersDao.payOnDeliveryFor(orderId);
+    if (pod == null || !pod.isLive) {
+      throw StateError('Order $orderId is not an open Pay on delivery order');
+    }
+    final customerId = pod.customerId;
+    if (customerId == null) {
+      throw StateError('Pay on delivery order $orderId has no customer');
+    }
+    final amountKobo = pod.outstandingKobo;
+    if (amountKobo <= 0) return 0;
+    await topUpWallet(
+      customerId: customerId,
+      amountKobo: amountKobo,
+      method: method,
+      staffId: staffId,
+      storeId: storeId,
+      note: 'Pay on delivery collected',
+      orderId: orderId,
+    );
+    return amountKobo;
   }
 
   /// §18.3 Refund Cash (CEO/Manager only) — pay the customer back, in cash,

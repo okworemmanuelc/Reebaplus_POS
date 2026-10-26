@@ -315,6 +315,51 @@ class OnlineOrdersDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
+  /// What the order slip (#430) prints: the order, all its lines, the business
+  /// and store name + phone, and which products track empties. Null when the
+  /// order is gone. Reads only.
+  Future<OnlineOrderSlipLoad?> slipLoad(String onlineOrderId) async {
+    final order =
+        await (select(onlineOrders)
+              ..where((t) => t.id.equals(onlineOrderId) & whereBusiness(t))
+              ..limit(1))
+            .getSingleOrNull();
+    if (order == null) return null;
+    final lines = await (select(onlineOrderLines)
+          ..where((t) => t.onlineOrderId.equals(order.id) & whereBusiness(t))
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.createdAt),
+            (t) => OrderingTerm(expression: t.productName),
+          ]))
+        .get();
+    final business = await (db.select(db.businesses)
+          ..where((b) => b.id.equals(order.businessId))
+          ..limit(1))
+        .getSingleOrNull();
+    final store = await (db.select(db.stores)
+          ..where((s) => s.id.equals(order.storeId) & whereBusiness(s))
+          ..limit(1))
+        .getSingleOrNull();
+    final ids = lines.map((l) => l.productId).toSet();
+    final tracked = ids.isEmpty
+        ? <ProductData>[]
+        : await (db.select(db.products)
+              ..where(
+                (p) =>
+                    p.id.isIn(ids) & whereBusiness(p) & p.trackEmpties.equals(true),
+              ))
+            .get();
+    return OnlineOrderSlipLoad(
+      order: order,
+      lines: lines,
+      businessName: business?.name ?? '',
+      businessPhone: business?.phone,
+      storeName: store?.name,
+      storePhone: store?.phone,
+      trackEmptiesProductIds: tracked.map((p) => p.id).toSet(),
+    );
+  }
+
   /// What Send to till (#431) loads into the Cart: an ACCEPTED order's lines
   /// with accepted_qty > 0, each with its live product and the stock of the
   /// order's store, plus the linked Customer. Null when the order is not (or no
@@ -452,6 +497,72 @@ class OnlineOrdersDao extends DatabaseAccessor<AppDatabase>
           );
       await _enqueueFullOrder(o.id);
     }
+  }
+
+  // ── Pay on delivery (#432) ────────────────────────────────────────────────
+  //
+  // A Pay on delivery order is a `credit` order an Online Order is linked to.
+  // What it has collected is the sum of the live Record Payment credits
+  // (`topup_cash` / `topup_transfer` with their `wallet_topup` payment row)
+  // that carry its id (Mark as paid). A sale's own paid-now leg has no payment
+  // row of its own, so it never counts.
+  static const String _payOnDeliverySql =
+      'SELECT o.id AS order_id, oo.id AS online_order_id, o.store_id, '
+      'o.customer_id, o.status, '
+      '(o.net_amount_kobo - o.amount_paid_kobo) AS due_kobo, '
+      'COALESCE((SELECT SUM(w.amount_kobo) FROM wallet_transactions w '
+      "WHERE w.business_id = o.business_id AND w.order_id = o.id "
+      "AND w.type = 'credit' "
+      "AND w.reference_type IN ('topup_cash', 'topup_transfer') "
+      'AND w.voided_at IS NULL '
+      'AND EXISTS (SELECT 1 FROM payment_transactions p '
+      "WHERE p.wallet_txn_id = w.id AND p.type = 'wallet_topup')), 0) "
+      'AS collected_kobo '
+      'FROM online_orders oo '
+      'JOIN orders o ON o.id = oo.linked_order_id '
+      'AND o.business_id = oo.business_id '
+      "WHERE oo.business_id = ? AND o.payment_type = 'credit'";
+
+  PayOnDeliveryOrder _payOnDeliveryFrom(QueryRow r) => PayOnDeliveryOrder(
+    orderId: r.read<String>('order_id'),
+    onlineOrderId: r.read<String>('online_order_id'),
+    storeId: r.readNullable<String>('store_id'),
+    customerId: r.readNullable<String>('customer_id'),
+    status: r.read<String>('status'),
+    dueKobo: r.read<int>('due_kobo'),
+    collectedKobo: r.read<int>('collected_kobo'),
+  );
+
+  /// Every Pay on delivery order of the business (any status).
+  Stream<List<PayOnDeliveryOrder>> watchPayOnDelivery() {
+    return customSelect(
+      _payOnDeliverySql,
+      variables: [Variable<String>(requireBusinessId())],
+      readsFrom: {
+        onlineOrders,
+        db.orders,
+        db.walletTransactions,
+        db.paymentTransactions,
+      },
+    ).watch().map((rows) => rows.map(_payOnDeliveryFrom).toList());
+  }
+
+  /// The Pay on delivery state of [orderId], or null when it is not one.
+  Future<PayOnDeliveryOrder?> payOnDeliveryFor(String orderId) async {
+    final rows = await customSelect(
+      '$_payOnDeliverySql AND o.id = ? LIMIT 1',
+      variables: [
+        Variable<String>(requireBusinessId()),
+        Variable<String>(orderId),
+      ],
+      readsFrom: {
+        onlineOrders,
+        db.orders,
+        db.walletTransactions,
+        db.paymentTransactions,
+      },
+    ).get();
+    return rows.isEmpty ? null : _payOnDeliveryFrom(rows.first);
   }
 
   Future<OnlineOrderData?> _openOrder(String id) async {

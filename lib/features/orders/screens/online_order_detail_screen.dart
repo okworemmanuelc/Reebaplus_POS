@@ -2,12 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/online_orders/online_order_answer.dart';
+import 'package:reebaplus_pos/core/online_orders/online_order_slip.dart';
 import 'package:reebaplus_pos/core/online_orders/online_order_till.dart';
+import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
+import 'package:reebaplus_pos/shared/widgets/receipt_paper_size_prompt.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/online_order_providers.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
@@ -172,6 +177,41 @@ class _OnlineOrderDetailScreenState
     }
   }
 
+  /// Print slip (#430): thermal printer when one is set up and answers, else the
+  /// share sheet with the slip text, as receipts fall back.
+  Future<void> _printSlip(OnlineOrderData order) async {
+    if (_busy) return;
+    OnlineOrderSlip? slip;
+    await _run(() async {
+      final load = await ref
+          .read(databaseProvider)
+          .onlineOrdersDao
+          .slipLoad(order.id);
+      if (load == null) return;
+      slip = OnlineOrderSlip.from(
+        load,
+        tracksCrates: businessTracksCrates(ref.read(currentBusinessProvider)),
+      );
+    }, 'orders.online.printSlip');
+    final s = slip;
+    if (s == null || !mounted) return;
+    final printer = ref.read(printerServiceProvider);
+    final outcome = await printOrShareOnlineOrderSlip(
+      slip: s,
+      print: () async {
+        if (!await printer.requestPermissions() || !mounted) return false;
+        final target = await prepareReceiptPrinter(context, printer);
+        if (!target.connected) return false;
+        return printer.printBytes(await s.toBytes(target.paperSize));
+      },
+      share: (text) =>
+          Share.share(text, subject: 'Order slip ${order.reference}'),
+    );
+    if (mounted && outcome == OnlineOrderSlipOutcome.printed) {
+      AppNotification.showSuccess(context, 'Slip printed');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final order = ref.watch(onlineOrderProvider(widget.onlineOrderId));
@@ -204,6 +244,7 @@ class _OnlineOrderDetailScreenState
                   onQuantity: (id, q) => setState(() => _qty[id] = q),
                   onCancelAccepted: () => _cancelAccepted(o),
                   onSendToTill: () => _sendToTill(o),
+                  onPrintSlip: () => _printSlip(o),
                   onAccept: () => _accept(o),
                   onDecline: () => _decline(o),
                 ),
@@ -221,6 +262,7 @@ class _OnlineOrderBody extends ConsumerWidget {
     required this.onQuantity,
     required this.onCancelAccepted,
     required this.onSendToTill,
+    required this.onPrintSlip,
     required this.onAccept,
     required this.onDecline,
   });
@@ -231,6 +273,7 @@ class _OnlineOrderBody extends ConsumerWidget {
   final void Function(String lineId, int qty) onQuantity;
   final VoidCallback onCancelAccepted;
   final VoidCallback onSendToTill;
+  final VoidCallback onPrintSlip;
   final VoidCallback onAccept;
   final VoidCallback onDecline;
 
@@ -251,6 +294,9 @@ class _OnlineOrderBody extends ConsumerWidget {
     final canSendToTill =
         order.status == 'accepted' &&
         ref.watch(canSendOnlineOrderToTillProvider(order.storeId));
+    final canPrintSlip =
+        (order.status == 'accepted' || order.status == 'fulfilled') &&
+        Gates.viewOnlineOrders.rule.evaluate(ref.watch(gateContextProvider));
     final prices = canAnswer
         ? ref.watch(onlineOrderRetailPricesProvider(order.id)).valueOrNull
         : null;
@@ -385,6 +431,17 @@ class _OnlineOrderBody extends ConsumerWidget {
                 variant: AppButtonVariant.danger,
                 onPressed: busy ? null : onCancelAccepted,
               ),
+            if (canCancel && canPrintSlip)
+              SizedBox(height: context.getRSize(12)),
+            if (canPrintSlip) ...[
+              AppButton(
+                key: OnlineOrderKeys.printSlip,
+                text: 'Print slip',
+                icon: AppIcons.print,
+                variant: AppButtonVariant.outline,
+                onPressed: busy ? null : onPrintSlip,
+              ),
+            ],
           ],
         );
       },

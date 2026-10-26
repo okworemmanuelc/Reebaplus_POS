@@ -36,6 +36,9 @@ import 'package:reebaplus_pos/core/services/product_gallery_service.dart';
 import 'package:reebaplus_pos/core/services/product_listing_service.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/product_photos_card.dart';
 import 'package:reebaplus_pos/core/listings/listing_content.dart';
+import 'package:reebaplus_pos/core/services/catalogue_lookup.dart';
+import 'package:reebaplus_pos/core/listings/listing_quality.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/listing_quality_checklist.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
@@ -83,6 +86,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   bool _contentReady = false; // deferred load flag
   bool _savingListing = false;
   bool _savingPhotos = false;
+  bool _sharingPhoto = false;
   String? _imagePath;
 
   // ── Role gating (master plan §16.6 / §16.7) ────────────────────────────────
@@ -550,10 +554,96 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   Widget? _buildListing() {
     final p = _productData;
     if (p == null || !Gates.manageListing.allowsNow(ref)) return null;
+    final categories = ref.watch(allCategoriesProvider).valueOrNull ?? const [];
+    final marketplace = categories
+        .where((c) => c.id == p.categoryId)
+        .map((c) => c.marketplaceCategory)
+        .firstOrNull;
+    final stores = ref.watch(allStoresProvider).valueOrNull ?? const [];
+    final stock = ref
+            .watch(productStockByStoreProvider(widget.item.id))
+            .valueOrNull ??
+        const <String, int>{};
+    final inStockOnline = stores.any(
+      (s) =>
+          s.kind == kStoreKindStore &&
+          s.onlineOrderingEnabled &&
+          (stock[s.id] ?? 0) > 0,
+    );
+    final hasPhoto =
+        (p.imageUrl ?? '').trim().isNotEmpty || (_imagePath ?? '').isNotEmpty;
+    final gaps = listingGaps(
+      hasPhoto: hasPhoto,
+      marketplaceCategory: marketplace,
+      onlineDescription: p.onlineDescription,
+      inStockOnline: inStockOnline,
+    );
+    // Only a factory barcode can be looked up (ADR 0029 §8, 2026-10-26).
+    final canShare = !hasPhoto && FactoryBarcode.tryParse(p.barcode ?? '') != null;
     return ProductListingCard(
       content: ListingContent.of(p),
       onEdit: _editListing,
+      checklist: ListingQualityChecklist(
+        gaps: gaps,
+        onFix: _fixListingGap,
+        onUseSharedPhoto: canShare ? _useSharedPhoto : null,
+        sharedPhotoBusy: _sharingPhoto,
+      ),
     );
+  }
+
+  /// A tapped checklist gap opens the matching editor.
+  void _fixListingGap(ListingGap gap) {
+    switch (gap) {
+      case ListingGap.photo:
+        _pickImage();
+      case ListingGap.marketplaceCategory:
+        _openEditProduct(); // the product form holds the category picker
+      case ListingGap.description:
+        _editListing();
+      case ListingGap.onlineStock:
+        _openAdjustStock();
+    }
+  }
+
+  /// "Use the shared photo" (#475, ADR 0029 §8): an explicit tap looks the
+  /// product's own factory barcode up in the shared catalogue and saves the
+  /// photo through the same path as a picked one. Never automatic.
+  Future<void> _useSharedPhoto() async {
+    if (!Gates.manageListing.allowsNow(ref)) {
+      showGateDenied(context, Gates.manageListing);
+      return;
+    }
+    final code = _productData?.barcode;
+    if (_sharingPhoto || code == null) return;
+    setState(() => _sharingPhoto = true);
+    final outcome = await ref.read(barcodeCatalogueServiceProvider).lookupOutcome(code);
+    if (!mounted) return;
+    Uint8List? bytes;
+    if (outcome case CatalogueFound(:final suggestion)) {
+      final raw = suggestion.photoBytes;
+      if (raw != null) {
+        bytes = switch (ref.read(productImageServiceProvider).processBytes(raw)) {
+          Ok(:final value) => value,
+          Err() => null,
+        };
+      }
+    }
+    if (bytes == null) {
+      setState(() => _sharingPhoto = false);
+      AppNotification.showInfo(
+        context,
+        switch (outcome) {
+          CatalogueUnreachable() =>
+            'Could not reach the product list. Check your connection and try again.',
+          CatalogueLookupFailed() => 'Something went wrong. Try again later.',
+          _ => 'No shared photo for this barcode yet.',
+        },
+      );
+      return;
+    }
+    await _saveProductPhoto(bytes);
+    if (mounted) setState(() => _sharingPhoto = false);
   }
 
   // ── Photos (#474) ─────────────────────────────────────────────────────────
@@ -1206,6 +1296,13 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         return;
     }
 
+    await _saveProductPhoto(bytes);
+  }
+
+  /// Saves already-processed photo [bytes] as the shop's own product photo.
+  /// The one save path for a picked photo and the shared one (#475).
+  Future<void> _saveProductPhoto(Uint8List bytes) async {
+    final imgSvc = ref.read(productImageServiceProvider);
     final productId = widget.item.id;
     final businessId = ref.read(authProvider).currentUser?.businessId;
     if (productId.isEmpty || businessId == null) return;
