@@ -7,6 +7,8 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #469: Reorder points use real sales speed (2026-10-26, ready for review)
+- App-only: `getProductsBelowROP` derives avg daily sales on read (units sold at the store over the last 28 days from recognised sales, `kReorderSalesWindowDays`); `products.avgDailySales` is no longer read (still never written; drop in a later cleanup).
 ### Issue #430: Print the order slip (2026-10-26, ready for review)
 - App-only (no Drift, no cloud): Print slip on accepted/fulfilled online orders (`online_orders.view`); `OnlineOrderSlip` (`lib/core/online_orders/online_order_slip.dart`) builds text + ESC/POS from `OnlineOrdersDao.slipLoad`; thermal printer, Share (text) fallback when no printer/print fails.
 ### Issue #433: Staff push for new Online Orders (2026-10-25, ready for review)
