@@ -1,11 +1,13 @@
--- #426 tier-2 SQL companion (reebaplus-dev, after applying 0205).
+-- #426 tier-2 SQL companion (reebaplus-dev, after applying 0205; section 6
+-- needs 0208 + 0219).
 -- Everything runs inside one transaction that is rolled back.
 --   psql "$DEV_DB_URL" -v ON_ERROR_STOP=1 -f test/integration/sql/online_orders.sql
 -- Covers: EXECUTE boundaries; one order per shop placed independently (a
 -- failing shop reported, the other placed); stock refusal without a count;
 -- min/step/max; out-of-area; a Shopper sees only their own orders (direct
 -- table reads denied); cancel only while new; the status guard; the 20-per-
--- hour spam limit; live-signal triggers present.
+-- hour spam limit; live-signal triggers present; #528: only staff at the
+-- order's store may answer it.
 BEGIN;
 
 -- 0. EXECUTE boundaries + triggers.
@@ -284,6 +286,102 @@ BEGIN
       'lga', 'Near', 'street', '1 Road'), NULL);
   IF r->0->>'code' <> 'rate_limited' THEN
     RAISE EXCEPTION '21st order in an hour was not refused: %', r;
+  END IF;
+END $$;
+
+-- 6. #528 (0219): answering needs the order's store. Two cashiers of shop A
+--    with online_orders.answer: one works at store A, one only at store A2.
+RESET ROLE;
+SELECT set_config('t.store_a2', gen_random_uuid()::text, true),
+       set_config('t.r_cash', gen_random_uuid()::text, true),
+       set_config('t.au_in', gen_random_uuid()::text, true),
+       set_config('t.au_out', gen_random_uuid()::text, true),
+       set_config('t.u_in', gen_random_uuid()::text, true),
+       set_config('t.u_out', gen_random_uuid()::text, true),
+       set_config('t.o_in', gen_random_uuid()::text, true),
+       set_config('t.o_out', gen_random_uuid()::text, true);
+INSERT INTO auth.users (id, email) VALUES
+  (current_setting('t.au_in')::uuid, current_setting('t.au_in') || '@example.invalid'),
+  (current_setting('t.au_out')::uuid, current_setting('t.au_out') || '@example.invalid');
+INSERT INTO public.profiles (id, business_id, name) VALUES
+  (current_setting('t.au_in')::uuid, current_setting('t.biz_a')::uuid, 'in'),
+  (current_setting('t.au_out')::uuid, current_setting('t.biz_a')::uuid, 'out');
+INSERT INTO public.stores (id, business_id, name, kind) VALUES
+  (current_setting('t.store_a2')::uuid, current_setting('t.biz_a')::uuid, 'A2', 'store');
+INSERT INTO public.roles (id, business_id, name, slug) VALUES
+  (current_setting('t.r_cash')::uuid, current_setting('t.biz_a')::uuid, 'Cashier', 'cashier');
+INSERT INTO public.role_permissions (business_id, role_id, permission_key) VALUES
+  (current_setting('t.biz_a')::uuid, current_setting('t.r_cash')::uuid, 'online_orders.answer');
+INSERT INTO public.users (id, business_id, name, auth_user_id) VALUES
+  (current_setting('t.u_in')::uuid, current_setting('t.biz_a')::uuid, 'in',
+   current_setting('t.au_in')::uuid),
+  (current_setting('t.u_out')::uuid, current_setting('t.biz_a')::uuid, 'out',
+   current_setting('t.au_out')::uuid);
+INSERT INTO public.user_businesses (business_id, user_id, role_id, status) VALUES
+  (current_setting('t.biz_a')::uuid, current_setting('t.u_in')::uuid,
+   current_setting('t.r_cash')::uuid, 'active'),
+  (current_setting('t.biz_a')::uuid, current_setting('t.u_out')::uuid,
+   current_setting('t.r_cash')::uuid, 'active');
+INSERT INTO public.user_stores (business_id, user_id, store_id) VALUES
+  (current_setting('t.biz_a')::uuid, current_setting('t.u_in')::uuid,
+   current_setting('t.store_a')::uuid),
+  (current_setting('t.biz_a')::uuid, current_setting('t.u_out')::uuid,
+   current_setting('t.store_a2')::uuid);
+INSERT INTO public.online_orders (id, business_id, store_id, shopper_account_id,
+  reference, shopper_name, delivery_phone, delivery_state, delivery_lga,
+  delivery_street)
+SELECT x::uuid, current_setting('t.biz_a')::uuid,
+       current_setting('t.store_a')::uuid, current_setting('t.shopper')::uuid,
+       'ON-STORE-' || substr(x, 1, 6), 'Ada', '0803', current_setting('t.state'),
+       'Near', '1 Road'
+  FROM unnest(ARRAY[current_setting('t.o_in'), current_setting('t.o_out')]) AS x;
+
+-- 6a. The cashier at another store is refused (42501), for accept and decline.
+SELECT set_config('request.jwt.claims', jsonb_build_object(
+  'sub', current_setting('t.au_out'), 'role', 'authenticated')::text, true);
+SET LOCAL ROLE authenticated;
+DO $$
+BEGIN
+  BEGIN
+    UPDATE public.online_orders SET status = 'accepted'
+     WHERE id = current_setting('t.o_out')::uuid;
+    RAISE EXCEPTION 'a cashier at another store accepted the order';
+  EXCEPTION WHEN insufficient_privilege THEN
+    IF SQLERRM <> 'online_orders.answer store assignment required' THEN RAISE; END IF;
+  END;
+  BEGIN
+    UPDATE public.online_orders
+       SET status = 'declined', decline_reason = 'Out of stock'
+     WHERE id = current_setting('t.o_out')::uuid;
+    RAISE EXCEPTION 'a cashier at another store declined the order';
+  EXCEPTION WHEN insufficient_privilege THEN
+    IF SQLERRM <> 'online_orders.answer store assignment required' THEN RAISE; END IF;
+  END;
+END $$;
+
+-- 6b. The cashier at the order's store may answer.
+SELECT set_config('request.jwt.claims', jsonb_build_object(
+  'sub', current_setting('t.au_in'), 'role', 'authenticated')::text, true);
+DO $$
+DECLARE n int;
+BEGIN
+  UPDATE public.online_orders SET status = 'accepted'
+   WHERE id = current_setting('t.o_in')::uuid;
+  GET DIAGNOSTICS n = ROW_COUNT;
+  IF n <> 1 THEN
+    RAISE EXCEPTION 'the cashier at the store could not accept (% rows)', n;
+  END IF;
+END $$;
+RESET ROLE;
+DO $$
+BEGIN
+  IF (SELECT status FROM public.online_orders
+       WHERE id = current_setting('t.o_in')::uuid) <> 'accepted' THEN
+    RAISE EXCEPTION 'store cashier''s accept did not land';
+  END IF;
+  IF (SELECT status FROM public.online_orders
+       WHERE id = current_setting('t.o_out')::uuid) <> 'new' THEN
+    RAISE EXCEPTION 'other-store cashier changed the order';
   END IF;
 END $$;
 

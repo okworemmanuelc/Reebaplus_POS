@@ -155,6 +155,22 @@ class SupabaseCloudTransport implements CloudTransport {
     return rows;
   }
 
+  @override
+  Future<List<dynamic>> fetchRowsByColumn(
+    String table,
+    String businessId,
+    String column,
+    Object value,
+  ) async {
+    final List<dynamic> rows = await _client
+        .from(table)
+        .select()
+        .eq('business_id', businessId)
+        .eq(column, value)
+        .timeout(const Duration(seconds: 15));
+    return rows;
+  }
+
   // ── CONNECTION / EXISTENCE ─────────────────────────────────────────────────
   @override
   Future<void> warmUp(String businessId) async {

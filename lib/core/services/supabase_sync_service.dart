@@ -616,19 +616,7 @@ class SupabaseSyncService {
           refused.add(rowId);
           continue;
         }
-        final code = e is PostgrestException ? (e.code ?? '') : '';
-        final isFk = code == '23503';
-        await _db.syncDao.markFailed(
-          queueIds[i],
-          e.toString(),
-          permanent:
-              !isFk &&
-              (code == 'P0001' ||
-                  code.startsWith('23') ||
-                  code == '42501' ||
-                  code == 'insufficient_privilege'),
-          fkDeferred: isFk,
-        );
+        await _markSingleRowFailed(queueIds[i], e);
       }
     }
     if (refused.isEmpty) return;
@@ -660,6 +648,149 @@ class SupabaseSyncService {
     } catch (e) {
       // The answer is already dropped; the next pull brings the cloud row.
       debugPrint('[SyncService] $table refused-answer re-read failed: $e');
+    }
+  }
+
+  /// §6.8 classification for one row retried alone by a settle step.
+  Future<void> _markSingleRowFailed(String queueId, Object e) async {
+    final code = e is PostgrestException ? (e.code ?? '') : '';
+    final isFk = code == '23503';
+    await _db.syncDao.markFailed(
+      queueId,
+      e.toString(),
+      permanent:
+          !isFk &&
+          (code == 'P0001' ||
+              code.startsWith('23') ||
+              code == '42501' ||
+              code == 'insufficient_privilege'),
+      fkDeferred: isFk,
+    );
+  }
+
+  /// The 0208 one-live-Customer-per-Shopper index refused a `customers` push
+  /// (23505 on `customers_business_shopper_account`): another phone linked the
+  /// same Shopper to a different Customer first (#528).
+  static bool _isShopperLinkCollision(Object e) =>
+      e is PostgrestException &&
+      e.code == '23505' &&
+      '${e.message} ${e.details ?? ''}'.contains(
+        'customers_business_shopper_account',
+      );
+
+  /// Settles a `customers` chunk the Shopper-link index refused (#528), the
+  /// same way a refused Online Order answer is settled (#427): never a Sync
+  /// Issues orphan. Each row is retried alone; a row that still collides
+  /// adopts the cloud's linked Customer:
+  ///   1. the local link is released (the local partial unique index must be
+  ///      free before the cloud's row lands);
+  ///   2. the cloud's linked Customer is applied locally;
+  ///   3. this Shopper's local Online Orders are re-pointed to it and queued
+  ///      into [requeue] (re-sent after the drain);
+  ///   4. the local Customer goes up UNLINKED (so nothing that references it
+  ///      FK-fails); if that send fails it is queued again.
+  /// When the cloud's linked Customer can't be read the row stays a normal
+  /// transient failure and retries.
+  Future<void> _settleShopperLinkCollisions(
+    List<Map<String, dynamic>> payloads,
+    List<String> queueIds,
+    String businessId,
+    List<({String orderId, String customerId})> requeue,
+  ) async {
+    for (var i = 0; i < payloads.length; i++) {
+      final payload = payloads[i];
+      try {
+        await _transport.upsertRows('customers', [payload]);
+        await _db.syncDao.markDone(queueIds[i]);
+        continue;
+      } catch (e) {
+        final localId = payload['id'];
+        final shopper = payload['shopper_account_id'];
+        if (!_isShopperLinkCollision(e) ||
+            localId is! String ||
+            shopper is! String) {
+          await _markSingleRowFailed(queueIds[i], e);
+          continue;
+        }
+        try {
+          await _adoptCloudLinkedCustomer(
+            payload: payload,
+            localId: localId,
+            shopper: shopper,
+            queueId: queueIds[i],
+            businessId: businessId,
+            requeue: requeue,
+          );
+        } catch (adoptError) {
+          debugPrint(
+            '[SyncService] customers $localId: Shopper-link reconcile '
+            'failed, will retry: $adoptError',
+          );
+          await _db.syncDao.markFailed(queueIds[i], adoptError.toString());
+        }
+      }
+    }
+  }
+
+  Future<void> _adoptCloudLinkedCustomer({
+    required Map<String, dynamic> payload,
+    required String localId,
+    required String shopper,
+    required String queueId,
+    required String businessId,
+    required List<({String orderId, String customerId})> requeue,
+  }) async {
+    final cloudRows = await _transport.fetchRowsByColumn(
+      'customers',
+      businessId,
+      'shopper_account_id',
+      shopper,
+    );
+    final winner = cloudRows
+        .cast<Map<String, dynamic>>()
+        .where((r) => r['is_deleted'] != true && r['id'] != localId)
+        .firstOrNull;
+    if (winner == null) {
+      throw StateError('no live cloud Customer linked to Shopper $shopper');
+    }
+    final winnerId = winner['id'] as String;
+    debugPrint(
+      '[SyncService] customers $localId: Shopper already linked to '
+      '$winnerId on another phone — adopting it (#528)',
+    );
+    final dao = _db.onlineOrdersDao;
+    // One local transaction: a failure leaves the link exactly as it was and
+    // the row retries.
+    final moved = await _db.transaction(() async {
+      await dao.releaseShopperLink(localId);
+      await _restoreTableData('customers', [winner], authoritative: true);
+      final restored = await _db.customersDao.findById(winnerId);
+      if (restored?.shopperAccountId != shopper) {
+        throw StateError('cloud Customer $winnerId did not apply locally');
+      }
+      return dao.repointShopperOrders(
+        shopper: shopper,
+        fromCustomerId: localId,
+        toCustomerId: winnerId,
+      );
+    });
+    for (final id in moved) {
+      requeue.add((orderId: id, customerId: winnerId));
+    }
+    await _db.syncDao.markDone(queueId);
+    final unlinked = Map<String, dynamic>.from(payload)
+      ..['shopper_account_id'] = null;
+    try {
+      await _transport.upsertRows('customers', [unlinked]);
+    } catch (e) {
+      debugPrint(
+        '[SyncService] customers $localId unlinked re-send failed, '
+        'queued: $e',
+      );
+      final row = await _db.customersDao.findById(localId);
+      if (row != null) {
+        await _db.syncDao.enqueueUpsert('customers', row.toCompanion(true));
+      }
     }
   }
 
@@ -931,6 +1062,12 @@ class SupabaseSyncService {
     // the drain. Quick-sale lines (no product) never contribute.
     final recostPairs = <({String productId, String storeId})>{};
 
+    // #528 — Online Orders re-pointed to the cloud's linked Customer while
+    // settling a Shopper-link race. Re-sent AFTER the group loop: this drain
+    // already holds their old payloads in memory, so coalescing into a pending
+    // row now would be overwritten when that old payload is marked done.
+    final requeueOnlineOrders = <({String orderId, String customerId})>[];
+
     for (final group in orderedGroups) {
       final items = groups[group]!;
       final ids = items.map((i) => i.id).toList();
@@ -1129,6 +1266,20 @@ class SupabaseSyncService {
             );
             continue;
           }
+          // #528: two phones linked the same Shopper to different Customers;
+          // the cloud's unique index refused this phone's link. Not an orphan:
+          // adopt the cloud's linked Customer (per row, so clean rows land).
+          if (group.table == 'customers' &&
+              group.action == 'upsert' &&
+              _isShopperLinkCollision(e)) {
+            await _settleShopperLinkCollisions(
+              chunkPayloads,
+              chunkIds,
+              sessionBusinessId,
+              requeueOnlineOrders,
+            );
+            continue;
+          }
           // §6.8 failure classification — parity with the domain-RPC path
           // (_pushDomainItems). Without it a per-table upsert that hits a cloud
           // constraint retried forever (uncapped transient backoff):
@@ -1213,6 +1364,19 @@ class SupabaseSyncService {
     // one rolled-up Activity Log row. Best-effort and off the sale path — see
     // [reconcilePushedSaleCosts].
     await reconcilePushedSaleCosts(recostPairs, sessionBusinessId);
+
+    // #528 — now that this drain's old Online Order payloads are settled, queue
+    // the re-pointed ones (they go up on the next drain).
+    for (final r in requeueOnlineOrders) {
+      try {
+        await _db.onlineOrdersDao.requeueOrder(
+          r.orderId,
+          customerId: r.customerId,
+        );
+      } catch (e) {
+        debugPrint('[SyncService] online order ${r.orderId} requeue failed: $e');
+      }
+    }
 
     // If the raw select hit the page limit, more is waiting — drain in the
     // next tick rather than recursing (avoids stack growth on huge backlogs).

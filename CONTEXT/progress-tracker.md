@@ -7,6 +7,8 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #528: Online order hardening (2026-10-26, ready for review)
+- Cloud 0219 (NOT deployed): `_online_orders_guard` re-issued from 0208 + store check via new SECURITY DEFINER `_caller_works_at_order_store` (0215's store rule, 0135's caller) -> 42501; sync: a `customers` 23505 on `customers_business_shopper_account` adopts the cloud's linked Customer (local one kept, unlinked; orders re-pointed + re-sent after the drain), never Sync Issues; new `CloudTransport.fetchRowsByColumn`. No Drift change.
 ### Issue #430: Print the order slip (2026-10-26, ready for review)
 - App-only (no Drift, no cloud): Print slip on accepted/fulfilled online orders (`online_orders.view`); `OnlineOrderSlip` (`lib/core/online_orders/online_order_slip.dart`) builds text + ESC/POS from `OnlineOrdersDao.slipLoad`; thermal printer, Share (text) fallback when no printer/print fails.
 ### Issue #433: Staff push for new Online Orders (2026-10-25, ready for review)
