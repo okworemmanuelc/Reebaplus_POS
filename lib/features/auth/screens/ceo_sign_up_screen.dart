@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/data/countries.dart';
 import 'package:reebaplus_pos/core/data/currencies.dart';
+import 'package:reebaplus_pos/core/data/timezones.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
@@ -618,7 +619,9 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
       // Feed the §5-dropped fields safe defaults before the commit. Currency
       // and businessPhone were set from step 3.
       draft.businessEmail = draft.email;
-      draft.timezone = 'Africa/Lagos';
+      // Derived from the chosen country (device offset picks among a
+      // multi-zone country's zones) — never a hardcoded Lagos (#63).
+      draft.timezone = timezoneForCountry(draft.country);
       draft.taxRegNumber = null;
 
       final persistedUser = await auth.completeOnboarding(draft);
