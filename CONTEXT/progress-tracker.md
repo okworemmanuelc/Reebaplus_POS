@@ -7,10 +7,15 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #506: Drop broken legacy invite preview functions (2026-10-26, ready for review)
+- Cloud 0220: drops `accept_invite_preview(text)` + `accept_invite_preview_by_code(text)` (anon-executable, always 42P01). Caller audit clean (POS, reebaplus-web, prod catalogue). No app change.
 ### Issue #469: Reorder points use real sales speed (2026-10-26, ready for review)
 - App-only: `getProductsBelowROP` derives avg daily sales on read (units sold at the store over the last 28 days from recognised sales, `kReorderSalesWindowDays`); `products.avgDailySales` is no longer read (still never written; drop in a later cleanup).
 ### Issue #430: Print the order slip (2026-10-26, ready for review)
 - App-only (no Drift, no cloud): Print slip on accepted/fulfilled online orders (`online_orders.view`); `OnlineOrderSlip` (`lib/core/online_orders/online_order_slip.dart`) builds text + ESC/POS from `OnlineOrdersDao.slipLoad`; thermal printer, Share (text) fallback when no printer/print fails.
+### Issue #475: Listing quality checklist + shared photo (2026-10-26, ready for review)
+- App only. Pure rule `lib/core/listings/listing_quality.dart` (kept out of `core/storefront`: shopper boundary); checklist in the Online listing card, per-store gap counts on the Online store hub (both `Gates.manageListing`); "Use the shared photo" on tap only (ADR 0029 §8 amended, signed off 2026-10-26). Not done: optional brand/category sharing. `pos-parity` issue not needed (no table/status/money change).
+
 ### Issue #433: Staff push for new Online Orders (2026-10-25, ready for review)
 - Cloud 0215 (NOT deployed): AFTER INSERT trigger on online_orders -> pg_net -> `send-push` with explicit `user_ids` (store-assigned/CEO/manager-all-stores holding online_orders.answer, role->store->user layering); `send-push` accepts `online_order` records (deploy after the migration, --no-verify-jwt); app tap opens the order if local else the Online tab. No Drift change.
 
@@ -20,6 +25,13 @@ The human updates it when resolving open questions or making architectural decis
 - Cloud 0213: `expire_stale_online_orders()` (service_role only) + hourly pg_cron (guarded); no Drift change, no guard change. NOT deployed.
 ### Issue #478: Report a listing + admin takedown (2026-10-25, ready for review)
 - Cloud 0214 (NOT deployed): `listing_reports` + `storefront_blocks` (cloud-only, service_role), `shopper_report_listing` (10/h, one open per target); `_storefront_stores`/`_storefront_cards`/`storefront_product_photos` re-issued with the block filter. App: Report on product sheet + store page. Console review screen + pos-parity filed in reebaplus-web.
+
+### Issue #432: Pay on delivery + Mark as paid (2026-10-26, ready for review)
+- Drift v94 adds only the `orders.pay_on_delivery.mark_paid` catalogue key. Cloud `0217_pay_on_delivery.sql` adds the key, re-issues the seed verbatim from 0208, backfills CEO roles, and re-issues `pos_cancel_order` verbatim from 0170 with one delta: a Mark as paid collection is not reversed. Deploy 0217 BEFORE the v94 build.
+- Checkout: a tagged Cart replaces "Register as Credit Sale" with "Pay on delivery · ₦X to collect" (PayMode.credit underneath). `checkDebtLimit(excludeOwnAmount:)` lives in `shared/services/orders/debt_limit.dart`.
+- Orders card: a "Pay on delivery" / "Paid" pill, the full label line and Mark as paid (`features/orders/widgets/mark_paid_dialog.dart`). Receipts on the Orders screen and the customer page use the Pay on delivery label. The recon line appears in Business worth (CEO) and Debts & expenses (Manager) and in the CSV.
+- pos-parity: okworemmanuelc/reebaplus-web#169.
+- Open: the v2 `pos_wallet_topup` RPC cannot carry `order_id`, so a linked collection always takes the direct-upsert path.
 
 ### Issue #431: Send to till (2026-10-25, ready for review)
 - App-only: NO Drift change (stays v93), NO cloud migration (0205/0208 guard already allows accepted -> fulfilled with linked_order_id). Online order detail: Send to till (accepted + `sales.make` + a store you work in) -> `OnlineOrdersDao.tillLoad` -> `CartService.loadOnlineOrder` (order's store, agreed price as charged, catalogue kept as `catalogPriceKobo`, linked Customer, qty lowered to stock). Tag = `onlineOrderId` + `agreedPriceKobo` keys on each cart line, so saved carts keep it and Clear drops it. Checkout passes `CartService.onlineOrderIdOf(cart)` -> `OrdersDao.createOrder(onlineOrderId)` -> `markFulfilled` in the sale txn (v2: held by the order; rejected sale reopens it). pos-parity issue filed in reebaplus-web.

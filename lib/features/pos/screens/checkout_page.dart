@@ -42,6 +42,8 @@ import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
 import 'package:reebaplus_pos/shared/services/printer_service.dart';
 import 'package:reebaplus_pos/shared/widgets/receipt_paper_size_prompt.dart';
 import 'package:reebaplus_pos/shared/services/cart_service.dart';
+import 'package:reebaplus_pos/shared/services/orders/debt_limit.dart';
+import 'package:reebaplus_pos/core/online_orders/pay_on_delivery.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CheckoutPage — shown after "Proceed to Checkout" in the cart.
@@ -138,6 +140,16 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
   late final CartService _cart;
   bool get _isWalkIn => _initialCustomer == null || _initialCustomer.isWalkIn;
+
+  /// #432 — the Cart was sent to the till from an accepted Online Order (and
+  /// has its customer). Only these Carts offer Pay on delivery.
+  bool get _isOnlineOrderCart =>
+      !_isWalkIn && CartService.onlineOrderIdOf(widget.cart) != null;
+
+  /// #432 — Pay on delivery: the credit-sale path on a tagged Cart. Labelled
+  /// "Pay on delivery · ₦X to collect", never "credit"; the debt-limit gate
+  /// leaves this order's own amount out.
+  bool get _isPayOnDelivery => _isOnlineOrderCart && _mode == PayMode.credit;
   Color get _bg => Theme.of(context).scaffoldBackgroundColor;
   Color get _surface => Theme.of(context).colorScheme.surface;
   Color get _text => Theme.of(context).colorScheme.onSurface;
@@ -231,6 +243,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       case PayMode.wallet:
         return 'Credit Payment';
       case PayMode.credit:
+        // #432 — on a Cart from an Online Order this is Pay on delivery.
+        if (_isOnlineOrderCart) return payOnDeliveryLabel(_totalKobo);
         // Always a Credit Sale when explicitly chosen — even if the wallet
         // could cover it, the cashier opted to book the whole total as debt.
         return 'Credit Sale';
@@ -280,16 +294,23 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   /// no limit is set). Drives the live warning; the same gate blocks on confirm.
   /// A fully-paid / overpaid Cash / Transfer never adds debt, so it's never
   /// gated even if the customer is already in debt.
-  bool get _overDebtLimit {
-    if (_isWalkIn) return false;
+  bool get _overDebtLimit => _debtLimitResult is! DebtLimitOk;
+
+  /// The debt-limit gate for the current mode (§14.3). Pay on delivery (#432)
+  /// leaves this order's own amount out: only the debt the customer already
+  /// had is checked, as usual.
+  DebtLimitResult get _debtLimitResult {
+    if (_isWalkIn) return const DebtLimitOk();
     final paidKobo = _mode == PayMode.cashTransfer
         ? (_cashReceivedValue * 100).round()
         : 0;
-    if (paidKobo >= _totalKobo) return false;
-    final projectedKobo = _projectedCreditKobo;
-    if (projectedKobo >= 0) return false;
-    final limitKobo = _currentCustomerCreditLimitKobo;
-    return limitKobo <= 0 || projectedKobo < -limitKobo;
+    return checkDebtLimit(
+      balanceKobo: _currentCustomerCreditKobo,
+      paidKobo: paidKobo,
+      totalKobo: _totalKobo,
+      limitKobo: _currentCustomerCreditLimitKobo,
+      excludeOwnAmount: _isPayOnDelivery,
+    );
   }
 
   /// Live credit balance (kobo) for the current customer (0 for walk-ins).
@@ -1060,31 +1081,34 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       // overpaid Cash / Transfer never is (even for a customer already in debt).
       // Balance + limit are read live (no awaited DB round-trip) so the
       // over-limit message always flashes (#7).
-      if (paidKobo < _totalKobo) {
-        final projectedKobo =
-            _currentCustomerCreditKobo + paidKobo - _totalKobo;
-        if (projectedKobo < 0) {
-          final customer = _initialCustomer!;
-          final limitKobo = _currentCustomerCreditLimitKobo;
-          if (limitKobo <= 0) {
-            AppNotification.showError(
-              context,
-              '${customer.name} has no debt limit set. Set a debt limit in the '
-              'customer profile before booking this debt.',
-            );
-            return;
-          }
-          if (projectedKobo < -limitKobo) {
-            final overByKobo = (-projectedKobo) - limitKobo;
-            AppNotification.showError(
-              context,
-              'This sale exceeds ${customer.name}\'s debt limit of '
-              '${formatCurrency(limitKobo / 100.0)}. '
-              'Over limit by ${formatCurrency(overByKobo / 100.0)}.',
-            );
-            return;
-          }
-        }
+      // #432 — Pay on delivery leaves this order's own amount out; the debt
+      // the customer already had is still checked (checkDebtLimit).
+      final customer = _initialCustomer!;
+      switch (_debtLimitResult) {
+        case DebtLimitOk():
+          break;
+        case DebtLimitNotSet():
+          AppNotification.showError(
+            context,
+            _isPayOnDelivery
+                ? '${customer.name} already owes money and has no debt limit '
+                      'set. Set a debt limit in the customer profile first.'
+                : '${customer.name} has no debt limit set. Set a debt limit in '
+                      'the customer profile before booking this debt.',
+          );
+          return;
+        case DebtLimitExceeded(:final limitKobo, :final overByKobo):
+          AppNotification.showError(
+            context,
+            _isPayOnDelivery
+                ? '${customer.name} is already over their debt limit of '
+                      '${formatCurrency(limitKobo / 100.0)} by '
+                      '${formatCurrency(overByKobo / 100.0)}.'
+                : 'This sale exceeds ${customer.name}\'s debt limit of '
+                      '${formatCurrency(limitKobo / 100.0)}. '
+                      'Over limit by ${formatCurrency(overByKobo / 100.0)}.',
+          );
+          return;
       }
     }
 
@@ -1692,7 +1716,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           _creditSaleCard(),
           if (_mode == PayMode.credit) ...[
             SizedBox(height: context.getRSize(10)),
-            _buildCreditPreview(),
+            _isOnlineOrderCart
+                ? _buildPayOnDeliveryPreview()
+                : _buildCreditPreview(),
           ],
         ],
 
@@ -1856,7 +1882,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         SizedBox(height: context.getRSize(6)),
         _previewHint(hint),
         if (_overDebtLimit)
-          _debtLimitWarning(_currentCustomerCreditLimitKobo, projectedKobo),
+          _debtLimitWarning(),
       ],
     );
   }
@@ -1901,7 +1927,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               : 'The order is charged to the credit balance.',
         ),
         if (_overDebtLimit)
-          _debtLimitWarning(_currentCustomerCreditLimitKobo, projectedKobo),
+          _debtLimitWarning(),
       ],
     );
   }
@@ -1919,8 +1945,28 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           projected,
           _balanceColor(projected),
         ),
-        if (_overDebtLimit)
-          _debtLimitWarning(_currentCustomerCreditLimitKobo, projectedKobo),
+        if (_overDebtLimit) _debtLimitWarning(),
+      ],
+    );
+  }
+
+  /// #432 — Pay on delivery preview: what the driver collects, plus the
+  /// warning when the customer's EARLIER debt already breaks their limit.
+  Widget _buildPayOnDeliveryPreview() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _amountBox(
+          'To collect on delivery',
+          formatCurrency(_totalKobo / 100.0),
+          _primary,
+        ),
+        SizedBox(height: context.getRSize(6)),
+        _previewHint(
+          'Nothing is paid now. Mark the order paid on the Orders screen when '
+          'the money comes in.',
+        ),
+        if (_overDebtLimit) _debtLimitWarning(),
       ],
     );
   }
@@ -1965,13 +2011,23 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
   /// Red warning shown when a debt-adding sale breaches the customer's limit
   /// (or none is set). The same condition blocks on Confirm Payment.
-  Widget _debtLimitWarning(int limitKobo, int projectedKobo) {
-    final msg = limitKobo <= 0
-        ? '$_customerDisplayName has no debt limit set — set one before booking '
-              'this debt.'
-        : 'Over $_customerDisplayName\'s debt limit of '
-              '${formatCurrency(limitKobo / 100.0)} by '
-              '${formatCurrency(((-projectedKobo) - limitKobo) / 100.0)}.';
+  Widget _debtLimitWarning() {
+    final msg = switch (_debtLimitResult) {
+      DebtLimitExceeded(:final limitKobo, :final overByKobo) =>
+        _isPayOnDelivery
+            ? '$_customerDisplayName is already over their debt limit of '
+                  '${formatCurrency(limitKobo / 100.0)} by '
+                  '${formatCurrency(overByKobo / 100.0)}.'
+            : 'Over $_customerDisplayName\'s debt limit of '
+                  '${formatCurrency(limitKobo / 100.0)} by '
+                  '${formatCurrency(overByKobo / 100.0)}.',
+      _ =>
+        _isPayOnDelivery
+            ? '$_customerDisplayName already owes money and has no debt limit '
+                  'set — set one first.'
+            : '$_customerDisplayName has no debt limit set — set one before '
+                  'booking this debt.',
+    };
     return Padding(
       padding: EdgeInsets.only(top: context.getRSize(8)),
       child: SalesNotice(
@@ -1986,6 +2042,19 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   /// "Register as Credit Sale" — the one retained payment card (registered
   /// customers only). Nothing is paid now; the whole total becomes wallet debt.
   Widget _creditSaleCard() {
+    // #432 — a Cart from an Online Order offers Pay on delivery instead: the
+    // same credit-sale path, never called "credit".
+    if (_isOnlineOrderCart) {
+      return SalesChoiceCard(
+        key: CheckoutKeys.modePayOnDelivery,
+        label: payOnDeliveryLabel(_totalKobo),
+        subtitle: 'Nothing paid now — collect the money when the goods arrive',
+        icon: AppIcons.bill,
+        selected: _mode == PayMode.credit,
+        trailingCheck: true,
+        onTap: () => setState(() => _mode = PayMode.credit),
+      );
+    }
     return SalesChoiceCard(
       key: CheckoutKeys.modeCredit,
       label: 'Register as Credit Sale',
@@ -2123,6 +2192,7 @@ abstract final class CheckoutKeys {
   static const modeCash = Key('checkout-mode-cash');
   static const modeWallet = Key('checkout-mode-wallet');
   static const modeCredit = Key('checkout-mode-credit');
+  static const modePayOnDelivery = Key('checkout-mode-pay-on-delivery');
   static const tenderCash = Key('checkout-tender-cash');
   static const tenderTransfer = Key('checkout-tender-transfer');
   static const amountPaid = Key('checkout-amount-paid');

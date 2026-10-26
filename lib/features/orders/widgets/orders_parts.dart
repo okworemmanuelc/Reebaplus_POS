@@ -37,6 +37,8 @@ abstract final class OrdersKeys {
   static const crateReturnSheet = Key('orders-crate-return-sheet');
   static const refundCredit = Key('orders-refund-to-credit');
   static const refundCash = Key('orders-refund-to-cash');
+  static const payOnDeliveryPill = Key('orders-pay-on-delivery-pill');
+  static const payOnDeliveryLabel = Key('orders-pay-on-delivery-label');
 }
 
 /// Height of the Orders top bar: room for the 44 icon tile (or a 48dp

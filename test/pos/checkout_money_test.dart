@@ -443,6 +443,124 @@ void main() {
     await finish(tester);
   });
 
+  // ── #432 Pay on delivery ────────────────────────────────────────────────
+  final newOnline = Customer(
+    id: 'cust-1',
+    name: 'Ada Buyer',
+    addressText: '',
+    googleMapsLocation: '',
+    walletLimitKobo: 0, // a new online customer: no debt limit
+  );
+
+  Future<void> tapPayOnDelivery(WidgetTester tester) async {
+    final card = inCheckout(find.byKey(CheckoutKeys.modePayOnDelivery));
+    await tester.ensureVisible(card);
+    await tester.pump();
+    await tester.tap(card);
+    await tester.pump();
+  }
+
+  testWidgets('Pay on delivery is offered only for a Cart from an online '
+      'order (#432)', (tester) async {
+    await openCheckout(tester, customer: regular);
+    expect(inCheckout(find.byKey(CheckoutKeys.modePayOnDelivery)),
+        findsNothing);
+    expect(inCheckout(find.byKey(CheckoutKeys.modeCredit)), findsOneWidget);
+    await finish(tester);
+  });
+
+  testWidgets('Pay on delivery books a credit sale labelled with what to '
+      'collect, never credit (#432)', (tester) async {
+    await openCheckout(tester, customer: regular, onlineOrderId: 'online-1');
+    expect(inCheckout(find.byKey(CheckoutKeys.modeCredit)), findsNothing);
+    expect(inCheckout(find.text('Register as Credit Sale')), findsNothing);
+    final label = 'Pay on delivery · ${formatCurrency(32500)} to collect';
+    expect(inCheckout(find.text(label)), findsOneWidget);
+    await tapPayOnDelivery(tester);
+    await tapButton(tester, 'Confirm Payment');
+    final call = orders.calls.single;
+    expect(call['paymentType'], label);
+    expect((call['paymentType'] as String).toLowerCase(),
+        isNot(contains('credit')));
+    // Underneath: exactly the credit-sale call.
+    expect(call['paymentSubType'], 'cash');
+    expect(call['amountPaidKobo'], 0);
+    expect(call['crateDepositPaidKobo'], 0);
+    expect(call['totalAmountKobo'], 3250000);
+    expect(call['onlineOrderId'], 'online-1');
+    await finish(tester);
+  });
+
+  testWidgets('a new customer with no debt limit can be served Pay on '
+      'delivery, but not an ordinary credit sale (#432)', (tester) async {
+    await openCheckout(tester, customer: newOnline, onlineOrderId: 'online-1');
+    await tapPayOnDelivery(tester);
+    expect(inCheckout(find.byKey(CheckoutKeys.debtLimit)), findsNothing);
+    await tapButton(tester, 'Confirm Payment');
+    expect(orders.calls, hasLength(1));
+    await finish(tester);
+  });
+
+  testWidgets('the usual credit sale still needs a debt limit (#432 '
+      'unchanged rule)', (tester) async {
+    await openCheckout(tester, customer: newOnline);
+    final card = inCheckout(find.text('Register as Credit Sale'));
+    await tester.ensureVisible(card);
+    await tester.pump();
+    await tester.tap(card);
+    await tester.pump();
+    await tapButton(tester, 'Confirm Payment');
+    expect(orders.calls, isEmpty);
+    await finish(tester);
+  });
+
+  testWidgets('prior debt over the limit still blocks Pay on delivery '
+      '(#432)', (tester) async {
+    // Owes ₦60,000 against a ₦50,000 limit before this order.
+    await openCheckout(
+      tester,
+      customer: regular,
+      creditKobo: -6000000,
+      onlineOrderId: 'online-1',
+    );
+    await tapPayOnDelivery(tester);
+    expect(inCheckout(find.byKey(CheckoutKeys.debtLimit)), findsOneWidget);
+    await tapButton(tester, 'Confirm Payment');
+    expect(orders.calls, isEmpty);
+    expect(find.textContaining('already over their debt limit'), findsWidgets);
+    await finish(tester);
+  });
+
+  testWidgets('prior debt within the limit: Pay on delivery ignores this '
+      'order\'s own amount (#432)', (tester) async {
+    // Owes ₦40,000 of ₦50,000; this ₦32,500 order would break the limit if
+    // it counted, but only the earlier debt is checked.
+    await openCheckout(
+      tester,
+      customer: regular,
+      creditKobo: -4000000,
+      onlineOrderId: 'online-1',
+    );
+    await tapPayOnDelivery(tester);
+    await tapButton(tester, 'Confirm Payment');
+    expect(orders.calls, hasLength(1));
+    await finish(tester);
+  });
+
+  testWidgets('prior debt with no limit set still blocks Pay on delivery '
+      '(#432)', (tester) async {
+    await openCheckout(
+      tester,
+      customer: newOnline,
+      creditKobo: -100000,
+      onlineOrderId: 'online-1',
+    );
+    await tapPayOnDelivery(tester);
+    await tapButton(tester, 'Confirm Payment');
+    expect(orders.calls, isEmpty);
+    await finish(tester);
+  });
+
   testWidgets('walk-in: the wrong amount is refused; empty pays the total', (
     tester,
   ) async {

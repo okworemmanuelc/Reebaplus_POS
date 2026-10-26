@@ -4382,4 +4382,22 @@ void main() {
       db = await openAndInit(); // idempotent re-upgrade
     } finally { await db.close(); }
   });
+
+  test('v93 to v94 adds the Pay on delivery mark-paid key (#432)', () async {
+    var db = await openAndInit();
+    await db.customStatement(
+        "DELETE FROM permissions WHERE key = 'orders.pay_on_delivery.mark_paid'");
+    await db.customStatement('PRAGMA user_version = 93');
+    await db.close();
+    db = await openAndInit();
+    try {
+      final rows = await db.customSelect(
+          "SELECT category FROM permissions "
+          "WHERE key = 'orders.pay_on_delivery.mark_paid'").get();
+      expect(rows.single.read<String>('category'), 'Online store');
+      await db.customStatement('PRAGMA user_version = 93');
+      await db.close();
+      db = await openAndInit(); // idempotent re-upgrade
+    } finally { await db.close(); }
+  });
 }

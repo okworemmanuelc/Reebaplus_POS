@@ -345,6 +345,15 @@ abstract final class Gates {
     rule: Gate.key('online_orders.answer'),
   );
 
+  /// Mark a Pay on delivery order paid (#432): the Mark as paid button on the
+  /// order (hidden without it) and the re-check at save. CEO only by default
+  /// (cloud 0217); a CEO can grant it to Managers.
+  static const NamedGate markPayOnDeliveryPaid = NamedGate(
+    name: 'markPayOnDeliveryPaid',
+    action: 'Mark pay-on-delivery orders paid',
+    rule: Gate.key('orders.pay_on_delivery.mark_paid'),
+  );
+
   /// Request a stock transfer from another store (§16.8.2) — store details,
   /// and one leg of the Stores screen's browse composite.
   static const NamedGate requestStoreTransfer = NamedGate(

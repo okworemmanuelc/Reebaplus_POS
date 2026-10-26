@@ -30,6 +30,7 @@ import 'package:reebaplus_pos/features/customers/widgets/customer_payment_sheet.
 import 'package:reebaplus_pos/features/customers/widgets/edit_customer_sheet.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_builder.dart';
 import 'package:reebaplus_pos/shared/models/order_status.dart';
+import 'package:reebaplus_pos/core/providers/online_order_providers.dart';
 import 'package:reebaplus_pos/shared/models/receipt_totals.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
@@ -889,9 +890,13 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                             discount: totals.discountKobo / 100.0,
                             crateDeposit: totals.depositKobo / 100.0,
                             total: totals.totalKobo / 100.0,
-                            paymentMethod: paymentMethodLabel(
-                              order.paymentType,
-                            ),
+                            // #432 — a Pay on delivery order says so.
+                            paymentMethod:
+                                receiptRef
+                                    .watch(payOnDeliveryByOrderProvider)[
+                                        order.id]
+                                    ?.label ??
+                                paymentMethodLabel(order.paymentType),
                             customerName: _name,
                             customerPhone: _phone,
                             customerAddress: _address,
@@ -1013,7 +1018,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
             discount: totals.discountKobo / 100.0,
             crateDeposit: totals.depositKobo / 100.0,
             total: totals.totalKobo / 100.0,
-            paymentMethod: paymentMethodLabel(order.paymentType),
+            paymentMethod:
+                ref.read(payOnDeliveryByOrderProvider)[order.id]?.label ??
+                paymentMethodLabel(order.paymentType),
             customerName: _name,
             customerAddress: _address,
             cashReceived: order.amountPaidKobo / 100.0,

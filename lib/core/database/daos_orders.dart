@@ -1692,6 +1692,25 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
+  /// #432 — the wallet credits of [orderId] that are Mark as paid
+  /// collections: Record Payment rows (a `wallet_topup` payment row hangs off
+  /// the wallet credit) carrying the order id. A sale's own legs never have a
+  /// payment row of their own (their payment row's parent is the order).
+  Future<Set<String>> _payOnDeliveryCollectionIds(String orderId) async {
+    final rows = await customSelect(
+      'SELECT w.id FROM wallet_transactions w '
+      'WHERE w.business_id = ? AND w.order_id = ? '
+      'AND EXISTS (SELECT 1 FROM payment_transactions p '
+      "WHERE p.wallet_txn_id = w.id AND p.type = 'wallet_topup')",
+      variables: [
+        Variable<String>(requireBusinessId()),
+        Variable<String>(orderId),
+      ],
+      readsFrom: {walletTransactions, paymentTransactions},
+    ).get();
+    return {for (final r in rows) r.read<String>('id')};
+  }
+
   /// Cancel/refund an order (§19.7): append compensating stock rows, post a
   /// dated refund cash-out row for the goods paid (the original sale payment is
   /// left intact — money leaves on the cancel day, #172), and reverse both
@@ -1944,7 +1963,12 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
                     ]),
               ))
               .get();
+      // #432 — a Mark as paid collection is money the customer really handed
+      // over, not a sale leg: it stays as their credit when the sale is
+      // reversed.
+      final collections = await _payOnDeliveryCollectionIds(orderId);
       for (final leg in saleWalletLegs) {
+        if (collections.contains(leg.id)) continue;
         final toCredit = leg.type == 'debit';
         final isHeldDeposit = leg.referenceType == 'crate_deposit';
         final compReverse = WalletTransactionsCompanion.insert(
@@ -2061,7 +2085,10 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
                     t.referenceType.isNotIn(const ['refund', 'void']),
               ))
               .get();
+      // #432 — never reverse a Mark as paid collection.
+      final collections = await _payOnDeliveryCollectionIds(orderId);
       for (final leg in saleWalletLegs) {
+        if (collections.contains(leg.id)) continue;
         final toCredit = leg.type == 'debit';
         final compReverse = WalletTransactionsCompanion.insert(
           id: Value(UuidV7.generate()),

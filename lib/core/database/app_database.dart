@@ -3135,7 +3135,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 93;
+  int get schemaVersion => 94;
 
   /// The v90 (#473) listing columns, pinned to their defaults in every older
   /// products rebuild: TableMigration copies from the CURRENT schema, so a
@@ -6816,6 +6816,19 @@ class AppDatabase extends _$AppDatabase {
           "'Online store')",
         );
       }
+      if (from < 94) {
+        // ── v94 — #432: Mark a Pay on delivery order paid ─────────────────
+        //
+        // Mirrors supabase/migrations/0217_pay_on_delivery.sql: one permission
+        // key (catalogue only — the CEO grant arrives from the cloud). Cloud
+        // 0217 must deploy first. No column change, so no older table rebuild
+        // can pick up a stale column.
+        await customStatement(
+          "INSERT OR IGNORE INTO permissions (key, description, category) VALUES "
+          "('orders.pay_on_delivery.mark_paid', "
+          "'Mark pay-on-delivery orders paid', 'Online store')",
+        );
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -7288,6 +7301,12 @@ const List<List<String>> _defaultPermissionRows = [
   // #427: Online Orders. CEO / Manager / Cashier by default (cloud 0208).
   ['online_orders.view', 'See online orders', 'Online store'],
   ['online_orders.answer', 'Accept or decline online orders', 'Online store'],
+  // #432: Mark a Pay on delivery order paid. CEO only by default (cloud 0217).
+  [
+    'orders.pay_on_delivery.mark_paid',
+    'Mark pay-on-delivery orders paid',
+    'Online store',
+  ],
   [
     'stores.receive_transfer',
     'Confirm receipt of incoming stock transfers',

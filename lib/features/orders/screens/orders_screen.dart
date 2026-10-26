@@ -13,6 +13,7 @@ import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/features/orders/widgets/online_orders_tab.dart';
 import 'package:reebaplus_pos/features/orders/widgets/online_order_parts.dart';
 import 'package:reebaplus_pos/features/orders/widgets/orders_parts.dart';
+import 'package:reebaplus_pos/features/orders/widgets/mark_paid_dialog.dart';
 import 'package:reebaplus_pos/core/providers/online_order_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/icon_tile.dart';
@@ -1202,7 +1203,13 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                             crateDeposit: totals.depositKobo / 100.0,
                             total: totals.totalKobo / 100.0,
                             manufacturerNames: manufacturerNames,
-                            paymentMethod: currentOrder.paymentType,
+                            // #432 — a Pay on delivery order says so.
+                            paymentMethod:
+                                receiptRef
+                                    .watch(payOnDeliveryByOrderProvider)[
+                                        currentOrder.id]
+                                    ?.label ??
+                                currentOrder.paymentType,
                             customerName:
                                 richOrder.customer?.name ?? 'Walk-in Customer',
                             customerAddress:
@@ -1369,7 +1376,10 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
             discount: totals.discountKobo / 100.0,
             crateDeposit: totals.depositKobo / 100.0,
             total: totals.totalKobo / 100.0,
-            paymentMethod: order.paymentType,
+            // #432 — a Pay on delivery order says so.
+            paymentMethod:
+                ref.read(payOnDeliveryByOrderProvider)[order.id]?.label ??
+                order.paymentType,
             customerName: richOrder.customer?.name ?? 'Walk-in Customer',
             customerAddress: richOrder.customer?.addressText ?? 'N/A',
             cashReceived: order.paymentType == 'Wallet Payment'
@@ -1638,6 +1648,17 @@ class _OrderCard extends ConsumerWidget {
         : (balances[customer.id] ?? 0);
     final showCreditDebt = customer != null && creditBalanceKobo < 0;
 
+    // #432 — a Pay on delivery order (a credit order linked to an Online
+    // Order): labelled "Pay on delivery · ₦X to collect" (never "credit"), and
+    // Mark as paid shows while money is left to collect — hidden without
+    // orders.pay_on_delivery.mark_paid (hide-don't-block, re-checked at save).
+    final pod = ref.watch(payOnDeliveryByOrderProvider)[order.id];
+    final canMarkPaid =
+        pod != null &&
+        pod.isLive &&
+        !pod.isPaid &&
+        Gates.markPayOnDeliveryPaid.allows(ref);
+
     // §19.4: who created the order (staffId → user name). Not a monetary value,
     // so it shows for every role (the §19.3 money-hiding rule does not apply).
     final users =
@@ -1872,8 +1893,20 @@ class _OrderCard extends ConsumerWidget {
                                 ),
                                 SizedBox(width: context.getRSize(8)),
                                 TagPill(
-                                  label: _paymentLabel(order.paymentType),
-                                  tone: _paymentTone(order.paymentType),
+                                  key: pod == null
+                                      ? null
+                                      : OrdersKeys.payOnDeliveryPill,
+                                  // #432 — short pill; the full "Pay on
+                                  // delivery · ₦X to collect" line sits with
+                                  // the money below.
+                                  label: pod == null
+                                      ? _paymentLabel(order.paymentType)
+                                      : (pod.isPaid ? 'Paid' : 'Pay on delivery'),
+                                  tone: pod == null
+                                      ? _paymentTone(order.paymentType)
+                                      : (pod.isPaid
+                                            ? TagPillTone.green
+                                            : TagPillTone.info),
                                 ),
                               ],
                             ),
@@ -2003,7 +2036,14 @@ class _OrderCard extends ConsumerWidget {
                                               height: context.getRSize(2),
                                             ),
                                             Text(
-                                              'Paid: ${formatCurrency(order.amountPaidKobo / 100.0)}',
+                                              // #432 — never "credit".
+                                              pod != null
+                                                  ? pod.label
+                                                  : 'Paid: ${formatCurrency(order.amountPaidKobo / 100.0)}',
+                                              key: pod == null
+                                                  ? null
+                                                  : OrdersKeys
+                                                        .payOnDeliveryLabel,
                                               style: context
                                                   .regularStyle(12)
                                                   .copyWith(color: subtextCol),
@@ -2080,6 +2120,37 @@ class _OrderCard extends ConsumerWidget {
                               ],
                             ),
                           ),
+
+                          // ── Mark as paid (#432) ───────────────────────────
+                          if (canMarkPaid)
+                            Container(
+                              padding: EdgeInsets.fromLTRB(
+                                context.getRSize(12),
+                                context.getRSize(10),
+                                context.getRSize(12),
+                                context.getRSize(
+                                  status == 'pending' &&
+                                          (onRefund != null ||
+                                              onMarkAsDelivered != null)
+                                      ? 0
+                                      : 12,
+                                ),
+                              ),
+                              decoration: BoxDecoration(
+                                border: Border(
+                                  top: BorderSide(color: borderCol),
+                                ),
+                              ),
+                              child: AppButton(
+                                key: MarkPaidKeys.button,
+                                text: 'Mark as paid',
+                                icon: AppIcons.cash,
+                                variant: AppButtonVariant.secondary,
+                                height: kMinInteractiveDimension,
+                                onPressed: () =>
+                                    markPayOnDeliveryPaid(context, ref, pod),
+                              ),
+                            ),
 
                           // ── Footer actions (pending only) ─────────────────
                           if (status == 'pending' &&
