@@ -9,6 +9,7 @@ import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart'
     show SaleSyncException;
 import 'package:reebaplus_pos/core/utils/order_number.dart';
+import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/shared/services/orders/crate_return_input.dart';
 import 'package:reebaplus_pos/shared/services/orders/sale_flusher.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
@@ -421,7 +422,7 @@ class OrderCommands {
     required ReturnOutcome outcome,
   }) async {
     try {
-      final amount = (outcome.refundKobo / 100).toStringAsFixed(2);
+      final amount = formatCurrency(outcome.refundKobo / 100);
       final msg =
           'Sale ${outcome.orderNumber} returned: $amount refunded, '
           '${outcome.damagedUnits} unit(s) written off. Reason: $reason';

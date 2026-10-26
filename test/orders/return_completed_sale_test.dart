@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/permissions/gate.dart';
+import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/shared/services/credit_ledger_service.dart';
 import 'package:reebaplus_pos/shared/services/orders/order_service.dart';
 
@@ -384,7 +385,7 @@ void main() {
       expect(logs, hasLength(1));
       expect(logs.single.userId, managerId);
       expect(logs.single.description, contains('2 unit(s) written off'));
-      expect(logs.single.description, contains('3000.00'));
+      expect(logs.single.description, contains(formatCurrency(3000)));
       expect(logs.single.description, contains('Customer brought it back'));
       final alerts = await (db.select(db.notifications)
             ..where((n) => n.type.equals('sale_returned')))
