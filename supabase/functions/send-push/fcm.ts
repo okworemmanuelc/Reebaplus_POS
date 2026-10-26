@@ -43,7 +43,7 @@ export type PushRecipient =
   | { audience: "staff"; businessId: string; userIds?: string[] }
   | { audience: "shopper"; authUserId: string };
 
-/// Shopper push types share this prefix (senders arrive with #434). The hook
+/// Shopper push types share this prefix (#434 sends `shopper_online_order`). The hook
 /// secret is the trust boundary; the prefix keeps a mis-addressed record from
 /// ever reaching a phone.
 export const SHOPPER_PUSH_TYPE_PREFIX = "shopper_";
@@ -87,12 +87,15 @@ export function resolveRecipient(r: unknown): PushRecipient | null {
 }
 
 /// The `devices` column + value whose live tokens address [recipient].
+/// Shopper pushes go to Android app phones only (#434): web-link and iPhone
+/// Shoppers are told by email instead (the 0218 trigger picks the channel).
 export function tokenFilterFor(
   recipient: PushRecipient,
 ): {
   column: "business_id" | "auth_user_id";
   value: string;
   userIds?: string[];
+  platform?: "android";
 } {
   return recipient.audience === "staff"
     ? {
@@ -100,7 +103,7 @@ export function tokenFilterFor(
       value: recipient.businessId,
       ...(recipient.userIds ? { userIds: recipient.userIds } : {}),
     }
-    : { column: "auth_user_id", value: recipient.authUserId };
+    : { column: "auth_user_id", value: recipient.authUserId, platform: "android" };
 }
 
 /// One FCM HTTP v1 message envelope (POST body to messages:send).
@@ -169,7 +172,12 @@ export function buildFcmMessages(
   if (audience === "staff" && nonEmpty(record.business_id)) {
     data.business_id = record.business_id;
   }
-  if (TARGETED_STAFF_PUSH_TYPES.includes(record.type) && record.data) {
+  // Extra data keys: targeted staff pushes (#433) and Shopper order updates
+  // (#434: online_order_id, event). Never overrides the routing keys above.
+  if (
+    (audience === "shopper" || TARGETED_STAFF_PUSH_TYPES.includes(record.type)) &&
+    record.data
+  ) {
     for (const [k, v] of Object.entries(record.data)) {
       if (typeof v === "string" && !(k in data)) data[k] = v;
     }

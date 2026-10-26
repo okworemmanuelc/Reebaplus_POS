@@ -33,6 +33,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:reebaplus_pos/core/crates/crate_shortage.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/utils/number_format.dart';
+import 'package:reebaplus_pos/core/providers/online_order_providers.dart';
+import 'package:reebaplus_pos/core/online_orders/pay_on_delivery.dart';
 import 'package:reebaplus_pos/core/permissions/gate.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/business_scoped_stream.dart';
@@ -641,6 +644,89 @@ void main() {
         find.byKey(const ValueKey(kReconCrateWriteOffButtonKey)),
         findsNothing,
       );
+    });
+  });
+
+  group('Pay on delivery not yet collected (#432)', () {
+    const pod = PayOnDeliveryOrder(
+      orderId: 'o-1',
+      onlineOrderId: 'oo-1',
+      storeId: _store,
+      customerId: 'c-1',
+      status: 'pending',
+      dueKobo: 1250000,
+      collectedKobo: 0,
+    );
+
+    for (final slug in ['ceo', 'manager']) {
+      testWidgets('a $slug sees the report-only uncollected total',
+          (tester) async {
+        await pumpDetail(
+          tester,
+          start: _dayStart,
+          endExclusive: _dayEnd,
+          roleSlug: slug,
+          grantedKeys: const {'expenses.approve'},
+          overrides: [
+            payOnDeliveryOrdersProvider.overrideWith(
+              (ref) => Stream.value(const [pod]),
+            ),
+          ],
+        );
+        final line =
+            find.byKey(const ValueKey(kReconPayOnDeliveryLineKey));
+        expect(line, findsOneWidget);
+        expect(
+          find.descendant(
+            of: line,
+            matching: find.text('Pay on delivery not yet collected'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: line, matching: find.text(formatCurrency(12500))),
+          findsOneWidget,
+        );
+      });
+    }
+
+    testWidgets('nothing to collect shows no line', (tester) async {
+      await pumpDetail(tester, start: _dayStart, endExclusive: _dayEnd);
+      expect(find.byKey(const ValueKey(kReconPayOnDeliveryLineKey)),
+          findsNothing);
+    });
+
+    test('the figure enters no cash or net-position total', () {
+      final none = reconDataFrom(const ReconInputs(isCeo: true));
+      final some = reconDataFrom(const ReconInputs(
+        isCeo: true,
+        payOnDelivery: [
+          pod,
+          PayOnDeliveryOrder(
+            orderId: 'o-2',
+            onlineOrderId: 'oo-2',
+            storeId: _store,
+            customerId: 'c-1',
+            status: 'pending',
+            dueKobo: 500000,
+            collectedKobo: 500000, // paid
+          ),
+          PayOnDeliveryOrder(
+            orderId: 'o-3',
+            onlineOrderId: 'oo-3',
+            storeId: _store,
+            customerId: 'c-1',
+            status: 'cancelled', // reversed: nothing to collect
+            dueKobo: 900000,
+            collectedKobo: 0,
+          ),
+        ],
+      ));
+      expect(some.payOnDeliveryUncollectedKobo, 1250000);
+      expect(some.netCashMovementKobo, none.netCashMovementKobo);
+      expect(some.cashInKobo, none.cashInKobo);
+      expect(some.totalOwedKobo, none.totalOwedKobo);
+      expect(some.businessNetPositionKobo, none.businessNetPositionKobo);
     });
   });
 }

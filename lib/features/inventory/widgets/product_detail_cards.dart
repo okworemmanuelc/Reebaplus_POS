@@ -1163,10 +1163,18 @@ class _ProductEditDialogState extends State<ProductEditDialog> {
 /// The shop's online words and order limits for this product. Shown only to a
 /// viewer holding `products.manage_listing`; [onEdit] null hides the pencil.
 class ProductListingCard extends StatelessWidget {
-  const ProductListingCard({super.key, required this.content, this.onEdit});
+  const ProductListingCard({
+    super.key,
+    required this.content,
+    this.onEdit,
+    this.checklist,
+  });
 
   final ListingContent content;
   final VoidCallback? onEdit;
+
+  /// The listing checklist (#475), shown under the figures.
+  final Widget? checklist;
 
   @override
   Widget build(BuildContext context) {
@@ -1219,6 +1227,7 @@ class ProductListingCard extends StatelessWidget {
           ),
           row('Brand', content.brand ?? 'Not set', muted: content.brand == null),
           row('Online orders', orderLimitsSummary(content.rule)),
+          ?checklist,
         ],
       ),
     );

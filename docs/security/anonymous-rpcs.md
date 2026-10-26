@@ -15,8 +15,8 @@ Remaining anonymous functions, left unchanged by this migration:
 
 | Function | Reason |
 | --- | --- |
-| accept_invite_preview(text) | Broken legacy function; cleanup tracked in #506 |
-| accept_invite_preview_by_code(text) | Broken legacy function; cleanup tracked in #506 |
+| accept_invite_preview(text) | Dropped in 0220 (#506) |
+| accept_invite_preview_by_code(text) | Dropped in 0220 (#506) |
 | lookup_invite_code(text) | Mobile staff signup validates a code before OTP |
 | console_get_trial_days() | Scalar trial-duration bootstrap setting |
 | storefront_feed / storefront_search / storefront_store / storefront_store_products | #425 (0202): signed-out Browse. Public listing fields only; every hide rule server-side; helpers `_storefront_*` are server-only |

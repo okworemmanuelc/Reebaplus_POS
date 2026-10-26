@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/online_orders/pay_on_delivery.dart';
 import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/business_scoped_stream.dart';
@@ -94,3 +95,23 @@ final canSendOnlineOrderToTillProvider = Provider.family<bool, String>((
   if (ref.watch(canViewAllStoresProvider)) return true;
   return ref.watch(selectableStoresProvider).any((s) => s.id == storeId);
 });
+
+/// Every Pay on delivery order of the business (#432), any status: a `credit`
+/// order an Online Order is linked to, with what Mark as paid has collected.
+final payOnDeliveryOrdersProvider =
+    businessScopedStream<List<PayOnDeliveryOrder>>(
+      (ref, db, businessId) => db.onlineOrdersDao.watchPayOnDelivery(),
+      whenAbsent: const [],
+    );
+
+/// [payOnDeliveryOrdersProvider] by order id — how the Orders screen, the
+/// receipt and the customer page know to say "Pay on delivery" (never
+/// "credit").
+final payOnDeliveryByOrderProvider = Provider<Map<String, PayOnDeliveryOrder>>(
+  (ref) => {
+    for (final o
+        in ref.watch(payOnDeliveryOrdersProvider).valueOrNull ??
+            const <PayOnDeliveryOrder>[])
+      o.orderId: o,
+  },
+);

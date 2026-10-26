@@ -215,6 +215,51 @@ void main() {
       await disposeScreen(tester);
     });
 
+    group('listing checklist + shared photo (#475)', () {
+      final checklist = find.byKey(const ValueKey('listing-quality-checklist'));
+      final shared = find.byKey(const ValueKey('use-shared-photo'));
+
+      testWidgets('shows the gaps with the listing grant', (tester) async {
+        await pump(tester, grants: const {'products.manage_listing'},
+          roleSlug: 'cashier', roleRank: GateTier.cashier);
+        expect(checklist, findsOneWidget);
+        expect(find.byKey(const ValueKey('listing-gap-description')), findsOneWidget);
+        expect(find.byKey(const ValueKey('listing-gap-photo')), findsOneWidget);
+        await disposeScreen(tester);
+      });
+
+      testWidgets('hidden without the listing grant', (tester) async {
+        await pump(tester, grants: const {'products.edit_price'});
+        expect(checklist, findsNothing);
+        await disposeScreen(tester);
+      });
+
+      testWidgets('shared photo button needs a factory barcode and no photo',
+          (tester) async {
+        await pump(tester, grants: const {'products.manage_listing'},
+          roleSlug: 'cashier', roleRank: GateTier.cashier);
+        expect(shared, findsNothing); // no barcode yet
+        await disposeScreen(tester);
+      });
+
+      testWidgets('shared photo button shows with a factory barcode',
+          (tester) async {
+        detail = await seedDetailSample(env, sample, barcode: '5449000000996');
+        await pump(tester, grants: const {'products.manage_listing'},
+          roleSlug: 'cashier', roleRank: GateTier.cashier, seeded: detail);
+        expect(shared, findsOneWidget);
+        await disposeScreen(tester);
+      });
+
+      testWidgets('a price-only user never sees the shared photo button',
+          (tester) async {
+        detail = await seedDetailSample(env, sample, barcode: '5449000000996');
+        await pump(tester, grants: const {'products.edit_price'}, seeded: detail);
+        expect(shared, findsNothing);
+        await disposeScreen(tester);
+      });
+    });
+
     testWidgets('edits description, brand and order limits', (tester) async {
       await pump(tester, grants: const {'products.manage_listing'},
         roleSlug: 'cashier', roleRank: GateTier.cashier);
