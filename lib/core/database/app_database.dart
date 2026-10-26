@@ -7011,6 +7011,9 @@ class AppDatabase extends _$AppDatabase {
   /// removing them is what makes this phone agree with the cloud.
   static const Set<String> kWithdrawableReversalTables = {
     'stock_transactions',
+    // #551 — a Return's damage write-off adjustments (after the stock rows that
+    // reference them).
+    'stock_adjustments',
     'payment_transactions',
     'wallet_transactions',
     'crate_ledger',

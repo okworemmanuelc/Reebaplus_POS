@@ -50,3 +50,14 @@ Confirm-ordering paths plus the existing suite.
   speculative generality: two best-effort reactions (quick-sale audit,
   crate-debt notify) get one isolated private side-effects step, not an event
   bus. Revisit only if the reaction list grows (receipts, loyalty, webhooks).
+
+## Update (#551): Return joins the command surface
+
+`OrderCommands.returnCompletedSale` (a fourth lifecycle write beside Checkout,
+Confirm and Cancel) and `OrderQueries.isReturnable` are exposed through
+`OrderService`. The Return shares the Cancel reversal (`OrdersDao.markCancelled`,
+run inside `beginGuardedReversal`/`commitGuardedReversal`, ADR 0032) and writes
+its damage write-offs through a hook in that same transaction. The Orders
+screen's Return dialog only collects input; the Gate (`Gates.refundOrder`) is
+enforced in the command. The "no Refund on Completed" rule (§19.8) now reads: no
+Refund on a Completed sale that involved crates; a crate-free one offers Return.

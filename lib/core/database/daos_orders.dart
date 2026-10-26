@@ -1740,11 +1740,28 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   /// left intact — money leaves on the cancel day, #172), and reverse both
   /// wallet legs so the customer's wallet returns to its pre-sale balance.
   /// Inventory is restored.
+  ///
+  /// Idempotent: an already-`cancelled` order is a no-op (#551), so a double tap
+  /// can't reverse a sale twice on one phone.
+  ///
+  /// [forceLocalReversal] skips the v2 domain-RPC path (the Return, #551, always
+  /// uses the local reversal). [damagedQtyByLine] (order-item id → units, the
+  /// Return only) shrinks each line's restore layer to its SELLABLE units and
+  /// writes the damaged units off as `damage:<damageReasonKey>` adjustments at
+  /// the line's recorded cost — no existing cost layer is drawn down, so the
+  /// reversal only ever ADDS rows (a rejected one withdraws cleanly, #550).
+  /// Both run inside the reversal's guarded
+  /// transaction after the compensating rows are written and before the claim
+  /// is committed, so any rows it writes (the Return's damage write-offs) are
+  /// held behind the same `pos_claim_order_reversal` envelope.
   Future<void> markCancelled(
     String orderId,
     String reason,
-    String staffId,
-  ) async {
+    String staffId, {
+    bool forceLocalReversal = false,
+    Map<String, int> damagedQtyByLine = const {},
+    String damageReasonKey = 'other',
+  }) async {
     // DO NOT ENABLE UNTIL #121 (the oversell-orphan go-live gate), and not
     // before migration 0170 is DEPLOYED. #201 rewrote `pos_cancel_order` to the
     // rules below — compensating rows only, deposits and top-ups reversed in
@@ -1757,9 +1774,12 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     final flagValue = await db.systemConfigDao.get(
       'feature.domain_rpcs_v2.cancel_order',
     );
-    final useDomainRpc = flagValue == 'true' || flagValue == '"true"';
+    final useDomainRpc =
+        !forceLocalReversal && (flagValue == 'true' || flagValue == '"true"');
 
     return db.transaction(() async {
+      final current = await findById(orderId);
+      if (current != null && current.status == 'cancelled') return;
       final now = DateTime.now();
 
       // Update order status (both v1 and v2 paths flip the header locally
@@ -1895,8 +1915,14 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         await db.costBatchesDao.recordInflowBatch(
           productId: productId,
           storeId: line.storeId,
-          quantity: line.quantity,
+          // #551: damaged returned units never come back as sellable stock.
+          quantity: line.quantity - (damagedQtyByLine[line.id] ?? 0),
           costKobo: line.buyingPriceKobo,
+          // 0228: a fixed id the cloud recost recognises (keeps this sale's
+          // units in the replay so no other sale is re-costed). Written even
+          // at 0 sellable units — its presence is what the cloud checks.
+          id: CostBatchesDao.cancelRestoreLayerId(line.id),
+          allowEmpty: true,
         );
       }
 
@@ -2030,12 +2056,147 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         staffId: staffId,
       );
 
+      // #551 — a Return's damaged units: written off at the line's recorded
+      // cost (outflowValueKobo → no FIFO draw-down; the restore layer above
+      // already excludes them).
+      for (final line in cancelledLines) {
+        final damaged = damagedQtyByLine[line.id] ?? 0;
+        final productId = line.productId;
+        if (damaged <= 0 || productId == null) continue;
+        await db.inventoryDao.adjustStock(
+          productId,
+          line.storeId,
+          -damaged,
+          'damage:$damageReasonKey',
+          staffId,
+          outflowValueKobo: damaged * line.buyingPriceKobo,
+        );
+      }
+
       await commitGuardedReversal(
         guard,
         orderId: orderId,
         staffId: staffId,
         reason: reason,
         cancelledAt: now,
+      );
+    });
+  }
+
+  // ── Return a crate-free Completed sale (#551, PRD #337) ────────────────────
+
+  /// Whether [orderId] may be Returned (PRD #337): `completed`, no crate history
+  /// (per-brand crate lines, crate-ledger rows referencing the order, crate
+  /// deposit payment rows or wallet legs) and no line that is a crate-tracked
+  /// bottle by current product settings. Business-scoped reads only.
+  Future<bool> isReturnable(String orderId) async =>
+      await returnRefusal(orderId) == null;
+
+  /// Why [orderId] can't be Returned, or null when it can.
+  Future<ReturnRefusal?> returnRefusal(String orderId) async {
+    final order = await findById(orderId);
+    if (order == null) return ReturnRefusal.notFound;
+    if (order.status != 'completed') return ReturnRefusal.notCompleted;
+    final biz = requireBusinessId();
+    final crateHistory = await customSelect(
+      'SELECT 1 AS x FROM order_crate_lines WHERE business_id = ?1 AND order_id = ?2 '
+      'UNION ALL SELECT 1 FROM crate_ledger WHERE business_id = ?1 AND reference_order_id = ?2 '
+      'UNION ALL SELECT 1 FROM payment_transactions WHERE business_id = ?1 AND order_id = ?2 AND type = \'crate_deposit\' '
+      'UNION ALL SELECT 1 FROM wallet_transactions WHERE business_id = ?1 AND order_id = ?2 '
+      'AND reference_type IN (\'crate_deposit\', \'crate_deposit_refunded\', \'crate_deposit_forfeited\', \'crate_refund\') '
+      'LIMIT 1',
+      variables: [Variable<String>(biz), Variable<String>(orderId)],
+      readsFrom: {
+        db.orderCrateLines,
+        db.crateLedger,
+        paymentTransactions,
+        walletTransactions,
+      },
+    ).get();
+    if (crateHistory.isNotEmpty) return ReturnRefusal.crateBearing;
+    final lines = await (select(orderItems)
+          ..where((i) => i.orderId.equals(orderId) & whereBusiness(i)))
+        .get();
+    final productIds = lines.map((l) => l.productId).whereType<String>().toSet();
+    if (productIds.isNotEmpty) {
+      final prods = await (select(products)
+            ..where((p) => p.id.isIn(productIds.toList()) & whereBusiness(p)))
+          .get();
+      if (prods.any(
+        (p) => isCrateTrackedBottle((unit: p.unit, trackEmpties: p.trackEmpties)),
+      )) {
+        return ReturnRefusal.crateBearing;
+      }
+    }
+    return null;
+  }
+
+  /// **Return** a crate-free Completed sale (#551): ONE transaction that
+  /// re-checks returnability, runs the shared [markCancelled] reversal inside a
+  /// guarded reversal, then writes off each line's [damagedQtyByLine] (keyed by
+  /// order-item id) as `damage:<damageReasonKey>` stock adjustments — held behind
+  /// the same reversal claim. Throws [ReturnRefusedException] when the order
+  /// can't be returned or a damaged quantity is out of bounds; no-op (returns
+  /// null) on an already-cancelled order. Mark-as-paid collections stay as
+  /// customer credit (markCancelled's #432 rule).
+  Future<ReturnOutcome?> returnCompletedSale({
+    required String orderId,
+    required String reason,
+    required String staffId,
+    String damageReasonKey = 'other',
+    Map<String, int> damagedQtyByLine = const {},
+  }) {
+    return db.transaction(() async {
+      final order = await findById(orderId);
+      if (order == null) {
+        throw const ReturnRefusedException(ReturnRefusal.notFound);
+      }
+      if (order.status == 'cancelled') return null;
+      final refusal = await returnRefusal(orderId);
+      if (refusal != null) throw ReturnRefusedException(refusal);
+
+      final lines = await (select(orderItems)
+            ..where((i) => i.orderId.equals(orderId) & whereBusiness(i)))
+          .get();
+      final byId = {for (final l in lines) l.id: l};
+      var damagedUnits = 0;
+      for (final e in damagedQtyByLine.entries) {
+        final line = byId[e.key];
+        if (e.value < 0 ||
+            line == null ||
+            e.value > line.quantity ||
+            (e.value > 0 && line.productId == null)) {
+          throw const ReturnRefusedException(ReturnRefusal.badDamagedQty);
+        }
+        damagedUnits += e.value;
+      }
+      if (damagedUnits > 0 && !kReturnDamageKeys.contains(damageReasonKey)) {
+        throw const ReturnRefusedException(ReturnRefusal.badDamageReason);
+      }
+
+      final refundKobo = (await (select(paymentTransactions)..where(
+                (p) =>
+                    p.orderId.equals(orderId) &
+                    whereBusiness(p) &
+                    p.voidedAt.isNull() &
+                    p.type.equals('sale'),
+              ))
+              .get())
+          .fold<int>(0, (a, p) => a + (p.amountKobo > 0 ? p.amountKobo : 0));
+
+      await markCancelled(
+        orderId,
+        reason,
+        staffId,
+        forceLocalReversal: true,
+        damagedQtyByLine: damagedQtyByLine,
+        damageReasonKey: damageReasonKey,
+      );
+      return ReturnOutcome(
+        orderNumber: order.orderNumber,
+        storeId: order.storeId,
+        refundKobo: refundKobo,
+        damagedUnits: damagedUnits,
       );
     });
   }
@@ -3362,4 +3523,45 @@ class GuardedReversal {
   const GuardedReversal._({required this.reversalId, required this.queueBefore});
   final String reversalId;
   final Set<String> queueBefore;
+}
+
+/// Why a Completed sale can't be Returned (#551).
+enum ReturnRefusal {
+  notFound('That sale could not be found.'),
+  notCompleted('Only a Completed sale can be returned.'),
+  crateBearing(
+    'This sale involved crates, so it cannot be returned here. Its crate and '
+    'deposit side was already settled.',
+  ),
+  badDamagedQty('A damaged quantity is more than was sold on that line.'),
+  badDamageReason('Pick a valid reason for the damaged items.');
+
+  const ReturnRefusal(this.message);
+  final String message;
+}
+
+/// Typed, user-presentable refusal of a Return (nothing was written).
+class ReturnRefusedException implements Exception {
+  const ReturnRefusedException(this.refusal);
+  final ReturnRefusal refusal;
+  String get message => refusal.message;
+  @override
+  String toString() => 'ReturnRefusedException(${refusal.name})';
+}
+
+/// The damage-reason keys a Return accepts (same keys as Record Damages).
+const Set<String> kReturnDamageKeys = {'broken', 'expired', 'spilled', 'other'};
+
+/// What a committed Return did, for the best-effort audit and alert.
+class ReturnOutcome {
+  const ReturnOutcome({
+    required this.orderNumber,
+    required this.storeId,
+    required this.refundKobo,
+    required this.damagedUnits,
+  });
+  final String orderNumber;
+  final String? storeId;
+  final int refundKobo;
+  final int damagedUnits;
 }

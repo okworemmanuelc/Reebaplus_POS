@@ -48,6 +48,7 @@ import 'package:reebaplus_pos/shared/widgets/notification_bell.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_builder.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/features/orders/widgets/crate_return_modal.dart';
+import 'package:reebaplus_pos/features/orders/widgets/return_sale_dialog.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/customers/screens/customer_detail_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
@@ -798,6 +799,17 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                 }
 
                 final item = list[index];
+                // #551: a Completed card offers Return only when the Order
+                // Module says the sale is returnable (it owns the rule).
+                if (status == 'completed' && canRefund) {
+                  return _ReturnableCard(
+                    key: ValueKey('ret-${item.order.id}'),
+                    orderWithItems: item,
+                    status: status,
+                    onViewReceipt: () => _viewReceipt(context, item),
+                    onReturn: () => _returnCompletedSale(item),
+                  );
+                }
                 return _OrderCard(
                   orderWithItems: item,
                   status: status,
@@ -879,6 +891,17 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
             sliver: SliverList(
               delegate: SliverChildBuilderDelegate((context, index) {
                 final item = list[index];
+                // #551: a Completed card offers Return only when the Order
+                // Module says the sale is returnable (it owns the rule).
+                if (status == 'completed' && canRefund) {
+                  return _ReturnableCard(
+                    key: ValueKey('ret-${item.order.id}'),
+                    orderWithItems: item,
+                    status: status,
+                    onViewReceipt: () => _viewReceipt(context, item),
+                    onReturn: () => _returnCompletedSale(item),
+                  );
+                }
                 return _OrderCard(
                   orderWithItems: item,
                   status: status,
@@ -889,7 +912,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                   // tab and is hidden unless the user may cancel a sale. It
                   // reverses the sale (stock, payment, both wallet legs) and moves
                   // the order to Cancelled. The Completed and Cancelled tabs have
-                  // no Refund button (§19.8).
+                  // no Refund button here (§19.8; a crate-free Completed sale offers Return, #551).
                   onRefund: (status == 'pending' && canRefund)
                       ? () => _refundPendingOrder(item.order)
                       : null,
@@ -1086,6 +1109,59 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     } catch (e) {
       if (mounted) {
         AppNotification.showError(context, 'Could not issue refund: $e');
+      }
+    }
+  }
+
+  /// #551: Return a crate-free Completed sale. The dialog only collects input;
+  /// the Order Module's command does every write (and re-checks the Gate and
+  /// returnability).
+  Future<void> _returnCompletedSale(OrderWithItems item) async {
+    final order = item.order;
+    final input = await showReturnSaleDialog(
+      context,
+      orderNumber: order.orderNumber,
+      refundLabel: formatCurrency(order.amountPaidKobo / 100.0),
+      lines: [
+        for (final l in item.items)
+          ReturnLineInput(
+            lineId: l.item.id,
+            name: l.displayName,
+            quantity: l.item.quantity,
+            canBeDamaged: l.item.productId != null,
+          ),
+      ],
+    );
+    if (input == null || !mounted) return;
+    try {
+      Gates.refundOrder.require(ref);
+    } on GateDeniedError {
+      showGateDenied(context, Gates.refundOrder);
+      return;
+    }
+    final staffId = ref.read(authProvider).currentUser?.id ?? '';
+    try {
+      await ref.read(orderServiceProvider).returnCompletedSale(
+            orderId: order.id,
+            reason: input.reason,
+            staffId: staffId,
+            gateContext: ref.read(gateContextProvider),
+            damageReasonKey: input.damageReasonKey,
+            damagedQtyByLine: input.damagedQtyByLine,
+          );
+      if (mounted) {
+        AppNotification.showSuccess(
+          context,
+          'Sale ${order.orderNumber} returned.',
+        );
+      }
+    } on GateDeniedError {
+      if (mounted) showGateDenied(context, Gates.refundOrder);
+    } on ReturnRefusedException catch (e) {
+      if (mounted) AppNotification.showError(context, e.message);
+    } catch (e) {
+      if (mounted) {
+        AppNotification.showError(context, 'Could not return the sale: $e');
       }
     }
   }
@@ -1529,6 +1605,63 @@ class _StatItem {
 }
 
 // ═══════════════════════════ ORDER CARD ═════════════════════════════════════
+
+/// #551: a Completed card that asks the Order Module whether the sale is
+/// returnable before offering Refund (the screen never re-derives the rule).
+class _ReturnableCard extends ConsumerStatefulWidget {
+  final OrderWithItems orderWithItems;
+  final String status;
+  final VoidCallback onViewReceipt;
+  final VoidCallback onReturn;
+
+  const _ReturnableCard({
+    super.key,
+    required this.orderWithItems,
+    required this.status,
+    required this.onViewReceipt,
+    required this.onReturn,
+  });
+
+  @override
+  ConsumerState<_ReturnableCard> createState() => _ReturnableCardState();
+}
+
+class _ReturnableCardState extends ConsumerState<_ReturnableCard> {
+  late Future<bool> _returnable;
+
+  @override
+  void initState() {
+    super.initState();
+    _returnable = _ask();
+  }
+
+  @override
+  void didUpdateWidget(_ReturnableCard old) {
+    super.didUpdateWidget(old);
+    if (old.orderWithItems.order.lastUpdatedAt !=
+        widget.orderWithItems.order.lastUpdatedAt) {
+      _returnable = _ask();
+    }
+  }
+
+  Future<bool> _ask() => ref
+      .read(orderServiceProvider)
+      .isReturnable(widget.orderWithItems.order.id)
+      .catchError((_) => false);
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<bool>(
+      future: _returnable,
+      builder: (context, snap) => _OrderCard(
+        orderWithItems: widget.orderWithItems,
+        status: widget.status,
+        onRefund: snap.data == true ? widget.onReturn : null,
+        onViewReceipt: widget.onViewReceipt,
+      ),
+    );
+  }
+}
 
 class _OrderCard extends ConsumerWidget {
   final OrderWithItems orderWithItems;
@@ -2129,7 +2262,8 @@ class _OrderCard extends ConsumerWidget {
                                 context.getRSize(10),
                                 context.getRSize(12),
                                 context.getRSize(
-                                  status == 'pending' &&
+                                  (status == 'pending' ||
+                                              status == 'completed') &&
                                           (onRefund != null ||
                                               onMarkAsDelivered != null)
                                       ? 0
@@ -2152,8 +2286,8 @@ class _OrderCard extends ConsumerWidget {
                               ),
                             ),
 
-                          // ── Footer actions (pending only) ─────────────────
-                          if (status == 'pending' &&
+                          // ── Footer actions (pending; completed = Return) ──
+                          if ((status == 'pending' || status == 'completed') &&
                               (onRefund != null || onMarkAsDelivered != null))
                             Container(
                               padding: EdgeInsets.fromLTRB(

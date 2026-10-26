@@ -7966,3 +7966,24 @@ changed-reviewed-days sweep also files an order under its cancel day. Left alone
 counts, Home staff list / drill-down, staff-performance, van screens, DAO SQL aggregates,
 `refundsKobo` / `periodNetResultKobo`. Excluded as before: `rejected_by_server`, cancelled
 with no `cancelledAt`. Web parity: reebaplus-web #190.
+### Return a crate-free Completed sale (#551) (2026-10-26)
+Branch `feat/551-return-completed-sale` (PRD #337 slice e). `OrdersDao.isReturnable` /
+`returnRefusal` (Order Module query `isReturnable`) and `returnCompletedSale`
+(`OrderCommands`, gated on `Gates.refundOrder`): one transaction re-checks, runs
+`markCancelled(forceLocalReversal, damagedQtyByLine, damageReasonKey)` (now a no-op on
+an already-cancelled order) inside the guarded reversal: each line's restore layer holds
+only its SELLABLE units (fixed id `CostBatchesDao.cancelRestoreLayerId`, written even at
+0) and the damaged units are written off as `damage:<key>` at the line's recorded cost
+(`outflowValueKobo`, no FIFO draw-down) — so a Return only ADDS rows and a rejected one
+withdraws cleanly without deleting a synced layer. Audit + `sale_returned` alert after commit (best-effort). `stock_adjustments`
+added to `kWithdrawableReversalTables` so a rejected Return withdraws its damage rows.
+Orders screen: Completed cards show Refund when allowed + returnable
+(`_ReturnableCard`); `return_sale_dialog.dart` collects reason / damaged / damage
+reason. Tests `test/orders/return_completed_sale_test.dart`. Owner decision "freeze past
+costs" → migration **0228** (DEPLOYED to prod 2026-10-26): `pos_recost_product_store`
+keeps a cancelled line in the FIFO replay when its fixed-id restore layer exists, so a
+refund/Return never re-costs another sale; unrecognised (older) cancels keep 0167's rule.
+Known edge: if one upload pass splits a refund's return row from its restore layer, the
+pass's recost runs without the layer; the next push touching that pair corrects it.
+Tier-2 `pos_recost_batches_test` (2 new 0228 cases; red before deploy, green after). Web parity: reebaplus-web #190.
+

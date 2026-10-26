@@ -2,6 +2,7 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:reebaplus_pos/core/database/app_database.dart' show CostBatchesDao;
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 
 import '../../helpers/supabase_test_clients.dart';
@@ -124,7 +125,7 @@ void main() {
       'id': id,
       'business_id': businessId,
       'name': 'Recost Product',
-      'selling_price_kobo': 100000,
+      'retailer_price_kobo': 100000,
     });
     productIds.add(id);
     return id;
@@ -140,8 +141,9 @@ void main() {
     required int qty,
     required DateTime receivedAt,
     int? qtyRemaining,
+    String? id,
   }) async {
-    final id = UuidV7.generate();
+    id ??= UuidV7.generate();
     await clients.adminClient.from('cost_batches').insert({
       'id': id,
       'business_id': businessId,
@@ -476,6 +478,61 @@ void main() {
           reason: 'only the live sale of 3 is costed');
       expect(await readQtyRemaining(b1), 10,
           reason: 'the fixture layer is untouched — no qty_remaining write-back');
+    }, skip: _skipReason);
+  });
+
+  // ── 0228: a refund never re-costs another sale (PRD #337 / #551) ─────────
+  //
+  // B1 10 @ ₦500 (Jan 1), B2 10 @ ₦800 (Jan 10). Sale A (8, Jan 5) drew 8 from
+  // B1, so sale C (4, Jan 20) drew 2 @ ₦500 + 2 @ ₦800 = ₦650/unit at checkout.
+  // A is then cancelled and its units come back as a restore layer (Feb 1).
+
+  group('pos_recost_product_store keeps reversed sales (0228)', () {
+    Future<({String product, String cancelledItem, String later})>
+        scenario() async {
+      final product = await newProduct();
+      await addBatch(product,
+          costKobo: 50000, qty: 10, receivedAt: DateTime(2026, 1, 1));
+      await addBatch(product,
+          costKobo: 80000, qty: 10, receivedAt: DateTime(2026, 1, 10));
+      final cancelledItem = await addSale(product,
+          qty: 8,
+          soldAt: DateTime(2026, 1, 5),
+          status: 'cancelled',
+          buyingPriceKobo: 50000);
+      final later = await addSale(product,
+          qty: 4, soldAt: DateTime(2026, 1, 20), buyingPriceKobo: 65000);
+      return (product: product, cancelledItem: cancelledItem, later: later);
+    }
+
+    test('a cancel with its fixed-id restore layer re-costs no other sale',
+        () async {
+      final s = await scenario();
+      await addBatch(s.product,
+          id: CostBatchesDao.cancelRestoreLayerId(s.cancelledItem),
+          costKobo: 50000,
+          qty: 8,
+          receivedAt: DateTime(2026, 2, 1));
+
+      await recost(s.product);
+
+      expect(await readBuyingPrice(s.later), 65000,
+          reason: 'C keeps the cost it was sold at (2 @ 500 + 2 @ 800)');
+      expect(await readBuyingPrice(s.cancelledItem), 50000,
+          reason: 'the reversed sale keeps the layer it was sold from');
+    }, skip: _skipReason);
+
+    test('an older cancel (restore layer with a random id) keeps the 0167 '
+        'behaviour', () async {
+      final s = await scenario();
+      await addBatch(s.product,
+          costKobo: 50000, qty: 8, receivedAt: DateTime(2026, 2, 1));
+
+      await recost(s.product);
+
+      expect(await readBuyingPrice(s.later), 50000,
+          reason: 'not recognised → dropped from the replay, as before; the '
+              'replay can never run short');
     }, skip: _skipReason);
   });
 

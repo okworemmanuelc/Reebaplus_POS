@@ -114,6 +114,11 @@ class OrderQueries {
     return _ordersDao.checkCartStaleness(lines);
   }
 
+  /// Whether a Completed sale may be Returned (#551, PRD #337): completed, no
+  /// crate history, no crate-tracked bottle line. Business-scoped reads.
+  Future<bool> isReturnable(String orderId) =>
+      _ordersDao.isReturnable(orderId);
+
   static domain.Order fromDb(OrderData data) {
     return domain.Order(
       id: data.id.toString(),

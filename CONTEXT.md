@@ -190,6 +190,21 @@ from another phone is rejected whole: that phone undoes its own reversal, lists
 it under Sync Issues, and alerts the CEO and Managers (`sale_refund_rejected`).
 _Avoid_: void, delete; dropping a cancelled sale from its creation day.
 
+**Return**:
+A Cancel of a `completed` Order for goods the customer brought back (#551, PRD
+#337). Only a crate-free Completed sale is returnable: no crate history on the
+order (crate lines, crate-ledger rows, crate-deposit payment or wallet legs) and
+no line that is a crate-tracked bottle by current product settings
+(`OrdersDao.isReturnable`, asked through the Order Module's query surface). Gated
+on `sales.cancel` (`Gates.refundOrder`), re-checked at the write boundary. The
+whole sale is reversed through the shared Cancel reversal; then each line's
+damaged units are written off as `damage:<key>` stock adjustments, inside the
+same guarded reversal. Money collected after Checkout (Mark as paid / Record
+Payment) stays as customer credit, never a cash refund. Writes an activity-log
+entry and a `sale_returned` warning to CEO and Managers (best-effort). Partial
+returns and Online Order handling are out of scope.
+_Avoid_: "refund" for the Completed-sale action in code; a partial return.
+
 **Cart**:
 A pre-checkout draft of a would-be Order — mutable, no revenue, no status, no
 invariants. Becomes an Order at **Checkout** (Cart → Checkout → Order). *Not*
@@ -354,6 +369,13 @@ consumption is derived, recomputable state, so the replay is deterministic and
 idempotent for a fixed ledger. The correction is audited with one rolled-up
 Activity Log row per sync batch ("N sales of X re-costed on sync"), never a
 silent rewrite and never a per-sale prompt.
+A **reversed sale stays in the replay** (0228, PRD #337): a cancelled line keeps
+consuming the layers it was sold from when its Cancel restore layer exists —
+that layer carries a fixed id, `CostBatchesDao.cancelRestoreLayerId(order line
+id)`, recomputed by the cloud — and the returned (sellable) units come back
+through that layer on the cancel day. So a refund or Return never re-costs any
+other sale. Cancels the cloud can't recognise (older builds, pre-#170) keep the
+old rule: dropped from the replay, so it never runs short.
 _Avoid_: server-arrival order as the FIFO key; prompting the user per corrected
 sale; treating an assignment as permanent (it is stable only until an earlier
 sale arrives).
