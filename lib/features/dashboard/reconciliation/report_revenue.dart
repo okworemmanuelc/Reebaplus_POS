@@ -10,13 +10,16 @@ import 'package:reebaplus_pos/shared/models/order_status.dart';
 /// money-flow audit flagged (Home summed `orders.totalAmountKobo`, deposit-IN;
 /// Recon/Profit summed item lines, deposit-OUT — they disagreed by construction).
 ///
-/// Only orders that COUNT AS A SALE (recognized at checkout via
-/// [orderCountsAsSale] — never a cancelled order) are summed. [inSpan] scopes by
-/// the order's `createdAt` day and [inScope] by store — applied to each line's
-/// `storeId` AND to the order-level discount, matching the reconciliation's
-/// scoping so the three surfaces stay numerically identical. Both predicates
-/// default to always-true, so a caller that has already filtered its order set
-/// (e.g. the Home dashboard) can pass it through unchanged.
+/// Which orders count, and on which day, is [saleDayEntries] (#549): a live
+/// order counts on its `createdAt` day; a CANCELLED order still counts there
+/// and ALSO contributes a negative entry (same goods-net) on its `cancelledAt`
+/// day, so a return never changes a day that was already reviewed.
+/// [inSpan] is tested against each entry's day and [inScope] by store —
+/// applied to each line's `storeId` AND to the order-level discount, matching
+/// the reconciliation's scoping so the three surfaces stay numerically
+/// identical. Both predicates default to always-true, so a caller that has
+/// already filtered its order set (e.g. the Home dashboard) can pass it
+/// through unchanged.
 ///
 /// Equal to the reconciliation's `totalRevenueKobo − discountsKobo` by
 /// construction (the reconciliation keeps the gross + discount split for its
@@ -27,13 +30,30 @@ int computeTotalSalesKobo(
   bool Function(String? storeId) inScope = _anyStore,
 }) {
   var total = 0;
-  for (final o in orders) {
-    if (!orderCountsAsSale(o.order.status) || !inSpan(o.order.createdAt)) {
-      continue;
-    }
-    total += orderGoodsNetKobo(o, inScope: inScope);
+  for (final e in saleDayEntries(orders)) {
+    if (!inSpan(e.day)) continue;
+    total += e.sign * orderGoodsNetKobo(e.o, inScope: inScope);
   }
   return total;
+}
+
+/// The report entries of [orders] under the original-day rule (#549): see
+/// [saleDayStamps] for the rule itself. Every money report sums
+/// `sign × amount` over the entries whose `day` is in its span; the order list
+/// is the UNFILTERED business-scoped set (cancelled orders included).
+Iterable<({OrderWithItems o, DateTime day, int sign})> saleDayEntries(
+  Iterable<OrderWithItems> orders,
+) sync* {
+  for (final o in orders) {
+    for (final s in saleDayStamps(
+      status: o.order.status,
+      createdAt: o.order.createdAt,
+      cancelledAt: o.order.cancelledAt,
+      cancellationReason: o.order.cancellationReason,
+    )) {
+      yield (o: o, day: s.day, sign: s.sign);
+    }
+  }
 }
 
 /// ONE order's contribution to [computeTotalSalesKobo]: its in-scope item lines

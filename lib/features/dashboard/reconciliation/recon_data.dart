@@ -15,7 +15,6 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/vat_settings.dart';
 import 'package:reebaplus_pos/core/stores/van_store.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/report_revenue.dart';
-import 'package:reebaplus_pos/shared/models/order_status.dart';
 
 /// Shared aggregation engine for the Daily Reconciliation (§25.9).
 ///
@@ -644,17 +643,15 @@ List<ReconBucket> buildReconBuckets(
     );
   }
 
-  for (final o in orders) {
-    // Revenue is recognized at checkout (status 'pending'), not at the
-    // ceremonial Confirm ('completed'). Count any non-reversed sale.
-    if (!orderCountsAsSale(o.order.status) || !inSpan(o.order.createdAt)) {
-      continue;
-    }
+  // #549 — a cancelled sale stays on its original day and its reversal is a
+  // negative entry on the cancel day (see [saleDayEntries]).
+  for (final e in saleDayEntries(orders)) {
+    if (!inSpan(e.day)) continue;
     _BucketAccum? acc;
-    for (final i in o.items) {
+    for (final i in e.o.items) {
       if (!inScope(i.item.storeId)) continue;
-      acc ??= bucketOf(o.order.createdAt);
-      acc.itemsSold += i.item.quantity;
+      acc ??= bucketOf(e.day);
+      acc.itemsSold += e.sign * i.item.quantity;
     }
   }
 
@@ -1752,32 +1749,35 @@ ReconData reconDataFrom(ReconInputs input) {
   final skuSet = <String>{};
   final byStaff = <String?, int>{};
   final byProduct = <String, ({String name, int qty})>{};
-  for (final o in orders) {
-    // Recognized at checkout ('pending'), not at Confirm ('completed'). A
-    // cancelled order is excluded here (orderCountsAsSale is false) — its money
-    // reversal is booked as a real refund payment row, summed below.
-    if (!orderCountsAsSale(o.order.status) || !inSpan(o.order.createdAt)) {
-      continue;
-    }
+  // #549 — recognized at checkout ('pending'), not at Confirm ('completed'). A
+  // CANCELLED sale still counts on its creation day and ALSO books a negative
+  // entry of the same amounts on its cancel day ([saleDayEntries]), so a return
+  // never moves a day that was already reviewed. Every amount below is
+  // multiplied by `sign`. The refund payment row stays a cash movement on the
+  // refund day (`refundsKobo`, cash card) and is NOT deducted from profit again.
+  for (final e in saleDayEntries(orders)) {
+    if (!inSpan(e.day)) continue;
+    final o = e.o;
+    final sign = e.sign;
     // Order-level discount (contra-revenue). Scoped by the ORDER's store — the
     // one rule that decides it lives in [orderDiscountKobo] (#195), so the P&L
     // card's discount line and the Total Sales headline cannot disagree about
     // which store wears a discount.
     final orderInScope = inScope(o.order.storeId);
-    discountsKobo += orderDiscountKobo(o, inScope: inScope);
+    discountsKobo += sign * orderDiscountKobo(o, inScope: inScope);
     var orderRevenue = 0;
     for (final i in o.items) {
       if (!inScope(i.item.storeId)) continue;
       final lineRev = i.item.quantity * i.item.unitPriceKobo;
-      totalRevenueKobo += lineRev;
-      orderRevenue += lineRev;
-      itemsSold += i.item.quantity;
+      totalRevenueKobo += sign * lineRev;
+      orderRevenue += sign * lineRev;
+      itemsSold += sign * i.item.quantity;
       final product = i.product;
       if (product == null || i.item.buyingPriceKobo <= 0) {
-        uncostedItems += i.item.quantity;
+        uncostedItems += sign * i.item.quantity;
       } else {
-        costedRevenueKobo += lineRev;
-        cogsKobo += i.item.quantity * i.item.buyingPriceKobo;
+        costedRevenueKobo += sign * lineRev;
+        cogsKobo += sign * i.item.quantity * i.item.buyingPriceKobo;
         skuSet.add(product.id);
       }
       // Rank top items by units sold across every identifiable product —
@@ -1787,11 +1787,11 @@ ReconData reconDataFrom(ReconInputs input) {
         final cur = byProduct[product.id];
         byProduct[product.id] = (
           name: product.name,
-          qty: (cur?.qty ?? 0) + i.item.quantity,
+          qty: (cur?.qty ?? 0) + sign * i.item.quantity,
         );
       }
     }
-    if (orderRevenue > 0) {
+    if (orderRevenue != 0) {
       byStaff.update(
         o.order.staffId,
         (v) => v + orderRevenue,
@@ -1810,8 +1810,8 @@ ReconData reconDataFrom(ReconInputs input) {
       amountPaid: o.order.amountPaidKobo,
       depositHeld: orderInScope ? o.order.crateDepositPaidKobo : 0,
     );
-    salesPaidNowKobo += split.paidNow;
-    salesOnCreditKobo += split.onCredit;
+    salesPaidNowKobo += sign * split.paidNow;
+    salesOnCreditKobo += sign * split.onCredit;
   }
   String? bestStaff;
   var bestStaffKobo = 0;
@@ -1823,7 +1823,10 @@ ReconData reconDataFrom(ReconInputs input) {
           : (users[staffId]?.name ?? 'Staff');
     }
   });
+  // #549 — a day that only holds a cancel's negative entry has non-positive
+  // quantities; those never rank as a "top item".
   final topItemsList = byProduct.entries
+      .where((e) => e.value.qty > 0)
       .map((e) => (name: e.value.name, qty: e.value.qty))
       .toList()
     ..sort((a, b) => b.qty.compareTo(a.qty));
@@ -2404,18 +2407,17 @@ ReconData reconDataFrom(ReconInputs input) {
   var vanSalesKobo = 0;
   var vanOpenRevenueKobo = 0;
   final openTrips = <String>{};
-  for (final o in orders) {
+  for (final e in saleDayEntries(orders)) {
+    final o = e.o;
     final tripId = o.order.vanTripId;
     if (tripId == null) continue;
-    if (!orderCountsAsSale(o.order.status) || !inSpan(o.order.createdAt)) {
-      continue;
-    }
+    if (!inSpan(e.day)) continue;
     final trip = tripById[tripId];
     if (trip == null || !inScope(trip.sourceStoreId)) continue;
     // The order's own net is the road-takings figure the trip reconciles
     // against (`watchSoldValueKoboForTrip` uses the same basis), and a road
     // sale carries no discount in v1.
-    vanSalesKobo += o.order.netAmountKobo;
+    vanSalesKobo += e.sign * o.order.netAmountKobo;
     // "Open in the period": still open, or closed only AFTER this period ended
     // — the month-straddling case (spec §9.4 #18). Revenue lands in the ring
     // month, profit in the close month, and the caveat says so.
@@ -2423,7 +2425,7 @@ ReconData reconDataFrom(ReconInputs input) {
         trip.closedAt == null ||
         (endExclusive != null && !trip.closedAt!.isBefore(endExclusive));
     if (closedAfterPeriod) {
-      vanOpenRevenueKobo += o.order.netAmountKobo;
+      vanOpenRevenueKobo += e.sign * o.order.netAmountKobo;
       openTrips.add(tripId);
     }
   }
@@ -2898,7 +2900,11 @@ final changedReviewedDaysProvider = Provider<Set<String>>((ref) {
 
   final ordersByDay = _byCandidateDay<OrderWithItems>(
     ref.watch(allOrdersProvider).valueOrNull ?? const [],
-    (o) => [o.order.createdAt],
+    // #549 — a cancelled sale is also a (negative) entry on its cancel day.
+    (o) => [
+      o.order.createdAt,
+      if (o.order.cancelledAt != null) o.order.cancelledAt!.toLocal(),
+    ],
     wanted,
   );
   final expensesByDay = _byCandidateDay<ExpenseWithCategory>(

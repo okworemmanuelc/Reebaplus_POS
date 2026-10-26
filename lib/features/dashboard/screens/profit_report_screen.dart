@@ -15,7 +15,6 @@ import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/recon_data.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/report_revenue.dart';
-import 'package:reebaplus_pos/shared/models/order_status.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 
@@ -90,11 +89,14 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
     var uncostedItems = 0;
     var concessionKobo = 0;
 
-    for (final o in orders) {
-      // Recognized at checkout ('pending'), not at the ceremonial Confirm
-      // ('completed'). Count any non-reversed sale.
-      if (!orderCountsAsSale(o.order.status)) continue;
-      if (!isDateInPeriod(o.order.createdAt, period)) continue;
+    // #549 — recognized at checkout ('pending'), not at the ceremonial Confirm
+    // ('completed'). A cancelled sale still counts on its creation day and
+    // books a negative entry (same lines) on its cancel day, so a return never
+    // changes an earlier day's profit; every amount below is signed.
+    for (final e in saleDayEntries(orders)) {
+      if (!isDateInPeriod(e.day, period)) continue;
+      final o = e.o;
+      final sign = e.sign;
       for (final i in o.items) {
         // #195 — per-LINE store scope, like the reconciliation. This also
         // carries the #140 van exclusion (a van fails `reconStoreFilter` by
@@ -115,30 +117,32 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
           unitPriceKobo: i.item.unitPriceKobo,
           quantity: i.item.quantity,
         );
-        concessionKobo += lineConcession;
+        concessionKobo += sign * lineConcession;
         // Quick-sale lines (§12.3) have no product and no captured cost — like
         // any uncosted line, they are excluded from the profit math.
         if (product == null || i.item.buyingPriceKobo <= 0) {
-          uncostedItems += i.item.quantity;
+          uncostedItems += sign * i.item.quantity;
           continue;
         }
         final lineRevenue = i.item.quantity * i.item.unitPriceKobo;
         final lineCogs = i.item.quantity * i.item.buyingPriceKobo;
-        revenueKobo += lineRevenue;
-        cogsKobo += lineCogs;
+        revenueKobo += sign * lineRevenue;
+        cogsKobo += sign * lineCogs;
         final acc = byProduct.putIfAbsent(
           product.id,
           () => _ProductAccum(product.name),
         );
-        acc.qty += i.item.quantity;
-        acc.revenueKobo += lineRevenue;
-        acc.cogsKobo += lineCogs;
-        acc.concessionKobo += lineConcession;
+        acc.qty += sign * i.item.quantity;
+        acc.revenueKobo += sign * lineRevenue;
+        acc.cogsKobo += sign * lineCogs;
+        acc.concessionKobo += sign * lineConcession;
       }
     }
 
     final products =
         byProduct.values
+            // #549 — a same-day cancel nets a product to nothing; don't list it.
+            .where((a) => a.qty != 0 || a.revenueKobo != 0 || a.cogsKobo != 0)
             .map(
               (a) => _ProductProfit(
                 name: a.name,
