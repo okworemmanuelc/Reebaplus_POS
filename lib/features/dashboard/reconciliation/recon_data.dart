@@ -8,6 +8,8 @@ import 'package:reebaplus_pos/core/crates/crate_shortage.dart';
 import 'package:reebaplus_pos/core/crates/crate_shortfall.dart';
 import 'package:reebaplus_pos/core/crates/crate_money_arrangement.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/online_orders/pay_on_delivery.dart';
+import 'package:reebaplus_pos/core/providers/online_order_providers.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/vat_settings.dart';
@@ -829,6 +831,8 @@ class ReconData {
     required this.goodsReceivedKobo,
     required this.supplierPaidKobo,
     required this.totalOwedKobo,
+    // #432 — report-only, optional-defaulted like the other additive fields.
+    this.payOnDeliveryUncollectedKobo = 0,
     required this.showCrates,
     required this.crateUnits,
     required this.crateDepositKobo,
@@ -1061,6 +1065,13 @@ class ReconData {
   final int goodsReceivedKobo;
   final int supplierPaidKobo;
   final int totalOwedKobo;
+
+  /// #432 — "Pay on delivery not yet collected": what live Pay on delivery
+  /// orders still have to collect, business-wide and point-in-time like
+  /// [totalOwedKobo]. REPORT-ONLY: it is already inside the customer debt
+  /// above, so it enters no total, no net position and no cash figure (Hard
+  /// Rule #8 — there is no cash balance to explain).
+  final int payOnDeliveryUncollectedKobo;
   final bool showCrates;
   final int crateUnits;
   final int crateDepositKobo;
@@ -1518,6 +1529,7 @@ class ReconInputs {
     this.crateDeposits = CrateDepositRollup.empty,
     this.crateShortages = CrateShortageRollup.empty,
     this.crateShortfallWriteOffs = const [],
+    this.payOnDelivery = const [],
     this.isCeo = false,
     this.inScope = _everyStore,
     this.start,
@@ -1578,6 +1590,10 @@ class ReconInputs {
   /// like every other row set here, so the "booked on the day it was taken"
   /// rule is exercised by the pure math rather than by a query.
   final List<CrateShortfallWriteoffData> crateShortfallWriteOffs;
+
+  /// #432 — every Pay on delivery order with what it has collected
+  /// (point-in-time, business-wide). Feeds the report-only line only.
+  final List<PayOnDeliveryOrder> payOnDelivery;
 
   /// Gates the supplier-ledger flows only; every other figure is computed
   /// either way and the screen decides what to show per the cost wall.
@@ -1686,6 +1702,8 @@ ReconData computeReconData(
       crateShortfallWriteOffs: showCrates
           ? (ref.watch(crateShortfallWriteOffsProvider).valueOrNull ?? const [])
           : const [],
+      payOnDelivery:
+          ref.watch(payOnDeliveryOrdersProvider).valueOrNull ?? const [],
       isCeo: isCeo,
       inScope: reconStoreFilter(ref, businessWide: businessWide),
       start: start,
@@ -2486,6 +2504,9 @@ ReconData reconDataFrom(ReconInputs input) {
     goodsReceivedKobo: goodsReceivedKobo,
     supplierPaidKobo: supplierPaidKobo,
     totalOwedKobo: totalOwedKobo,
+    payOnDeliveryUncollectedKobo: payOnDeliveryUncollectedKobo(
+      input.payOnDelivery,
+    ),
     showCrates: showCrates,
     crateUnits: crateUnits,
     crateDepositKobo: crateDepositKobo,
