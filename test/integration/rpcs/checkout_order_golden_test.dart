@@ -318,6 +318,14 @@ void main() {
         'p_amount_paid_kobo': amountPaid,
         'p_discount_kobo': scenario.checkout.discountKobo,
         'p_customer_id': customerId,
+        // 0222: the money-track crate deposit, keyed by manufacturer id. OMITTED
+        // when empty so a crate-track / non-crate sale is the exact pre-0222
+        // call shape (and works against a DB that predates the migration).
+        if (scenario.checkout.depositPaidByManufacturer.isNotEmpty)
+          'p_crate_deposit_by_manufacturer': {
+            for (final e in scenario.checkout.depositPaidByManufacturer.entries)
+              manufacturerIdByKey[e.key]!: e.value,
+          },
       };
 
       // A rejection scenario (Slice 3, #55): the RPC must refuse — its debt-limit
@@ -366,6 +374,37 @@ void main() {
           .eq('order_id', orderId)
           .eq('type', 'sale')
           .maybeSingle();
+
+      // 0222 / #175: the non-`sale` money rows (crate_deposit / wallet_topup),
+      // and the #169 invariant that EVERY payment row of the sale is stamped
+      // with the sale's store.
+      final allPayRows = await admin
+          .from('payment_transactions')
+          .select('type, method, amount_kobo, store_id')
+          .eq('order_id', orderId);
+      for (final r in allPayRows) {
+        expect(r['store_id'], store,
+            reason: '${scenario.name}: payment row ${r['type']} store_id (#169)');
+      }
+      final extraPayments = [
+        for (final r in allPayRows)
+          if (r['type'] != 'sale')
+            ActualTypedPayment(
+              type: r['type'] as String,
+              method: r['method'] as String,
+              amountKobo: (r['amount_kobo'] as num).toInt(),
+            ),
+      ];
+      // #80: the header carries the deposit held.
+      final depositHeader = (await admin
+          .from('orders')
+          .select('crate_deposit_paid_kobo')
+          .eq('id', orderId)
+          .single())['crate_deposit_paid_kobo'];
+      expect((depositHeader as num).toInt(),
+          scenario.checkout.depositPaidByManufacturer.values
+              .fold<int>(0, (a, b) => a + b),
+          reason: '${scenario.name}: orders.crate_deposit_paid_kobo');
 
       // Wallet legs THIS sale posted (order_id == this order) + the customer's
       // derived spendable balance (SUM(signed) excluding the crate-deposit family).
@@ -500,6 +539,7 @@ void main() {
                 method: paymentRow['method'] as String,
                 amountKobo: (paymentRow['amount_kobo'] as num).toInt(),
               ),
+        extraPayments: extraPayments,
         walletLegs: walletLegs,
         customerBalanceAfter: customerBalanceAfter,
         crateLines: crateLines,
@@ -519,8 +559,8 @@ void main() {
 ///   the CEO slug to 100 — so it cannot bite for this Tier-2 identity (the
 ///   business CEO). That rule is pinned on the Dart arm rather than asserted
 ///   here against an un-clampable caller.
-/// * #175's tender/deposit/overpayment row split is `dart_arm_only` until the
-///   web `checkout_order` RPC implements the matching split.
+/// * #175's tender/deposit/overpayment row split runs on this arm since
+///   migration 0222 (apply it to the dev DB before running).
 /// * #206's cancel fixtures are `dart_arm_only` for a DIFFERENT reason: the SQL
 ///   twin EXISTS (migration 0170, #201) but is NOT DEPLOYED, so this arm still
 ///   meets the pre-#155 `pos_cancel_order` that voids originals in place and
@@ -534,5 +574,5 @@ String? _armSkipReason(GoldenScenario scenario) {
     return 'cancel parity ships in migration 0170 (#201) — un-flag once it is '
         'DEPLOYED and this arm has a pos_cancel_order step (#206)';
   }
-  return '#175 money-row split pinned on the Dart arm; web RPC TODO';
+  return 'pinned on the Dart arm only (dart_arm_only)';
 }

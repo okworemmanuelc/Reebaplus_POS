@@ -16,8 +16,10 @@
     "#175 (money integrity #5): the checkout now writes the tender on the payment",
     "`method` and splits the tender into distinct types — a goods-only `sale` row,",
     "a `crate_deposit` row (held), and a `wallet_topup` row (overpayment excess).",
-    "Scenarios exercising that split carry `dart_arm_only: true` until the web",
-    "`checkout_order` RPC implements the matching split (flagged to the web repo).",
+    "Both arms implement that split since migration 0222 (web `checkout_order`).",
+    "`orders.payment_type` is the real mobile value (wallet / credit / mixed /",
+    "cash, OrderCommands resolveOrderPaymentType) and every payment row carries",
+    "the sale's store_id.",
     "#206 (#176/#183): a checkout line may carry `charged_unit_price_kobo` — the",
     "price actually charged when the cashier overrode the tier list price. The",
     "product's own `unit_price_kobo` stays the CATALOGUE price, and the line",
@@ -351,7 +353,7 @@
       },
       "expected": {
         "order": {
-          "status": "pending", "payment_type": "cash",
+          "status": "pending", "payment_type": "wallet",
           "total_amount_kobo": 300000, "discount_kobo": 0,
           "net_amount_kobo": 300000, "amount_paid_kobo": 0,
           "completed_at_null": true
@@ -380,7 +382,7 @@
       },
       "expected": {
         "order": {
-          "status": "pending", "payment_type": "cash",
+          "status": "pending", "payment_type": "credit",
           "total_amount_kobo": 300000, "discount_kobo": 0,
           "net_amount_kobo": 300000, "amount_paid_kobo": 0,
           "completed_at_null": true
@@ -409,7 +411,7 @@
       },
       "expected": {
         "order": {
-          "status": "pending", "payment_type": "cash",
+          "status": "pending", "payment_type": "mixed",
           "total_amount_kobo": 300000, "discount_kobo": 0,
           "net_amount_kobo": 300000, "amount_paid_kobo": 100000,
           "completed_at_null": true
@@ -507,8 +509,7 @@
     },
     {
       "name": "overpayment (#175): the excess splits into a wallet_topup, not the sale",
-      "_note": "Dart-arm only — the mobile checkout splits the tender into a goods `sale` row + a `wallet_topup` for the excess; the web `checkout_order` RPC must add the matching split before this can run on its arm.",
-      "dart_arm_only": true,
+      "_note": "Both arms (migration 0222): the checkout splits the tender into a goods `sale` row + a `wallet_topup` for the excess.",
       "customer": { "opening_balance_kobo": 0, "debt_limit_kobo": 0 },
       "products": [
         { "key": "P1", "name": "Star 60cl", "unit_price_kobo": 100000, "scalar_cost_kobo": 50000 }
@@ -537,6 +538,42 @@
         "wallet_legs": [
           { "reference_type": "order_payment", "signed_amount_kobo": -300000 },
           { "reference_type": "topup_cash", "signed_amount_kobo": 350000 }
+        ],
+        "customer_balance_after_kobo": 50000
+      }
+    },
+
+    {
+      "name": "overpayment by transfer (#175, 0222): the excess is a transfer-method wallet_topup",
+      "_note": "Registered customer, transfer tender 350k on a 300k sale: sale 300k + wallet_topup 50k both method transfer; credit leg is topup_transfer for the whole tender.",
+      "customer": { "opening_balance_kobo": 0, "debt_limit_kobo": 0 },
+      "products": [
+        { "key": "P1", "name": "Star 60cl", "unit_price_kobo": 100000, "scalar_cost_kobo": 50000 }
+      ],
+      "inventory": [{ "product": "P1", "quantity": 100 }],
+      "batches": [{ "product": "P1", "qty": 20, "cost_kobo": 50000, "received_at": "2026-01-01" }],
+      "checkout": {
+        "payment_method": "transfer",
+        "discount_kobo": 0,
+        "amount_paid_kobo": 350000,
+        "items": [{ "product": "P1", "quantity": 3 }]
+      },
+      "expected": {
+        "order": {
+          "status": "pending", "payment_type": "cash",
+          "total_amount_kobo": 300000, "discount_kobo": 0,
+          "net_amount_kobo": 300000, "amount_paid_kobo": 350000,
+          "completed_at_null": true
+        },
+        "items": [{ "product": "P1", "quantity": 3, "unit_price_kobo": 100000, "total_kobo": 300000, "buying_price_kobo": 50000 }],
+        "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 17 }],
+        "inventory_after": [{ "product": "P1", "quantity": 97 }],
+        "product_scalar_cost": [{ "product": "P1", "buying_price_kobo": 50000 }],
+        "payment": { "method": "transfer", "amount_kobo": 300000 },
+        "extra_payments": [{ "type": "wallet_topup", "method": "transfer", "amount_kobo": 50000 }],
+        "wallet_legs": [
+          { "reference_type": "order_payment", "signed_amount_kobo": -300000 },
+          { "reference_type": "topup_transfer", "signed_amount_kobo": 350000 }
         ],
         "customer_balance_after_kobo": 50000
       }

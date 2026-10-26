@@ -19,7 +19,7 @@
     "#175 (money integrity #5): a MONEY-track deposit (deposit_paid > 0) splits its",
     "held deposit into its own `crate_deposit` payment row (kept out of Cash sales)",
     "and posts no issued crate ledger / customer balance. That scenario is",
-    "`dart_arm_only: true` until the web `checkout_order` RPC adds the split."
+    "run on BOTH arms since migration 0222 (web `checkout_order`)."
   ],
   "scenarios": [
     {
@@ -281,8 +281,7 @@
     },
     {
       "name": "deposit paid in cash (#175): the deposit splits into its own crate_deposit row",
-      "_note": "Dart-arm only — a MONEY-track deposit sale: the mobile checkout carves the ₦1,500 tendered into a goods `sale` row (₦300k) + a `crate_deposit` row (₦150k), keeping the deposit out of Cash sales. deposit_paid > 0 means no issued crate ledger / customer balance (money-track). The web `checkout_order` RPC must add the matching split before this can run on its arm.",
-      "dart_arm_only": true,
+      "_note": "Both arms (migration 0222) — a MONEY-track deposit sale: the mobile checkout carves the ₦1,500 tendered into a goods `sale` row (₦300k) + a `crate_deposit` row (₦150k), keeping the deposit out of Cash sales. deposit_paid > 0 means no issued crate ledger / customer balance (money-track).",
       "business_type": "Bar",
       "tracks_empty_crates": true,
       "manufacturers": [{ "key": "M1", "name": "Star Co", "deposit_rate_kobo": 50000 }],
@@ -321,6 +320,156 @@
         "crate_lines": [{ "manufacturer": "M1", "crates_taken": 3, "deposit_rate_kobo": 50000, "deposit_paid_kobo": 150000 }],
         "crate_ledger": [],
         "crate_balances": []
+      }
+    },
+
+    {
+      "name": "deposit + overpayment (#175, 0222): sale / crate_deposit / wallet_topup rows sum to the tender",
+      "_note": "Money-track: goods 300k + deposit 150k payable 450k, tendered 500k by transfer. Three rows (300k sale, 150k crate_deposit, 50k wallet_topup), the held deposit leg is carved out of the goods credit, and the 50k excess is spendable credit.",
+      "business_type": "Bar",
+      "tracks_empty_crates": true,
+      "manufacturers": [{ "key": "M1", "name": "Star Co", "deposit_rate_kobo": 50000 }],
+      "customer": { "opening_balance_kobo": 0, "debt_limit_kobo": 0 },
+      "products": [
+        { "key": "P1", "name": "Star 60cl", "unit_price_kobo": 100000, "scalar_cost_kobo": 50000, "manufacturer": "M1" }
+      ],
+      "inventory": [{ "product": "P1", "quantity": 100 }],
+      "batches": [{ "product": "P1", "qty": 20, "cost_kobo": 50000, "received_at": "2026-01-01" }],
+      "checkout": {
+        "payment_method": "transfer",
+        "discount_kobo": 0,
+        "amount_paid_kobo": 500000,
+        "deposit_paid_by_manufacturer": { "M1": 150000 },
+        "items": [{ "product": "P1", "quantity": 3 }]
+      },
+      "expected": {
+        "order": {
+          "status": "pending", "payment_type": "cash",
+          "total_amount_kobo": 450000, "discount_kobo": 0,
+          "net_amount_kobo": 450000, "amount_paid_kobo": 500000,
+          "completed_at_null": true
+        },
+        "items": [{ "product": "P1", "quantity": 3, "unit_price_kobo": 100000, "total_kobo": 300000, "buying_price_kobo": 50000 }],
+        "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 17 }],
+        "inventory_after": [{ "product": "P1", "quantity": 97 }],
+        "product_scalar_cost": [{ "product": "P1", "buying_price_kobo": 50000 }],
+        "payment": { "method": "transfer", "amount_kobo": 300000 },
+        "extra_payments": [
+          { "type": "crate_deposit", "method": "transfer", "amount_kobo": 150000 },
+          { "type": "wallet_topup", "method": "transfer", "amount_kobo": 50000 }
+        ],
+        "wallet_legs": [
+          { "reference_type": "order_payment", "signed_amount_kobo": -300000 },
+          { "reference_type": "topup_transfer", "signed_amount_kobo": 350000 },
+          { "reference_type": "crate_deposit", "signed_amount_kobo": 150000 }
+        ],
+        "customer_balance_after_kobo": 50000,
+        "crate_lines": [{ "manufacturer": "M1", "crates_taken": 3, "deposit_rate_kobo": 50000, "deposit_paid_kobo": 150000 }],
+        "crate_ledger": [],
+        "crate_balances": []
+      }
+    },
+    {
+      "name": "deposit-only tender on a credit sale (#175, 0222): the deposit is cash held, the goods stay owed",
+      "_note": "Money-track credit sale: goods 300k owed, only the 150k deposit tendered. No goods `sale` row, a `crate_deposit` row, header 'mixed' (paid 150k < payable 450k), debit -300k and the held credit; spendable balance -300k.",
+      "business_type": "Bar",
+      "tracks_empty_crates": true,
+      "manufacturers": [{ "key": "M1", "name": "Star Co", "deposit_rate_kobo": 50000 }],
+      "customer": { "opening_balance_kobo": 0, "debt_limit_kobo": 500000 },
+      "products": [
+        { "key": "P1", "name": "Star 60cl", "unit_price_kobo": 100000, "scalar_cost_kobo": 50000, "manufacturer": "M1" }
+      ],
+      "inventory": [{ "product": "P1", "quantity": 100 }],
+      "batches": [{ "product": "P1", "qty": 20, "cost_kobo": 50000, "received_at": "2026-01-01" }],
+      "checkout": {
+        "payment_method": "credit",
+        "discount_kobo": 0,
+        "amount_paid_kobo": 150000,
+        "deposit_paid_by_manufacturer": { "M1": 150000 },
+        "items": [{ "product": "P1", "quantity": 3 }]
+      },
+      "expected": {
+        "order": {
+          "status": "pending", "payment_type": "mixed",
+          "total_amount_kobo": 450000, "discount_kobo": 0,
+          "net_amount_kobo": 450000, "amount_paid_kobo": 150000,
+          "completed_at_null": true
+        },
+        "items": [{ "product": "P1", "quantity": 3, "unit_price_kobo": 100000, "total_kobo": 300000, "buying_price_kobo": 50000 }],
+        "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 17 }],
+        "inventory_after": [{ "product": "P1", "quantity": 97 }],
+        "product_scalar_cost": [{ "product": "P1", "buying_price_kobo": 50000 }],
+        "extra_payments": [{ "type": "crate_deposit", "method": "cash", "amount_kobo": 150000 }],
+        "wallet_legs": [
+          { "reference_type": "order_payment", "signed_amount_kobo": -300000 },
+          { "reference_type": "crate_deposit", "signed_amount_kobo": 150000 }
+        ],
+        "customer_balance_after_kobo": -300000,
+        "crate_lines": [{ "manufacturer": "M1", "crates_taken": 3, "deposit_rate_kobo": 50000, "deposit_paid_kobo": 150000 }],
+        "crate_ledger": [],
+        "crate_balances": []
+      }
+    },
+    {
+      "name": "one brand money-track, one brand crate-track in the same sale (0222)",
+      "_note": "M1 pays a 100k deposit (money-track: no issued row / balance); M2 pays none (crate-track: issued + balance, unchanged). Goods 100k*2 + 120k*1 = 320k, deposit 100k, payable 420k paid in cash.",
+      "business_type": "Bar",
+      "tracks_empty_crates": true,
+      "manufacturers": [
+        { "key": "M1", "name": "Star Co", "deposit_rate_kobo": 50000 },
+        { "key": "M2", "name": "Guinness Co", "deposit_rate_kobo": 60000 }
+      ],
+      "customer": { "opening_balance_kobo": 0, "debt_limit_kobo": 0 },
+      "products": [
+        { "key": "P1", "name": "Star 60cl", "unit_price_kobo": 100000, "scalar_cost_kobo": 50000, "manufacturer": "M1" },
+        { "key": "P2", "name": "Guinness 60cl", "unit_price_kobo": 120000, "scalar_cost_kobo": 70000, "manufacturer": "M2" }
+      ],
+      "inventory": [{ "product": "P1", "quantity": 100 }, { "product": "P2", "quantity": 100 }],
+      "batches": [
+        { "product": "P1", "qty": 20, "cost_kobo": 50000, "received_at": "2026-01-01" },
+        { "product": "P2", "qty": 20, "cost_kobo": 70000, "received_at": "2026-01-01" }
+      ],
+      "checkout": {
+        "payment_method": "cash",
+        "discount_kobo": 0,
+        "amount_paid_kobo": 420000,
+        "deposit_paid_by_manufacturer": { "M1": 100000 },
+        "items": [{ "product": "P1", "quantity": 2 }, { "product": "P2", "quantity": 1 }]
+      },
+      "expected": {
+        "order": {
+          "status": "pending", "payment_type": "cash",
+          "total_amount_kobo": 420000, "discount_kobo": 0,
+          "net_amount_kobo": 420000, "amount_paid_kobo": 420000,
+          "completed_at_null": true
+        },
+        "items": [
+          { "product": "P1", "quantity": 2, "unit_price_kobo": 100000, "total_kobo": 200000, "buying_price_kobo": 50000 },
+          { "product": "P2", "quantity": 1, "unit_price_kobo": 120000, "total_kobo": 120000, "buying_price_kobo": 70000 }
+        ],
+        "batches_remaining": [
+          { "product": "P1", "received_at": "2026-01-01", "qty_remaining": 18 },
+          { "product": "P2", "received_at": "2026-01-01", "qty_remaining": 19 }
+        ],
+        "inventory_after": [{ "product": "P1", "quantity": 98 }, { "product": "P2", "quantity": 99 }],
+        "product_scalar_cost": [
+          { "product": "P1", "buying_price_kobo": 50000 },
+          { "product": "P2", "buying_price_kobo": 70000 }
+        ],
+        "payment": { "method": "cash", "amount_kobo": 320000 },
+        "extra_payments": [{ "type": "crate_deposit", "method": "cash", "amount_kobo": 100000 }],
+        "wallet_legs": [
+          { "reference_type": "order_payment", "signed_amount_kobo": -320000 },
+          { "reference_type": "topup_cash", "signed_amount_kobo": 320000 },
+          { "reference_type": "crate_deposit", "signed_amount_kobo": 100000 }
+        ],
+        "customer_balance_after_kobo": 0,
+        "crate_lines": [
+          { "manufacturer": "M1", "crates_taken": 2, "deposit_rate_kobo": 50000, "deposit_paid_kobo": 100000 },
+          { "manufacturer": "M2", "crates_taken": 1, "deposit_rate_kobo": 60000, "deposit_paid_kobo": 0 }
+        ],
+        "crate_ledger": [{ "manufacturer": "M2", "quantity_delta": 1 }],
+        "crate_balances": [{ "manufacturer": "M2", "balance": 1 }]
       }
     }
   ]

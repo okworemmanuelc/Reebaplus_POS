@@ -13,6 +13,27 @@ import 'package:reebaplus_pos/shared/services/orders/crate_return_input.dart';
 import 'package:reebaplus_pos/shared/services/orders/sale_flusher.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
 
+/// `orders.payment_type` for a checkout — the single rule shared by the mobile
+/// checkout and the golden-scenario Dart arm (its SQL twin is `checkout_order`,
+/// migration 0222). [totalAmountKobo] is the payable (goods + held deposit).
+String resolveOrderPaymentType({
+  required String paymentSubType,
+  required int amountPaidKobo,
+  required int totalAmountKobo,
+  required int walletBalanceKobo,
+}) {
+  if (paymentSubType == 'wallet') return 'wallet';
+  if (amountPaidKobo <= 0) {
+    // A "credit sale" the customer's EXISTING wallet credit fully covers is
+    // financially a wallet payment — _resolveWalletDebit debits the full total
+    // for both 'credit' and 'wallet', so this is a label change only, no ledger
+    // change. Record it as wallet so receipt/badge reflect what settled it.
+    return walletBalanceKobo >= totalAmountKobo ? 'wallet' : 'credit';
+  }
+  if (amountPaidKobo < totalAmountKobo) return 'mixed';
+  return 'cash';
+}
+
 /// The Order module's **command surface** (ADR 0004): the three lifecycle
 /// writes — **Checkout** (settle the sale, recognise revenue), **Confirm** (the
 /// ceremonial `pending`→`completed` flip), and **Cancel** (reverse a settled
@@ -581,18 +602,12 @@ class OrderCommands {
     required int amountPaidKobo,
     required int totalAmountKobo,
     required int walletBalanceKobo,
-  }) {
-    if (paymentSubType == 'wallet') return 'wallet';
-    if (amountPaidKobo <= 0) {
-      // A "credit sale" the customer's EXISTING wallet credit fully covers is
-      // financially a wallet payment — _resolveWalletDebit debits the full total
-      // for both 'credit' and 'wallet', so this is a label change only, no ledger
-      // change. Record it as wallet so receipt/badge reflect what settled it.
-      return walletBalanceKobo >= totalAmountKobo ? 'wallet' : 'credit';
-    }
-    if (amountPaidKobo < totalAmountKobo) return 'mixed';
-    return 'cash';
-  }
+  }) => resolveOrderPaymentType(
+    paymentSubType: paymentSubType,
+    amountPaidKobo: amountPaidKobo,
+    totalAmountKobo: totalAmountKobo,
+    walletBalanceKobo: walletBalanceKobo,
+  );
 
   int _resolveWalletDebit({
     required String dbPaymentType,
