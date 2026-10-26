@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/storefront/shopper_cart.dart';
 import 'package:reebaplus_pos/core/storefront/storefront_models.dart';
+import 'package:reebaplus_pos/core/storefront/storefront_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -75,6 +76,10 @@ class _AddToCartBoxState extends ConsumerState<AddToCartBox> {
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     if (!widget.card.orderable) return const SizedBox.shrink();
+    // #437: an owner never orders from their own business.
+    if (ref.watch(ownStoreIdsProvider).contains(widget.card.storeId)) {
+      return const SizedBox.shrink();
+    }
     final inCart = ref
         .watch(shopperCartProvider)
         .valueOrNull

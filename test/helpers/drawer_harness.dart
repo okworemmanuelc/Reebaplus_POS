@@ -99,6 +99,7 @@ Future<BuildContext> pumpOpenDrawer(
   String? activeStoreId,
   ThemeData? theme,
   TextScaler? textScaler,
+  List<Override> overrides = const [],
 }) async {
   tester.view.viewPadding = FakeViewPadding(
     left: padding.left,
@@ -129,6 +130,7 @@ Future<BuildContext> pumpOpenDrawer(
       currentBusinessNameProvider.overrideWithValue(kDrawerSampleBusiness),
       currentBusinessLogoPathProvider.overrideWith((ref) async => null),
       currentBusinessSubscriptionProvider.overrideWithValue(subscription),
+      ...overrides,
     ],
     screen: Scaffold(
       key: scaffoldKey,

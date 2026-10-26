@@ -141,7 +141,11 @@ Future<void> pumpBrowse(
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [storefrontServiceProvider.overrideWithValue(backend.service)],
+      overrides: [
+        storefrontServiceProvider.overrideWithValue(backend.service),
+        // No business on a plain Browse phone: nothing is "Your store" (#437).
+        ownStoreIdsProvider.overrideWith((ref) => const <String>{}),
+      ],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: brightness == Brightness.light ? AppTheme.light() : AppTheme.dark(),

@@ -2,6 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'package:reebaplus_pos/core/storefront/storefront_providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:reebaplus_pos/core/storefront/shopper_cart.dart';
@@ -133,7 +135,10 @@ void main() {
     Future<List<bool>> pumpGate(WidgetTester tester, FakeAgeCloud cloud) async {
       final results = <bool>[];
       await tester.pumpWidget(ProviderScope(
-        overrides: [shopperAgeServiceProvider.overrideWithValue(cloud.service)],
+        overrides: [
+          shopperAgeServiceProvider.overrideWithValue(cloud.service),
+          ownStoreIdsProvider.overrideWith((ref) => const <String>{}),
+        ],
         child: MaterialApp(
           theme: AppTheme.light(),
           home: Consumer(
@@ -186,7 +191,10 @@ void main() {
     Future<void> pumpBox(WidgetTester tester, StorefrontCard card, FakeAgeCloud cloud,
         List<String> added) async {
       await tester.pumpWidget(ProviderScope(
-        overrides: [shopperAgeServiceProvider.overrideWithValue(cloud.service)],
+        overrides: [
+          shopperAgeServiceProvider.overrideWithValue(cloud.service),
+          ownStoreIdsProvider.overrideWith((ref) => const <String>{}),
+        ],
         child: MaterialApp(
           theme: AppTheme.light(),
           home: Scaffold(
