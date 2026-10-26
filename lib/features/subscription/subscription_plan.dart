@@ -53,7 +53,7 @@ String effectivePlan({
   required DateTime? currentPeriodEnd,
   required DateTime now,
 }) {
-  if (status == 'trial' && trialEndsAt != null && trialEndsAt.isAfter(now)) {
+  if (status == 'trial' && (trialEndsAt == null || trialEndsAt.isAfter(now))) {
     return kPlanPremium;
   }
   if (status == 'active' &&
@@ -92,11 +92,10 @@ String planPriceLine(String? plan, {required bool nigeria}) => switch (plan) {
   _ => nigeria ? '₦0' : '\$0',
 };
 
-/// Whether prices show in naira. The business has no country column; the
-/// timezone is the signal (0223 backfilled it from currency). An unset/default
-/// 'UTC' keeps the historical naira default.
-bool pricesInNaira(String? timezone) =>
-    timezone == null || timezone == 'UTC' || timezone == 'Africa/Lagos';
+/// Whether prices show in naira: the business's `default_currency` setting is
+/// NGN or unset; any other currency shows USD (matches the console and 0223).
+bool pricesInNaira(String? currencyCode) =>
+    currencyCode == null || currencyCode.isEmpty || currencyCode == 'NGN';
 
 /// The plan that keeps the owner's CURRENT setup after the trial: Basic when
 /// they have at most 1 store and at most 5 staff and no van/warehouse,

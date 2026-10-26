@@ -71,7 +71,7 @@ class SubscriptionScreen extends ConsumerWidget {
     final business = ref.watch(currentBusinessProvider);
     final access = ref.watch(currentBusinessSubscriptionProvider);
     final plan = ref.watch(effectivePlanProvider);
-    final nigeria = pricesInNaira(business?.timezone);
+    final nigeria = pricesInNaira(ref.watch(currencyCodeProvider).valueOrNull);
 
     if (business == null) {
       return SettingsCard(

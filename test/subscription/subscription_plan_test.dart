@@ -37,9 +37,9 @@ void main() {
       expect(eff('trial', null, future, null), kPlanPremium);
       expect(eff('trial', kPlanBasic, future, null), kPlanPremium);
     });
-    test('ended trial or no deadline falls to free', () {
+    test('ended trial falls to free; a trial with no deadline is premium', () {
       expect(eff('trial', kPlanPremium, past, null), kPlanFree);
-      expect(eff('trial', kPlanPremium, null, null), kPlanFree);
+      expect(eff('trial', kPlanPremium, null, null), kPlanPremium);
     });
     test('active uses the stored plan until period end', () {
       expect(eff('active', kPlanBasic, null, null), kPlanBasic);
@@ -50,6 +50,13 @@ void main() {
     test('inactive is free', () {
       expect(eff('inactive', kPlanPremium, future, future), kPlanFree);
     });
+  });
+
+  test('pricesInNaira follows default_currency', () {
+    expect(pricesInNaira(null), isTrue);
+    expect(pricesInNaira('NGN'), isTrue);
+    expect(pricesInNaira('USD'), isFalse);
+    expect(pricesInNaira('GHS'), isFalse);
   });
 
   group('recommendedPlanFor', () {

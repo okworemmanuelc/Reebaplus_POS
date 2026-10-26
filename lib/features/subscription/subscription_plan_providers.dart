@@ -14,11 +14,6 @@ final effectivePlanProvider = Provider<String>((ref) {
   ref.watch(subscriptionClockTickProvider);
   final b = ref.watch(currentBusinessProvider);
   if (b == null) return kPlanPremium;
-  // A trial row with no deadline yet (not-yet-synced / grace) never restricts,
-  // like SubscriptionAccess.grace; the server trigger stays the authority.
-  if (b.subscriptionStatus == 'trial' && b.trialEndsAt == null) {
-    return kPlanPremium;
-  }
   return effectivePlan(
     status: b.subscriptionStatus,
     plan: b.subscriptionPlan,

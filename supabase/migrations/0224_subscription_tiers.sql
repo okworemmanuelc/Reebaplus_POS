@@ -117,8 +117,7 @@ AS $$
   SELECT COALESCE(
     (SELECT CASE
               WHEN b.subscription_status = 'trial'
-                   AND b.trial_ends_at IS NOT NULL
-                   AND b.trial_ends_at > now()
+                   AND (b.trial_ends_at IS NULL OR b.trial_ends_at > now())
                 THEN 'premium'
               WHEN b.subscription_status = 'active'
                    AND (b.current_period_end IS NULL OR b.current_period_end > now())

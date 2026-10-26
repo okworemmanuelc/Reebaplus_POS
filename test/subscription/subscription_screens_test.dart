@@ -202,10 +202,8 @@ void main() {
     testWidgets('premium plan outside Nigeria shows the dollar price', (
       tester,
     ) async {
-      final intl = business.copyWith(
-        subscriptionPlan: const Value('premium'),
-        timezone: 'Europe/London',
-      );
+      final intl = business.copyWith(subscriptionPlan: const Value('premium'));
+      await env.db.settingsDao.set('default_currency', 'USD');
       await pump(tester, ThankYouSubscriptionScreen(business: intl));
       expect(find.text('\$20 per month'), findsOneWidget);
       await disposeScreen(tester);
