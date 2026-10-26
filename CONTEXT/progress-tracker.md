@@ -7,6 +7,8 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #430: Print the order slip (2026-10-26, ready for review)
+- App-only (no Drift, no cloud): Print slip on accepted/fulfilled online orders (`online_orders.view`); `OnlineOrderSlip` (`lib/core/online_orders/online_order_slip.dart`) builds text + ESC/POS from `OnlineOrdersDao.slipLoad`; thermal printer, Share (text) fallback when no printer/print fails.
 ### Issue #475: Listing quality checklist + shared photo (2026-10-26, ready for review)
 - App only. Pure rule `lib/core/storefront/listing_quality.dart`; checklist in the Online listing card, per-store gap counts on the Online store hub (both `Gates.manageListing`); "Use the shared photo" on tap only (ADR 0029 §8 amended, owner sign-off pending). Not done: optional brand/category sharing. `pos-parity` issue not needed (no table/status/money change).
 
