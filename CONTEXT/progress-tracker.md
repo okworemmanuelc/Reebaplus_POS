@@ -7924,3 +7924,12 @@ carried over.)_
 2. No raw Supabase call from `lib/features/` or `lib/data/repositories/`.
 3. No UPDATE or DELETE on an append-only ledger table — corrections are
    new rows only.
+
+### Web checkout money parity (0222) (2026-10-26)
+Branch `feat/web-checkout-mobile-money-shape`. `checkout_order` now writes the mobile
+money shape (split sale / crate_deposit / wallet_topup rows with store_id, real
+`orders.payment_type`, money-track crate deposit via `p_crate_deposit_by_manufacturer`).
+Migration 0222 is NOT applied to live (owner confirmation pending); apply plan,
+rollback and verification in `docs/rollouts/0222-checkout-order-mobile-money-shape/`.
+Golden: Dart arm green; rpc arm not yet run (needs reebaplus-dev with 0222 applied).
+reebaplus-web #72, #80.

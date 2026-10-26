@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:reebaplus_pos/shared/services/orders/order_commands.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/utils/order_number.dart';
@@ -252,6 +253,18 @@ void main() {
         return;
       }
 
+      // The mobile header value (OrderCommands.checkout → resolveOrderPaymentType),
+      // computed against the payable (goods + held deposit) exactly as the cart
+      // passes it. Fed to the order so both arms assert the same header.
+      final paymentType = resolveOrderPaymentType(
+        paymentSubType: scenario.checkout.paymentMethod == 'wallet'
+            ? 'wallet'
+            : (scenario.checkout.paymentMethod == 'credit' ? 'credit' : 'cash'),
+        amountPaidKobo: cashPaid,
+        totalAmountKobo: grandTotal,
+        walletBalanceKobo: scenario.customer?.openingBalanceKobo ?? 0,
+      );
+
       await db.ordersDao.createOrder(
         order: OrdersCompanion.insert(
           id: Value(orderId),
@@ -261,7 +274,7 @@ void main() {
           discountKobo: Value(discount),
           netAmountKobo: grandTotal,
           amountPaidKobo: Value(cashPaid),
-          paymentType: 'cash',
+          paymentType: paymentType,
           status: 'pending',
           staffId: Value(staffId),
           storeId: Value(storeId),
