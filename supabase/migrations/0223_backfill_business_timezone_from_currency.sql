@@ -1,4 +1,4 @@
--- 0222_backfill_business_timezone_from_currency.sql
+-- 0223_backfill_business_timezone_from_currency.sql
 --
 -- #63 (reebaplus-web): CEO sign-up hardcoded settings.timezone = 'Africa/Lagos'
 -- for every business, so non-Nigerian businesses cut business days, daily
