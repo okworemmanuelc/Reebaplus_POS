@@ -265,6 +265,12 @@ void main() {
         walletBalanceKobo: scenario.customer?.openingBalanceKobo ?? 0,
       );
 
+      // Mirror real Checkout (OrderCommands.checkout, PRD #337): Pending only
+      // for a crate-bearing sale, decided from the DB rows; else completed.
+      final crateBearing = await db.ordersDao.isCrateBearingCart(
+        scenario.checkout.items.map((l) => productIdByKey[l.productKey]),
+      );
+
       await db.ordersDao.createOrder(
         order: OrdersCompanion.insert(
           id: Value(orderId),
@@ -275,7 +281,9 @@ void main() {
           netAmountKobo: grandTotal,
           amountPaidKobo: Value(cashPaid),
           paymentType: paymentType,
-          status: 'pending',
+          status: crateBearing ? 'pending' : 'completed',
+          completedAt:
+              crateBearing ? const Value.absent() : Value(DateTime.now().toUtc()),
           staffId: Value(staffId),
           storeId: Value(storeId),
           customerId: Value(customerId),

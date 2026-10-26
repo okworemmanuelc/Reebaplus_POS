@@ -17,7 +17,7 @@ import '../../helpers/supabase_test_env.dart';
 ///     with a mobile device-tag number (`^ORD-…`);
 ///   * the checkout is idempotent on the order id (a replay applies nothing new);
 ///   * an order-level discount within the caller's role cap is honored, and the
-///     sale settles at `pending` (revenue recognized at checkout).
+///     sale settles `completed` (non-crate) or `pending` (crate bottle, #548).
 ///
 /// Hits real dev Supabase; auto-skipped when env vars are absent. Assumes the
 /// test user is the CEO of TEST_BUSINESS_ID (100% discount cap, sales.make).
@@ -93,7 +93,11 @@ void main() {
     await clients.dispose();
   });
 
-  Future<String> seedProduct({int scalarCostKobo = 50000}) async {
+  Future<String> seedProduct({
+    int scalarCostKobo = 50000,
+    String? unit,
+    bool trackEmpties = false,
+  }) async {
     final id = UuidV7.generate();
     await clients.adminClient.from('products').insert({
       'id': id,
@@ -101,6 +105,8 @@ void main() {
       'name': 'Guard Product',
       'retailer_price_kobo': 100000,
       'buying_price_kobo': scalarCostKobo,
+      if (unit != null) 'unit': unit,
+      'track_empties': trackEmpties,
     });
     productIds.add(id);
     return id;
@@ -221,7 +227,7 @@ void main() {
     return (row['quantity'] as num).toInt();
   }
 
-  test('cash sale settles at pending with a WEB- order number, never ORD-', () async {
+  test('non-crate cash sale settles completed with a WEB- order number, never ORD-', () async {
     final product = await seedProduct();
     await seedInventory(product, 10);
     await seedBatch(product, 10, 50000);
@@ -230,14 +236,42 @@ void main() {
         orderId: UuidV7.generate(), productId: product, quantity: 3);
     final order = res['order'] as Map;
 
-    expect(order['status'], 'pending',
-        reason: 'revenue recognized at checkout, not at confirm');
-    expect(order['completed_at'], isNull);
+    expect(order['status'], 'completed',
+        reason: 'Pending holds only crate-bearing sales (#548)');
+    expect(order['completed_at'], isNotNull);
     expect(order['order_number'], matches(RegExp(r'^WEB-\d{6}-[0-9A-F]{6}$')));
     expect(order['order_number'], isNot(startsWith('ORD-')),
         reason: 'must not collide with the mobile device-tag scheme');
     expect(res['replayed'], false);
     expect(await onHand(product), 7, reason: '3 units left the shelf');
+  }, skip: _skipReason);
+
+  test('crate bottle at a crate business settles pending, completed_at null',
+      () async {
+    final biz = await clients.adminClient
+        .from('businesses')
+        .select('type, tracks_empty_crates')
+        .eq('id', businessId)
+        .single();
+    await clients.adminClient.from('businesses').update(
+        {'type': 'Bar', 'tracks_empty_crates': true}).eq('id', businessId);
+    try {
+      final product =
+          await seedProduct(unit: 'Bottle', trackEmpties: true);
+      await seedInventory(product, 10);
+      await seedBatch(product, 10, 50000);
+
+      final res = await checkout(
+          orderId: UuidV7.generate(), productId: product, quantity: 2);
+      final order = res['order'] as Map;
+      expect(order['status'], 'pending');
+      expect(order['completed_at'], isNull);
+    } finally {
+      await clients.adminClient.from('businesses').update({
+        'type': biz['type'],
+        'tracks_empty_crates': biz['tracks_empty_crates'],
+      }).eq('id', businessId);
+    }
   }, skip: _skipReason);
 
   test('rejects when live stock is insufficient — no partial write', () async {
@@ -338,7 +372,7 @@ void main() {
     );
 
     final order = res['order'] as Map;
-    expect(order['status'], 'pending');
+    expect(order['status'], 'completed');
     expect((order['amount_paid_kobo'] as num).toInt(), 0,
         reason: 'no cash settled on a pure credit sale');
     expect(order['customer_id'], customer);

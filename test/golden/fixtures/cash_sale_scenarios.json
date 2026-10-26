@@ -46,10 +46,10 @@
       },
       "expected": {
         "order": {
-          "status": "pending", "payment_type": "cash",
+          "status": "completed", "payment_type": "cash",
           "total_amount_kobo": 300000, "discount_kobo": 0,
           "net_amount_kobo": 300000, "amount_paid_kobo": 300000,
-          "completed_at_null": true
+          "completed_at_null": false
         },
         "items": [{ "product": "P1", "quantity": 3, "unit_price_kobo": 100000, "total_kobo": 300000, "buying_price_kobo": 50000 }],
         "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 17 }],
@@ -76,10 +76,10 @@
       },
       "expected": {
         "order": {
-          "status": "pending", "payment_type": "cash",
+          "status": "completed", "payment_type": "cash",
           "total_amount_kobo": 1000000, "discount_kobo": 0,
           "net_amount_kobo": 1000000, "amount_paid_kobo": 1000000,
-          "completed_at_null": true
+          "completed_at_null": false
         },
         "items": [{ "product": "P1", "quantity": 10, "unit_price_kobo": 100000, "total_kobo": 1000000, "buying_price_kobo": 54000 }],
         "batches_remaining": [
@@ -112,10 +112,10 @@
       },
       "expected": {
         "order": {
-          "status": "pending", "payment_type": "cash",
+          "status": "completed", "payment_type": "cash",
           "total_amount_kobo": 600000, "discount_kobo": 0,
           "net_amount_kobo": 600000, "amount_paid_kobo": 600000,
-          "completed_at_null": true
+          "completed_at_null": false
         },
         "items": [
           { "product": "P1", "quantity": 3, "unit_price_kobo": 100000, "total_kobo": 300000, "buying_price_kobo": 50000 },
@@ -145,10 +145,10 @@
       },
       "expected": {
         "order": {
-          "status": "pending", "payment_type": "cash",
+          "status": "completed", "payment_type": "cash",
           "total_amount_kobo": 500000, "discount_kobo": 0,
           "net_amount_kobo": 500000, "amount_paid_kobo": 500000,
-          "completed_at_null": true
+          "completed_at_null": false
         },
         "items": [{ "product": "P1", "quantity": 5, "unit_price_kobo": 100000, "total_kobo": 500000, "buying_price_kobo": 30000 }],
         "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 0 }],
@@ -172,10 +172,10 @@
       },
       "expected": {
         "order": {
-          "status": "pending", "payment_type": "cash",
+          "status": "completed", "payment_type": "cash",
           "total_amount_kobo": 300000, "discount_kobo": 0,
           "net_amount_kobo": 300000, "amount_paid_kobo": 300000,
-          "completed_at_null": true
+          "completed_at_null": false
         },
         "items": [{ "product": "P1", "quantity": 3, "unit_price_kobo": 100000, "total_kobo": 300000, "buying_price_kobo": 0 }],
         "batches_remaining": [],
@@ -199,10 +199,10 @@
       },
       "expected": {
         "order": {
-          "status": "pending", "payment_type": "cash",
+          "status": "completed", "payment_type": "cash",
           "total_amount_kobo": 400000, "discount_kobo": 0,
           "net_amount_kobo": 400000, "amount_paid_kobo": 400000,
-          "completed_at_null": true
+          "completed_at_null": false
         },
         "items": [{ "product": "P1", "quantity": 4, "unit_price_kobo": 100000, "total_kobo": 400000, "buying_price_kobo": 0 }],
         "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 6 }],
@@ -226,10 +226,10 @@
       },
       "expected": {
         "order": {
-          "status": "pending", "payment_type": "cash",
+          "status": "completed", "payment_type": "cash",
           "total_amount_kobo": 1000000, "discount_kobo": 50000,
           "net_amount_kobo": 950000, "amount_paid_kobo": 950000,
-          "completed_at_null": true
+          "completed_at_null": false
         },
         "items": [{ "product": "P1", "quantity": 10, "unit_price_kobo": 100000, "total_kobo": 1000000, "buying_price_kobo": 50000 }],
         "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 10 }],
@@ -263,10 +263,10 @@
       },
       "expected": {
         "order": {
-          "status": "pending", "payment_type": "cash",
+          "status": "completed", "payment_type": "cash",
           "total_amount_kobo": 360000, "discount_kobo": 0,
           "net_amount_kobo": 360000, "amount_paid_kobo": 360000,
-          "completed_at_null": true
+          "completed_at_null": false
         },
         "items": [
           { "product": "P1", "quantity": 2, "unit_price_kobo": 100000, "total_kobo": 200000, "buying_price_kobo": 50000 },
@@ -313,10 +313,10 @@
       },
       "expected": {
         "order": {
-          "status": "pending", "payment_type": "cash",
+          "status": "completed", "payment_type": "cash",
           "total_amount_kobo": 260000, "discount_kobo": 0,
           "net_amount_kobo": 260000, "amount_paid_kobo": 260000,
-          "completed_at_null": true
+          "completed_at_null": false
         },
         "items": [
           { "product": "P1", "quantity": 2, "unit_price_kobo": 80000, "total_kobo": 160000, "buying_price_kobo": 50000, "catalogue_price_kobo": 100000 },
@@ -353,10 +353,10 @@
       },
       "expected": {
         "order": {
-          "status": "pending", "payment_type": "wallet",
+          "status": "completed", "payment_type": "wallet",
           "total_amount_kobo": 300000, "discount_kobo": 0,
           "net_amount_kobo": 300000, "amount_paid_kobo": 0,
-          "completed_at_null": true
+          "completed_at_null": false
         },
         "items": [{ "product": "P1", "quantity": 3, "unit_price_kobo": 100000, "total_kobo": 300000, "buying_price_kobo": 50000 }],
         "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 17 }],
@@ -382,10 +382,10 @@
       },
       "expected": {
         "order": {
-          "status": "pending", "payment_type": "credit",
+          "status": "completed", "payment_type": "credit",
           "total_amount_kobo": 300000, "discount_kobo": 0,
           "net_amount_kobo": 300000, "amount_paid_kobo": 0,
-          "completed_at_null": true
+          "completed_at_null": false
         },
         "items": [{ "product": "P1", "quantity": 3, "unit_price_kobo": 100000, "total_kobo": 300000, "buying_price_kobo": 50000 }],
         "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 17 }],
@@ -411,10 +411,10 @@
       },
       "expected": {
         "order": {
-          "status": "pending", "payment_type": "mixed",
+          "status": "completed", "payment_type": "mixed",
           "total_amount_kobo": 300000, "discount_kobo": 0,
           "net_amount_kobo": 300000, "amount_paid_kobo": 100000,
-          "completed_at_null": true
+          "completed_at_null": false
         },
         "items": [{ "product": "P1", "quantity": 3, "unit_price_kobo": 100000, "total_kobo": 300000, "buying_price_kobo": 50000 }],
         "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 17 }],
@@ -444,10 +444,10 @@
       },
       "expected": {
         "order": {
-          "status": "pending", "payment_type": "cash",
+          "status": "completed", "payment_type": "cash",
           "total_amount_kobo": 300000, "discount_kobo": 0,
           "net_amount_kobo": 300000, "amount_paid_kobo": 300000,
-          "completed_at_null": true
+          "completed_at_null": false
         },
         "items": [{ "product": "P1", "quantity": 3, "unit_price_kobo": 100000, "total_kobo": 300000, "buying_price_kobo": 50000 }],
         "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 17 }],
@@ -478,10 +478,10 @@
       },
       "expected": {
         "order": {
-          "status": "pending", "payment_type": "cash",
+          "status": "completed", "payment_type": "cash",
           "total_amount_kobo": 1000000, "discount_kobo": 100000,
           "net_amount_kobo": 900000, "amount_paid_kobo": 900000,
-          "completed_at_null": true
+          "completed_at_null": false
         },
         "items": [{ "product": "P1", "quantity": 10, "unit_price_kobo": 100000, "total_kobo": 1000000, "buying_price_kobo": 50000 }],
         "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 10 }],
@@ -524,10 +524,10 @@
       },
       "expected": {
         "order": {
-          "status": "pending", "payment_type": "cash",
+          "status": "completed", "payment_type": "cash",
           "total_amount_kobo": 300000, "discount_kobo": 0,
           "net_amount_kobo": 300000, "amount_paid_kobo": 350000,
-          "completed_at_null": true
+          "completed_at_null": false
         },
         "items": [{ "product": "P1", "quantity": 3, "unit_price_kobo": 100000, "total_kobo": 300000, "buying_price_kobo": 50000 }],
         "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 17 }],
@@ -560,10 +560,10 @@
       },
       "expected": {
         "order": {
-          "status": "pending", "payment_type": "cash",
+          "status": "completed", "payment_type": "cash",
           "total_amount_kobo": 300000, "discount_kobo": 0,
           "net_amount_kobo": 300000, "amount_paid_kobo": 350000,
-          "completed_at_null": true
+          "completed_at_null": false
         },
         "items": [{ "product": "P1", "quantity": 3, "unit_price_kobo": 100000, "total_kobo": 300000, "buying_price_kobo": 50000 }],
         "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 17 }],

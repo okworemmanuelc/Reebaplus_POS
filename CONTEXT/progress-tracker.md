@@ -7945,3 +7945,10 @@ rides both sync paths (v1 header carries status + completed_at; v2 forwards `p_s
 Golden fixtures untouched (Dart arm drives the DAO with explicit status). Not in this
 slice: cloud `checkout_order` status, Return of a Completed sale.
 Tests: `test/crates/crate_bearing_sale_test.dart`, `test/orders/checkout_status_test.dart`.
+### 2026-10-26 - #548 web checkout_order follows the Pending rule (PRD #337 b)
+Migration `0226_checkout_order_pending_rule.sql` re-issues `checkout_order` from
+0222 (same 9-arg signature/grants); only delta: status `pending` iff crate
+business gate + any bottle/track_empties line, else `completed` + completed_at.
+NOT applied to live. Tier-2 tests updated (compile-checked, auto-skip without env).
+Shared golden fixtures still say `pending` for non-crate sales: updated with
+slice (a) #547 (Dart side) so both arms flip together. reebaplus-web #190.

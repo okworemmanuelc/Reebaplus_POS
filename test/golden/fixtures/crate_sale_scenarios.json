@@ -259,10 +259,10 @@
       },
       "expected": {
         "order": {
-          "status": "pending", "payment_type": "cash",
+          "status": "completed", "payment_type": "cash",
           "total_amount_kobo": 300000, "discount_kobo": 0,
           "net_amount_kobo": 300000, "amount_paid_kobo": 300000,
-          "completed_at_null": true
+          "completed_at_null": false
         },
         "items": [{ "product": "P1", "quantity": 3, "unit_price_kobo": 100000, "total_kobo": 300000, "buying_price_kobo": 50000 }],
         "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 17 }],
