@@ -152,9 +152,19 @@ not tied to the `completed` status).
 
 **Checkout**:
 The lifecycle operation that settles a sale and recognizes revenue: books wallet
-legs, deducts inventory, issues crates, writes the Order at status `pending`.
-The economic act.
+legs, deducts inventory, issues crates, writes the Order. The Order is born
+`pending` only for a **Crate-bearing sale**; every other sale is born `completed`
+(`completedAt` = the checkout instant, no confirmer). The economic act.
 _Avoid_: settle, record-sale (as user-facing verbs), "complete the sale".
+
+**Crate-bearing sale**:
+A Sale made by a business that tracks empties (`isCrateBusiness(type)` and
+`tracksEmptyCrates` on) with at least one crate-tracked bottle line (unit
+`bottle`, case-insensitive, and track empties on). Quick Sale lines never count.
+Decided at Checkout from the business and the cart's products by
+`isCrateBearingSale` (`lib/core/crates/crate_bearing_sale.dart`, §13.4 / rule #13,
+PRD #337) — the same rule the Empty-Crates sheet uses to decide whether to open.
+Only these sales wait in Pending for the empties to be counted back.
 
 **Confirm**:
 The ceremonial lifecycle operation flipping an Order `pending`→`completed`,
