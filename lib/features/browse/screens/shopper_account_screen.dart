@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/storefront/shopper_age_confirmation.dart';
+import 'package:reebaplus_pos/core/storefront/shopper_cart.dart';
 import 'package:reebaplus_pos/core/storefront/shopper_providers.dart';
 import 'package:reebaplus_pos/core/storefront/shopper_session.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
@@ -17,7 +19,9 @@ import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 /// The Shopper's account (#426, stories 40–41): who is signed in, their
 /// details (edit), My orders, and a plain sign-out — no device wipe, the cart
 /// stays. A business phone shops with its business sign-in and has no
-/// Shopper sign-out here (ADR 0030).
+/// Shopper sign-out here (ADR 0030). Delete account (#438) erases the
+/// Shopper's data, clears the cart and signs a Shopper-only phone out; a
+/// business phone keeps its sign-in.
 class ShopperAccountScreen extends ConsumerWidget {
   const ShopperAccountScreen({super.key});
 
@@ -74,6 +78,62 @@ class ShopperAccountScreen extends ConsumerWidget {
     );
     if (confirmed != true) return;
     await ref.read(shopperSessionProvider.notifier).signOut();
+  }
+
+  Future<void> _deleteAccount(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        scrollable: true,
+        title: const Text('Delete your account?'),
+        content: const Text(
+          'Your details, saved phones and addresses are erased and orders '
+          'the shops have not answered yet are cancelled. Shops keep the '
+          'records of orders they already answered. This cannot be undone.',
+        ),
+        actions: [
+          AppButton(
+            text: 'Keep account',
+            variant: AppButtonVariant.ghost,
+            isFullWidth: false,
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+          ),
+          AppButton(
+            key: const Key('shopper-delete-account-confirm'),
+            text: 'Delete account',
+            variant: AppButtonVariant.danger,
+            isFullWidth: false,
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(shopperServiceProvider).deleteAccount();
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text("Couldn't delete your account. Check your connection."),
+        ),
+      );
+      return;
+    }
+    // TODO(#434): the account_deleted email is sent once #434's send-email
+    // template is merged.
+    await ref.read(shopperCartProvider.notifier).clear();
+    await ref.read(shopperAgeConfirmationProvider.notifier).forget();
+    final session = ref.read(shopperSessionProvider.notifier);
+    if (ref.read(shopperSessionProvider).canSignOut) {
+      await session.signOut();
+    } else {
+      ref.invalidate(shopperProfileProvider);
+      ref.invalidate(shopperOrdersProvider);
+    }
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Your account has been deleted.')),
+    );
   }
 
   @override
@@ -187,6 +247,14 @@ class ShopperAccountScreen extends ConsumerWidget {
                   icon: AppIcons.download,
                   variant: AppButtonVariant.outline,
                   onPressed: () => _download(context, ref),
+                ),
+                SizedBox(height: context.getRSize(8)),
+                AppButton(
+                  key: const Key('shopper-delete-account'),
+                  text: 'Delete account',
+                  icon: AppIcons.deleteForever,
+                  variant: AppButtonVariant.danger,
+                  onPressed: () => _deleteAccount(context, ref),
                 ),
               ],
             ),
