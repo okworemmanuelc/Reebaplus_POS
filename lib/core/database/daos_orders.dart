@@ -1745,7 +1745,12 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   /// can't reverse a sale twice on one phone.
   ///
   /// [forceLocalReversal] skips the v2 domain-RPC path (the Return, #551, always
-  /// uses the local reversal). [inReversal] runs inside the reversal's guarded
+  /// uses the local reversal). [damagedQtyByLine] (order-item id → units, the
+  /// Return only) shrinks each line's restore layer to its SELLABLE units and
+  /// writes the damaged units off as `damage:<damageReasonKey>` adjustments at
+  /// the line's recorded cost — no existing cost layer is drawn down, so the
+  /// reversal only ever ADDS rows (a rejected one withdraws cleanly, #550).
+  /// Both run inside the reversal's guarded
   /// transaction after the compensating rows are written and before the claim
   /// is committed, so any rows it writes (the Return's damage write-offs) are
   /// held behind the same `pos_claim_order_reversal` envelope.
@@ -1754,7 +1759,8 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     String reason,
     String staffId, {
     bool forceLocalReversal = false,
-    Future<void> Function()? inReversal,
+    Map<String, int> damagedQtyByLine = const {},
+    String damageReasonKey = 'other',
   }) async {
     // DO NOT ENABLE UNTIL #121 (the oversell-orphan go-live gate), and not
     // before migration 0170 is DEPLOYED. #201 rewrote `pos_cancel_order` to the
@@ -1909,8 +1915,14 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         await db.costBatchesDao.recordInflowBatch(
           productId: productId,
           storeId: line.storeId,
-          quantity: line.quantity,
+          // #551: damaged returned units never come back as sellable stock.
+          quantity: line.quantity - (damagedQtyByLine[line.id] ?? 0),
           costKobo: line.buyingPriceKobo,
+          // 0228: a fixed id the cloud recost recognises (keeps this sale's
+          // units in the replay so no other sale is re-costed). Written even
+          // at 0 sellable units — its presence is what the cloud checks.
+          id: CostBatchesDao.cancelRestoreLayerId(line.id),
+          allowEmpty: true,
         );
       }
 
@@ -2044,7 +2056,22 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         staffId: staffId,
       );
 
-      if (inReversal != null) await inReversal();
+      // #551 — a Return's damaged units: written off at the line's recorded
+      // cost (outflowValueKobo → no FIFO draw-down; the restore layer above
+      // already excludes them).
+      for (final line in cancelledLines) {
+        final damaged = damagedQtyByLine[line.id] ?? 0;
+        final productId = line.productId;
+        if (damaged <= 0 || productId == null) continue;
+        await db.inventoryDao.adjustStock(
+          productId,
+          line.storeId,
+          -damaged,
+          'damage:$damageReasonKey',
+          staffId,
+          outflowValueKobo: damaged * line.buyingPriceKobo,
+        );
+      }
 
       await commitGuardedReversal(
         guard,
@@ -2162,19 +2189,8 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         reason,
         staffId,
         forceLocalReversal: true,
-        inReversal: () async {
-          for (final line in lines) {
-            final qty = damagedQtyByLine[line.id] ?? 0;
-            if (qty <= 0) continue;
-            await db.inventoryDao.adjustStock(
-              line.productId!,
-              line.storeId,
-              -qty,
-              'damage:$damageReasonKey',
-              staffId,
-            );
-          }
-        },
+        damagedQtyByLine: damagedQtyByLine,
+        damageReasonKey: damageReasonKey,
       );
       return ReturnOutcome(
         orderNumber: order.orderNumber,

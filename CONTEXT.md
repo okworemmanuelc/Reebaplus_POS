@@ -369,6 +369,13 @@ consumption is derived, recomputable state, so the replay is deterministic and
 idempotent for a fixed ledger. The correction is audited with one rolled-up
 Activity Log row per sync batch ("N sales of X re-costed on sync"), never a
 silent rewrite and never a per-sale prompt.
+A **reversed sale stays in the replay** (0228, PRD #337): a cancelled line keeps
+consuming the layers it was sold from when its Cancel restore layer exists —
+that layer carries a fixed id, `CostBatchesDao.cancelRestoreLayerId(order line
+id)`, recomputed by the cloud — and the returned (sellable) units come back
+through that layer on the cancel day. So a refund or Return never re-costs any
+other sale. Cancels the cloud can't recognise (older builds, pre-#170) keep the
+old rule: dropped from the replay, so it never runs short.
 _Avoid_: server-arrival order as the FIFO key; prompting the user per corrected
 sale; treating an assignment as permanent (it is stable only until an earlier
 sale arrives).

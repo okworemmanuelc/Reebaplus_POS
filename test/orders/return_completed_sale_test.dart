@@ -446,5 +446,84 @@ void main() {
       expect(await inv(), 47, reason: 'back to the post-sale shelf');
       expect(await db.select(db.stockAdjustments).get(), isEmpty);
     });
-  });
+      group('cost layers (0228)', () {
+      Future<CostBatchData> seedLayer() async {
+        await db.costBatchesDao.recordInflowBatch(
+          productId: productId,
+          storeId: storeId,
+          quantity: 50,
+          costKobo: 60000,
+          receivedAt: DateTime(2026, 1, 1),
+        );
+        return (await db.costBatchesDao.queueFor(productId, storeId)).single;
+      }
+
+      Future<CostBatchData?> batch(String id) =>
+          (db.select(db.costBatches)..where((b) => b.id.equals(id)))
+              .getSingleOrNull();
+
+      test('a damaged Return never draws an existing layer: its restore layer '
+          'holds only the sellable units, under the fixed id', () async {
+        final existing = await seedLayer();
+        final id = await sell([line(productId, 3)]);
+        final item = (await itemsOf(id)).single;
+        expect(item.buyingPriceKobo, 60000);
+        expect((await batch(existing.id))!.qtyRemaining, 47);
+
+        await doReturn(id, damaged: {item.id: 1}, key: 'broken');
+
+        expect((await batch(existing.id))!.qtyRemaining, 47,
+            reason: 'the pre-existing layer is untouched');
+        final restore =
+            await batch(CostBatchesDao.cancelRestoreLayerId(item.id));
+        expect(restore, isNotNull);
+        expect(restore!.qtyOriginal, 2);
+        expect(restore.qtyRemaining, 2);
+        expect(restore.costKobo, 60000);
+        final adj = await (db.select(db.stockAdjustments)
+              ..where((a) => a.productId.equals(productId)))
+            .getSingle();
+        expect(adj.valueKobo, 60000, reason: '1 unit at the recorded cost');
+        expect(await inv(), 49);
+      });
+
+      test('a fully damaged line still writes its 0-unit restore layer',
+          () async {
+        await seedLayer();
+        final id = await sell([line(productId, 2)]);
+        final item = (await itemsOf(id)).single;
+        await doReturn(id, damaged: {item.id: 2});
+        final restore =
+            await batch(CostBatchesDao.cancelRestoreLayerId(item.id));
+        expect(restore, isNotNull,
+            reason: 'the cloud recost recognises the sale by this layer');
+        expect(restore!.qtyOriginal, 0);
+        expect(await inv(), 48);
+      });
+
+      test('a rejected damaged Return keeps the real layer and withdraws only '
+          'its own restore layer', () async {
+        final existing = await seedLayer();
+        final id = await sell([line(productId, 3)]);
+        final item = (await itemsOf(id)).single;
+        await db.delete(db.syncQueue).go();
+        await doReturn(id, damaged: {item.id: 1});
+        final claim = (await db.select(db.syncQueue).get())
+            .singleWhere((r) => r.actionType == kReversalClaimAction);
+        final reversalId = decodePayload(claim)['p_reversal_id'] as String;
+
+        expect(
+          await db.ordersDao
+              .undoRejectedReversal(reversalId: reversalId, orderId: id),
+          isTrue,
+        );
+        final kept = await batch(existing.id);
+        expect(kept, isNotNull, reason: 'a synced layer is never deleted');
+        expect(kept!.qtyRemaining, 47);
+        expect(await batch(CostBatchesDao.cancelRestoreLayerId(item.id)),
+            isNull);
+        expect(await inv(), 47);
+      });
+    });
+});
 }
