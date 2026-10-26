@@ -1811,7 +1811,11 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         return;
       }
 
-      // v1 path: full local mirror + per-table enqueues.
+      // v1 path: full local mirror + per-table enqueues — every outbox row
+      // this reversal writes is HELD behind one `pos_claim_order_reversal`
+      // envelope (#550, ADR 0032), so the cloud accepts it only if it is the
+      // FIRST reversal of this order; a loser's rows never upload.
+      final guard = await beginGuardedReversal();
       await _enqueueFullOrder(orderId);
 
       // Stock: append COMPENSATING rows (ledger is append-only)
@@ -2025,7 +2029,238 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         orderId: orderId,
         staffId: staffId,
       );
+
+      await commitGuardedReversal(
+        guard,
+        orderId: orderId,
+        staffId: staffId,
+        reason: reason,
+        cancelledAt: now,
+      );
     });
+  }
+
+  // ── First reversal wins (#550, ADR 0032) ───────────────────────────────────
+  //
+  // The seam every local reversal of an Order goes through (the Pending-tab
+  // Refund via [markCancelled] today; the Return, #551, next):
+  //
+  //   final guard = await beginGuardedReversal();
+  //   …write the reversal's rows and enqueue them as usual…
+  //   await commitGuardedReversal(guard, orderId: …, …);
+  //
+  // all inside ONE transaction. Commit enqueues the `pos_claim_order_reversal`
+  // envelope and HOLDS every outbox row enqueued since begin behind it (keyed by
+  // the reversal id). The drain releases them when the claim lands, or — when
+  // another phone's reversal won — [undoRejectedReversal] withdraws them.
+
+  /// Starts a guarded reversal: snapshots the outbox so [commitGuardedReversal]
+  /// can hold exactly the rows the reversal enqueues. Call inside the
+  /// reversal's transaction, before its first enqueue.
+  Future<GuardedReversal> beginGuardedReversal() async => GuardedReversal._(
+    reversalId: UuidV7.generate(),
+    queueBefore: await db.syncDao.queueRowIds(requireBusinessId()),
+  );
+
+  /// Finishes a guarded reversal begun by [beginGuardedReversal]: enqueues the
+  /// claim envelope and holds the reversal's rows behind it. Returns the
+  /// reversal id (the hold key).
+  Future<String> commitGuardedReversal(
+    GuardedReversal guard, {
+    required String orderId,
+    required String staffId,
+    required String reason,
+    required DateTime cancelledAt,
+  }) async {
+    final businessId = requireBusinessId();
+    final reversalRows = (await db.syncDao.queueRowIds(
+      businessId,
+    )).difference(guard.queueBefore).toList();
+    await db.syncDao.enqueue(
+      kReversalClaimAction,
+      jsonEncode(<String, dynamic>{
+        'p_business_id': businessId,
+        'p_actor_id': staffId,
+        'p_order_id': orderId,
+        'p_reversal_id': guard.reversalId,
+        'p_cancellation_reason': reason,
+        'p_cancelled_at': cancelledAt.toUtc().toIso8601String(),
+      }),
+    );
+    await db.syncDao.holdRowsByOrder(reversalRows, guard.reversalId);
+    return guard.reversalId;
+  }
+
+  /// The cloud REJECTED reversal [reversalId] of [orderId] because another
+  /// reversal of the same order landed first (`reversal_already_applied`). None
+  /// of its rows reached the cloud (they were held), so this phone withdraws
+  /// them and puts the order header back to what the cloud holds:
+  ///   • compensating stock rows are removed and the inventory they restored is
+  ///     taken back off the shelf;
+  ///   • payment, wallet, crate and cost-layer rows are removed (the customer's
+  ///     crate cache is moved back with its crate rows);
+  ///   • the header takes the cloud's status / cancellation fields from
+  ///     [cloudHeader] (the rejection's DETAIL) — or, without it, keeps its
+  ///     status with an old `last_updated_at` so the next pull overwrites it;
+  ///   • the held outbox rows are discarded (sanctioned under Invariant #12:
+  ///     the server rejected them; the claim itself stays visible as an orphan).
+  ///
+  /// Idempotent: returns false (and writes nothing) when no rows are held for
+  /// [reversalId] — already undone, or never guarded.
+  Future<bool> undoRejectedReversal({
+    required String reversalId,
+    required String orderId,
+    Map<String, dynamic>? cloudHeader,
+  }) {
+    return db.transaction(() async {
+      final held = await db.syncDao.heldRowsFor(reversalId);
+      if (held.isEmpty) return false;
+      final businessId = requireBusinessId();
+
+      final idsByTable = <String, List<String>>{};
+      final heldInventoryIds = <String>{};
+      for (final q in held) {
+        final table = q.actionType.split(':').first;
+        final Object? rowId;
+        try {
+          rowId = (jsonDecode(q.payload) as Map<String, dynamic>)['id'];
+        } on FormatException {
+          continue;
+        }
+        if (rowId is! String) continue;
+        if (table == 'inventory') heldInventoryIds.add(rowId);
+        idsByTable.putIfAbsent(table, () => []).add(rowId);
+      }
+
+      // Stock: take back the units each compensating row put on the shelf.
+      final stockIds = idsByTable['stock_transactions'] ?? const <String>[];
+      final touchedInventory = <({String productId, String storeId})>{};
+      if (stockIds.isNotEmpty) {
+        final rows =
+            await (select(stockTransactions)..where(
+                  (s) => s.id.isIn(stockIds) & whereBusiness(s),
+                ))
+                .get();
+        for (final r in rows) {
+          await customUpdate(
+            'UPDATE inventory SET quantity = quantity - ? '
+            'WHERE business_id = ? AND product_id = ? AND store_id = ?',
+            variables: [
+              Variable<int>(r.quantityDelta),
+              Variable<String>(businessId),
+              Variable<String>(r.productId),
+              Variable<String>(r.locationId),
+            ],
+            updates: {inventory},
+          );
+          touchedInventory.add((productId: r.productId, storeId: r.locationId));
+        }
+      }
+
+      // Crates: through the Crate Pool seam (ADR 0020, sole crate writer).
+      await db.cratePoolDao.withdrawRejectedReversalRows(
+        idsByTable['crate_ledger'] ?? const <String>[],
+      );
+
+      for (final table in AppDatabase.kWithdrawableReversalTables) {
+        if (table == 'crate_ledger') continue; // withdrawn by the seam above
+        await db.withdrawUnsyncedRows(
+          table,
+          businessId,
+          idsByTable[table] ?? const <String>[],
+        );
+      }
+
+      // Header: back to the cloud's.
+      final status = cloudHeader?['status'];
+      if (status is String) {
+        final cancelledAt = cloudHeader?['cancelled_at'];
+        final lua = cloudHeader?['last_updated_at'];
+        await (update(
+          orders,
+        )..where((o) => o.id.equals(orderId) & whereBusiness(o))).write(
+          OrdersCompanion(
+            status: Value(status),
+            cancelledAt: Value(
+              cancelledAt is String ? DateTime.tryParse(cancelledAt) : null,
+            ),
+            cancellationReason: Value(
+              cloudHeader?['cancellation_reason'] as String?,
+            ),
+            lastUpdatedAt: Value(
+              (lua is String ? DateTime.tryParse(lua) : null) ??
+                  DateTime.fromMillisecondsSinceEpoch(0),
+            ),
+          ),
+        );
+      } else {
+        await (update(
+          orders,
+        )..where((o) => o.id.equals(orderId) & whereBusiness(o))).write(
+          OrdersCompanion(
+            lastUpdatedAt: Value(DateTime.fromMillisecondsSinceEpoch(0)),
+          ),
+        );
+      }
+
+      await db.syncDao.discardHeldByOrder(reversalId);
+
+      // An inventory row whose upsert was NOT held (it coalesced into an
+      // already-pending entry, so the refund's units may ride or have ridden
+      // it) is re-enqueued with the corrected quantity. A held one was
+      // discarded unsent, so the cloud never saw the refund's units.
+      for (final key in touchedInventory) {
+        final inv =
+            await (select(inventory)..where(
+                  (t) =>
+                      t.productId.equals(key.productId) &
+                      t.storeId.equals(key.storeId) &
+                      whereBusiness(t),
+                ))
+                .getSingleOrNull();
+        if (inv == null || heldInventoryIds.contains(inv.id)) continue;
+        await db.syncDao.enqueueUpsert('inventory', inv);
+      }
+      return true;
+    });
+  }
+
+  /// #550 — alerts the CEO and the Managers (of the order's store, when it has
+  /// one) that a refund of [orderId] made on this phone was rejected because the
+  /// sale had already been refunded on another phone: cash may have been handed
+  /// back twice. Best-effort: never throws.
+  Future<void> alertRefundRejected(String orderId) async {
+    try {
+      final order = await (select(
+        orders,
+      )..where((o) => o.id.equals(orderId) & whereBusiness(o))).getSingleOrNull();
+      final label = order?.orderNumber ?? 'a sale';
+      final ceoIds = await db.userBusinessesDao.getUserIdsForRoleSlugs(['ceo']);
+      var managerIds = await db.userBusinessesDao.getUserIdsForRoleSlugs([
+        'manager',
+      ]);
+      final storeId = order?.storeId;
+      if (storeId != null) {
+        final storeUserIds = (await db.userStoresDao.getUserIdsForStore(
+          storeId,
+        )).toSet();
+        managerIds = managerIds.where(storeUserIds.contains).toList();
+      }
+      for (final uid in <String>{...ceoIds, ...managerIds}) {
+        await db.notificationsDao.fireNotification(
+          type: 'sale_refund_rejected',
+          message:
+              'A refund of $label was rejected: the sale had already been '
+              'refunded on another phone. Check whether money was handed back '
+              'twice.',
+          severity: 'warning',
+          linkedRecordId: orderId,
+          recipientUserId: uid,
+        );
+      }
+    } catch (e) {
+      debugPrint('[OrdersDao] refund-rejected alert failed: $e');
+    }
   }
 
   /// Completely undoes a sale the server PERMANENTLY REJECTED (an oversell:
@@ -3118,4 +3353,13 @@ class QuickSaleRequestsDao extends DatabaseAccessor<AppDatabase>
       );
     });
   }
+}
+
+/// #550 — the token [OrdersDao.beginGuardedReversal] hands to
+/// [OrdersDao.commitGuardedReversal]: the reversal's id (its hold key and the
+/// cloud's per-order marker) and the outbox snapshot taken at begin.
+class GuardedReversal {
+  const GuardedReversal._({required this.reversalId, required this.queueBefore});
+  final String reversalId;
+  final Set<String> queueBefore;
 }

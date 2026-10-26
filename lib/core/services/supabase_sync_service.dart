@@ -1384,6 +1384,11 @@ class SupabaseSyncService {
     // the next connectivity / periodic trigger resumes the drain.
     if (rawItems.length == 200 && !isLinkDegraded) {
       Future.microtask(pushPending);
+    } else if (_releasedReversalRows && !isLinkDegraded) {
+      // #550 — a reversal claim landed this drain and released its held rows;
+      // upload them now rather than on the next tick.
+      _releasedReversalRows = false;
+      Future.microtask(pushPending);
     }
   }
 
@@ -1461,6 +1466,19 @@ class SupabaseSyncService {
       debugPrint('[SyncService] Connection warm-up skipped/failed: $e');
     }
   }
+
+  /// #550 — set when a `pos_claim_order_reversal` envelope released its held
+  /// rows during the current drain, so [pushPending] re-drains straight away.
+  bool _releasedReversalRows = false;
+
+  /// Test seam (#550): drains [items] through the domain-envelope path exactly
+  /// as [pushPending] does, without the connectivity / tenant preamble.
+  @visibleForTesting
+  Future<void> pushDomainItemsForTesting(
+    List<SyncQueueData> items,
+    String sessionBusinessId,
+    String currentAuthUid,
+  ) => _pushDomainItems(items, sessionBusinessId, currentAuthUid);
 
   /// Pushes one outbox row per call to a Postgres RPC defined in
   /// 0006_domain_rpcs.sql. Used for atomic multi-table actions
@@ -1542,6 +1560,16 @@ class SupabaseSyncService {
           final oid = payload['p_order_id'];
           if (oid is String) await _db.syncDao.releaseHeldByOrder(oid);
         }
+        // #550 — this phone's reversal WON (or is the winner retrying: the claim
+        // replays idempotently). Release its held rows; they upload as ordinary
+        // rows on the next drain, scheduled now rather than on the next tick.
+        if (item.actionType == kReversalClaimAction) {
+          final rid = payload['p_reversal_id'];
+          if (rid is String) {
+            await _db.syncDao.releaseHeldByOrder(rid);
+            _releasedReversalRows = true;
+          }
+        }
         final replayed = response is Map && response['replayed'] == true;
         debugPrint('[SyncService] domain $rpcName ok (replayed=$replayed)');
       } on PostgrestException catch (e) {
@@ -1564,9 +1592,20 @@ class SupabaseSyncService {
           '(code=$code, permanent=$isPermanent, fk_deferred=$isFkViolation): '
           '${e.message}',
         );
+        // #550 — another phone's reversal of this order landed first. Undo
+        // this phone's reversal BEFORE the orphan move, so a crash in between
+        // just replays the (idempotent) undo on the next drain.
+        final reversalLost =
+            item.actionType == kReversalClaimAction &&
+            code == 'P0001' &&
+            e.message.contains(kReversalAlreadyAppliedError);
+        if (reversalLost) await _undoLostReversal(payload, e.details);
         await _db.syncDao.markFailed(
           item.id,
-          'pg_$code: ${e.message}',
+          reversalLost
+              ? 'pg_$code: ${e.message} — this sale was already refunded on '
+                    'another phone; the refund made here was undone'
+              : 'pg_$code: ${e.message}',
           permanent: isPermanent,
           fkDeferred: isFkViolation,
         );
@@ -1589,6 +1628,47 @@ class SupabaseSyncService {
         debugPrint('[SyncService] Domain RPC $rpcName transient error: $e');
         await _db.syncDao.markFailed(item.id, e.toString());
       }
+    }
+  }
+
+  /// #550 — the losing phone's side of "first reversal wins": withdraw the
+  /// rejected reversal's local rows, restore the order header from the cloud's
+  /// copy carried in the rejection's DETAIL, and alert the CEO / Managers.
+  /// Best-effort: a failure leaves the rows held (still visible, still in the
+  /// outbox) and never breaks the drain.
+  Future<void> _undoLostReversal(
+    Map<String, dynamic> payload,
+    Object? details,
+  ) async {
+    final reversalId = payload['p_reversal_id'];
+    final orderId = payload['p_order_id'];
+    if (reversalId is! String || orderId is! String) return;
+    Map<String, dynamic>? cloudHeader;
+    if (details is String) {
+      try {
+        final decoded = jsonDecode(details);
+        if (decoded is Map) cloudHeader = Map<String, dynamic>.from(decoded);
+      } on FormatException {
+        cloudHeader = null;
+      }
+    } else if (details is Map) {
+      cloudHeader = Map<String, dynamic>.from(details);
+    }
+    try {
+      final undone = await _db.ordersDao.undoRejectedReversal(
+        reversalId: reversalId,
+        orderId: orderId,
+        cloudHeader: cloudHeader,
+      );
+      if (undone) await _db.ordersDao.alertRefundRejected(orderId);
+    } catch (e) {
+      debugPrint('[SyncService] lost-reversal undo failed: $e');
+      await _db.errorLogDao.logError(
+        errorType: 'sync.reversal_undo_failed',
+        message: 'Undo of rejected reversal $reversalId failed: $e',
+        context: '_undoLostReversal',
+        businessId: _db.currentBusinessId,
+      );
     }
   }
 
