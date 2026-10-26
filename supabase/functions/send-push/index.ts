@@ -23,6 +23,10 @@
 // explicit `user_ids` list (resolved by the 0215 trigger); same secret, same
 // FCM path. Console-broadcast and Shopper behaviour is unchanged.
 //
+// #434: Shopper order updates (type `shopper_online_order`, from the 0218
+// triggers) use the Shopper route, Android-platform tokens only, and carry
+// their `data` keys (online_order_id, event).
+//
 // Config (Edge Function secrets): PUSH_HOOK_SECRET (shared with the Vault
 // secret the trigger reads) and FCM_SERVICE_ACCOUNT (the Firebase service
 // account JSON). If FCM_SERVICE_ACCOUNT is absent the function degrades to
@@ -202,6 +206,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
     .not("fcm_token", "is", null);
   // Targeted staff push (#433): only the phones last used by the listed users.
   if (filter.userIds) query = query.in("last_user_id", filter.userIds);
+  // Shopper push (#434): Android app phones only.
+  if (filter.platform) query = query.eq("platform", filter.platform);
   const { data: rows, error: tokenErr } = await query;
   if (tokenErr) {
     console.error("token lookup failed", tokenErr.message);

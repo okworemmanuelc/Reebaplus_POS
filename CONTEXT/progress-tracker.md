@@ -11,10 +11,16 @@ The human updates it when resolving open questions or making architectural decis
 - Cloud 0221 `shopper_delete_account()` (cancels New orders, erases shopper_* rows, unlinks customers/online_orders, login via account_deletion_events kind='shopper' unless it belongs to a business) + Delete account button. Terms/Privacy text and the public deletion page still open on #438.
 ### Issue #506: Drop broken legacy invite preview functions (2026-10-26, ready for review)
 - Cloud 0220: drops `accept_invite_preview(text)` + `accept_invite_preview_by_code(text)` (anon-executable, always 42P01). Caller audit clean (POS, reebaplus-web, prod catalogue). No app change.
+### Issue #469: Reorder points use real sales speed (2026-10-26, ready for review)
+- App-only: `getProductsBelowROP` derives avg daily sales on read (units sold at the store over the last 28 days from recognised sales, `kReorderSalesWindowDays`); `products.avgDailySales` is no longer read (still never written; drop in a later cleanup).
+### Issue #528: Online order hardening (2026-10-26, ready for review)
+- Cloud 0219 (NOT deployed): `_online_orders_guard` re-issued from 0208 + store check via new SECURITY DEFINER `_caller_works_at_order_store` (0215's store rule, 0135's caller) -> 42501; sync: a `customers` 23505 on `customers_business_shopper_account` adopts the cloud's linked Customer (local one kept, unlinked; orders re-pointed + re-sent after the drain), never Sync Issues; new `CloudTransport.fetchRowsByColumn`. No Drift change.
 ### Issue #430: Print the order slip (2026-10-26, ready for review)
 - App-only (no Drift, no cloud): Print slip on accepted/fulfilled online orders (`online_orders.view`); `OnlineOrderSlip` (`lib/core/online_orders/online_order_slip.dart`) builds text + ESC/POS from `OnlineOrdersDao.slipLoad`; thermal printer, Share (text) fallback when no printer/print fails.
 ### Issue #475: Listing quality checklist + shared photo (2026-10-26, ready for review)
 - App only. Pure rule `lib/core/listings/listing_quality.dart` (kept out of `core/storefront`: shopper boundary); checklist in the Online listing card, per-store gap counts on the Online store hub (both `Gates.manageListing`); "Use the shared photo" on tap only (ADR 0029 §8 amended, signed off 2026-10-26). Not done: optional brand/category sharing. `pos-parity` issue not needed (no table/status/money change).
+### Issue #434: Shopper notifications (2026-10-26, ready for review)
+- Cloud 0218 (NOT deployed): accepted/changed/declined/shop-cancelled/sent-out notify the Shopper — Android push via `send-push` (shopper route, android tokens only) else email via new `send-email` (templates; send-invite-email shares the code). No Drift change; deploy migration, then send-push + send-email (--no-verify-jwt).
 
 ### Issue #433: Staff push for new Online Orders (2026-10-25, ready for review)
 - Cloud 0215 (NOT deployed): AFTER INSERT trigger on online_orders -> pg_net -> `send-push` with explicit `user_ids` (store-assigned/CEO/manager-all-stores holding online_orders.answer, role->store->user layering); `send-push` accepts `online_order` records (deploy after the migration, --no-verify-jwt); app tap opens the order if local else the Online tab. No Drift change.

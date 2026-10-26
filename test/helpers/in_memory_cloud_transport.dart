@@ -190,6 +190,21 @@ class InMemoryCloudTransport implements CloudTransport {
     ];
   }
 
+  @override
+  Future<List<dynamic>> fetchRowsByColumn(
+    String table,
+    String businessId,
+    String column,
+    Object value,
+  ) async {
+    _maybeThrowForTable(table);
+    return [
+      for (final r in _store[table]?.values ?? const <Map<String, dynamic>>[])
+        if (r['business_id'] == businessId && r[column] == value)
+          Map<String, dynamic>.from(r),
+    ];
+  }
+
   // ── CONNECTION / EXISTENCE ─────────────────────────────────────────────────
   final Set<String> _deletedBusinesses = {};
 
