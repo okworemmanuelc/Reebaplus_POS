@@ -303,6 +303,12 @@ class ShopperCartNotifier extends AsyncNotifier<ShopperCart> {
     ]);
   }
 
+  /// Empties the cart (#438, account deleted).
+  Future<void> clear() async {
+    await future;
+    await _save(const []);
+  }
+
   Future<void> _save(List<ShopperCartLine> lines) async {
     state = AsyncData(ShopperCart(List.unmodifiable(lines)));
     try {

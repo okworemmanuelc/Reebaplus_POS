@@ -200,6 +200,12 @@ sanctioned direct-RPC Shopper seam. Shopper sign-in is email OTP
 sign-out is a local `signOut` with no wipe gate. On a phone with a business
 user the Shopper side shops with the business session: no Shopper OTP, no
 Shopper sign-out (ADR 0030).
+Shopper account deletion (#438, cloud 0221) is `shopper_delete_account()`:
+New orders → `cancelled_by_customer`, shopper_* rows erased,
+`customers`/`online_orders.shopper_account_id` nulled (snapshots kept); the
+login goes through `account_deletion_events` (`kind = 'shopper'`) and
+`reconcile-account-deletions`, never when it owns a business or has a
+`public.users` row.
 
 **Answering Online Orders (#427).** Cloud 0208 / Drift 93. Shop phones accept
 or decline only `new` orders (`OnlineOrdersDao`, Drift + outbox; gates

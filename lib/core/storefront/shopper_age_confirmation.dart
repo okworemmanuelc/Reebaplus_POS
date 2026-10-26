@@ -117,6 +117,17 @@ class ShopperAgeConfirmationNotifier extends AsyncNotifier<bool> {
     return false;
   }
 
+  /// Forgets the phone's answer (#438, account deleted).
+  Future<void> forget() async {
+    state = const AsyncData(false);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(prefKey);
+    } catch (_) {
+      // Nothing stored, or storage unreadable: the in-memory answer is reset.
+    }
+  }
+
   Future<void> _remember() async {
     try {
       final prefs = await SharedPreferences.getInstance();

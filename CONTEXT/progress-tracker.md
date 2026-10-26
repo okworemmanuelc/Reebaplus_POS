@@ -7,6 +7,8 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #438 (part): Shopper account deletion (2026-10-26, ready for review)
+- Cloud 0221 `shopper_delete_account()` (cancels New orders, erases shopper_* rows, unlinks customers/online_orders, login via account_deletion_events kind='shopper' unless it belongs to a business) + Delete account button. Terms/Privacy text and the public deletion page still open on #438.
 ### Issue #506: Drop broken legacy invite preview functions (2026-10-26, ready for review)
 - Cloud 0220: drops `accept_invite_preview(text)` + `accept_invite_preview_by_code(text)` (anon-executable, always 42P01). Caller audit clean (POS, reebaplus-web, prod catalogue). No app change.
 ### Issue #430: Print the order slip (2026-10-26, ready for review)

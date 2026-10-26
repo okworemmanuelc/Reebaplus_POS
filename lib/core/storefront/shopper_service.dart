@@ -187,6 +187,15 @@ class ShopperService {
     return result == true;
   }
 
+  /// Deletes the Shopper's account (#438): cancels their New orders, erases
+  /// their saved details and unlinks shop Customers. The login itself goes
+  /// later (server job) unless it also belongs to a business.
+  Future<void> deleteAccount() async {
+    final result = await _call('shopper_delete_account', const {});
+    if (result is Map && result['ok'] == true) return;
+    throw ShopperException(ShopperFailure.failed, result);
+  }
+
   /// Reports a product or a store (#478). Cloud-only; the server rate-limits
   /// (10 an hour) and keeps one open report per Shopper per target. Throws
   /// [ShopperException] (`rateLimited`, `signedOut`, ...) on failure.
