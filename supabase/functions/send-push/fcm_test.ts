@@ -106,7 +106,11 @@ Deno.test("resolveRecipient: console broadcast routes by business (unchanged)", 
 Deno.test("resolveRecipient: Shopper push routes by auth user id", () => {
   const r = resolveRecipient(shopperRecord);
   assertEquals(r, { audience: "shopper", authUserId: "auth-1" });
-  assertEquals(tokenFilterFor(r!), { column: "auth_user_id", value: "auth-1" });
+  assertEquals(tokenFilterFor(r!), {
+    column: "auth_user_id",
+    value: "auth-1",
+    platform: "android",
+  });
 });
 
 Deno.test("resolveRecipient: never routes by both keys or by neither", () => {
@@ -181,4 +185,21 @@ Deno.test("online_order message: own title + data, token filter has users", () =
   assertEquals(m.message.data.online_order_id, "oo-1");
   assertEquals(m.message.data.store_id, "s-1");
   assertEquals(m.message.data.type, "online_order"); // not overridable
+});
+
+// ── #434: Shopper order updates carry their data keys ────────────────────────
+
+Deno.test("buildFcmMessages: Shopper order update carries order id + event", () => {
+  const rec: PushRecord = {
+    ...shopperRecord,
+    type: "shopper_online_order",
+    data: { online_order_id: "oo-1", event: "changed", audience: "staff" },
+  };
+  assertEquals(resolveRecipient(rec), { audience: "shopper", authUserId: "auth-1" });
+  const m = buildFcmMessages(rec, ["t"], "shopper")[0].message;
+  assertEquals(m.data.online_order_id, "oo-1");
+  assertEquals(m.data.event, "changed");
+  // A data key never overrides a routing key.
+  assertEquals(m.data.audience, "shopper");
+  assert(!("business_id" in m.data));
 });
