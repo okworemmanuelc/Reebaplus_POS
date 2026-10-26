@@ -75,6 +75,24 @@ void main() {
     await disposeScreen(tester);
   });
 
+  testWidgets('hub counts in-stock products with listing gaps (#475)', (tester) async {
+    await env.db.customStatement(
+        "UPDATE inventory SET quantity = 5 WHERE store_id = '${env.storeId}'");
+    await pump(tester, const OnlineStoreSettingsScreen(),
+        grants: const {'stores.online_ordering', 'products.manage_listing'});
+    expect(find.byKey(ValueKey('store-gaps-${env.storeId}')), findsOneWidget);
+    expect(find.text('1 product missing a photo'), findsOneWidget);
+    await disposeScreen(tester);
+  });
+
+  testWidgets('hub gap counts need the listing grant (#475)', (tester) async {
+    await env.db.customStatement(
+        "UPDATE inventory SET quantity = 5 WHERE store_id = '${env.storeId}'");
+    await pump(tester, const OnlineStoreSettingsScreen());
+    expect(find.byKey(ValueKey('store-gaps-${env.storeId}')), findsNothing);
+    await disposeScreen(tester);
+  });
+
   testWidgets('without the permission the hub and page show no access', (tester) async {
     await pump(tester, const OnlineStoreSettingsScreen(),
         grants: const {'settings.manage', 'stores.manage'}, rank: GateTier.manager);

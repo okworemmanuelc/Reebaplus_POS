@@ -7,6 +7,9 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #475: Listing quality checklist + shared photo (2026-10-26, ready for review)
+- App only. Pure rule `lib/core/storefront/listing_quality.dart`; checklist in the Online listing card, per-store gap counts on the Online store hub (both `Gates.manageListing`); "Use the shared photo" on tap only (ADR 0029 §8 amended, owner sign-off pending). Not done: optional brand/category sharing. `pos-parity` issue not needed (no table/status/money change).
+
 ### Issue #433: Staff push for new Online Orders (2026-10-25, ready for review)
 - Cloud 0215 (NOT deployed): AFTER INSERT trigger on online_orders -> pg_net -> `send-push` with explicit `user_ids` (store-assigned/CEO/manager-all-stores holding online_orders.answer, role->store->user layering); `send-push` accepts `online_order` records (deploy after the migration, --no-verify-jwt); app tap opens the order if local else the Online tab. No Drift change.
 

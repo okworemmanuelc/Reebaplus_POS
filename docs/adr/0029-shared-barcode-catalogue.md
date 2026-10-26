@@ -296,6 +296,14 @@ with the review page.
   client code at all. It comes from the products a shop already syncs, which
   also covers the web POS.
 
+**Amendment 2026-10-26 (#475, awaiting owner sign-off).** Lookups are also
+allowed for an **existing** product that has a factory barcode and no photo,
+only on an explicit tap of "Use the shared photo" on Product Details (a viewer
+holding `products.manage_listing`). Never automatic, never on open, and only
+the photo is used: the name and unit are not touched. The photo goes through
+the same processing and save path as a picked photo, so it becomes the shop's
+own photo. Offline or no shared photo: a short message, nothing changes.
+
 ## Consequences
 
 - **Invariant #5 gains one named exception.** No *row* of another business is
