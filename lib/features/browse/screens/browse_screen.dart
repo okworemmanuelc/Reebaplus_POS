@@ -30,8 +30,15 @@ import 'package:reebaplus_pos/shared/widgets/smooth_route.dart';
 /// browse". **Sell on Reebaplus** pushes today's [WelcomeScreen] unchanged
 /// and stays tappable offline. The cart and account buttons open the
 /// Shopper's cart and orders (#426).
+///
+/// [fromTill] (#437): opened from the till's side menu (Shop) on a phone
+/// signed in to a business. The business sign-in is the Shopper login; Sell
+/// on Reebaplus is hidden (this login already has its business) and a back
+/// button returns to the till — through the PIN screen ([openShopFromTill]).
 class BrowseScreen extends ConsumerStatefulWidget {
-  const BrowseScreen({super.key});
+  const BrowseScreen({super.key, this.fromTill = false});
+
+  final bool fromTill;
 
   @override
   ConsumerState<BrowseScreen> createState() => _BrowseScreenState();
@@ -101,8 +108,14 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
         appBar: BrowseTopBar(
           height: BrowseTopBar.heightFor(context),
           header: ScreenHeader(
+            leading: widget.fromTill
+                ? BrowseBackButton(
+                    key: const Key('browse-back-to-till'),
+                    onPressed: () => Navigator.maybePop(context),
+                  )
+                : null,
             icon: AppIcons.storefront,
-            title: 'Browse',
+            title: widget.fromTill ? 'Shop' : 'Browse',
             subtitle: area?.label,
             actions: [
               ShopperBarButton(
@@ -116,7 +129,8 @@ class _BrowseScreenState extends ConsumerState<BrowseScreen> {
                 ),
               ),
               const ShopperCartButton(),
-              SellOnReebaplusButton(onPressed: _openWelcome),
+              if (!widget.fromTill)
+                SellOnReebaplusButton(onPressed: _openWelcome),
             ],
           ),
         ),

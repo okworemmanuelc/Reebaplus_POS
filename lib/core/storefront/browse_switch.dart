@@ -7,9 +7,10 @@
 // [kBrowseFirstEnabled] to `true` (and release) when #426/#427 ship — nothing
 // else needs to change.
 //
-// What the switch decides: only the signed-out entry screen in `_HomeRouter`
-// (Browse vs Welcome). A phone signed in to a business always opens on the PIN
-// screen and till, switch on or off.
+// What the switch decides: the signed-out entry screen in `_HomeRouter`
+// (Browse vs Welcome), and whether the till's side menu shows **Shop** (#437).
+// A phone signed in to a business always opens on the PIN screen and till,
+// switch on or off.
 library;
 
 import 'package:flutter/foundation.dart';

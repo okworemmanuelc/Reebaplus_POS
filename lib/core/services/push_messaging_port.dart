@@ -44,6 +44,13 @@ class PushMessage {
 
   String? get businessId => data['business_id'];
 
+  /// A "New online order" staff push (#433): `online_order_id` + `store_id`.
+  bool get isOnlineOrder => type == 'online_order' && !isShopperPush;
+
+  String? get onlineOrderId => data['online_order_id'];
+
+  String? get storeId => data['store_id'];
+
   bool get isConsoleBroadcast => type == 'console_broadcast' && !isShopperPush;
 
   /// `staff` or `shopper` (#476): which role of a phone a push belongs to — a

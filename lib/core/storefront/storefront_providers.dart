@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/storefront/storefront_models.dart';
 import 'package:reebaplus_pos/core/storefront/storefront_service.dart';
 
@@ -223,3 +224,39 @@ final storefrontProductPhotosProvider = FutureProvider.autoDispose
           .read(storefrontServiceProvider)
           .productPhotos(storeId: key.storeId, productId: key.productId),
     );
+
+/// The stores of the business this login OWNS (#437) — what Browse shows as
+/// "Your store", with no Add to cart. Empty unless a business is signed in on
+/// this phone and its owner (`businesses.owner_id`) is the signed-in login:
+/// staff order from their employer like any Shopper (ADR 0030).
+///
+/// Decided on the phone from the business's own local stores, so no storefront
+/// RPC has to expose a business id. The cloud still refuses the order
+/// (`own_business` from `shopper_place_orders`); this only hides the button.
+final ownStoreIdsProvider = Provider.autoDispose<Set<String>>((ref) {
+  // A Shopper-only phone has no business: nothing is "yours".
+  if (ref.watch(deviceUserIdProvider).value == null) return const {};
+  final authUserId = ref.watch(
+    authProvider.select((auth) => auth.value?.authUserId),
+  );
+  final ownerId = ref.watch(currentBusinessProvider)?.ownerId;
+  final stores = ref.watch(allStoresProvider).valueOrNull ?? const [];
+  return ownStoreIdsFor(
+    authUserId: authUserId,
+    ownerId: ownerId,
+    storeIds: [for (final s in stores) s.id],
+  );
+});
+
+/// The pure rule behind [ownStoreIdsProvider]: the business's stores only
+/// when the signed-in login is the business owner.
+Set<String> ownStoreIdsFor({
+  required String? authUserId,
+  required String? ownerId,
+  required Iterable<String> storeIds,
+}) {
+  if (authUserId == null || ownerId == null || authUserId != ownerId) {
+    return const {};
+  }
+  return storeIds.toSet();
+}

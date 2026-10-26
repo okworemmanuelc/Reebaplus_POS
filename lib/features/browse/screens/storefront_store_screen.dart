@@ -124,7 +124,12 @@ class _StorefrontStoreScreenState extends ConsumerState<StorefrontStoreScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _StoreNotices(store: store),
+                        _StoreNotices(
+                          store: store,
+                          yours: ref
+                              .watch(ownStoreIdsProvider)
+                              .contains(widget.storeId),
+                        ),
                         AppInput(
                           key: const Key('store-search'),
                           controller: _search,
@@ -173,17 +178,18 @@ class _StorefrontStoreScreenState extends ConsumerState<StorefrontStoreScreen> {
             title: store?.businessName ?? 'Store',
             subtitle: store == null ? null : _areaLine(store),
             actions: [
-              ShopperBarButton(
-                key: const Key('browse-report-store'),
-                icon: AppIcons.flag,
-                tooltip: 'Report this store',
-                onPressed: () => reportListing(
-                  context,
-                  ref,
-                  target: ReportTarget.store,
-                  targetId: widget.storeId,
+              if (!ref.watch(ownStoreIdsProvider).contains(widget.storeId))
+                ShopperBarButton(
+                  key: const Key('browse-report-store'),
+                  icon: AppIcons.flag,
+                  tooltip: 'Report this store',
+                  onPressed: () => reportListing(
+                    context,
+                    ref,
+                    target: ReportTarget.store,
+                    targetId: widget.storeId,
+                  ),
                 ),
-              ),
               const ShopperCartButton(),
             ],
           ),
@@ -201,9 +207,12 @@ class _StorefrontStoreScreenState extends ConsumerState<StorefrontStoreScreen> {
 
 /// Delivery warning, stale-stock note and the store's own note.
 class _StoreNotices extends StatelessWidget {
-  const _StoreNotices({required this.store});
+  const _StoreNotices({required this.store, required this.yours});
 
   final StorefrontStore store;
+
+  /// The owner's own store (#437): shown, never orderable.
+  final bool yours;
 
   @override
   Widget build(BuildContext context) {
@@ -211,7 +220,12 @@ class _StoreNotices extends StatelessWidget {
     final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
     final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     final notes = <Widget>[
-      if (!store.deliversToArea)
+      if (yours)
+        Padding(
+          padding: EdgeInsets.only(bottom: context.getRSize(10)),
+          child: const YourStoreNote(key: Key('store-your-store')),
+        ),
+      if (!yours && !store.deliversToArea)
         _Notice(
           key: const Key('store-no-delivery'),
           icon: AppIcons.location,

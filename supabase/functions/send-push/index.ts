@@ -19,6 +19,10 @@
 // writes the notification row of record; that arrives via the Sync Engine
 // (ADR 0018).
 //
+// #433: also routes a targeted staff push (type `online_order`) carrying an
+// explicit `user_ids` list (resolved by the 0215 trigger); same secret, same
+// FCM path. Console-broadcast and Shopper behaviour is unchanged.
+//
 // Config (Edge Function secrets): PUSH_HOOK_SECRET (shared with the Vault
 // secret the trigger reads) and FCM_SERVICE_ACCOUNT (the Firebase service
 // account JSON). If FCM_SERVICE_ACCOUNT is absent the function degrades to
@@ -191,11 +195,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // Resolve every live token for the recipient (dedup — one push per device,
   // and a token maps to one row by the 0159 uniqueness trigger anyway).
   const filter = tokenFilterFor(recipient);
-  const { data: rows, error: tokenErr } = await service
+  let query = service
     .from("devices")
     .select("fcm_token")
     .eq(filter.column, filter.value)
     .not("fcm_token", "is", null);
+  // Targeted staff push (#433): only the phones last used by the listed users.
+  if (filter.userIds) query = query.in("last_user_id", filter.userIds);
+  const { data: rows, error: tokenErr } = await query;
   if (tokenErr) {
     console.error("token lookup failed", tokenErr.message);
     return errorResponse("internal");
@@ -237,7 +244,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // Stamp observability on the broadcast's notifications row (never read by
   // the client; a re-push upsert can't clobber it — the column is absent from
   // the Drift schema). Shopper records are not notifications rows.
-  if (recipient.audience === "staff") {
+  if (recipient.audience === "staff" && push.type === "console_broadcast") {
     const { error: stampErr } = await service
       .from("notifications")
       .update({ push_sent_at: new Date().toISOString() })

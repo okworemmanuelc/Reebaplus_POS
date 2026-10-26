@@ -44,6 +44,7 @@ abstract final class AppDrawerKeys {
   static const storePicker = Key('drawer-store-picker');
   static const display = Key('drawer-display');
   static const logOut = Key('drawer-log-out');
+  static const shop = Key('drawer-shop');
 }
 
 /// One tag under the person's name: PRO / FREE TRIAL, the role.

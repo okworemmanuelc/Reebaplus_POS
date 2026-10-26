@@ -156,6 +156,37 @@ void main() {
     });
   });
 
+  group('online order tap (#433)', () {
+    const tap = PushMessage(data: {
+      'type': 'online_order',
+      'online_order_id': 'oo-1',
+      'store_id': 's-1',
+    });
+
+    test('routes to the bound action with the order id when signed in',
+        () async {
+      String? opened;
+      service.bindOnlineOrderTapAction((id) => opened = id);
+      await service.onSignedIn('biz-1');
+      service.handleTap(tap);
+      expect(opened, 'oo-1');
+      expect(openCount, 0); // never the broadcast bell
+    });
+
+    test('ignored when signed out; a throwing action never escapes', () async {
+      var calls = 0;
+      service.bindOnlineOrderTapAction((_) {
+        calls++;
+        throw StateError('boom');
+      });
+      service.handleTap(tap);
+      expect(calls, 0);
+      await service.onSignedIn('biz-1');
+      service.handleTap(tap);
+      expect(calls, 1);
+    });
+  });
+
   group('token lifecycle', () {
     test('sign-in with permission granted registers the token', () async {
       port.permission = PushPermissionStatus.granted;
