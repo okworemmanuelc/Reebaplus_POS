@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reebaplus_pos/core/storefront/listing_quality.dart';
+import 'package:reebaplus_pos/core/listings/listing_quality.dart';
 
 void main() {
   group('listingGaps', () {

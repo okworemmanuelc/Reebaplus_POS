@@ -1,7 +1,7 @@
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/business_scoped_stream.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-import 'package:reebaplus_pos/core/storefront/listing_quality.dart';
+import 'package:reebaplus_pos/core/listings/listing_quality.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Listing gaps for one store (#475): the sellable, online-visible products

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'package:reebaplus_pos/core/storefront/listing_quality.dart';
+import 'package:reebaplus_pos/core/listings/listing_quality.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';

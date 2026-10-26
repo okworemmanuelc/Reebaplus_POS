@@ -5,7 +5,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/settings/online_store_detail_screen.dart';
-import 'package:reebaplus_pos/core/storefront/listing_quality_providers.dart';
+import 'package:reebaplus_pos/core/listings/listing_quality_providers.dart';
 import 'package:reebaplus_pos/core/stores/van_store.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/product_details_route.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';

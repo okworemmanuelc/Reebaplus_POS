@@ -37,7 +37,7 @@ import 'package:reebaplus_pos/core/services/product_listing_service.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/product_photos_card.dart';
 import 'package:reebaplus_pos/core/listings/listing_content.dart';
 import 'package:reebaplus_pos/core/services/catalogue_lookup.dart';
-import 'package:reebaplus_pos/core/storefront/listing_quality.dart';
+import 'package:reebaplus_pos/core/listings/listing_quality.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/listing_quality_checklist.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
