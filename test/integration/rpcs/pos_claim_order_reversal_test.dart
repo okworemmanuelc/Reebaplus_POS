@@ -149,7 +149,7 @@ void main() {
       'id': productId,
       'business_id': clients.env.businessId,
       'name': 'Reversal Test Beer',
-      'selling_price_kobo': 100000,
+      'retailer_price_kobo': 100000,
     });
   });
 
