@@ -23,6 +23,7 @@ abstract final class OnlineOrderKeys {
   static const decline = Key('online-order-decline');
   static const cancelOrder = Key('online-order-cancel');
   static const sendToTill = Key('online-order-send-to-till');
+  static const printSlip = Key('online-order-print-slip');
   static const replaceCartConfirm = Key('online-order-replace-cart');
   static const cancelReason = Key('online-order-cancel-reason');
   static const cancelConfirm = Key('online-order-cancel-confirm');
