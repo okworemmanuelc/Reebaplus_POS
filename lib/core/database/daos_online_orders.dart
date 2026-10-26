@@ -305,6 +305,51 @@ class OnlineOrdersDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
+  /// What the order slip (#430) prints: the order, all its lines, the business
+  /// and store name + phone, and which products track empties. Null when the
+  /// order is gone. Reads only.
+  Future<OnlineOrderSlipLoad?> slipLoad(String onlineOrderId) async {
+    final order =
+        await (select(onlineOrders)
+              ..where((t) => t.id.equals(onlineOrderId) & whereBusiness(t))
+              ..limit(1))
+            .getSingleOrNull();
+    if (order == null) return null;
+    final lines = await (select(onlineOrderLines)
+          ..where((t) => t.onlineOrderId.equals(order.id) & whereBusiness(t))
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.createdAt),
+            (t) => OrderingTerm(expression: t.productName),
+          ]))
+        .get();
+    final business = await (db.select(db.businesses)
+          ..where((b) => b.id.equals(order.businessId))
+          ..limit(1))
+        .getSingleOrNull();
+    final store = await (db.select(db.stores)
+          ..where((s) => s.id.equals(order.storeId) & whereBusiness(s))
+          ..limit(1))
+        .getSingleOrNull();
+    final ids = lines.map((l) => l.productId).toSet();
+    final tracked = ids.isEmpty
+        ? <ProductData>[]
+        : await (db.select(db.products)
+              ..where(
+                (p) =>
+                    p.id.isIn(ids) & whereBusiness(p) & p.trackEmpties.equals(true),
+              ))
+            .get();
+    return OnlineOrderSlipLoad(
+      order: order,
+      lines: lines,
+      businessName: business?.name ?? '',
+      businessPhone: business?.phone,
+      storeName: store?.name,
+      storePhone: store?.phone,
+      trackEmptiesProductIds: tracked.map((p) => p.id).toSet(),
+    );
+  }
+
   /// What Send to till (#431) loads into the Cart: an ACCEPTED order's lines
   /// with accepted_qty > 0, each with its live product and the stock of the
   /// order's store, plus the linked Customer. Null when the order is not (or no

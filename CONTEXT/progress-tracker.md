@@ -7,6 +7,8 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #430: Print the order slip (2026-10-26, ready for review)
+- App-only (no Drift, no cloud): Print slip on accepted/fulfilled online orders (`online_orders.view`); `OnlineOrderSlip` (`lib/core/online_orders/online_order_slip.dart`) builds text + ESC/POS from `OnlineOrdersDao.slipLoad`; thermal printer, Share (text) fallback when no printer/print fails.
 ### Issue #435: Expire unanswered Online Orders (2026-10-25, ready for review)
 - Cloud 0213: `expire_stale_online_orders()` (service_role only) + hourly pg_cron (guarded); no Drift change, no guard change. NOT deployed.
 ### Issue #478: Report a listing + admin takedown (2026-10-25, ready for review)
