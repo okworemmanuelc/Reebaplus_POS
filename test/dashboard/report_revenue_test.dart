@@ -108,7 +108,7 @@ void main() {
       expect(computeTotalSalesKobo([costed, quick]), 100000 + 60000);
     });
 
-    test('excludes cancelled orders (never a sale)', () {
+    test('excludes a legacy cancelled order (no cancelledAt) — #549', () {
       final live = _order(
         status: 'pending', createdAt: _day(10), lines: [(1, 100000)]);
       final cancelled = _order(

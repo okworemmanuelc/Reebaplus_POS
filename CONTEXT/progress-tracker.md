@@ -7952,3 +7952,13 @@ business gate + any bottle/track_empties line, else `completed` + completed_at.
 NOT applied to live. Tier-2 tests updated (compile-checked, auto-skip without env).
 Shared golden fixtures still say `pending` for non-crate sales: updated with
 slice (a) #547 (Dart side) so both arms flip together. reebaplus-web #190.
+### A cancelled sale keeps its original day (#549) (2026-10-26)
+Branch `feat/549-cancel-keeps-original-day` (PRD #337). Money reports no longer drop a
+cancelled Order by its creation day: it counts on `createdAt` and books a negative entry
+on `cancelledAt` (`saleDayStamps` in `order_status.dart`, `saleDayEntries` in
+`report_revenue.dart`). Switched: `computeTotalSalesKobo`, `reconDataFrom` (P&L loop and
+van rollup), `buildReconBuckets`, Home Total Sales + Net Profit, Profit report; the
+changed-reviewed-days sweep also files an order under its cancel day. Left alone: order
+counts, Home staff list / drill-down, staff-performance, van screens, DAO SQL aggregates,
+`refundsKobo` / `periodNetResultKobo`. Excluded as before: `rejected_by_server`, cancelled
+with no `cancelledAt`. Web parity: reebaplus-web #190.

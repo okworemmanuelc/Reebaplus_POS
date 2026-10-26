@@ -174,9 +174,15 @@ _Avoid_: complete (as a synonym for Checkout), finalize.
 
 **Cancel**:
 The lifecycle operation that reverses a settled sale (a.k.a. refund) — undoes
-stock, payments, and credit-balance legs. A cancelled/refunded Order is never a
-recognized Sale.
-_Avoid_: void, delete.
+stock, payments, and credit-balance legs. A cancelled Order is no longer a live
+Sale, but **reports keep it on its original day** (#549): it still counts on its
+`createdAt` day and books a NEGATIVE entry of the same amounts on its
+`cancelledAt` day, so a reviewed day never changes (`saleDayStamps` /
+`saleDayEntries`). Excluded entirely: a sale the server rejected
+(`cancellation_reason = 'rejected_by_server'`) and a legacy cancel with no
+`cancelledAt`. The refund payment row stays a cash movement on the refund day;
+profit counts the return once (via the negative entry), never again as a refund.
+_Avoid_: void, delete; dropping a cancelled sale from its creation day.
 
 **Cart**:
 A pre-checkout draft of a would-be Order — mutable, no revenue, no status, no
@@ -259,6 +265,9 @@ per ORDER `orderGoodsNetKobo`. The Home dashboard, Daily Reconciliation and
 Profit report all read this one helper, over the same period AND the same store
 predicate (`reconStoreFilter`), so a day has one answer at every scope (#195).
 Scoping is per ITEM LINE, with the order's own store carrying the discount.
+A cancelled Order keeps counting on its creation day and nets out as a negative
+entry on its cancel day (see **Cancel**, #549), so the span is tested per
+entry day, not per order `createdAt`.
 _Avoid_: `orders.totalAmountKobo` / `net_amount_kobo` for a "sales" figure (both
 are gross of discounts and deposit-inclusive); scoping a sales figure by the
 order header's store while another surface scopes by the line's.
