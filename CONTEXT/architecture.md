@@ -220,6 +220,23 @@ Checkout of a tagged Cart marks the order `fulfilled` + `linked_order_id`
 inside `OrdersDao.createOrder`'s transaction (Drift + outbox; held by the
 order on the v2 envelope path). Stock, money and crates are a till sale's.
 
+**Pay on delivery + Mark as paid (#432).** No new payment type, status or
+column. A Cart tagged with an Online Order offers Pay on delivery, which is the
+existing credit sale (`payment_type = 'credit'`). An order IS Pay on delivery
+when it is `credit` and an online order's `linked_order_id` points at it
+(`OnlineOrdersDao.watchPayOnDelivery`). It is labelled "Pay on delivery · ₦X to
+collect", never "credit". The debt-limit gate (`checkDebtLimit`) leaves only
+this order's own amount out, so earlier debt is checked as usual. Mark as paid
+(cash or transfer, `orders.pay_on_delivery.mark_paid`, CEO by default; the
+button is hidden without it and the permission is re-checked at save) calls
+`CustomerService.topUpWallet`, the Record Payment rows, with the wallet credit
+carrying `order_id`. Collected = the live `topup_*` credits with their own
+`wallet_topup` payment row. A cancel never reverses such a collection: it stays
+as the customer's credit (`markCancelled`; cloud `pos_cancel_order`, 0217).
+Daily Reconciliation shows "Pay on delivery not yet collected" as a report-only
+line. It is point-in-time and business-wide, sits inside the customer debt, and
+is not a cash figure.
+
 **Online store setup (#423).** Cloud0199 / Drift89. Each `stores` row carries
 its own area (`country`, `state`, `lga` — Nigeria values from the bundled lists
 that match `ng_areas`, free text elsewhere), a public `phone` (falls back to the

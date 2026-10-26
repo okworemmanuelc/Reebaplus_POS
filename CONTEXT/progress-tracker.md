@@ -17,6 +17,13 @@ The human updates it when resolving open questions or making architectural decis
 ### Issue #478: Report a listing + admin takedown (2026-10-25, ready for review)
 - Cloud 0214 (NOT deployed): `listing_reports` + `storefront_blocks` (cloud-only, service_role), `shopper_report_listing` (10/h, one open per target); `_storefront_stores`/`_storefront_cards`/`storefront_product_photos` re-issued with the block filter. App: Report on product sheet + store page. Console review screen + pos-parity filed in reebaplus-web.
 
+### Issue #432: Pay on delivery + Mark as paid (2026-10-26, ready for review)
+- Drift v94 adds only the `orders.pay_on_delivery.mark_paid` catalogue key. Cloud `0217_pay_on_delivery.sql` adds the key, re-issues the seed verbatim from 0208, backfills CEO roles, and re-issues `pos_cancel_order` verbatim from 0170 with one delta: a Mark as paid collection is not reversed. Deploy 0217 BEFORE the v94 build.
+- Checkout: a tagged Cart replaces "Register as Credit Sale" with "Pay on delivery · ₦X to collect" (PayMode.credit underneath). `checkDebtLimit(excludeOwnAmount:)` lives in `shared/services/orders/debt_limit.dart`.
+- Orders card: a "Pay on delivery" / "Paid" pill, the full label line and Mark as paid (`features/orders/widgets/mark_paid_dialog.dart`). Receipts on the Orders screen and the customer page use the Pay on delivery label. The recon line appears in Business worth (CEO) and Debts & expenses (Manager) and in the CSV.
+- pos-parity: okworemmanuelc/reebaplus-web#169.
+- Open: the v2 `pos_wallet_topup` RPC cannot carry `order_id`, so a linked collection always takes the direct-upsert path.
+
 ### Issue #431: Send to till (2026-10-25, ready for review)
 - App-only: NO Drift change (stays v93), NO cloud migration (0205/0208 guard already allows accepted -> fulfilled with linked_order_id). Online order detail: Send to till (accepted + `sales.make` + a store you work in) -> `OnlineOrdersDao.tillLoad` -> `CartService.loadOnlineOrder` (order's store, agreed price as charged, catalogue kept as `catalogPriceKobo`, linked Customer, qty lowered to stock). Tag = `onlineOrderId` + `agreedPriceKobo` keys on each cart line, so saved carts keep it and Clear drops it. Checkout passes `CartService.onlineOrderIdOf(cart)` -> `OrdersDao.createOrder(onlineOrderId)` -> `markFulfilled` in the sale txn (v2: held by the order; rejected sale reopens it). pos-parity issue filed in reebaplus-web.
 ### Issue #429: Linked customers see their tier price (2026-10-25, ready for review)

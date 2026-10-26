@@ -20,8 +20,8 @@
 --      existing CEO roles get a one-off backfill. The key reaches the
 --      catalogue BEFORE any grant syncs (role_permissions FK).
 --   2. pos_cancel_order re-issued VERBATIM from 0170 with one delta: a Mark as
---      paid collection (a 'topup_cash' / 'topup_transfer' wallet credit that
---      carries the order id) is NOT reversed when the sale is cancelled. It is
+--      paid collection (a wallet credit carrying the order id AND its own
+--      'wallet_topup' payment row) is NOT reversed when the sale is cancelled. It is
 --      money the customer really handed over, so it stays as their credit —
 --      the SQL twin of the same exclusion in OrdersDao.markCancelled. (This
 --      RPC runs only behind the held-off feature.domain_rpcs_v2.cancel_order
@@ -406,10 +406,14 @@ BEGIN
        AND business_id = p_business_id
        AND voided_at IS NULL
        AND reference_type NOT IN ('refund', 'void', 'crate_deposit_refunded',
-                                  'crate_deposit_forfeited', 'crate_refund',
-                                  -- #432 delta — a Mark as paid collection
-                                  -- stays as the customer's credit.
-                                  'topup_cash', 'topup_transfer')
+                                  'crate_deposit_forfeited', 'crate_refund')
+       -- #432 delta — a Mark as paid collection (a wallet credit with its own
+       -- 'wallet_topup' payment row) stays as the customer's credit. A sale's
+       -- own legs never have one (their payment row's parent is the order).
+       AND NOT EXISTS (
+         SELECT 1 FROM public.payment_transactions pt
+          WHERE pt.wallet_txn_id = wallet_transactions.id
+            AND pt.type = 'wallet_topup')
      ORDER BY created_at, id
   LOOP
     v_to_credit := (v_wt.type = 'debit');

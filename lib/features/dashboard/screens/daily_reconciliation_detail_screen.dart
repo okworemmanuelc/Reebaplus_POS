@@ -1246,6 +1246,8 @@ class _DailyReconciliationDetailScreenState
           '+ ${formatCurrency(d.totalOwedKobo / 100.0)}',
           color: d.totalOwedKobo > 0 ? dangerColor : null,
         ),
+        if (d.payOnDeliveryUncollectedKobo != 0)
+          _payOnDeliveryLine(context, theme, d),
         // #163 — crate liabilities netted against the empties asset above: the
         // deposits we still hold for customers (owed back on return) and the
         // crate debt we owe suppliers for full crates delivered. Only shown when
@@ -1331,18 +1333,8 @@ class _DailyReconciliationDetailScreenState
           formatCurrency(d.totalOwedKobo / 100.0),
           danger: d.totalOwedKobo > 0,
         ),
-        // #432 — report-only: already inside the debt above, never a cash
-        // figure (no cash balance, Hard Rule #8).
         if (d.payOnDeliveryUncollectedKobo != 0)
-          KeyedSubtree(
-            key: const ValueKey(kReconPayOnDeliveryLineKey),
-            child: _line(
-              context,
-              theme,
-              'Pay on delivery not yet collected',
-              formatCurrency(d.payOnDeliveryUncollectedKobo / 100.0),
-            ),
-          ),
+          _payOnDeliveryLine(context, theme, d),
         _line(
           context,
           theme,
@@ -1353,6 +1345,23 @@ class _DailyReconciliationDetailScreenState
       badges: badges,
     );
   }
+
+  /// #432 — "Pay on delivery not yet collected": REPORT-ONLY. It is part of
+  /// the customer debt line above it, so it carries no sign and adds to
+  /// nothing; and it is never a cash figure (no cash balance, Hard Rule #8).
+  Widget _payOnDeliveryLine(
+    BuildContext context,
+    ThemeData theme,
+    ReconData d,
+  ) => KeyedSubtree(
+    key: const ValueKey(kReconPayOnDeliveryLineKey),
+    child: _line(
+      context,
+      theme,
+      'Pay on delivery not yet collected',
+      formatCurrency(d.payOnDeliveryUncollectedKobo / 100.0),
+    ),
+  );
 
   Widget _cratesCard(BuildContext context, ThemeData theme, ReconData d) {
     return _card(

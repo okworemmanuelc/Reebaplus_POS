@@ -458,7 +458,9 @@ class OnlineOrdersDao extends DatabaseAccessor<AppDatabase>
   //
   // A Pay on delivery order is a `credit` order an Online Order is linked to.
   // What it has collected is the sum of the live Record Payment credits
-  // (`topup_cash` / `topup_transfer`) that carry its id (Mark as paid).
+  // (`topup_cash` / `topup_transfer` with their `wallet_topup` payment row)
+  // that carry its id (Mark as paid). A sale's own paid-now leg has no payment
+  // row of its own, so it never counts.
   static const String _payOnDeliverySql =
       'SELECT o.id AS order_id, oo.id AS online_order_id, o.store_id, '
       'o.customer_id, o.status, '
@@ -467,7 +469,10 @@ class OnlineOrdersDao extends DatabaseAccessor<AppDatabase>
       "WHERE w.business_id = o.business_id AND w.order_id = o.id "
       "AND w.type = 'credit' "
       "AND w.reference_type IN ('topup_cash', 'topup_transfer') "
-      'AND w.voided_at IS NULL), 0) AS collected_kobo '
+      'AND w.voided_at IS NULL '
+      'AND EXISTS (SELECT 1 FROM payment_transactions p '
+      "WHERE p.wallet_txn_id = w.id AND p.type = 'wallet_topup')), 0) "
+      'AS collected_kobo '
       'FROM online_orders oo '
       'JOIN orders o ON o.id = oo.linked_order_id '
       'AND o.business_id = oo.business_id '
@@ -488,7 +493,12 @@ class OnlineOrdersDao extends DatabaseAccessor<AppDatabase>
     return customSelect(
       _payOnDeliverySql,
       variables: [Variable<String>(requireBusinessId())],
-      readsFrom: {onlineOrders, db.orders, db.walletTransactions},
+      readsFrom: {
+        onlineOrders,
+        db.orders,
+        db.walletTransactions,
+        db.paymentTransactions,
+      },
     ).watch().map((rows) => rows.map(_payOnDeliveryFrom).toList());
   }
 
@@ -500,7 +510,12 @@ class OnlineOrdersDao extends DatabaseAccessor<AppDatabase>
         Variable<String>(requireBusinessId()),
         Variable<String>(orderId),
       ],
-      readsFrom: {onlineOrders, db.orders, db.walletTransactions},
+      readsFrom: {
+        onlineOrders,
+        db.orders,
+        db.walletTransactions,
+        db.paymentTransactions,
+      },
     ).get();
     return rows.isEmpty ? null : _payOnDeliveryFrom(rows.first);
   }

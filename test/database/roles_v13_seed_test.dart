@@ -62,10 +62,16 @@ void main() {
       );
     });
 
-    test('permissions table seeded with 46 default rows on fresh install',
+    test('permissions table seeded with 47 default rows on fresh install',
         () async {
       final perms = await db.permissionsDao.getAll();
-      expect(perms.length, equals(46)); // #427 added online_orders.view / .answer
+      // #427 added online_orders.view / .answer; #432 the mark-paid key.
+      expect(perms.length, equals(47));
+      expect(
+          perms
+              .singleWhere((p) => p.key == 'orders.pay_on_delivery.mark_paid')
+              .category,
+          'Online store');
       expect(perms.singleWhere((p) => p.key == 'stores.online_ordering').category,
           'Online store'); // #423
 
