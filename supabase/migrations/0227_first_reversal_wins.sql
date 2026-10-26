@@ -139,7 +139,14 @@ BEGIN
         OR EXISTS (SELECT 1 FROM public.payment_transactions pt
                     WHERE pt.business_id = p_business_id
                       AND pt.order_id = p_order_id
-                      AND pt.type = 'refund')))
+                      AND pt.type = 'refund')
+        -- A credit sale with no stocked lines and nothing paid (e.g. Quick
+        -- Sale lines on account) reverses ONLY its credit-balance legs:
+        -- markCancelled's 'refund' credit / 'void' debit carry the order id.
+        OR EXISTS (SELECT 1 FROM public.wallet_transactions wt
+                    WHERE wt.business_id = p_business_id
+                      AND wt.order_id = p_order_id
+                      AND wt.reference_type IN ('refund', 'void'))))
   THEN
     -- Someone else reversed this order first. Rejected WHOLE: this phone's
     -- reversal rows are still held on the phone and never reach the cloud.
