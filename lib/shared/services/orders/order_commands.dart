@@ -62,7 +62,8 @@ class OrderCommands {
   }
 
   /// **Checkout** — build an order from a UI cart and persist it atomically,
-  /// recognising revenue (the Order is born `pending`).
+  /// recognising revenue. The Order is born `pending` only if it is a
+  /// crate-bearing sale (PRD #337), otherwise `completed`.
   ///
   /// Returns the human-readable order number (e.g. `ORD-000042`) — the
   /// checkout/receipt code displays this to the user.
@@ -122,6 +123,11 @@ class OrderCommands {
       storeId: storeId,
     );
 
+    final crateBearing = await _ordersDao.isCrateBearingCart(
+      cart.map((i) => i['id'] as String?),
+    );
+    final checkoutAt = DateTime.now().toUtc();
+
     final orderCompanion = OrdersCompanion.insert(
       id: Value(orderId),
       businessId: _ordersDao.requireBusinessId(),
@@ -142,14 +148,20 @@ class OrderCommands {
       netAmountKobo: totalAmountKobo,
       amountPaidKobo: Value(amountPaidKobo),
       paymentType: dbPaymentType,
-      // §19.5 lifecycle: a completed checkout lands the order in Pending
-      // (already settled — received, or charged through the wallet, §14.3).
-      // Confirm (OrdersDao.markCompleted) flips it to 'completed' and stamps
-      // completedAt — for crate businesses that's after the Empty-Crates modal.
-      // Revenue is recognized here at checkout, not at Confirm; the wallet legs
-      // are already booked regardless of status. The v2 RPC forwards this status
-      // via p_status, so both sync paths agree.
-      status: 'pending',
+      // §19.5 lifecycle (PRD #337): Pending holds ONLY crate-bearing sales —
+      // waiting for the empties to be counted back (business tracks empties AND
+      // at least one line is a crate-tracked bottle; see [isCrateBearingSale]).
+      // Every other sale is born `completed` with completedAt = the checkout
+      // instant and no confirmer (nobody confirmed it). Decided on-device from
+      // the DB rows, so it works offline. Either way the sale is already
+      // settled (received, or charged through the wallet, §14.3), revenue is
+      // recognized here at checkout, and the seller (staffId) is credited. For
+      // a pending order, Confirm (OrdersDao.markCompleted) later flips it to
+      // 'completed' after the Empty-Crates modal. The v2 RPC forwards this
+      // status via p_status and the v1 header push carries status +
+      // completed_at, so both sync paths agree.
+      status: crateBearing ? 'pending' : 'completed',
+      completedAt: crateBearing ? const Value.absent() : Value(checkoutAt),
       staffId: Value(staffId),
       storeId: Value(storeId),
       crateDepositPaidKobo: Value(crateDepositPaidKobo),

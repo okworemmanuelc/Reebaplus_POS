@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/crates/crate_bearing_sale.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
@@ -74,12 +75,21 @@ class CrateReturnModal extends ConsumerStatefulWidget {
     OrderWithItems orderWithItems, {
     required WidgetRef ref,
   }) async {
-    // Guard 1: skip if no bottle items with trackEmpties enabled
-    final hasBottles = orderWithItems.items.any((i) {
-      final p = i.product; // null for a Quick Sale line — never a crate product
-      return p != null && p.unit?.toLowerCase() == 'bottle' && p.trackEmpties;
-    });
-    if (!hasBottles) return CrateReturnResult.empty; // no crates to track
+    // Guard 1: skip unless this is a crate-bearing sale (PRD #337) — the same
+    // rule Checkout uses to decide Pending: a crate business that tracks empties
+    // AND at least one crate-tracked bottle line. A Quick Sale line (no product)
+    // never counts.
+    final business = ref.read(currentBusinessProvider);
+    final crateBearing = isCrateBearingSale(
+      businessType: business?.type,
+      tracksEmptyCrates: business?.tracksEmptyCrates,
+      products: [
+        for (final i in orderWithItems.items)
+          if (i.product != null)
+            (unit: i.product!.unit, trackEmpties: i.product!.trackEmpties),
+      ],
+    );
+    if (!crateBearing) return CrateReturnResult.empty; // no crates to track
 
     if (!context.mounted) return null;
     return showModalBottomSheet<CrateReturnResult>(

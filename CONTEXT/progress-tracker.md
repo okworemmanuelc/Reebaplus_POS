@@ -7933,3 +7933,15 @@ Migration 0222 is NOT applied to live (owner confirmation pending); apply plan,
 rollback and verification in `docs/rollouts/0222-checkout-order-mobile-money-shape/`.
 Golden: Dart arm green; rpc arm not yet run (needs reebaplus-dev with 0222 applied).
 reebaplus-web #72, #80.
+
+### Pending holds only crate-bearing sales (#547, PRD #337) (2026-10-26)
+Branch `feat/547-pending-crate-only`. `OrderCommands.checkout` now decides the status:
+`pending` only if `isCrateBearingSale` (new `lib/core/crates/crate_bearing_sale.dart`;
+business is a crate type + tracks empties + a line's DB product is a tracked Bottle),
+else `completed` with `completedAt` = checkout instant and no confirmer. DB read via
+`OrdersDao.isCrateBearingCart` (business-scoped). `CrateReturnModal.show` Guard 1 uses
+the same rule (now also skips at a business that doesn't track empties). Status already
+rides both sync paths (v1 header carries status + completed_at; v2 forwards `p_status`).
+Golden fixtures untouched (Dart arm drives the DAO with explicit status). Not in this
+slice: cloud `checkout_order` status, Return of a Completed sale.
+Tests: `test/crates/crate_bearing_sale_test.dart`, `test/orders/checkout_status_test.dart`.

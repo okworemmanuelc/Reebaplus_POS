@@ -45,6 +45,30 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         .getSingleOrNull();
   }
 
+  /// Whether a cart is a **crate-bearing sale** (PRD #337, rule #13): decides
+  /// whether Checkout creates the Order `pending` (waiting for empties) or
+  /// `completed`. Re-reads the business and each product from the DB — never
+  /// trusts the cart map — business-scoped. A null/empty id is a Quick Sale
+  /// line and never counts.
+  Future<bool> isCrateBearingCart(Iterable<String?> productIds) async {
+    final ids = productIds.whereType<String>().where((i) => i.isNotEmpty);
+    if (ids.isEmpty) return false;
+    final biz =
+        await (select(businesses)
+              ..where((b) => b.id.equals(requireBusinessId()))
+              ..limit(1))
+            .getSingleOrNull();
+    if (biz == null) return false;
+    final rows = await (select(products)
+          ..where((p) => p.id.isIn(ids.toSet().toList()) & whereBusiness(p)))
+        .get();
+    return isCrateBearingSale(
+      businessType: biz.type,
+      tracksEmptyCrates: biz.tracksEmptyCrates,
+      products: rows.map((p) => (unit: p.unit, trackEmpties: p.trackEmpties)),
+    );
+  }
+
   Stream<List<OrderData>> watchPendingOrders() {
     return (select(orders)
           ..where((o) => whereBusiness(o) & o.status.equals('pending'))
