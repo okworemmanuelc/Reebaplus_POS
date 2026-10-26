@@ -7005,6 +7005,67 @@ class AppDatabase extends _$AppDatabase {
     }
   }
 
+  /// The tables [withdrawUnsyncedRows] may remove rows from (#550). Each is a
+  /// row the phone wrote for a reversal the cloud REJECTED: the rows never
+  /// uploaded (they were held behind the claim and are discarded with it), so
+  /// removing them is what makes this phone agree with the cloud.
+  static const Set<String> kWithdrawableReversalTables = {
+    'stock_transactions',
+    'payment_transactions',
+    'wallet_transactions',
+    'crate_ledger',
+    'cost_batches',
+  };
+
+  /// #550 (ADR 0032) — withdraws a rejected reversal's never-uploaded rows from
+  /// [table] by id, scoped to [businessId]. Append-only ledgers carry a
+  /// `<table>_no_delete` guard; for THIS deliberate, server-ordered withdrawal
+  /// the table's delete guards are dropped and recreated verbatim inside one
+  /// transaction, so the guard is never missing outside it. Callers must only
+  /// pass ids whose outbox rows were held and are being discarded (the cloud
+  /// never saw them — Invariant #12's sanctioned server-rejection path).
+  Future<void> withdrawUnsyncedRows(
+    String table,
+    String businessId,
+    List<String> ids,
+  ) async {
+    if (ids.isEmpty) return;
+    if (!kWithdrawableReversalTables.contains(table)) {
+      throw ArgumentError.value(table, 'table', 'not withdrawable');
+    }
+    final info = allTables.firstWhere((t) => t.actualTableName == table);
+    await transaction(() async {
+      final guards = (await customSelect(
+        "SELECT name, sql FROM sqlite_master "
+        "WHERE type = 'trigger' AND tbl_name = ?1",
+        variables: [Variable.withString(table)],
+      ).get()).where((r) {
+        final sql = r.read<String?>('sql') ?? '';
+        return RegExp(
+          r'(BEFORE|AFTER|INSTEAD\s+OF)\s+DELETE\s+ON',
+          caseSensitive: false,
+        ).hasMatch(sql);
+      }).toList();
+      for (final g in guards) {
+        await customStatement('DROP TRIGGER IF EXISTS ${g.read<String>('name')}');
+      }
+      final placeholders = List.filled(ids.length, '?').join(', ');
+      await customUpdate(
+        'DELETE FROM $table WHERE business_id = ? AND id IN ($placeholders)',
+        variables: [
+          Variable.withString(businessId),
+          for (final id in ids) Variable.withString(id),
+        ],
+        updates: {info},
+        updateKind: UpdateKind.delete,
+      );
+      for (final g in guards) {
+        final sql = g.read<String?>('sql');
+        if (sql != null && sql.isNotEmpty) await customStatement(sql);
+      }
+    });
+  }
+
   /// Runs [body] with every delete-event trigger and foreign-key enforcement
   /// temporarily off, then restores both — even if [body] throws.
   ///

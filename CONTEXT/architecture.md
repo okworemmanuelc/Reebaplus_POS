@@ -226,6 +226,18 @@ Checkout of a tagged Cart marks the order `fulfilled` + `linked_order_id`
 inside `OrdersDao.createOrder`'s transaction (Drift + outbox; held by the
 order on the v2 envelope path). Stock, money and crates are a till sale's.
 
+**First reversal wins (#550, ADR 0032).** Storage: one cloud-only table,
+`order_reversals` (UNIQUE `order_id`, no Drift twin, written only by the definer
+RPC `pos_claim_order_reversal`, migration 0227). Every local reversal (the
+Pending refund today, the Return next) runs through
+`OrdersDao.beginGuardedReversal` / `commitGuardedReversal`, which hold its
+outbox rows (`sync_queue.held_by_order_id` = reversal id) behind one claim
+envelope. If the claim lands, the rows are released. If another reversal of the
+order already landed, the claim is rejected whole: `undoRejectedReversal`
+withdraws the local rows (through `AppDatabase.withdrawUnsyncedRows`), takes the
+cloud header and discards the held rows. A trigger keeps a claimed or cancelled
+order's cancellation sticky on the cloud.
+
 **Pay on delivery + Mark as paid (#432).** No new payment type, status or
 column. A Cart tagged with an Online Order offers Pay on delivery, which is the
 existing credit sale (`payment_type = 'credit'`). An order IS Pay on delivery

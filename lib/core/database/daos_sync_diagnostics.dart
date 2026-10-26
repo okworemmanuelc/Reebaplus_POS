@@ -21,6 +21,13 @@ enum SaleEnvelopeState {
   rejected,
 }
 
+/// #550 (ADR 0032) — the envelope a reversal's held rows wait behind. The cloud
+/// accepts ONE reversal per order (`pos_claim_order_reversal`, migration 0227).
+const String kReversalClaimAction = 'domain:pos_claim_order_reversal';
+
+/// #550 — the P0001 message the claim raises when another reversal won.
+const String kReversalAlreadyAppliedError = 'reversal_already_applied';
+
 @DriftAccessor(tables: [SyncQueue, SyncQueueOrphans])
 class SyncDao extends DatabaseAccessor<AppDatabase>
     with _$SyncDaoMixin, BusinessScopedDao<AppDatabase> {
@@ -132,6 +139,17 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
     var discarded = 0;
     for (final row in heldOrders) {
       final orderId = row.read<String>('oid');
+      // #550 — a REVERSAL's rows are held by its reversal id behind the
+      // `pos_claim_order_reversal` envelope, not by a sale envelope. Still in
+      // the queue → keep waiting. Orphaned → keep held too: a lost race is
+      // undone (and its rows discarded) inline by the drain BEFORE the orphan
+      // move, so an orphan seen here failed for another reason and waits for
+      // the user's retry from Sync Issues — releasing would upload an
+      // unguarded reversal. Gone from both → confirmed, release (below).
+      if (await _reversalClaimQueued(orderId) ||
+          await _reversalClaimOrphaned(orderId)) {
+        continue;
+      }
       // Any queue row (synced-and-lingering or not) means the envelope hasn't
       // left the queue yet — still in flight; keep waiting.
       if (await _saleEnvelopeQueued(orderId)) continue;
@@ -183,6 +201,41 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
       variables: [Variable.withString(orderId)],
     ).get();
     return rows.isNotEmpty;
+  }
+
+  /// #550 — whether a `pos_claim_order_reversal` envelope for [reversalId]
+  /// is still UN-synced in `sync_queue`. A synced-but-lingering claim counts as
+  /// confirmed (it released its rows inline at markDone; a crash in between is
+  /// healed by [reconcileHeldRows] releasing them).
+  Future<bool> _reversalClaimQueued(String reversalId) async {
+    final rows = await customSelect(
+      "SELECT 1 FROM sync_queue "
+      "WHERE action_type = '$kReversalClaimAction' "
+      "AND is_synced = 0 "
+      "AND json_extract(payload, '\$.p_reversal_id') = ?1 LIMIT 1",
+      variables: [Variable.withString(reversalId)],
+    ).get();
+    return rows.isNotEmpty;
+  }
+
+  /// #550 — whether a `pos_claim_order_reversal` envelope for [reversalId] was
+  /// archived to `sync_queue_orphans`.
+  Future<bool> _reversalClaimOrphaned(String reversalId) async {
+    final rows = await customSelect(
+      "SELECT 1 FROM sync_queue_orphans "
+      "WHERE action_type = '$kReversalClaimAction' "
+      "AND json_extract(payload, '\$.p_reversal_id') = ?1 LIMIT 1",
+      variables: [Variable.withString(reversalId)],
+    ).get();
+    return rows.isNotEmpty;
+  }
+
+  /// #550 — the outbox rows a reversal enqueued and still holds (by its
+  /// [reversalId]). Read by [OrdersDao.undoRejectedReversal] to know exactly
+  /// which local rows to withdraw when the cloud rejects the reversal.
+  Future<List<SyncQueueData>> heldRowsFor(String heldKey) {
+    return (select(syncQueue)..where((t) => t.heldByOrderId.equals(heldKey)))
+        .get();
   }
 
   /// Whether a `pos_record_sale_v2` envelope for [orderId] was archived to

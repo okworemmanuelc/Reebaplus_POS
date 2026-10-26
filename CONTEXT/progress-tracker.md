@@ -7,6 +7,10 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #550: First reversal wins, server guard (2026-10-26, ready for review)
+- Cloud 0227 (NOT deployed): cloud-only `order_reversals` (UNIQUE order_id) + `pos_claim_order_reversal` (claim + header flip; same id = replay; other claim or claim-less reversal evidence = P0001 `reversal_already_applied`, DETAIL = cloud header) + sticky-cancel trigger on `orders`. No Drift change (reuses `held_by_order_id`).
+- App: `OrdersDao.beginGuardedReversal`/`commitGuardedReversal` (the seam #551 reuses) hold all reversal rows behind the claim; drain releases on success, `undoRejectedReversal` + `alertRefundRejected` on loss. ADR 0032.
+- Deploy 0227 to production BEFORE this build (otherwise refunds wait in the outbox; nothing is lost) and before any build with the Return. pos-parity: comment on okworemmanuelc/reebaplus-web#190.
 ### Issue #438 (part): Shopper account deletion (2026-10-26, ready for review)
 - Cloud 0221 `shopper_delete_account()` (cancels New orders, erases shopper_* rows, unlinks customers/online_orders, login via account_deletion_events kind='shopper' unless it belongs to a business) + Delete account button. Terms/Privacy text and the public deletion page still open on #438.
 ### Issue #506: Drop broken legacy invite preview functions (2026-10-26, ready for review)

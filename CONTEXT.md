@@ -89,6 +89,8 @@ The set of un-uploaded local writes awaiting push — the `sync_queue` and
 `sync_queue_orphans` tables together. Governed by Invariant #12, "the outbox is
 sacred": a local row with an unconfirmed outbox entry is inviolable — no pull,
 reconcile, restore, or wipe may destroy it before the server confirms its push.
+A reversal's rows are **held** behind its `pos_claim_order_reversal` envelope
+until the cloud accepts the claim (ADR 0032).
 _Avoid_: queue (alone — ambiguous), pending writes.
 
 **Orphan**:
@@ -182,6 +184,10 @@ Sale, but **reports keep it on its original day** (#549): it still counts on its
 (`cancellation_reason = 'rejected_by_server'`) and a legacy cancel with no
 `cancelledAt`. The refund payment row stays a cash movement on the refund day;
 profit counts the return once (via the negative entry), never again as a refund.
+**First reversal wins** (ADR 0032, #550): the cloud accepts exactly one reversal
+per Order. Each local reversal holds its rows behind one claim. A later reversal
+from another phone is rejected whole: that phone undoes its own reversal, lists
+it under Sync Issues, and alerts the CEO and Managers (`sale_refund_rejected`).
 _Avoid_: void, delete; dropping a cancelled sale from its creation day.
 
 **Cart**:

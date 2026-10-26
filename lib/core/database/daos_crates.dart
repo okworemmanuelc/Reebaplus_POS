@@ -729,6 +729,37 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
         enqueue: true,
       );
 
+  /// #550 (ADR 0032) — withdraws a REJECTED reversal's never-uploaded crate
+  /// ledger rows ([ids], the held `crate_ledger` upserts the cloud refused with
+  /// the claim) and moves the customer's local-only crate cache back with them.
+  /// The inverse of [reverseIssuedByCustomer]'s cancel-path writes. Business
+  /// scoped; a no-op on an empty list.
+  Future<void> withdrawRejectedReversalRows(List<String> ids) async {
+    if (ids.isEmpty) return;
+    final businessId = requireBusinessId();
+    final rows =
+        await (select(crateLedger)
+              ..where((l) => l.id.isIn(ids) & whereBusiness(l)))
+            .get();
+    for (final r in rows) {
+      final customerId = r.customerId;
+      final manufacturerId = r.manufacturerId;
+      if (customerId == null || manufacturerId == null) continue;
+      await customUpdate(
+        'UPDATE customer_crate_balances SET balance = balance - ? '
+        'WHERE business_id = ? AND customer_id = ? AND manufacturer_id = ?',
+        variables: [
+          Variable<int>(r.quantityDelta),
+          Variable<String>(businessId),
+          Variable<String>(customerId),
+          Variable<String>(manufacturerId),
+        ],
+        updates: {customerCrateBalances},
+      );
+    }
+    await db.withdrawUnsyncedRows('crate_ledger', businessId, ids);
+  }
+
   /// Shared body of the reverse-order-issuance verb. [enqueue] distinguishes a
   /// CANCEL (true — the cloud accepted the sale, so the compensating ledger row
   /// syncs) from a REJECTED-sale recovery (false — the cloud never held the
