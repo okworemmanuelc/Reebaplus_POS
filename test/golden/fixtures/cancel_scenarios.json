@@ -101,13 +101,13 @@
       },
       "expected": {
         "order": {
-          "status": "pending",
+          "status": "completed",
           "payment_type": "cash",
           "total_amount_kobo": 200000,
           "discount_kobo": 0,
           "net_amount_kobo": 200000,
           "amount_paid_kobo": 200000,
-          "completed_at_null": true
+          "completed_at_null": false
         },
         "items": [
           {
@@ -442,13 +442,13 @@
       },
       "expected": {
         "order": {
-          "status": "pending",
+          "status": "completed",
           "payment_type": "cash",
           "total_amount_kobo": 300000,
           "discount_kobo": 0,
           "net_amount_kobo": 300000,
           "amount_paid_kobo": 350000,
-          "completed_at_null": true
+          "completed_at_null": false
         },
         "items": [
           {
