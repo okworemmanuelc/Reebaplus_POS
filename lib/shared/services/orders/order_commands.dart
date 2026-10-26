@@ -377,6 +377,79 @@ class OrderCommands {
     return _ordersDao.markCancelled(orderId, reason, staffId);
   }
 
+  /// **Return** a crate-free Completed sale (#551, PRD #337): the whole sale is
+  /// reversed through the shared Cancel reversal, then each line's damaged
+  /// units are written off as `damage:<damageReasonKey>`. Gated on the same
+  /// `sales.cancel` Gate as the Pending refund, enforced here at the write
+  /// boundary. Refuses a pending / crate-bearing order with a typed
+  /// [ReturnRefusedException]; a no-op on an already-cancelled order. After the
+  /// transaction the activity log and CEO + Manager alert are best-effort.
+  Future<void> returnCompletedSale({
+    required String orderId,
+    required String reason,
+    required String staffId,
+    required GateContext gateContext,
+    String damageReasonKey = 'other',
+    Map<String, int> damagedQtyByLine = const {},
+  }) async {
+    const gate = Gates.refundOrder;
+    if (!gate.evaluate(gateContext)) {
+      throw GateDeniedError(gateName: gate.name, action: gate.action);
+    }
+    final outcome = await _ordersDao.returnCompletedSale(
+      orderId: orderId,
+      reason: reason,
+      staffId: staffId,
+      damageReasonKey: damageReasonKey,
+      damagedQtyByLine: damagedQtyByLine,
+    );
+    if (outcome == null) return;
+    await _auditReturn(
+      orderId: orderId,
+      staffId: staffId,
+      reason: reason,
+      outcome: outcome,
+    );
+  }
+
+  /// Activity-log entry + `sale_returned` warning to CEO + Manager. Best-effort:
+  /// the Return is already committed and this can never fail it.
+  Future<void> _auditReturn({
+    required String orderId,
+    required String staffId,
+    required String reason,
+    required ReturnOutcome outcome,
+  }) async {
+    try {
+      final amount = (outcome.refundKobo / 100).toStringAsFixed(2);
+      final msg =
+          'Sale ${outcome.orderNumber} returned: $amount refunded, '
+          '${outcome.damagedUnits} unit(s) written off. Reason: $reason';
+      await _db.activityLogDao.log(
+        action: 'sale_returned',
+        description: msg,
+        staffId: staffId,
+        storeId: outcome.storeId,
+        orderId: orderId,
+      );
+      final recipients = await _db.userBusinessesDao.getUserIdsForRoleSlugs([
+        'ceo',
+        'manager',
+      ]);
+      for (final uid in (recipients.isEmpty ? [staffId] : recipients)) {
+        await _db.notificationsDao.fireNotification(
+          type: 'sale_returned',
+          message: msg,
+          severity: 'warning',
+          linkedRecordId: orderId,
+          recipientUserId: uid,
+        );
+      }
+    } catch (e) {
+      debugPrint('[OrderCommands] return audit failed (non-fatal): $e');
+    }
+  }
+
   Future<void> assignRider(String orderId, String riderName) {
     return _ordersDao.assignRider(orderId, riderName);
   }

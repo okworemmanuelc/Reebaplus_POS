@@ -103,6 +103,31 @@ class OrderService {
     return _commands.cancel(orderId, reason, staffId, gateContext: gateContext);
   }
 
+  /// **Return** a crate-free Completed sale (#551). See
+  /// [OrderCommands.returnCompletedSale]. [damagedQtyByLine] is keyed by
+  /// order-item id.
+  Future<void> returnCompletedSale({
+    required String orderId,
+    required String reason,
+    required String staffId,
+    required GateContext gateContext,
+    String damageReasonKey = 'other',
+    Map<String, int> damagedQtyByLine = const {},
+  }) {
+    return _commands.returnCompletedSale(
+      orderId: orderId,
+      reason: reason,
+      staffId: staffId,
+      gateContext: gateContext,
+      damageReasonKey: damageReasonKey,
+      damagedQtyByLine: damagedQtyByLine,
+    );
+  }
+
+  /// Whether a Completed sale may be Returned (#551) — the Orders screen asks
+  /// this and never re-derives the rule.
+  Future<bool> isReturnable(String orderId) => _queries.isReturnable(orderId);
+
   /// **Cancel a server-REJECTED sale** — the cashier tapped Cancel on the
   /// `sale_rejected` alert (an oversell: a concurrent till took the last unit).
   /// Rebuilds the sold lines from the orphaned `pos_record_sale_v2` envelope and

@@ -7966,3 +7966,17 @@ changed-reviewed-days sweep also files an order under its cancel day. Left alone
 counts, Home staff list / drill-down, staff-performance, van screens, DAO SQL aggregates,
 `refundsKobo` / `periodNetResultKobo`. Excluded as before: `rejected_by_server`, cancelled
 with no `cancelledAt`. Web parity: reebaplus-web #190.
+### Return a crate-free Completed sale (#551) (2026-10-26)
+Branch `feat/551-return-completed-sale` (PRD #337 slice e). `OrdersDao.isReturnable` /
+`returnRefusal` (Order Module query `isReturnable`) and `returnCompletedSale`
+(`OrderCommands`, gated on `Gates.refundOrder`): one transaction re-checks, runs
+`markCancelled(forceLocalReversal, inReversal)` (now a no-op on an already-cancelled
+order), then `adjustStock(-damaged, 'damage:<key>')` per line inside the guarded
+reversal. Audit + `sale_returned` alert after commit (best-effort). `stock_adjustments`
+added to `kWithdrawableReversalTables` so a rejected Return withdraws its damage rows.
+Orders screen: Completed cards show Refund when allowed + returnable
+(`_ReturnableCard`); `return_sale_dialog.dart` collects reason / damaged / damage
+reason. Tests `test/orders/return_completed_sale_test.dart`. OPEN: the cancel push
+still triggers `pos_recost_pairs`, which re-derives COGS of other sales of the
+product/store (see PR #551 body); no SQL changed. Web parity: reebaplus-web #190.
+
