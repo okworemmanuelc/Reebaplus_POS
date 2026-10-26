@@ -499,6 +499,66 @@ class OnlineOrdersDao extends DatabaseAccessor<AppDatabase>
     }
   }
 
+  // ── #528: two phones linked the same Shopper at once ─────────────────────
+  // The cloud keeps one live Customer per Shopper per business
+  // (customers_business_shopper_account). When this phone's link loses that
+  // race, the sync engine adopts the cloud's linked Customer: it releases the
+  // local link ([releaseShopperLink]), applies the cloud's row, re-points this
+  // Shopper's orders ([repointShopperOrders]) and re-sends them
+  // ([requeueOrder]). The losing Customer stays, unlinked: nothing is lost.
+
+  /// Clears [customerId]'s Shopper link locally (no outbox write: the sync
+  /// engine pushes the unlinked row itself).
+  Future<void> releaseShopperLink(String customerId) async {
+    await (update(customers)
+          ..where((t) => t.id.equals(customerId) & whereBusiness(t)))
+        .write(
+          CustomersCompanion(
+            shopperAccountId: const Value(null),
+            lastUpdatedAt: Value(DateTime.now()),
+          ),
+        );
+  }
+
+  /// Moves [shopper]'s Online Orders from Customer [fromCustomerId] to
+  /// [toCustomerId] locally and returns the moved order ids.
+  Future<List<String>> repointShopperOrders({
+    required String shopper,
+    required String fromCustomerId,
+    required String toCustomerId,
+  }) async {
+    final rows = await (select(onlineOrders)
+          ..where(
+            (t) =>
+                whereBusiness(t) &
+                t.shopperAccountId.equals(shopper) &
+                t.customerId.equals(fromCustomerId),
+          ))
+        .get();
+    if (rows.isEmpty) return const [];
+    final ids = [for (final r in rows) r.id];
+    await (update(onlineOrders)
+          ..where((t) => t.id.isIn(ids) & whereBusiness(t)))
+        .write(
+          OnlineOrdersCompanion(
+            customerId: Value(toCustomerId),
+            lastUpdatedAt: Value(DateTime.now()),
+          ),
+        );
+    return ids;
+  }
+
+  /// Re-sends order [id] when it still points at [customerId] (a later
+  /// reconcile — e.g. a refused answer — may have replaced the row since).
+  Future<void> requeueOrder(String id, {required String customerId}) async {
+    final row = await (select(onlineOrders)
+          ..where((t) => t.id.equals(id) & whereBusiness(t))
+          ..limit(1))
+        .getSingleOrNull();
+    if (row == null || row.customerId != customerId) return;
+    await db.syncDao.enqueueUpsert('online_orders', row.toCompanion(true));
+  }
+
   // ── Pay on delivery (#432) ────────────────────────────────────────────────
   //
   // A Pay on delivery order is a `credit` order an Online Order is linked to.

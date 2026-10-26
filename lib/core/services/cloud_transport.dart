@@ -84,6 +84,15 @@ abstract interface class CloudTransport {
     List<String> ids,
   );
 
+  /// Fetch the rows of [table] for [businessId] whose [column] equals [value]
+  /// in one round-trip (#528: the cloud's Customer linked to a Shopper).
+  Future<List<dynamic>> fetchRowsByColumn(
+    String table,
+    String businessId,
+    String column,
+    Object value,
+  );
+
   // ── CONNECTION / EXISTENCE ─────────────────────────────────────────────────
   /// Pay the cold-network cost with a trivial round-trip (a `businesses` row
   /// probe) before the first real drain.

@@ -11,6 +11,8 @@ The human updates it when resolving open questions or making architectural decis
 - Cloud 0220: drops `accept_invite_preview(text)` + `accept_invite_preview_by_code(text)` (anon-executable, always 42P01). Caller audit clean (POS, reebaplus-web, prod catalogue). No app change.
 ### Issue #469: Reorder points use real sales speed (2026-10-26, ready for review)
 - App-only: `getProductsBelowROP` derives avg daily sales on read (units sold at the store over the last 28 days from recognised sales, `kReorderSalesWindowDays`); `products.avgDailySales` is no longer read (still never written; drop in a later cleanup).
+### Issue #528: Online order hardening (2026-10-26, ready for review)
+- Cloud 0219 (NOT deployed): `_online_orders_guard` re-issued from 0208 + store check via new SECURITY DEFINER `_caller_works_at_order_store` (0215's store rule, 0135's caller) -> 42501; sync: a `customers` 23505 on `customers_business_shopper_account` adopts the cloud's linked Customer (local one kept, unlinked; orders re-pointed + re-sent after the drain), never Sync Issues; new `CloudTransport.fetchRowsByColumn`. No Drift change.
 ### Issue #430: Print the order slip (2026-10-26, ready for review)
 - App-only (no Drift, no cloud): Print slip on accepted/fulfilled online orders (`online_orders.view`); `OnlineOrderSlip` (`lib/core/online_orders/online_order_slip.dart`) builds text + ESC/POS from `OnlineOrdersDao.slipLoad`; thermal printer, Share (text) fallback when no printer/print fails.
 ### Issue #475: Listing quality checklist + shared photo (2026-10-26, ready for review)
