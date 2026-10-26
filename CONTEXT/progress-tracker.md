@@ -409,7 +409,7 @@ changes. Details docs/data/marketplace-categories.md.
 - Self-review: standards and issue acceptance checked; foreign-business mapping,
   explicit null clearing, starter mappings, catalogue seed parity and real
   v86-to-v87 upgrade are covered. Phone/wide goldens visually inspected.
-- Required web parity: okworemmanuelc/reebaplus-web#138.
+- Required web parity: okworemmanuelc/reebaplus-web#138 (resolved in PR okworemmanuelc/reebaplus-web#170).
 - Migration0190 applied only to reebaplus-dev after the security test window.
   Public cloud parity: 1 pass / 0 skips, all46 entries. Rolled-back SQL verifies
   six anon/authenticated write denials, valid/invalid FK mappings and null
