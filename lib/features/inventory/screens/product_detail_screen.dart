@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/features/subscription/read_only_store_gate.dart';
+import 'package:reebaplus_pos/features/subscription/subscription_plan_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
@@ -932,6 +934,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       showGateDenied(context, Gates.editProductPrice);
       return;
     }
+    if (blockIfReadOnlyStore(context, ref, widget.selectedStoreId)) return;
     final product = _productData;
     if (product == null) return;
     HapticFeedback.mediumImpact();
@@ -1149,6 +1152,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       showGateDenied(context, Gates.adjustStock);
       return;
     }
+    if (blockIfReadOnlyStore(context, ref, widget.selectedStoreId)) return;
     final product = _productData;
     if (product == null) return;
     final db = ref.read(databaseProvider);
@@ -1190,6 +1194,13 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               required String notes,
               int? unitCostKobo,
             }) async {
+              // Extra stores are read-only after a downgrade (#90). Checked at
+              // save: the sheet lets the user pick any store.
+              final blocked = readOnlyStoreWriteBlock(
+                ref.read(readOnlyStoreIdsProvider),
+                store.id,
+              );
+              if (blocked != null) return blocked;
               final auth = ref.read(authProvider);
               final actorName = auth.currentUser?.name ?? 'Unknown';
               final delta = isRemove ? -qty : qty;

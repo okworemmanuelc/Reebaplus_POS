@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/features/subscription/read_only_store_gate.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
@@ -197,12 +198,19 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
               : ref.watch(currentBusinessProvider)?.phone,
           note: _store.onlineNote,
           onManage: Gates.manageOnlineStore.allows(ref)
-              ? () => Navigator.push(
+              ? () {
+                  // Store settings are read-only on an extra store (#90).
+                  if (blockIfReadOnlyStore(context, ref, widget.store.id)) {
+                    return;
+                  }
+                  Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => OnlineStoreDetailScreen(storeId: widget.store.id),
+                      builder: (_) =>
+                          OnlineStoreDetailScreen(storeId: widget.store.id),
                     ),
-                  )
+                  );
+                }
               : null,
         ),
         SizedBox(height: context.getRSize(16)),
