@@ -87,6 +87,10 @@ class Businesses extends Table {
   TextColumn get subscriptionPlan => text().nullable()();
   DateTimeColumn get trialEndsAt => dateTime().nullable()();
   DateTimeColumn get currentPeriodEnd => dateTime().nullable()();
+  // 'monthly' | 'yearly' (null on free / trial). Cloud-authoritative like the
+  // other subscription columns: omitted from the push whitelist. Mirrors
+  // businesses.billing_cycle from 0224_subscription_tiers.sql.
+  TextColumn get billingCycle => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -3135,7 +3139,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 94;
+  int get schemaVersion => 95;
 
   /// The v90 (#473) listing columns, pinned to their defaults in every older
   /// products rebuild: TableMigration copies from the CURRENT schema, so a
@@ -6829,6 +6833,22 @@ class AppDatabase extends _$AppDatabase {
           "'Mark pay-on-delivery orders paid', 'Online store')",
         );
       }
+      if (from < 95) {
+        // ── v95 — #90: mirror businesses.billing_cycle ────────────────────
+        //
+        // Mirrors supabase/migrations/0224_subscription_tiers.sql (live).
+        // Nullable, cloud-authoritative, never pushed. Guarded so a re-upgrade
+        // is idempotent.
+        final has = await customSelect(
+          "SELECT 1 FROM pragma_table_info('businesses') "
+          "WHERE name = 'billing_cycle'",
+        ).get();
+        if (has.isEmpty) {
+          await customStatement(
+            'ALTER TABLE businesses ADD COLUMN billing_cycle TEXT',
+          );
+        }
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -7003,6 +7023,70 @@ class AppDatabase extends _$AppDatabase {
         ],
       );
     }
+  }
+
+  /// The tables [withdrawUnsyncedRows] may remove rows from (#550). Each is a
+  /// row the phone wrote for a reversal the cloud REJECTED: the rows never
+  /// uploaded (they were held behind the claim and are discarded with it), so
+  /// removing them is what makes this phone agree with the cloud.
+  static const Set<String> kWithdrawableReversalTables = {
+    'stock_transactions',
+    // #551 — a Return's damage write-off adjustments (after the stock rows that
+    // reference them).
+    'stock_adjustments',
+    'payment_transactions',
+    'wallet_transactions',
+    'crate_ledger',
+    'cost_batches',
+  };
+
+  /// #550 (ADR 0032) — withdraws a rejected reversal's never-uploaded rows from
+  /// [table] by id, scoped to [businessId]. Append-only ledgers carry a
+  /// `<table>_no_delete` guard; for THIS deliberate, server-ordered withdrawal
+  /// the table's delete guards are dropped and recreated verbatim inside one
+  /// transaction, so the guard is never missing outside it. Callers must only
+  /// pass ids whose outbox rows were held and are being discarded (the cloud
+  /// never saw them — Invariant #12's sanctioned server-rejection path).
+  Future<void> withdrawUnsyncedRows(
+    String table,
+    String businessId,
+    List<String> ids,
+  ) async {
+    if (ids.isEmpty) return;
+    if (!kWithdrawableReversalTables.contains(table)) {
+      throw ArgumentError.value(table, 'table', 'not withdrawable');
+    }
+    final info = allTables.firstWhere((t) => t.actualTableName == table);
+    await transaction(() async {
+      final guards = (await customSelect(
+        "SELECT name, sql FROM sqlite_master "
+        "WHERE type = 'trigger' AND tbl_name = ?1",
+        variables: [Variable.withString(table)],
+      ).get()).where((r) {
+        final sql = r.read<String?>('sql') ?? '';
+        return RegExp(
+          r'(BEFORE|AFTER|INSTEAD\s+OF)\s+DELETE\s+ON',
+          caseSensitive: false,
+        ).hasMatch(sql);
+      }).toList();
+      for (final g in guards) {
+        await customStatement('DROP TRIGGER IF EXISTS ${g.read<String>('name')}');
+      }
+      final placeholders = List.filled(ids.length, '?').join(', ');
+      await customUpdate(
+        'DELETE FROM $table WHERE business_id = ? AND id IN ($placeholders)',
+        variables: [
+          Variable.withString(businessId),
+          for (final id in ids) Variable.withString(id),
+        ],
+        updates: {info},
+        updateKind: UpdateKind.delete,
+      );
+      for (final g in guards) {
+        final sql = g.read<String?>('sql');
+        if (sql != null && sql.isNotEmpty) await customStatement(sql);
+      }
+    });
   }
 
   /// Runs [body] with every delete-event trigger and foreign-key enforcement

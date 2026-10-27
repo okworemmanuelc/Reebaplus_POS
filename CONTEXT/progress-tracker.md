@@ -7,6 +7,10 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #550: First reversal wins, server guard (2026-10-26, ready for review)
+- Cloud 0227 (NOT deployed): cloud-only `order_reversals` (UNIQUE order_id) + `pos_claim_order_reversal` (claim + header flip; same id = replay; other claim or claim-less reversal evidence = P0001 `reversal_already_applied`, DETAIL = cloud header) + sticky-cancel trigger on `orders`. No Drift change (reuses `held_by_order_id`).
+- App: `OrdersDao.beginGuardedReversal`/`commitGuardedReversal` (the seam #551 reuses) hold all reversal rows behind the claim; drain releases on success, `undoRejectedReversal` + `alertRefundRejected` on loss. ADR 0032.
+- Deploy 0227 to production BEFORE this build (otherwise refunds wait in the outbox; nothing is lost) and before any build with the Return. pos-parity: comment on okworemmanuelc/reebaplus-web#190.
 ### Issue #438 (part): Shopper account deletion (2026-10-26, ready for review)
 - Cloud 0221 `shopper_delete_account()` (cancels New orders, erases shopper_* rows, unlinks customers/online_orders, login via account_deletion_events kind='shopper' unless it belongs to a business) + Delete account button. Terms/Privacy text and the public deletion page still open on #438.
 ### Issue #506: Drop broken legacy invite preview functions (2026-10-26, ready for review)
@@ -405,7 +409,7 @@ changes. Details docs/data/marketplace-categories.md.
 - Self-review: standards and issue acceptance checked; foreign-business mapping,
   explicit null clearing, starter mappings, catalogue seed parity and real
   v86-to-v87 upgrade are covered. Phone/wide goldens visually inspected.
-- Required web parity: okworemmanuelc/reebaplus-web#138.
+- Required web parity: okworemmanuelc/reebaplus-web#138 (resolved in PR okworemmanuelc/reebaplus-web#170).
 - Migration0190 applied only to reebaplus-dev after the security test window.
   Public cloud parity: 1 pass / 0 skips, all46 entries. Rolled-back SQL verifies
   six anon/authenticated write denials, valid/invalid FK mappings and null
@@ -7933,3 +7937,56 @@ Migration 0222 is NOT applied to live (owner confirmation pending); apply plan,
 rollback and verification in `docs/rollouts/0222-checkout-order-mobile-money-shape/`.
 Golden: Dart arm green; rpc arm not yet run (needs reebaplus-dev with 0222 applied).
 reebaplus-web #72, #80.
+
+### Pending holds only crate-bearing sales (#547, PRD #337) (2026-10-26)
+Branch `feat/547-pending-crate-only`. `OrderCommands.checkout` now decides the status:
+`pending` only if `isCrateBearingSale` (new `lib/core/crates/crate_bearing_sale.dart`;
+business is a crate type + tracks empties + a line's DB product is a tracked Bottle),
+else `completed` with `completedAt` = checkout instant and no confirmer. DB read via
+`OrdersDao.isCrateBearingCart` (business-scoped). `CrateReturnModal.show` Guard 1 uses
+the same rule (now also skips at a business that doesn't track empties). Status already
+rides both sync paths (v1 header carries status + completed_at; v2 forwards `p_status`).
+Golden fixtures untouched (Dart arm drives the DAO with explicit status). Not in this
+slice: cloud `checkout_order` status, Return of a Completed sale.
+Tests: `test/crates/crate_bearing_sale_test.dart`, `test/orders/checkout_status_test.dart`.
+### 2026-10-26 - #548 web checkout_order follows the Pending rule (PRD #337 b)
+Migration `0226_checkout_order_pending_rule.sql` re-issues `checkout_order` from
+0222 (same 9-arg signature/grants); only delta: status `pending` iff crate
+business gate + any bottle/track_empties line, else `completed` + completed_at.
+NOT applied to live. Tier-2 tests updated (compile-checked, auto-skip without env).
+Shared golden fixtures still say `pending` for non-crate sales: updated with
+slice (a) #547 (Dart side) so both arms flip together. reebaplus-web #190.
+### A cancelled sale keeps its original day (#549) (2026-10-26)
+Branch `feat/549-cancel-keeps-original-day` (PRD #337). Money reports no longer drop a
+cancelled Order by its creation day: it counts on `createdAt` and books a negative entry
+on `cancelledAt` (`saleDayStamps` in `order_status.dart`, `saleDayEntries` in
+`report_revenue.dart`). Switched: `computeTotalSalesKobo`, `reconDataFrom` (P&L loop and
+van rollup), `buildReconBuckets`, Home Total Sales + Net Profit, Profit report; the
+changed-reviewed-days sweep also files an order under its cancel day. Left alone: order
+counts, Home staff list / drill-down, staff-performance, van screens, DAO SQL aggregates,
+`refundsKobo` / `periodNetResultKobo`. Excluded as before: `rejected_by_server`, cancelled
+with no `cancelledAt`. Web parity: reebaplus-web #190.
+### Return a crate-free Completed sale (#551) (2026-10-26)
+Branch `feat/551-return-completed-sale` (PRD #337 slice e). `OrdersDao.isReturnable` /
+`returnRefusal` (Order Module query `isReturnable`) and `returnCompletedSale`
+(`OrderCommands`, gated on `Gates.refundOrder`): one transaction re-checks, runs
+`markCancelled(forceLocalReversal, damagedQtyByLine, damageReasonKey)` (now a no-op on
+an already-cancelled order) inside the guarded reversal: each line's restore layer holds
+only its SELLABLE units (fixed id `CostBatchesDao.cancelRestoreLayerId`, written even at
+0) and the damaged units are written off as `damage:<key>` at the line's recorded cost
+(`outflowValueKobo`, no FIFO draw-down) — so a Return only ADDS rows and a rejected one
+withdraws cleanly without deleting a synced layer. Audit + `sale_returned` alert after commit (best-effort). `stock_adjustments`
+added to `kWithdrawableReversalTables` so a rejected Return withdraws its damage rows.
+Orders screen: Completed cards show Refund when allowed + returnable
+(`_ReturnableCard`); `return_sale_dialog.dart` collects reason / damaged / damage
+reason. Tests `test/orders/return_completed_sale_test.dart`. Owner decision "freeze past
+costs" → migration **0228** (DEPLOYED to prod 2026-10-26): `pos_recost_product_store`
+keeps a cancelled line in the FIFO replay when its fixed-id restore layer exists, so a
+refund/Return never re-costs another sale; unrecognised (older) cancels keep 0167's rule.
+Known edge: if one upload pass splits a refund's return row from its restore layer, the
+pass's recost runs without the layer; the next push touching that pair corrects it.
+Tier-2 `pos_recost_batches_test` (2 new 0228 cases; red before deploy, green after). Web parity: reebaplus-web #190.
+
+- Part of #438: shopper_delete_account() now emails the Shopper an `account_deleted` confirmation (migration 0229; pg_net -> send-email, same as 0218 order emails; address captured before erase). Both TODO(#434) removed. Deploy 0229 only (send-email already deployed). Legal text still pending.
+
+- Part of #439: per-store "Store link" card on the online store page (`online_store_detail_screen.dart`), shown only while the store is online (same `manageOnlineStore` gate). Copy (clipboard + "Link copied") and Share (share_plus). URL built by `storeShareLink` in `lib/core/storefront/store_share_link.dart` (`https://reebaplus.com/shop/s/<storeId>`). No Drift/cloud change. Tests in `test/storefront/`.

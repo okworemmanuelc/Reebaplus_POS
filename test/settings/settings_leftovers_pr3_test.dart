@@ -75,8 +75,8 @@ void main() {
     ) async {
       await seedSubscription(
         env,
-        plan: 'local',
-        periodEnd: DateTime(2026, 4, 14),
+        plan: 'basic',
+        periodEnd: DateTime(2099, 4, 14),
       );
       await pumpSettingsPage(
         tester,
@@ -90,17 +90,17 @@ void main() {
           ),
         ],
       );
-      expect(find.text('Monthly subscription'), findsOneWidget);
+      expect(find.text('Basic plan'), findsOneWidget);
       expect(find.text('ACTIVE'), findsOneWidget);
       expect(find.text('Renews'), findsOneWidget);
-      expect(find.text('14 Apr 2026'), findsOneWidget);
+      expect(find.text('14 Apr 2099'), findsOneWidget);
       expect(find.byKey(const Key('paywall-non-android')), findsOneWidget);
       // Read-only: the cloud-owned columns are untouched.
       final b = await (env.db.select(
         env.db.businesses,
       )..where((t) => t.id.equals(env.businessId))).getSingle();
-      expect(b.currentPeriodEnd, DateTime(2026, 4, 14));
-      expect(b.subscriptionPlan, 'local');
+      expect(b.currentPeriodEnd, DateTime(2099, 4, 14));
+      expect(b.subscriptionPlan, 'basic');
       await disposeScreen(tester);
     });
 
@@ -377,7 +377,7 @@ void main() {
           await seedSubscription(
             env,
             plan: 'local',
-            periodEnd: DateTime(2026, 4, 14),
+            periodEnd: DateTime(2099, 4, 14),
           );
           await pumpSettingsPage(
             tester,

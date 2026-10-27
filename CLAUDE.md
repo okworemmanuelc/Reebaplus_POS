@@ -46,3 +46,5 @@ Single-context layout — `CONTEXT.md` + `docs/adr/` at the repo root (created l
 ### POS Parity Drift Guard
 
 Any PR that changes a database table, column, status value, or money calculation rule MUST open a `pos-parity` issue in `okworemmanuelc/reebaplus-web` (the web console shares the same Supabase database and must remain POS-faithful).
+
+reebaplus-web issues are logged in that repo's `docs/progress-tracker.md`, never in this repo's `CONTEXT/progress-tracker.md`.

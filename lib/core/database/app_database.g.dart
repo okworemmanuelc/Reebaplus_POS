@@ -204,6 +204,17 @@ class $BusinessesTable extends Businesses
         type: DriftSqlType.dateTime,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _billingCycleMeta = const VerificationMeta(
+    'billingCycle',
+  );
+  @override
+  late final GeneratedColumn<String> billingCycle = GeneratedColumn<String>(
+    'billing_cycle',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -223,6 +234,7 @@ class $BusinessesTable extends Businesses
     subscriptionPlan,
     trialEndsAt,
     currentPeriodEnd,
+    billingCycle,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -361,6 +373,15 @@ class $BusinessesTable extends Businesses
         ),
       );
     }
+    if (data.containsKey('billing_cycle')) {
+      context.handle(
+        _billingCycleMeta,
+        billingCycle.isAcceptableOrUnknown(
+          data['billing_cycle']!,
+          _billingCycleMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -438,6 +459,10 @@ class $BusinessesTable extends Businesses
         DriftSqlType.dateTime,
         data['${effectivePrefix}current_period_end'],
       ),
+      billingCycle: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}billing_cycle'],
+      ),
     );
   }
 
@@ -465,6 +490,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
   final String? subscriptionPlan;
   final DateTime? trialEndsAt;
   final DateTime? currentPeriodEnd;
+  final String? billingCycle;
   const BusinessData({
     required this.id,
     required this.name,
@@ -483,6 +509,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
     this.subscriptionPlan,
     this.trialEndsAt,
     this.currentPeriodEnd,
+    this.billingCycle,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -520,6 +547,9 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
     if (!nullToAbsent || currentPeriodEnd != null) {
       map['current_period_end'] = Variable<DateTime>(currentPeriodEnd);
     }
+    if (!nullToAbsent || billingCycle != null) {
+      map['billing_cycle'] = Variable<String>(billingCycle);
+    }
     return map;
   }
 
@@ -556,6 +586,9 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
       currentPeriodEnd: currentPeriodEnd == null && nullToAbsent
           ? const Value.absent()
           : Value(currentPeriodEnd),
+      billingCycle: billingCycle == null && nullToAbsent
+          ? const Value.absent()
+          : Value(billingCycle),
     );
   }
 
@@ -586,6 +619,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
       currentPeriodEnd: serializer.fromJson<DateTime?>(
         json['currentPeriodEnd'],
       ),
+      billingCycle: serializer.fromJson<String?>(json['billingCycle']),
     );
   }
   @override
@@ -609,6 +643,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
       'subscriptionPlan': serializer.toJson<String?>(subscriptionPlan),
       'trialEndsAt': serializer.toJson<DateTime?>(trialEndsAt),
       'currentPeriodEnd': serializer.toJson<DateTime?>(currentPeriodEnd),
+      'billingCycle': serializer.toJson<String?>(billingCycle),
     };
   }
 
@@ -630,6 +665,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
     Value<String?> subscriptionPlan = const Value.absent(),
     Value<DateTime?> trialEndsAt = const Value.absent(),
     Value<DateTime?> currentPeriodEnd = const Value.absent(),
+    Value<String?> billingCycle = const Value.absent(),
   }) => BusinessData(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -652,6 +688,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
     currentPeriodEnd: currentPeriodEnd.present
         ? currentPeriodEnd.value
         : this.currentPeriodEnd,
+    billingCycle: billingCycle.present ? billingCycle.value : this.billingCycle,
   );
   BusinessData copyWithCompanion(BusinessesCompanion data) {
     return BusinessData(
@@ -688,6 +725,9 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
       currentPeriodEnd: data.currentPeriodEnd.present
           ? data.currentPeriodEnd.value
           : this.currentPeriodEnd,
+      billingCycle: data.billingCycle.present
+          ? data.billingCycle.value
+          : this.billingCycle,
     );
   }
 
@@ -710,7 +750,8 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
           ..write('subscriptionStatus: $subscriptionStatus, ')
           ..write('subscriptionPlan: $subscriptionPlan, ')
           ..write('trialEndsAt: $trialEndsAt, ')
-          ..write('currentPeriodEnd: $currentPeriodEnd')
+          ..write('currentPeriodEnd: $currentPeriodEnd, ')
+          ..write('billingCycle: $billingCycle')
           ..write(')'))
         .toString();
   }
@@ -734,6 +775,7 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
     subscriptionPlan,
     trialEndsAt,
     currentPeriodEnd,
+    billingCycle,
   );
   @override
   bool operator ==(Object other) =>
@@ -755,7 +797,8 @@ class BusinessData extends DataClass implements Insertable<BusinessData> {
           other.subscriptionStatus == this.subscriptionStatus &&
           other.subscriptionPlan == this.subscriptionPlan &&
           other.trialEndsAt == this.trialEndsAt &&
-          other.currentPeriodEnd == this.currentPeriodEnd);
+          other.currentPeriodEnd == this.currentPeriodEnd &&
+          other.billingCycle == this.billingCycle);
 }
 
 class BusinessesCompanion extends UpdateCompanion<BusinessData> {
@@ -776,6 +819,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
   final Value<String?> subscriptionPlan;
   final Value<DateTime?> trialEndsAt;
   final Value<DateTime?> currentPeriodEnd;
+  final Value<String?> billingCycle;
   final Value<int> rowid;
   const BusinessesCompanion({
     this.id = const Value.absent(),
@@ -795,6 +839,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
     this.subscriptionPlan = const Value.absent(),
     this.trialEndsAt = const Value.absent(),
     this.currentPeriodEnd = const Value.absent(),
+    this.billingCycle = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   BusinessesCompanion.insert({
@@ -815,6 +860,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
     this.subscriptionPlan = const Value.absent(),
     this.trialEndsAt = const Value.absent(),
     this.currentPeriodEnd = const Value.absent(),
+    this.billingCycle = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : name = Value(name);
   static Insertable<BusinessData> custom({
@@ -835,6 +881,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
     Expression<String>? subscriptionPlan,
     Expression<DateTime>? trialEndsAt,
     Expression<DateTime>? currentPeriodEnd,
+    Expression<String>? billingCycle,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -855,6 +902,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
       if (subscriptionPlan != null) 'subscription_plan': subscriptionPlan,
       if (trialEndsAt != null) 'trial_ends_at': trialEndsAt,
       if (currentPeriodEnd != null) 'current_period_end': currentPeriodEnd,
+      if (billingCycle != null) 'billing_cycle': billingCycle,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -877,6 +925,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
     Value<String?>? subscriptionPlan,
     Value<DateTime?>? trialEndsAt,
     Value<DateTime?>? currentPeriodEnd,
+    Value<String?>? billingCycle,
     Value<int>? rowid,
   }) {
     return BusinessesCompanion(
@@ -897,6 +946,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
       subscriptionPlan: subscriptionPlan ?? this.subscriptionPlan,
       trialEndsAt: trialEndsAt ?? this.trialEndsAt,
       currentPeriodEnd: currentPeriodEnd ?? this.currentPeriodEnd,
+      billingCycle: billingCycle ?? this.billingCycle,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -955,6 +1005,9 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
     if (currentPeriodEnd.present) {
       map['current_period_end'] = Variable<DateTime>(currentPeriodEnd.value);
     }
+    if (billingCycle.present) {
+      map['billing_cycle'] = Variable<String>(billingCycle.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -981,6 +1034,7 @@ class BusinessesCompanion extends UpdateCompanion<BusinessData> {
           ..write('subscriptionPlan: $subscriptionPlan, ')
           ..write('trialEndsAt: $trialEndsAt, ')
           ..write('currentPeriodEnd: $currentPeriodEnd, ')
+          ..write('billingCycle: $billingCycle, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -52701,6 +52755,7 @@ typedef $$BusinessesTableCreateCompanionBuilder =
       Value<String?> subscriptionPlan,
       Value<DateTime?> trialEndsAt,
       Value<DateTime?> currentPeriodEnd,
+      Value<String?> billingCycle,
       Value<int> rowid,
     });
 typedef $$BusinessesTableUpdateCompanionBuilder =
@@ -52722,6 +52777,7 @@ typedef $$BusinessesTableUpdateCompanionBuilder =
       Value<String?> subscriptionPlan,
       Value<DateTime?> trialEndsAt,
       Value<DateTime?> currentPeriodEnd,
+      Value<String?> billingCycle,
       Value<int> rowid,
     });
 
@@ -54271,6 +54327,11 @@ class $$BusinessesTableFilterComposer
 
   ColumnFilters<DateTime> get currentPeriodEnd => $composableBuilder(
     column: $table.currentPeriodEnd,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get billingCycle => $composableBuilder(
+    column: $table.billingCycle,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -56006,6 +56067,11 @@ class $$BusinessesTableOrderingComposer
     column: $table.currentPeriodEnd,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get billingCycle => $composableBuilder(
+    column: $table.billingCycle,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$BusinessesTableAnnotationComposer
@@ -56081,6 +56147,11 @@ class $$BusinessesTableAnnotationComposer
 
   GeneratedColumn<DateTime> get currentPeriodEnd => $composableBuilder(
     column: $table.currentPeriodEnd,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get billingCycle => $composableBuilder(
+    column: $table.billingCycle,
     builder: (column) => column,
   );
 
@@ -57848,6 +57919,7 @@ class $$BusinessesTableTableManager
                 Value<String?> subscriptionPlan = const Value.absent(),
                 Value<DateTime?> trialEndsAt = const Value.absent(),
                 Value<DateTime?> currentPeriodEnd = const Value.absent(),
+                Value<String?> billingCycle = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => BusinessesCompanion(
                 id: id,
@@ -57867,6 +57939,7 @@ class $$BusinessesTableTableManager
                 subscriptionPlan: subscriptionPlan,
                 trialEndsAt: trialEndsAt,
                 currentPeriodEnd: currentPeriodEnd,
+                billingCycle: billingCycle,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -57888,6 +57961,7 @@ class $$BusinessesTableTableManager
                 Value<String?> subscriptionPlan = const Value.absent(),
                 Value<DateTime?> trialEndsAt = const Value.absent(),
                 Value<DateTime?> currentPeriodEnd = const Value.absent(),
+                Value<String?> billingCycle = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => BusinessesCompanion.insert(
                 id: id,
@@ -57907,6 +57981,7 @@ class $$BusinessesTableTableManager
                 subscriptionPlan: subscriptionPlan,
                 trialEndsAt: trialEndsAt,
                 currentPeriodEnd: currentPeriodEnd,
+                billingCycle: billingCycle,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

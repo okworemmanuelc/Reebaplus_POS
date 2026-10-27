@@ -23,6 +23,9 @@ import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
 import 'package:reebaplus_pos/features/staff/widgets/staff_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
+import 'package:reebaplus_pos/features/subscription/subscription_plan.dart';
+import 'package:reebaplus_pos/features/subscription/subscription_plan_providers.dart';
+import 'package:reebaplus_pos/features/subscription/widgets/plan_limit_widgets.dart';
 
 /// Detailed capabilities for each role slug, shown dynamically in the selector cards.
 const Map<String, List<String>> _roleCapabilities = {
@@ -151,6 +154,18 @@ class _InviteStaffScreenState extends ConsumerState<InviteStaffScreen> {
       }
     }
 
+    // Plan limit pre-check (reebaplus-web#90): active staff + pending invites.
+    final plan = ref.read(effectivePlanProvider);
+    final blocked = checkAddStaff(
+      ref.read(planLimitsProvider),
+      currentStaff: ref.read(planUsageProvider).staffSlots,
+    );
+    if (blocked != null) {
+      if (!mounted) return;
+      await showPlanLimitDialog(context, blocked, plan: plan);
+      return;
+    }
+
     setState(() => _generating = true);
     try {
       final actorIsCeo = ref.read(currentUserRoleProvider)?.slug == 'ceo';
@@ -205,6 +220,11 @@ class _InviteStaffScreenState extends ConsumerState<InviteStaffScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _generating = false);
+      final limit = planLimitKindOf(e);
+      if (limit != null) {
+        await showPlanLimitDialog(context, limit, plan: plan);
+        return;
+      }
       AppNotification.showError(context, 'Could not generate code: $e');
     }
   }

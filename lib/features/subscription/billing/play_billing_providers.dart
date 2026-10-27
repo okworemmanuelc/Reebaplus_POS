@@ -5,6 +5,7 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/features/subscription/billing/play_billing_controller.dart';
 import 'package:reebaplus_pos/features/subscription/billing/play_billing_port.dart';
+import 'package:reebaplus_pos/features/subscription/subscription_plan.dart';
 
 /// True only on the Android app, where Google Play Billing exists.
 final billingSupportedProvider = Provider<bool>(
@@ -26,5 +27,5 @@ final billingBusinessIdProvider = Provider<String?>(
 
 /// Naira fallback prices for Nigerian (NGN) businesses, dollars otherwise.
 final billingUsesNairaProvider = Provider<bool>(
-  (ref) => (ref.watch(currencyCodeProvider).valueOrNull ?? 'NGN') == 'NGN',
+  (ref) => pricesInNaira(ref.watch(currencyCodeProvider).valueOrNull),
 );

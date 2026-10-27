@@ -273,13 +273,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         : filteredOrdersWithItems;
     // #176 — the single "Total Sales" definition, shared with the Daily
     // Reconciliation and the Profit report (deposit-exclusive item lines minus
-    // discounts). `salesOrders` is already period/cashier-filtered, so only the
-    // store predicate is passed; it still excludes any cancelled order via
-    // `orderCountsAsSale`. Replaces the old Σ`totalAmountKobo` (deposit-IN, so a
-    // crate shop's headline was overstated by every deposit taken and disagreed
-    // with the other two surfaces).
+    // discounts). Replaces the old Σ`totalAmountKobo` (deposit-IN, so a crate
+    // shop's headline was overstated by every deposit taken and disagreed with
+    // the other two surfaces).
+    //
+    // #549 — money figures run over the UNFILTERED order set (cancelled orders
+    // included): a cancelled sale still counts on its creation day and books a
+    // negative entry on its cancel day, so the span is tested per ENTRY day by
+    // the helper. `salesOrders` / `filteredOrdersWithItems` stay on the old
+    // creation-day, non-cancelled basis for the order list and counts.
+    final cashierOrders = isCashier
+        ? _allOrdersWithItems.where((o) => o.order.staffId == userId)
+        : _allOrdersWithItems;
     final totalSales =
-        computeTotalSalesKobo(salesOrders, inScope: inScope) / 100.0;
+        computeTotalSalesKobo(
+          cashierOrders,
+          inSpan: (d) => _isDateInPeriod(d, _selectedPeriod),
+          inScope: inScope,
+        ) /
+        100.0;
     final totalExpenses = filteredExpenses.fold<double>(
       0,
       (sum, e) => sum + e.expense.amountKobo / 100.0,
@@ -303,8 +315,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // the cross-scope contradiction #195 exists to close — under a store lock it
     // would credit one store with the whole business's forfeits. It belongs
     // here only alongside a store-attributed forfeit source.
-    final hasBuyingPrices = filteredOrdersWithItems.any(
-      (o) => o.items.any(
+    //
+    // #549 — revenue / COGS / discounts are summed over the sale-day ENTRIES of
+    // the period (a cancelled sale: + on its creation day, − on its cancel day),
+    // so a return nets the profit once here and no refund is deducted again.
+    final profitEntries = saleDayEntries(_allOrdersWithItems)
+        .where(
+          (e) =>
+              _isDateInPeriod(e.day, _selectedPeriod) &&
+              (inScope(e.o.order.storeId) ||
+                  e.o.items.any((i) => inScope(i.item.storeId))),
+        )
+        .toList();
+    final hasBuyingPrices = profitEntries.any(
+      (e) => e.o.items.any(
         (i) => inScope(i.item.storeId) && i.item.buyingPriceKobo > 0,
       ),
     );
@@ -313,15 +337,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       double pricedRevenue = 0;
       double cogs = 0;
       double discounts = 0;
-      for (final o in filteredOrdersWithItems) {
+      for (final e in profitEntries) {
+        final o = e.o;
+        final sign = e.sign;
         for (final i in o.items) {
           if (!inScope(i.item.storeId)) continue;
           if (i.item.buyingPriceKobo > 0) {
-            pricedRevenue += i.item.quantity * i.item.unitPriceKobo / 100.0;
-            cogs += i.item.quantity * i.item.buyingPriceKobo / 100.0;
+            pricedRevenue +=
+                sign * i.item.quantity * i.item.unitPriceKobo / 100.0;
+            cogs += sign * i.item.quantity * i.item.buyingPriceKobo / 100.0;
           }
         }
-        discounts += orderDiscountKobo(o, inScope: inScope) / 100.0;
+        discounts += sign * orderDiscountKobo(o, inScope: inScope) / 100.0;
       }
       netProfit = pricedRevenue - discounts - cogs - totalExpenses;
     }

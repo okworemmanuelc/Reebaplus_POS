@@ -84,8 +84,8 @@ void main() {
           await seedSampleActivityLogs(env);
           await seedSubscription(
             env,
-            plan: 'local',
-            periodEnd: DateTime(2026, 4, 14),
+            plan: 'basic',
+            periodEnd: DateTime(2099, 4, 14),
           );
           await pumpSettingsPage(
             tester,

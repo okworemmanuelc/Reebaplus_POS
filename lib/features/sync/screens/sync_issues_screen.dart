@@ -58,6 +58,7 @@ enum _SyncErrorKind {
   missingBusinessId,
   authUserMismatch,
   duplicateKey,
+  planLimit,
   fk,
   network,
   other,
@@ -70,6 +71,7 @@ _SyncErrorKind _classify(String? error) {
   if (e.startsWith('auth_user_mismatch')) {
     return _SyncErrorKind.authUserMismatch;
   }
+  if (e.contains('plan_limit_')) return _SyncErrorKind.planLimit;
   if (e.contains('row-level security')) return _SyncErrorKind.rls;
   if (e.contains('duplicate key')) return _SyncErrorKind.duplicateKey;
   if (e.contains('violates foreign key')) return _SyncErrorKind.fk;
@@ -87,6 +89,8 @@ String _labelFor(_SyncErrorKind kind) {
       return 'Missing business_id';
     case _SyncErrorKind.authUserMismatch:
       return 'Wrong user';
+    case _SyncErrorKind.planLimit:
+      return 'Plan limit';
     case _SyncErrorKind.duplicateKey:
       return 'Duplicate key';
     case _SyncErrorKind.fk:
@@ -582,6 +586,7 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
     _SyncErrorKind.authUserMismatch => TagPillTone.danger,
     _SyncErrorKind.missingBusinessId => TagPillTone.warning,
     _SyncErrorKind.duplicateKey => TagPillTone.warning,
+    _SyncErrorKind.planLimit => TagPillTone.warning,
     _SyncErrorKind.fk => TagPillTone.warning,
     _SyncErrorKind.network => TagPillTone.neutral,
     _SyncErrorKind.other => TagPillTone.neutral,

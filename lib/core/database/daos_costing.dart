@@ -82,6 +82,20 @@ class CostBatchesDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
+  /// The id of the cost layer a **Cancel** writes to put a cancelled sale
+  /// line's units back (`markCancelled`), derived from the ORDER LINE id
+  /// (name-based UUID v5, URL namespace — see [UuidV7.deterministic]).
+  ///
+  /// The cloud recomputes the same id in `pos_recost_product_store` (migration
+  /// 0228: `extensions.uuid_generate_v5(extensions.uuid_ns_url(),
+  /// 'cancel_restore:' || order_items.id)`): a cancelled line stays in the FIFO
+  /// replay only when its restore layer exists, so a refund never re-costs
+  /// another sale and the replay can never run short. Changing this seed
+  /// breaks that match — the two MUST stay identical (pinned by
+  /// `test/costing/cancel_restore_layer_id_test.dart`).
+  static String cancelRestoreLayerId(String orderItemId) =>
+      UuidV7.deterministic('cancel_restore:$orderItemId');
+
   // ─── Batch creation on inflow (ADR 0005 "Cost Batch", issue #42) ───────────
 
   /// Push one new Cost Batch onto a (product, store) FIFO queue for a stock
@@ -109,17 +123,24 @@ class CostBatchesDao extends DatabaseAccessor<AppDatabase>
   /// [receivedAt] is the FIFO ordering key (defaults to now for opening stock;
   /// Receive Stock passes the receipt date). A non-positive [quantity] inserts
   /// nothing — no units entered, so there is no batch to cost.
+  ///
+  /// [id] overrides the fresh id — only for a layer the cloud must be able to
+  /// recognise, i.e. a Cancel's restore layer ([cancelRestoreLayerId]).
+  /// [allowEmpty] writes the layer even at 0 units (that restore layer's
+  /// presence is the cloud's marker, migration 0228).
   Future<void> recordInflowBatch({
     required String productId,
     required String storeId,
     required int quantity,
     required int costKobo,
     DateTime? receivedAt,
+    String? id,
+    bool allowEmpty = false,
   }) async {
-    if (quantity <= 0) return;
+    if (quantity < 0 || (quantity == 0 && !allowEmpty)) return;
     final now = DateTime.now();
     final row = CostBatchesCompanion.insert(
-      id: Value(UuidV7.generate()),
+      id: Value(id ?? UuidV7.generate()),
       businessId: requireBusinessId(),
       productId: productId,
       storeId: storeId,

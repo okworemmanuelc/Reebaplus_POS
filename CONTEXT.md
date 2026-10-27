@@ -89,6 +89,8 @@ The set of un-uploaded local writes awaiting push — the `sync_queue` and
 `sync_queue_orphans` tables together. Governed by Invariant #12, "the outbox is
 sacred": a local row with an unconfirmed outbox entry is inviolable — no pull,
 reconcile, restore, or wipe may destroy it before the server confirms its push.
+A reversal's rows are **held** behind its `pos_claim_order_reversal` envelope
+until the cloud accepts the claim (ADR 0032).
 _Avoid_: queue (alone — ambiguous), pending writes.
 
 **Orphan**:
@@ -152,9 +154,19 @@ not tied to the `completed` status).
 
 **Checkout**:
 The lifecycle operation that settles a sale and recognizes revenue: books wallet
-legs, deducts inventory, issues crates, writes the Order at status `pending`.
-The economic act.
+legs, deducts inventory, issues crates, writes the Order. The Order is born
+`pending` only for a **Crate-bearing sale**; every other sale is born `completed`
+(`completedAt` = the checkout instant, no confirmer). The economic act.
 _Avoid_: settle, record-sale (as user-facing verbs), "complete the sale".
+
+**Crate-bearing sale**:
+A Sale made by a business that tracks empties (`isCrateBusiness(type)` and
+`tracksEmptyCrates` on) with at least one crate-tracked bottle line (unit
+`bottle`, case-insensitive, and track empties on). Quick Sale lines never count.
+Decided at Checkout from the business and the cart's products by
+`isCrateBearingSale` (`lib/core/crates/crate_bearing_sale.dart`, §13.4 / rule #13,
+PRD #337) — the same rule the Empty-Crates sheet uses to decide whether to open.
+Only these sales wait in Pending for the empties to be counted back.
 
 **Confirm**:
 The ceremonial lifecycle operation flipping an Order `pending`→`completed`,
@@ -164,9 +176,34 @@ _Avoid_: complete (as a synonym for Checkout), finalize.
 
 **Cancel**:
 The lifecycle operation that reverses a settled sale (a.k.a. refund) — undoes
-stock, payments, and credit-balance legs. A cancelled/refunded Order is never a
-recognized Sale.
-_Avoid_: void, delete.
+stock, payments, and credit-balance legs. A cancelled Order is no longer a live
+Sale, but **reports keep it on its original day** (#549): it still counts on its
+`createdAt` day and books a NEGATIVE entry of the same amounts on its
+`cancelledAt` day, so a reviewed day never changes (`saleDayStamps` /
+`saleDayEntries`). Excluded entirely: a sale the server rejected
+(`cancellation_reason = 'rejected_by_server'`) and a legacy cancel with no
+`cancelledAt`. The refund payment row stays a cash movement on the refund day;
+profit counts the return once (via the negative entry), never again as a refund.
+**First reversal wins** (ADR 0032, #550): the cloud accepts exactly one reversal
+per Order. Each local reversal holds its rows behind one claim. A later reversal
+from another phone is rejected whole: that phone undoes its own reversal, lists
+it under Sync Issues, and alerts the CEO and Managers (`sale_refund_rejected`).
+_Avoid_: void, delete; dropping a cancelled sale from its creation day.
+
+**Return**:
+A Cancel of a `completed` Order for goods the customer brought back (#551, PRD
+#337). Only a crate-free Completed sale is returnable: no crate history on the
+order (crate lines, crate-ledger rows, crate-deposit payment or wallet legs) and
+no line that is a crate-tracked bottle by current product settings
+(`OrdersDao.isReturnable`, asked through the Order Module's query surface). Gated
+on `sales.cancel` (`Gates.refundOrder`), re-checked at the write boundary. The
+whole sale is reversed through the shared Cancel reversal; then each line's
+damaged units are written off as `damage:<key>` stock adjustments, inside the
+same guarded reversal. Money collected after Checkout (Mark as paid / Record
+Payment) stays as customer credit, never a cash refund. Writes an activity-log
+entry and a `sale_returned` warning to CEO and Managers (best-effort). Partial
+returns and Online Order handling are out of scope.
+_Avoid_: "refund" for the Completed-sale action in code; a partial return.
 
 **Cart**:
 A pre-checkout draft of a would-be Order — mutable, no revenue, no status, no
@@ -249,6 +286,9 @@ per ORDER `orderGoodsNetKobo`. The Home dashboard, Daily Reconciliation and
 Profit report all read this one helper, over the same period AND the same store
 predicate (`reconStoreFilter`), so a day has one answer at every scope (#195).
 Scoping is per ITEM LINE, with the order's own store carrying the discount.
+A cancelled Order keeps counting on its creation day and nets out as a negative
+entry on its cancel day (see **Cancel**, #549), so the span is tested per
+entry day, not per order `createdAt`.
 _Avoid_: `orders.totalAmountKobo` / `net_amount_kobo` for a "sales" figure (both
 are gross of discounts and deposit-inclusive); scoping a sales figure by the
 order header's store while another surface scopes by the line's.
@@ -329,6 +369,13 @@ consumption is derived, recomputable state, so the replay is deterministic and
 idempotent for a fixed ledger. The correction is audited with one rolled-up
 Activity Log row per sync batch ("N sales of X re-costed on sync"), never a
 silent rewrite and never a per-sale prompt.
+A **reversed sale stays in the replay** (0228, PRD #337): a cancelled line keeps
+consuming the layers it was sold from when its Cancel restore layer exists —
+that layer carries a fixed id, `CostBatchesDao.cancelRestoreLayerId(order line
+id)`, recomputed by the cloud — and the returned (sellable) units come back
+through that layer on the cancel day. So a refund or Return never re-costs any
+other sale. Cancels the cloud can't recognise (older builds, pre-#170) keep the
+old rule: dropped from the replay, so it never runs short.
 _Avoid_: server-arrival order as the FIFO key; prompting the user per corrected
 sale; treating an assignment as permanent (it is stable only until an earlier
 sale arrives).
