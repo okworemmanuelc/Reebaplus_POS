@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/utils/name_case.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
@@ -207,7 +208,7 @@ class CustomerListRow extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          name,
+                          toNameCase(name),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: context
@@ -603,7 +604,7 @@ class CustomerProfileCard extends StatelessWidget {
                       top: onEdit == null ? 0 : context.getRSize(10),
                     ),
                     child: Text(
-                      name,
+                      toNameCase(name),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: context

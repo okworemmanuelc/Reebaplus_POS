@@ -16,7 +16,7 @@ class CustomersDao extends DatabaseAccessor<AppDatabase>
   Stream<List<CustomerData>> watchAllCustomers() {
     return (select(customers)
           ..where((t) => whereBusiness(t) & t.isDeleted.not())
-          ..orderBy([(t) => OrderingTerm(expression: t.name)]))
+          ..orderBy([(t) => OrderingTerm(expression: t.name.lower())]))
         .watch();
   }
 
@@ -28,7 +28,7 @@ class CustomersDao extends DatabaseAccessor<AppDatabase>
                 t.storeId.equals(storeId) &
                 t.isDeleted.not(),
           )
-          ..orderBy([(t) => OrderingTerm(expression: t.name)]))
+          ..orderBy([(t) => OrderingTerm(expression: t.name.lower())]))
         .watch();
   }
 

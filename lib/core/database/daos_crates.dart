@@ -73,14 +73,14 @@ class CrateSizeGroupsDao extends DatabaseAccessor<AppDatabase>
   Stream<List<CrateSizeGroupData>> watchAll() {
     return (select(crateSizeGroups)
           ..where((t) => whereBusiness(t) & t.isDeleted.not())
-          ..orderBy([(t) => OrderingTerm.asc(t.name)]))
+          ..orderBy([(t) => OrderingTerm.asc(t.name.lower())]))
         .watch();
   }
 
   Future<List<CrateSizeGroupData>> getAll() {
     return (select(crateSizeGroups)
           ..where((t) => whereBusiness(t) & t.isDeleted.not())
-          ..orderBy([(t) => OrderingTerm.asc(t.name)]))
+          ..orderBy([(t) => OrderingTerm.asc(t.name.lower())]))
         .get();
   }
 }

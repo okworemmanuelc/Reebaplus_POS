@@ -85,7 +85,7 @@ class StoresDao extends DatabaseAccessor<AppDatabase>
   Stream<List<StoreData>> watchActiveStores() {
     return (select(stores)
           ..where((t) => whereBusiness(t) & t.isDeleted.not())
-          ..orderBy([(t) => OrderingTerm(expression: t.name)]))
+          ..orderBy([(t) => OrderingTerm(expression: t.name.lower())]))
         .watch();
   }
 
@@ -107,7 +107,7 @@ class StoresDao extends DatabaseAccessor<AppDatabase>
   Future<List<StoreData>> getActiveStores() {
     return (select(stores)
           ..where((t) => whereBusiness(t) & t.isDeleted.not())
-          ..orderBy([(t) => OrderingTerm(expression: t.name)]))
+          ..orderBy([(t) => OrderingTerm(expression: t.name.lower())]))
         .get();
   }
 

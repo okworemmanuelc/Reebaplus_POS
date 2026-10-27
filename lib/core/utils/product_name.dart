@@ -1,7 +1,10 @@
+import 'package:reebaplus_pos/core/utils/name_case.dart';
 import 'package:reebaplus_pos/core/utils/product_unit.dart';
 
 /// Returns the display name for a product, optionally prepending the unit
-/// and appending a size abbreviation. The unit is shown through [unitLabel],
+/// and appending a size abbreviation. The name goes through [toNameCase] so
+/// names saved before #507 show the same way as new ones. The unit is shown
+/// through [unitLabel],
 /// so in a shop that counts empty crates ([crates] =
 /// `businessTracksCrates(business)`) a stored `Bottle` reads "Bottle Crate"
 /// (#487); every other shop keeps "Bottle".
@@ -20,7 +23,8 @@ String productDisplayName(
   required bool crates,
 }) {
   final shown = unitLabel(unit, crates: crates);
-  final base = (shown != null && shown.isNotEmpty) ? '$shown $name' : name;
+  final cased = toNameCase(name);
+  final base = (shown != null && shown.isNotEmpty) ? '$shown $cased' : cased;
   if (size == null || size.isEmpty) return base;
   final abbr = size[0].toUpperCase();
   return '$base ($abbr)';

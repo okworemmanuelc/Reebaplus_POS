@@ -56,7 +56,7 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
   Stream<List<ExpenseCategoryData>> watchAllCategories() {
     return (select(expenseCategories)
           ..where((t) => whereBusiness(t) & t.isDeleted.not())
-          ..orderBy([(t) => OrderingTerm.asc(t.name)]))
+          ..orderBy([(t) => OrderingTerm.asc(t.name.lower())]))
         .watch();
   }
 

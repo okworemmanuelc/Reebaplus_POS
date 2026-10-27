@@ -100,7 +100,11 @@ class _DriverTerminalScreenState extends ConsumerState<DriverTerminalScreen> {
     final sellable = [
       for (final s in stock)
         if (prices.containsKey(s.product.id) && s.totalStock > 0) s,
-    ]..sort((a, b) => a.product.name.compareTo(b.product.name));
+    ]..sort(
+      (a, b) => a.product.name.toLowerCase().compareTo(
+        b.product.name.toLowerCase(),
+      ),
+    );
 
     final totalKobo = _units.entries.fold<int>(
       0,

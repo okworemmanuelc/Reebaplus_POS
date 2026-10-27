@@ -17,6 +17,7 @@ import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
+import 'package:reebaplus_pos/core/utils/name_case.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/services/catalogue_lookup.dart';
 import 'package:reebaplus_pos/core/utils/factory_barcode.dart';
@@ -727,7 +728,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     if (match != null) return match;
 
     final id = await db.inventoryDao.insertManufacturer(
-      ManufacturersCompanion.insert(name: name, businessId: businessId),
+      ManufacturersCompanion.insert(name: toNameCase(name), businessId: businessId),
     );
     final manufacturers = await db.inventoryDao.getAllManufacturers();
     return manufacturers.firstWhere((m) => m.id == id);
@@ -744,7 +745,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     if (match != null) return match;
 
     final id = await db.catalogDao.insertCategory(
-      CategoriesCompanion.insert(name: name, businessId: businessId),
+      CategoriesCompanion.insert(name: toNameCase(name), businessId: businessId),
     );
     final categories = await db.inventoryDao.getAllCategories();
     return categories.firstWhere((c) => c.id == id);
@@ -761,7 +762,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     if (match != null) return match;
 
     final id = await db.catalogDao.insertSupplier(
-      SuppliersCompanion.insert(name: name, businessId: businessId),
+      SuppliersCompanion.insert(name: toNameCase(name), businessId: businessId),
     );
     final suppliers = await db.catalogDao.getAllSuppliers();
     return suppliers.firstWhere((s) => s.id == id);
@@ -2150,7 +2151,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
 
   /// 1000 and over: the Preview side panel with the save buttons.
   Widget _previewPanel(bool canEditBuying) {
-    final name = _nameCtrl.text.trim();
+    final name = toNameCase(_nameCtrl.text);
     final pack = int.tryParse(_unitsPerPackCtrl.text.trim());
     final noun = priceUnitNoun(_unit, crates: _isCrateBusiness);
     final lines = _profitLines(canSeeCost: canEditBuying, suffix: ' per $noun');

@@ -48,14 +48,14 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
   Stream<List<ManufacturerData>> watchAllManufacturers() {
     return (select(manufacturers)
           ..where((t) => whereBusiness(t) & t.isDeleted.not())
-          ..orderBy([(t) => OrderingTerm(expression: t.name)]))
+          ..orderBy([(t) => OrderingTerm(expression: t.name.lower())]))
         .watch();
   }
 
   Future<List<ManufacturerData>> getAllManufacturers() {
     return (select(manufacturers)
           ..where((t) => whereBusiness(t) & t.isDeleted.not())
-          ..orderBy([(t) => OrderingTerm(expression: t.name)]))
+          ..orderBy([(t) => OrderingTerm(expression: t.name.lower())]))
         .get();
   }
 
@@ -146,7 +146,7 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     final ps =
         await (select(products)
               ..where((t) => whereBusiness(t) & t.isDeleted.not())
-              ..orderBy([(t) => OrderingTerm(expression: t.name)]))
+              ..orderBy([(t) => OrderingTerm(expression: t.name.lower())]))
             .get();
     final invQuery = select(inventory)..where((t) => whereBusiness(t));
     if (storeId != null) {
@@ -172,7 +172,7 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
   }) {
     final productsQuery = select(products)
       ..where((t) => whereBusiness(t) & t.isDeleted.not())
-      ..orderBy([(t) => OrderingTerm(expression: t.name)]);
+      ..orderBy([(t) => OrderingTerm(expression: t.name.lower())]);
     if (categoryId != null) {
       productsQuery.where((t) => t.categoryId.equals(categoryId));
     }
@@ -574,7 +574,7 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
   Stream<List<CategoryData>> watchAllCategories() {
     return (select(categories)
           ..where((t) => whereBusiness(t) & t.isDeleted.not())
-          ..orderBy([(t) => OrderingTerm(expression: t.name)]))
+          ..orderBy([(t) => OrderingTerm(expression: t.name.lower())]))
         .watch();
   }
 
@@ -584,21 +584,21 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
   Future<List<CategoryData>> getAllCategories() {
     return (select(categories)
           ..where((t) => whereBusiness(t) & t.isDeleted.not())
-          ..orderBy([(t) => OrderingTerm(expression: t.name)]))
+          ..orderBy([(t) => OrderingTerm(expression: t.name.lower())]))
         .get();
   }
 
   Stream<List<CrateSizeGroupData>> watchAllCrateSizeGroups() {
     return (select(crateSizeGroups)
           ..where((t) => whereBusiness(t) & t.isDeleted.not())
-          ..orderBy([(t) => OrderingTerm(expression: t.name)]))
+          ..orderBy([(t) => OrderingTerm(expression: t.name.lower())]))
         .watch();
   }
 
   Future<List<CrateSizeGroupData>> getAllCrateSizeGroups() {
     return (select(crateSizeGroups)
           ..where((t) => whereBusiness(t) & t.isDeleted.not())
-          ..orderBy([(t) => OrderingTerm(expression: t.name)]))
+          ..orderBy([(t) => OrderingTerm(expression: t.name.lower())]))
         .get();
   }
 
@@ -779,7 +779,11 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
         ),
       );
     }
-    out.sort((a, b) => a.product.name.compareTo(b.product.name));
+    out.sort(
+      (a, b) => a.product.name.toLowerCase().compareTo(
+        b.product.name.toLowerCase(),
+      ),
+    );
     return out;
   }
 }

@@ -190,4 +190,11 @@ void main() {
       },
     );
   });
+
+  test('productDisplayName name-cases names saved before #507', () {
+    expect(
+      productDisplayName('STAR lager 60CL', 'big', unit: 'Can', crates: false),
+      'Can Star Lager 60CL (B)',
+    );
+  });
 }

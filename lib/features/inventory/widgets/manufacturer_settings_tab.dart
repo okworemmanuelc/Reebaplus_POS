@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/utils/name_case.dart';
 import 'package:reebaplus_pos/core/crates/crate_value_change_impact.dart';
 import 'package:reebaplus_pos/core/crates/manufacturer_crate_position.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -134,7 +135,7 @@ class _ManufacturerSettingsSliversState
       return;
     }
     final mfr = widget.manufacturer;
-    final name = _nameCtrl.text.trim();
+    final name = toNameCase(_nameCtrl.text);
     final newKobo = _newValueKobo!;
     final valueChanged = newKobo != mfr.depositAmountKobo;
     if (name == mfr.name && !valueChanged) {
@@ -230,6 +231,7 @@ class _ManufacturerSettingsSliversState
                     key: const ValueKey(kManufacturerSettingsNameFieldKey),
                     controller: _nameCtrl,
                     labelText: 'Name',
+                    textCapitalization: TextCapitalization.words,
                     textInputAction: TextInputAction.next,
                     validator: _validateName,
                   ),

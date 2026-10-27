@@ -83,7 +83,7 @@ class OnlineOrdersDao extends DatabaseAccessor<AppDatabase>
                     t.isDeleted.not() &
                     t.shopperAccountId.isNull(),
               )
-              ..orderBy([(t) => OrderingTerm(expression: t.name)]))
+              ..orderBy([(t) => OrderingTerm(expression: t.name.lower())]))
             .get();
     final wantPhone = _phoneKey(phone);
     final wantName = name.trim().toLowerCase();
@@ -120,7 +120,7 @@ class OnlineOrdersDao extends DatabaseAccessor<AppDatabase>
                 t.shopperAccountId.isNull() &
                 (t.name.like(q) | t.phone.like(q)),
           )
-          ..orderBy([(t) => OrderingTerm(expression: t.name)])
+          ..orderBy([(t) => OrderingTerm(expression: t.name.lower())])
           ..limit(limit))
         .get();
   }
