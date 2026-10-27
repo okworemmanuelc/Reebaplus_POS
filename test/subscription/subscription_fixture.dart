@@ -16,7 +16,7 @@ Future<BusinessData> seedSubscriptionBusiness(
     BusinessesCompanion(
       name: const Value('Stallion Global'),
       subscriptionStatus: Value(status),
-      subscriptionPlan: const Value('nigeria'),
+      subscriptionPlan: const Value('basic'),
       trialEndsAt: Value(DateTime(2026, 9, 30)),
       currentPeriodEnd: Value(DateTime(2026, 11, 15)),
     ),

@@ -12,6 +12,8 @@ import 'package:reebaplus_pos/core/theme/app_theme.dart';
 
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
+import 'package:reebaplus_pos/features/subscription/subscription_plan.dart';
+import 'package:reebaplus_pos/features/subscription/subscription_plan_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
@@ -68,6 +70,8 @@ class SubscriptionScreen extends ConsumerWidget {
     final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     final business = ref.watch(currentBusinessProvider);
     final access = ref.watch(currentBusinessSubscriptionProvider);
+    final plan = ref.watch(effectivePlanProvider);
+    final nigeria = pricesInNaira(ref.watch(currencyCodeProvider).valueOrNull);
 
     if (business == null) {
       return SettingsCard(
@@ -89,7 +93,7 @@ class SubscriptionScreen extends ConsumerWidget {
             children: [
               Expanded(
                 child: Text(
-                  _planTitle(business.subscriptionPlan),
+                  _planTitle(plan),
                   style: context
                       .extraBoldStyle(18)
                       .copyWith(color: t.colorScheme.onSurface),
@@ -101,7 +105,7 @@ class SubscriptionScreen extends ConsumerWidget {
           ),
           SizedBox(height: context.getRSize(6)),
           Text(
-            _priceLine(business.subscriptionPlan),
+            _priceLine(plan, nigeria),
             style: context.regularStyle(14).copyWith(color: muted),
           ),
           Divider(height: context.getRSize(28), color: t.dividerColor),
@@ -127,12 +131,11 @@ class SubscriptionScreen extends ConsumerWidget {
         SubscriptionAccess.grace => ('—', TagPillTone.warning),
       };
 
-  String _planTitle(String? plan) => 'Monthly subscription';
+  String _planTitle(String plan) => '${planLabel(plan)} plan';
 
-  /// Fixed subscription price (§32) — literal, not a POS amount. ₦5,000/mo for
-  /// the local plan, $10/mo for international; default to local.
-  String _priceLine(String? plan) =>
-      plan == 'international' ? '\$10 per month' : '₦5,000 per month';
+  /// Plan price (naira for Nigeria, USD elsewhere) plus what the plan includes.
+  String _priceLine(String plan, bool nigeria) =>
+      '${planPriceLine(plan, nigeria: nigeria)}  ·  ${planSummary(plan)}';
 
   String _periodLabel(SubscriptionAccess access) =>
       access == SubscriptionAccess.active ? 'Renews' : 'Trial ends';

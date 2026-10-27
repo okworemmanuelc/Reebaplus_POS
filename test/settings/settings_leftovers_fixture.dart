@@ -193,6 +193,9 @@ Future<void> seedSubscription(
   )..where((t) => t.id.equals(env.businessId))).write(
     BusinessesCompanion(
       subscriptionPlan: Value(plan),
+      subscriptionStatus: periodEnd != null
+          ? const Value('active')
+          : const Value.absent(),
       currentPeriodEnd: Value(periodEnd),
       trialEndsAt: Value(trialEnds),
     ),

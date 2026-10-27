@@ -193,18 +193,19 @@ void main() {
         find.textContaining('Stallion Global is now on the'),
         findsOneWidget,
       );
-      expect(find.text('₦5,000 per month'), findsOneWidget);
+      expect(find.text('₦6,500 per month'), findsOneWidget);
       expect(find.text('Renews 15 Nov 2026'), findsOneWidget);
       expect(find.text('Continue'), findsOneWidget);
       await disposeScreen(tester);
     });
 
-    testWidgets('international plan shows the dollar price', (tester) async {
-      final intl = business.copyWith(
-        subscriptionPlan: const Value('international'),
-      );
+    testWidgets('premium plan outside Nigeria shows the dollar price', (
+      tester,
+    ) async {
+      final intl = business.copyWith(subscriptionPlan: const Value('premium'));
+      await env.db.settingsDao.set('default_currency', 'USD');
       await pump(tester, ThankYouSubscriptionScreen(business: intl));
-      expect(find.text('\$10 per month'), findsOneWidget);
+      expect(find.text('\$20 per month'), findsOneWidget);
       await disposeScreen(tester);
     });
 

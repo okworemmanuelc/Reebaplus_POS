@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/features/subscription/subscription_plan.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
@@ -96,9 +98,10 @@ class _ThankYouSubscriptionScreenState
   }
 
   /// Fixed subscription price (§32) — mirrors SubscriptionScreen.
-  String get _priceLine => widget.business.subscriptionPlan == 'international'
-      ? '\$10 per month'
-      : '₦5,000 per month';
+  String get _priceLine => planPriceLine(
+    widget.business.subscriptionPlan,
+    nigeria: pricesInNaira(ref.watch(currencyCodeProvider).valueOrNull),
+  );
 
   Future<void> _onContinue() async {
     if (_continuing) return;
