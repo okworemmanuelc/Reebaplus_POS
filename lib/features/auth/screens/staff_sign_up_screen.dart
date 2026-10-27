@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:reebaplus_pos/features/auth/staff_redeem_failure_message.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/data/countries.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -795,6 +796,22 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
         return;
       }
 
+      // #90: the plan's staff cap is full (server trigger plan_limit_staff).
+      // Friendly upgrade message; no hydrate fallback (nothing was created).
+      final planMsg = staffRedeemPlanLimitMessage(e);
+      if (planMsg != null) {
+        if (mounted) {
+          setState(() {
+            _committing = false;
+            _pin = '';
+            _firstPin = '';
+            _pinError = planMsg;
+            _step = 6;
+          });
+        }
+        return;
+      }
+
       // Fall back to cloud hydrate exactly like completeOnboarding: the RPC
       // is idempotent, so on a retry the canonical rows are already cloud-side.
       try {
@@ -813,6 +830,19 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
         }
       } catch (e2, stack2) {
         debugPrint('[StaffSignUp] cloud-hydrate fallback FAILED: $e2\n$stack2');
+        // The hydrate path can also surface the cap (e.g. a queued membership
+        // upsert refused by the server).
+        final hydrateMsg = staffRedeemPlanLimitMessage(e2);
+        if (hydrateMsg != null && mounted) {
+          setState(() {
+            _committing = false;
+            _pin = '';
+            _firstPin = '';
+            _pinError = hydrateMsg;
+            _step = 6;
+          });
+          return;
+        }
       }
       if (mounted) {
         setState(() {

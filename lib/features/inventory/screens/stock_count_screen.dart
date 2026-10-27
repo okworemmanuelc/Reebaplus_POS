@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/features/subscription/read_only_store_gate.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -377,6 +378,8 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
   }
 
   Future<void> _saveCount() async {
+    // Extra stores are read-only after a downgrade (#90): no stock counts.
+    if (blockIfReadOnlyStore(context, ref, _selectedStoreId)) return;
     setState(() => _saving = true);
 
     final db = ref.read(databaseProvider);
