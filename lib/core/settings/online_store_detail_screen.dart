@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'package:reebaplus_pos/core/data/area_selection.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -10,6 +11,7 @@ import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/result.dart';
 import 'package:reebaplus_pos/core/services/store_online_service.dart';
+import 'package:reebaplus_pos/core/storefront/store_share_link.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
@@ -197,6 +199,10 @@ class _OnlineStoreDetailScreenState extends ConsumerState<OnlineStoreDetailScree
                     success: v ? 'Online ordering is on.' : 'Online ordering is off.',
                   ),
                 ),
+                if (store.onlineOrderingEnabled) ...[
+                  gap,
+                  _StoreLinkCard(link: storeShareLink(store.id)),
+                ],
                 gap,
                 const SectionHeader(title: 'Store area'),
                 SizedBox(height: context.getRSize(8)),
@@ -299,6 +305,68 @@ class _OnlineStoreDetailScreenState extends ConsumerState<OnlineStoreDetailScree
           bottom: context.getRSize(24) + context.deviceBottomPadding,
         ),
       ],
+    );
+  }
+}
+
+/// The store's public shop link with Copy and Share (#439). Shown only
+/// while the store is online.
+class _StoreLinkCard extends StatelessWidget {
+  const _StoreLinkCard({required this.link});
+
+  final String link;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('online-store-link'),
+      width: double.infinity,
+      padding: EdgeInsets.all(context.getRSize(16)),
+      decoration: AppDecorations.card(context),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Store link', style: context.boldStyle(15)),
+          SizedBox(height: context.getRSize(4)),
+          Text(
+            'Share this link so shoppers can find your shop.',
+            style: context.regularStyle(13),
+          ),
+          SizedBox(height: context.getRSize(8)),
+          SelectableText(link, style: context.regularStyle(13)),
+          SizedBox(height: context.getRSize(12)),
+          Row(
+            children: [
+              Expanded(
+                child: AppButton(
+                  key: const Key('online-store-link-copy'),
+                  text: 'Copy',
+                  icon: AppIcons.copy,
+                  variant: AppButtonVariant.outline,
+                  height: kMinInteractiveDimension,
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: link));
+                    if (context.mounted) {
+                      AppNotification.showSuccess(context, 'Link copied');
+                    }
+                  },
+                ),
+              ),
+              SizedBox(width: context.getRSize(12)),
+              Expanded(
+                child: AppButton(
+                  key: const Key('online-store-link-share'),
+                  text: 'Share',
+                  icon: AppIcons.share,
+                  variant: AppButtonVariant.outline,
+                  height: kMinInteractiveDimension,
+                  onPressed: () => Share.share(link),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
