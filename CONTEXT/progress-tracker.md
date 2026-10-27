@@ -7987,3 +7987,4 @@ Known edge: if one upload pass splits a refund's return row from its restore lay
 pass's recost runs without the layer; the next push touching that pair corrects it.
 Tier-2 `pos_recost_batches_test` (2 new 0228 cases; red before deploy, green after). Web parity: reebaplus-web #190.
 
+- Part of #438: shopper_delete_account() now emails the Shopper an `account_deleted` confirmation (migration 0229; pg_net -> send-email, same as 0218 order emails; address captured before erase). Both TODO(#434) removed. Deploy 0229 only (send-email already deployed). Legal text still pending.

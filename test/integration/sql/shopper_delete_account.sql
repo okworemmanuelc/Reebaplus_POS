@@ -1,4 +1,4 @@
--- #438 tier-2 SQL companion (reebaplus-dev only, after 0221). WRITTEN, NOT RUN
+-- #438 tier-2 SQL companion (reebaplus-dev only, after 0221 + 0229). WRITTEN, NOT RUN
 -- by the agent. One transaction, rolled back.
 --   psql "$DEV_DB_URL" -v ON_ERROR_STOP=1 -f test/integration/sql/shopper_delete_account.sql
 -- Asserts shopper_delete_account():
@@ -9,6 +9,10 @@
 --   * a pure Shopper gets a 'shopper' account_deletion_events row;
 --   * a business member who also shops keeps users + user_businesses + login
 --     (no deletion event), only their shopper data goes;
+--   * 0229: the account_deleted email address is captured before the erase
+--     (event owner_email is the login email) and the pg_net send, with Vault
+--     unset here, is swallowed so the RPC still succeeds; the email helper is
+--     service_role only;
 --   * another Shopper is untouched; signed out cannot call it.
 BEGIN;
 
@@ -142,6 +146,15 @@ BEGIN
                   WHERE owner_auth_user_id = v_s AND kind = 'shopper'
                     AND business_id IS NULL) THEN
     RAISE EXCEPTION 'a shopper deletion event must be recorded for the reconcile job';
+  END IF;
+  -- 0229: the email address was read before the erase.
+  IF (SELECT owner_email FROM public.account_deletion_events
+       WHERE owner_auth_user_id = v_s) IS DISTINCT FROM v_s::text || '@example.invalid' THEN
+    RAISE EXCEPTION 'the Shopper email must be captured before deletion';
+  END IF;
+  IF has_function_privilege('authenticated',
+       'public._notify_shopper_account_deleted(text,text)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'the email helper must not be callable by clients';
   END IF;
   -- Either the in-DB delete worked or the event is pending for the job.
   IF EXISTS (SELECT 1 FROM auth.users WHERE id = v_s)

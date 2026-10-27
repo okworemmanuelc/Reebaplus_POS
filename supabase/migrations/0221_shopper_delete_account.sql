@@ -32,8 +32,7 @@
 -- listing_reports (0214) keep reporter_auth_id: moderation records, no
 -- personal details, no FK.
 --
--- TODO(#434): send the `account_deleted` email from `send-email` once #434's
--- template is merged (it exists only on that branch today).
+-- The account_deleted email is sent from this RPC by 0229.
 --
 -- DEPLOY: after 0205, 0206, 0208, 0209, 0200 and 0112/0125. Additive. Never
 -- together with 0193.
