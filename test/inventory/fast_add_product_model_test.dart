@@ -373,4 +373,15 @@ void main() {
       );
     });
   });
+
+  group('name case (#507)', () {
+    test('the saved product name is name-cased, sizes kept as typed', () {
+      final result = resolveFastAdd(
+        input(name: '  STAR   lager 60CL ', hasManufacturer: true),
+        ctx(tracksCrates: true),
+      );
+      expect(result, isA<FastAddIntent>());
+      expect((result as FastAddIntent).name, 'Star Lager 60CL');
+    });
+  });
 }

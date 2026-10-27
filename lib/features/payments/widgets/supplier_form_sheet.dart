@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/core/utils/name_case.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -126,7 +127,7 @@ class _SupplierFormSheetState extends ConsumerState<SupplierFormSheet> {
       showGateDenied(context, Gates.manageSuppliers);
       return;
     }
-    final supplierName = _nameCtrl.text.trim();
+    final supplierName = toNameCase(_nameCtrl.text);
     final confirmed = await _confirmSaveSupplier(supplierName);
     if (!confirmed || !mounted) return;
 
@@ -137,7 +138,7 @@ class _SupplierFormSheetState extends ConsumerState<SupplierFormSheet> {
         await db.catalogDao.updateSupplier(
           SuppliersCompanion(
             id: Value(widget.existing!.id),
-            name: Value(_nameCtrl.text.trim()),
+            name: Value(supplierName),
             phone: Value(_orNull(_phoneCtrl.text)),
             email: Value(_orNull(_emailCtrl.text)),
             address: Value(_orNull(_addressCtrl.text)),
@@ -149,7 +150,7 @@ class _SupplierFormSheetState extends ConsumerState<SupplierFormSheet> {
         );
         await db.activityLogDao.logActivity(
           action: 'supplier.edit',
-          description: 'Edited supplier ${_nameCtrl.text.trim()}',
+          description: 'Edited supplier $supplierName',
           staffId: ref.read(authProvider).currentUser?.id,
           entityType: 'supplier',
           entityId: widget.existing!.id,
@@ -173,7 +174,7 @@ class _SupplierFormSheetState extends ConsumerState<SupplierFormSheet> {
         final id = await db.catalogDao.insertSupplier(
           SuppliersCompanion.insert(
             businessId: businessId,
-            name: _nameCtrl.text.trim(),
+            name: supplierName,
             phone: Value(_orNull(_phoneCtrl.text)),
             email: Value(_orNull(_emailCtrl.text)),
             address: Value(_orNull(_addressCtrl.text)),
@@ -185,7 +186,7 @@ class _SupplierFormSheetState extends ConsumerState<SupplierFormSheet> {
         );
         await db.activityLogDao.logActivity(
           action: 'supplier.add',
-          description: 'Added supplier ${_nameCtrl.text.trim()}',
+          description: 'Added supplier $supplierName',
           staffId: ref.read(authProvider).currentUser?.id,
           entityType: 'supplier',
           entityId: id,
@@ -211,6 +212,7 @@ class _SupplierFormSheetState extends ConsumerState<SupplierFormSheet> {
       AppInput(
         labelText: 'Supplier Name',
         controller: _nameCtrl,
+        textCapitalization: TextCapitalization.words,
         hintText: 'e.g. SABMiller Nigeria',
         validator: (v) =>
             (v == null || v.trim().isEmpty) ? 'This field is required' : null,

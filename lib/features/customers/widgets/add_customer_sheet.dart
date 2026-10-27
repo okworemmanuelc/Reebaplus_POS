@@ -5,6 +5,7 @@ import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
+import 'package:reebaplus_pos/core/utils/name_case.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -141,6 +142,7 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
                     AppInput(
                       labelText: 'Customer Name',
                       controller: _nameCtrl,
+                      textCapitalization: TextCapitalization.words,
                       hintText: 'e.g. John Doe',
                       validator: (v) => (v == null || v.trim().isEmpty)
                           ? 'This field is required'
@@ -226,7 +228,7 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
 
                           final newCustomer = Customer(
                             id: '', // Database will generate this
-                            name: _nameCtrl.text.trim(),
+                            name: toNameCase(_nameCtrl.text),
                             addressText: _addressCtrl.text.trim(),
                             googleMapsLocation: '',
                             phone: _phoneCtrl.text.trim().isEmpty

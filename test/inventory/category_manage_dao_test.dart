@@ -231,4 +231,23 @@ void main() {
     expect(ids, contains(water));
     expect(ids, isNot(contains(sodas)));
   });
+
+  // ─── Name case (#507) ────────────────────────────────────────────────────
+
+  test('findByName matches a product whatever the case', () async {
+    await newProduct(name: 'Star Lager', categoryId: null);
+    expect((await db.catalogDao.findByName('STAR LAGER'))?.name, 'Star Lager');
+    expect((await db.catalogDao.findByName(' star lager '))?.name, 'Star Lager');
+    expect(await db.catalogDao.findByName('Star'), isNull);
+  });
+
+  test('categories sort ignoring case', () async {
+    await newCategory('beer');
+    await newCategory('Wine');
+    await newCategory('Apple Juice');
+    final names = (await db.inventoryDao.getAllCategories())
+        .map((c) => c.name)
+        .toList();
+    expect(names, ['Apple Juice', 'beer', 'Wine']);
+  });
 }

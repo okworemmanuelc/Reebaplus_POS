@@ -13,6 +13,7 @@
 /// scroll to and point at.
 library;
 
+import 'package:reebaplus_pos/core/utils/name_case.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 
 /// The business context the Fast-Add model needs, decoupled from widgets and
@@ -220,7 +221,7 @@ final class FastAddIntent extends FastAddResult {
 /// names itself. A multi-store business requires a store selection; a
 /// single-store business resolves its one store silently.
 FastAddResult resolveFastAdd(FastAddInput input, FastAddContext context) {
-  final name = input.name.trim();
+  final name = toNameCase(input.name);
   if (name.isEmpty) {
     return const FastAddInvalid(
       field: FastAddField.name,

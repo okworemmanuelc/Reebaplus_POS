@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
+import 'package:reebaplus_pos/core/utils/name_case.dart';
 import 'package:reebaplus_pos/core/utils/product_name.dart';
 import 'package:reebaplus_pos/core/utils/stock_calculator.dart';
 
@@ -200,7 +201,7 @@ class ReceiptWidget extends StatelessWidget {
           ],
           if (businessName != null && businessName!.trim().isNotEmpty)
             Text(
-              businessName!.trim(),
+              toNameCase(businessName!),
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: context.getRFontSize(20),
@@ -241,7 +242,7 @@ class ReceiptWidget extends StatelessWidget {
               alignment: Alignment.centerLeft,
               child: Text(
                 [
-                  customerName!,
+                  toNameCase(customerName!),
                   if (customerAddress != null &&
                       customerAddress!.isNotEmpty &&
                       customerAddress != 'N/A')

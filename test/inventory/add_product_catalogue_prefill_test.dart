@@ -587,7 +587,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final saved = await db.catalogDao.findProductByBarcode(_gtin);
-      expect(saved?.name, 'Saved early');
+      expect(saved?.name, 'Saved Early'); // name-cased on save (#507)
       expect(images.saved, isEmpty);
 
       // The lookup still answers later; the screen is gone, nothing breaks.

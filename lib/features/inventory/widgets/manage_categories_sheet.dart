@@ -8,6 +8,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/core/utils/name_case.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
@@ -244,6 +245,7 @@ Future<void> _rename(
               controller: controller,
               labelText: 'Category name',
               autofocus: true,
+              textCapitalization: TextCapitalization.words,
               onChanged: (_) {
                 if (errorText != null) setLocal(() => errorText = null);
               },
@@ -276,7 +278,7 @@ Future<void> _rename(
             variant: AppButtonVariant.primary,
             size: AppButtonSize.small,
             onPressed: () async {
-              final name = controller.text.trim();
+              final name = toNameCase(controller.text);
               if (name.isEmpty) {
                 setLocal(() => errorText = 'Enter a name.');
                 return;

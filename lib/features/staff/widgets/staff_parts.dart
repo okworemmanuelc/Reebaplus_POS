@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'package:reebaplus_pos/core/utils/name_case.dart';
 import 'package:reebaplus_pos/core/settings/settings_screen.dart'
     show kSettingsMaxContentWidth;
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
@@ -310,7 +311,7 @@ class StaffListRow extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          name,
+                          toNameCase(name),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: context
@@ -560,7 +561,7 @@ class StaffHeaderCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    name,
+                    toNameCase(name),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: context

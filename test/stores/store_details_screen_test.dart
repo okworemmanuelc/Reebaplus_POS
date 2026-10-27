@@ -300,7 +300,7 @@ void main() {
       await tester.tap(
         find.descendant(
           of: find.byKey(StoresKeys.card(env.storeId)),
-          matching: find.text('Abuja HQ'),
+          matching: find.text('Abuja Hq'), // card name-cases (#507)
         ),
       );
       await tester.pumpAndSettle();
@@ -320,7 +320,7 @@ void main() {
       await tester.tap(
         find.descendant(
           of: find.byKey(StoresKeys.card(env.storeId)),
-          matching: find.text('Abuja HQ'),
+          matching: find.text('Abuja Hq'), // card name-cases (#507)
         ),
       );
       await tester.pumpAndSettle();

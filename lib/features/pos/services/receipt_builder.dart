@@ -4,6 +4,7 @@ import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:image/image.dart' as img;
 
 import 'package:reebaplus_pos/core/utils/number_format.dart'; // assuming fmtNumber is exported here
+import 'package:reebaplus_pos/core/utils/name_case.dart';
 import 'package:reebaplus_pos/core/utils/product_name.dart';
 import 'package:reebaplus_pos/core/utils/stock_calculator.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
@@ -118,7 +119,7 @@ class ThermalReceiptService {
     }
     if (businessName != null && businessName.trim().isNotEmpty) {
       bytes += generator.text(
-        businessName.trim(),
+        toNameCase(businessName),
         styles: const PosStyles(
           align: PosAlign.center,
           height: PosTextSize.size2,
@@ -144,7 +145,7 @@ class ThermalReceiptService {
         customerName.isNotEmpty &&
         customerName.toLowerCase() != 'walk-in customer') {
       bytes += generator.text(
-        customerName,
+        toNameCase(customerName),
         styles: const PosStyles(bold: true),
       );
       if (customerAddress != null &&

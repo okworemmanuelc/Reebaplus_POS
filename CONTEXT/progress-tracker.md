@@ -424,6 +424,13 @@ Branch `feat/493-one-price-shops`, worktree `../drinkPosApp-wt-493`, PR #510.
 - **UI when ON:** wholesale boxes, the POS tier dropdown, customer Price Tier pickers and tier pills are hidden; Product Details and the receive cart show one "Price".
 - **Deploy order:** push 0197 BEFORE shipping a v86 app (the app pushes the column on every businesses upsert). Parity: reebaplus-web#142.
 
+### #507 PR 2: Name case everywhere else (2026-10-27)
+Branch `feat/507-name-case-rest`, worktree `../drinkPosApp-wt-507`.
+- **Save time:** product name via `resolveFastAdd` (Add, Edit and barcode-filled names); categories, brands and suppliers created from Add Product; category rename; Add Manufacturer + manufacturer settings; customer add/edit; supplier form. Name boxes get `TextCapitalization.words`. Invite has no name box (the name comes from staff sign-up, done in PR 1). Quick sale left alone (one-off item, not saved).
+- **Old names on screen:** `productDisplayName` (so every product line and receipt line), receipt business + customer name (`ReceiptWidget`, `ReceiptBuilder`), customer/supplier/staff list rows + profile/header cards, store cards.
+- **Matching/sorting:** `findByName` (product duplicate check) now ignores case; DAO name sorts use `lower(name)`; staff/van/stock Dart sorts ignore case. Category/manufacturer/supplier get-or-create already matched case-insensitively.
+- No schema or money change. Web parity issue filed in `reebaplus-web`.
+
 ### #507 PR 1: Name case helper and save-time casing in sign-up, profile, business info, stores (2026-10-24)
 Branch `feat/507-name-case`, worktree `../drinkPosApp-wt-507-1`.
 - **Helper:** Created `lib/core/utils/name_case.dart` with `toNameCase(String input)`.

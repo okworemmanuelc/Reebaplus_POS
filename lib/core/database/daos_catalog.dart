@@ -10,14 +10,14 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
   Stream<List<SupplierData>> watchAllSupplierDatas() {
     return (select(suppliers)
           ..where((t) => whereBusiness(t) & t.isDeleted.not())
-          ..orderBy([(t) => OrderingTerm(expression: t.name)]))
+          ..orderBy([(t) => OrderingTerm(expression: t.name.lower())]))
         .watch();
   }
 
   Future<List<SupplierData>> getAllSuppliers() {
     return (select(suppliers)
           ..where((t) => whereBusiness(t) & t.isDeleted.not())
-          ..orderBy([(t) => OrderingTerm(expression: t.name)]))
+          ..orderBy([(t) => OrderingTerm(expression: t.name.lower())]))
         .get();
   }
 
@@ -428,7 +428,7 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
   Future<List<ManufacturerData>> getAllManufacturers() {
     return (select(manufacturers)
           ..where((t) => whereBusiness(t) & t.isDeleted.not())
-          ..orderBy([(t) => OrderingTerm(expression: t.name)]))
+          ..orderBy([(t) => OrderingTerm(expression: t.name.lower())]))
         .get();
   }
 
@@ -438,7 +438,7 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
         (t) =>
             whereBusiness(t) & t.isDeleted.not() & t.isAvailable.equals(true),
       )
-      ..orderBy([(t) => OrderingTerm(expression: t.name)]);
+      ..orderBy([(t) => OrderingTerm(expression: t.name.lower())]);
     if (categoryId != null) {
       query.where((t) => t.categoryId.equals(categoryId));
     }
@@ -549,9 +549,14 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<ProductData?> findByName(String name) {
+    // Case-insensitive (#507): "STAR LAGER" and "Star Lager" are one product.
+    final target = name.trim().toLowerCase();
     return (select(products)
           ..where(
-            (t) => t.name.equals(name) & whereBusiness(t) & t.isDeleted.not(),
+            (t) =>
+                t.name.trim().lower().equals(target) &
+                whereBusiness(t) &
+                t.isDeleted.not(),
           )
           ..limit(1))
         .getSingleOrNull();
@@ -592,7 +597,7 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
                 t.isDeleted.not(),
           )
           ..orderBy([
-            (t) => OrderingTerm.asc(t.name),
+            (t) => OrderingTerm.asc(t.name.lower()),
             (t) => OrderingTerm.asc(t.id),
           ]))
         .get();
@@ -828,7 +833,7 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     final stmt = select(products)
       ..where((t) => whereBusiness(t) & t.isDeleted.not())
       ..orderBy([
-        (t) => OrderingTerm.asc(t.name),
+        (t) => OrderingTerm.asc(t.name.lower()),
         (t) => OrderingTerm.asc(t.id),
       ])
       ..limit(limit);

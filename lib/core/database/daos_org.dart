@@ -228,7 +228,7 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
             userBusinesses.businessId.equals(businessId) &
                 userBusinesses.status.equals('active'),
           )
-          ..orderBy([OrderingTerm.asc(users.name)]);
+          ..orderBy([OrderingTerm.asc(users.name.lower())]);
     return query.watch().map(
       (rows) => rows
           .map(

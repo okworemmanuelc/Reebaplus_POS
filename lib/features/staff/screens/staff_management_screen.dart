@@ -286,7 +286,9 @@ class _StaffTabState extends ConsumerState<_StaffTab> {
     // alphabetically by name within each role (master plan §9.2).
     int byRoleThenName(_StaffRow a, _StaffRow b) {
       final r = roleRank(a.role?.slug).compareTo(roleRank(b.role?.slug));
-      return r != 0 ? r : a.user.name.compareTo(b.user.name);
+      return r != 0
+          ? r
+          : a.user.name.toLowerCase().compareTo(b.user.name.toLowerCase());
     }
 
     final active = rows.where((r) => r.membership.status == 'active').toList()

@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/utils/name_case.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -75,7 +76,7 @@ class _AddManufacturerSheetState extends ConsumerState<AddManufacturerSheet> {
       showGateDenied(context, Gates.addManufacturer);
       return;
     }
-    final name = _nameCtrl.text.trim();
+    final name = toNameCase(_nameCtrl.text);
     final user = ref.read(authProvider).currentUser;
     final businessId = user?.businessId;
     if (businessId == null) return;
@@ -148,6 +149,7 @@ class _AddManufacturerSheetState extends ConsumerState<AddManufacturerSheet> {
             AppInput(
               controller: _nameCtrl,
               labelText: 'Name',
+              textCapitalization: TextCapitalization.words,
               hintText: 'e.g. Nigerian Breweries',
               textInputAction: TextInputAction.next,
               validator: _validateName,

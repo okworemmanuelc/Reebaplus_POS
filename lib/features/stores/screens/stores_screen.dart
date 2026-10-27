@@ -665,7 +665,7 @@ class _StoreCardState extends ConsumerState<_StoreCard> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            widget.store.name,
+                            toNameCase(widget.store.name),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: context
