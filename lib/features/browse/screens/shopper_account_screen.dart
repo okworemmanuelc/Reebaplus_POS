@@ -120,8 +120,7 @@ class ShopperAccountScreen extends ConsumerWidget {
       );
       return;
     }
-    // TODO(#434): the account_deleted email is sent once #434's send-email
-    // template is merged.
+    // The account_deleted email is sent server-side by the RPC (0229).
     await ref.read(shopperCartProvider.notifier).clear();
     await ref.read(shopperAgeConfirmationProvider.notifier).forget();
     final session = ref.read(shopperSessionProvider.notifier);
