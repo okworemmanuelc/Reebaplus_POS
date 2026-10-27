@@ -17,6 +17,7 @@ import 'package:reebaplus_pos/core/settings/delete_business_screen.dart';
 import 'package:reebaplus_pos/core/settings/security_settings_screen.dart';
 import 'package:reebaplus_pos/core/settings/subscription_screen.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/features/subscription/billing/play_billing_providers.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
 import 'package:reebaplus_pos/shared/widgets/activity_log_screen.dart';
 
@@ -100,6 +101,7 @@ void main() {
               'activity_logs.view',
             },
             overrides: [
+              billingSupportedProvider.overrideWithValue(false),
               currentBusinessSubscriptionProvider.overrideWithValue(
                 SubscriptionAccess.active,
               ),

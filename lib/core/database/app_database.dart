@@ -87,6 +87,10 @@ class Businesses extends Table {
   TextColumn get subscriptionPlan => text().nullable()();
   DateTimeColumn get trialEndsAt => dateTime().nullable()();
   DateTimeColumn get currentPeriodEnd => dateTime().nullable()();
+  // 'monthly' | 'yearly' (null on free / trial). Cloud-authoritative like the
+  // other subscription columns: omitted from the push whitelist. Mirrors
+  // businesses.billing_cycle from 0224_subscription_tiers.sql.
+  TextColumn get billingCycle => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -3135,7 +3139,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 94;
+  int get schemaVersion => 95;
 
   /// The v90 (#473) listing columns, pinned to their defaults in every older
   /// products rebuild: TableMigration copies from the CURRENT schema, so a
@@ -6828,6 +6832,22 @@ class AppDatabase extends _$AppDatabase {
           "('orders.pay_on_delivery.mark_paid', "
           "'Mark pay-on-delivery orders paid', 'Online store')",
         );
+      }
+      if (from < 95) {
+        // ── v95 — #90: mirror businesses.billing_cycle ────────────────────
+        //
+        // Mirrors supabase/migrations/0224_subscription_tiers.sql (live).
+        // Nullable, cloud-authoritative, never pushed. Guarded so a re-upgrade
+        // is idempotent.
+        final has = await customSelect(
+          "SELECT 1 FROM pragma_table_info('businesses') "
+          "WHERE name = 'billing_cycle'",
+        ).get();
+        if (has.isEmpty) {
+          await customStatement(
+            'ALTER TABLE businesses ADD COLUMN billing_cycle TEXT',
+          );
+        }
       }
     },
     beforeOpen: (details) async {

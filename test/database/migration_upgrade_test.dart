@@ -4400,4 +4400,18 @@ void main() {
       db = await openAndInit(); // idempotent re-upgrade
     } finally { await db.close(); }
   });
+
+  test('v94 to v95 adds businesses.billing_cycle (#90)', () async {
+    var db = await openAndInit();
+    await db.customStatement('ALTER TABLE businesses DROP COLUMN billing_cycle');
+    await db.customStatement('PRAGMA user_version = 94');
+    await db.close();
+    db = await openAndInit();
+    try {
+      expect(await columnsOf(db, 'businesses'), contains('billing_cycle'));
+      await db.customStatement('PRAGMA user_version = 94');
+      await db.close();
+      db = await openAndInit(); // idempotent re-upgrade
+    } finally { await db.close(); }
+  });
 }
