@@ -16,7 +16,9 @@ library;
 import 'package:flutter/foundation.dart';
 
 /// Whether the app opens on Browse for phones with no business user.
-const bool kBrowseFirstEnabled = false;
+/// Off for release; a test run can turn it on with
+/// `flutter run --dart-define=BROWSE_FIRST=true` (no code change).
+const bool kBrowseFirstEnabled = bool.fromEnvironment('BROWSE_FIRST');
 
 bool? _override;
 
