@@ -7988,3 +7988,5 @@ pass's recost runs without the layer; the next push touching that pair corrects 
 Tier-2 `pos_recost_batches_test` (2 new 0228 cases; red before deploy, green after). Web parity: reebaplus-web #190.
 
 - Part of #438: shopper_delete_account() now emails the Shopper an `account_deleted` confirmation (migration 0229; pg_net -> send-email, same as 0218 order emails; address captured before erase). Both TODO(#434) removed. Deploy 0229 only (send-email already deployed). Legal text still pending.
+
+- Part of #439: per-store "Store link" card on the online store page (`online_store_detail_screen.dart`), shown only while the store is online (same `manageOnlineStore` gate). Copy (clipboard + "Link copied") and Share (share_plus). URL built by `storeShareLink` in `lib/core/storefront/store_share_link.dart` (`https://reebaplus.com/shop/s/<storeId>`). No Drift/cloud change. Tests in `test/storefront/`.
