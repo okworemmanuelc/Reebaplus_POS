@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dark-mode launch window (pre-Android 12): plain, matches the dark launcher icon background. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <color android:color="#040404"/>
+    </item>
+</layer-list>
