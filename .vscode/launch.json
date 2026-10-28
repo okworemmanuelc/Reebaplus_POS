@@ -6,6 +6,20 @@
             "request": "launch",
             "type": "dart",
             "deviceId": "RZCY30FP0TN"
+        },
+        {
+            "name": "Customer test (Samsung)",
+            "request": "launch",
+            "type": "dart",
+            "deviceId": "RZCY30FP0TN",
+            "toolArgs": ["--dart-define=BROWSE_FIRST=true"]
+        },
+        {
+            "name": "Customer test (emulator)",
+            "request": "launch",
+            "type": "dart",
+            "deviceId": "emulator-5554",
+            "toolArgs": ["--dart-define=BROWSE_FIRST=true"]
         }
     ]
 }
