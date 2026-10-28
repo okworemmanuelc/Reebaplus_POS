@@ -5,13 +5,13 @@
             "name": "Samsung Device",
             "request": "launch",
             "type": "dart",
-            "deviceId": "RZCY30FP0TN"
+            "deviceId": "SM A566B"
         },
         {
             "name": "Customer test (Samsung)",
             "request": "launch",
             "type": "dart",
-            "deviceId": "RZCY30FP0TN",
+            "deviceId": "SM A566B",
             "toolArgs": ["--dart-define=BROWSE_FIRST=true"]
         },
         {
