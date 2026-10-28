@@ -93,6 +93,44 @@ void main() {
     await disposeScreen(tester);
   });
 
+  const listingGrants = {'stores.online_ordering', 'products.manage_listing'};
+
+  testWidgets('"Show all products online" lists every hidden product (#421)',
+      (tester) async {
+    await env.db.customStatement('UPDATE products SET show_online = 0');
+    await env.db.delete(env.db.syncQueue).go();
+    await pump(tester, const OnlineStoreSettingsScreen(), grants: listingGrants);
+    final tile = find.byKey(const Key('all-products-online-switch'));
+    expect(tester.widget<SwitchListTile>(tile).value, isFalse);
+    expect(find.text('1 of 1 products are hidden from shoppers.'), findsOneWidget);
+    await tester.tap(tile);
+    await deliver(tester);
+    final rows = await env.db.select(env.db.products).get();
+    expect(rows.every((p) => p.showOnline), isTrue);
+    expect(await env.db.select(env.db.syncQueue).get(), isNotEmpty);
+    expect(tester.widget<SwitchListTile>(tile).value, isTrue);
+    await disposeScreen(tester);
+  });
+
+  testWidgets('turning it off asks first, then hides every product (#421)',
+      (tester) async {
+    await pump(tester, const OnlineStoreSettingsScreen(), grants: listingGrants);
+    await tester.tap(find.byKey(const Key('all-products-online-switch')));
+    await deliver(tester);
+    expect(find.text('Hide all products?'), findsOneWidget);
+    await tester.tap(find.text('Hide all'));
+    await deliver(tester);
+    final rows = await env.db.select(env.db.products).get();
+    expect(rows.any((p) => p.showOnline), isFalse);
+    await disposeScreen(tester);
+  });
+
+  testWidgets('the all-products switch needs the listing grant (#421)', (tester) async {
+    await pump(tester, const OnlineStoreSettingsScreen());
+    expect(find.byKey(const Key('all-products-online-switch')), findsNothing);
+    await disposeScreen(tester);
+  });
+
   testWidgets('without the permission the hub and page show no access', (tester) async {
     await pump(tester, const OnlineStoreSettingsScreen(),
         grants: const {'settings.manage', 'stores.manage'}, rank: GateTier.manager);
