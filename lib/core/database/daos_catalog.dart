@@ -891,6 +891,36 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
     return true;
   });
 
+  /// Lists or hides every live product at once (#421). Only rows whose
+  /// value changes are written and queued, each as a full row like
+  /// [setProductShowOnline]. Returns how many changed.
+  Future<int> setAllProductsShowOnline(bool showOnline) => transaction(() async {
+    final rows = await (select(products)..where((t) =>
+      whereBusiness(t) & t.isDeleted.not() & t.showOnline.equals(!showOnline)))
+      .get();
+    final now = DateTime.now();
+    for (final row in rows) {
+      await (update(products)..where((t) =>
+        t.id.equals(row.id) & whereBusiness(t))).write(ProductsCompanion(
+          showOnline: Value(showOnline),
+          lastUpdatedAt: Value(now),
+        ));
+      await db.syncDao.enqueueUpsert('products',
+        row.copyWith(showOnline: showOnline, lastUpdatedAt: now).toCompanion(false));
+    }
+    return rows.length;
+  });
+
+  /// (live products, of which hidden from shoppers) for the hub's
+  /// "Show all products online" switch (#421).
+  Stream<({int total, int hidden})> watchShowOnlineCounts() =>
+      (select(products)..where((t) => whereBusiness(t) & t.isDeleted.not()))
+          .watch()
+          .map((rows) => (
+                total: rows.length,
+                hidden: rows.where((p) => !p.showOnline).length,
+              ));
+
   /// The live gallery photos of [productId] (#474), positions 2–5 in order.
   /// The cover (position 1) is `products.image_url`, not a row here.
   Stream<List<ProductPhotoData>> watchProductPhotos(String productId) =>

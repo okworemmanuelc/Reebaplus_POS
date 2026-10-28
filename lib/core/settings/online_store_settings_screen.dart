@@ -6,12 +6,15 @@ import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/settings/online_store_detail_screen.dart';
 import 'package:reebaplus_pos/core/listings/listing_quality_providers.dart';
+import 'package:reebaplus_pos/core/result.dart';
+import 'package:reebaplus_pos/core/services/product_listing_service.dart';
 import 'package:reebaplus_pos/core/stores/van_store.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/product_details_route.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
+import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/stores/widgets/stores_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
@@ -84,6 +87,10 @@ class _OnlineStoreSettingsScreenState
                                     'the areas it delivers to. Vans are never listed.',
                               ),
                               SizedBox(height: context.getRSize(16)),
+                              if (Gates.manageListing.allows(ref)) ...[
+                                const AllProductsOnlineCard(),
+                                SizedBox(height: context.getRSize(16)),
+                              ],
                               if (stores.isEmpty)
                                 const StoresMessage(text: 'No stores yet.'),
                               for (final store in stores) ...[
@@ -251,5 +258,111 @@ class StoreListingGapsNote extends ConsumerWidget {
     final product = await ref.read(databaseProvider).catalogDao.findById(id);
     if (product == null || !context.mounted) return;
     await openProductDetails(context, product, storeId: storeId);
+  }
+}
+
+/// "Show all products online" (#421): one switch that lists or hides every
+/// product. On only while no product is hidden; a product can still be
+/// hidden alone from its own page. Shown only to `products.manage_listing`.
+class AllProductsOnlineCard extends ConsumerStatefulWidget {
+  const AllProductsOnlineCard({super.key});
+
+  @override
+  ConsumerState<AllProductsOnlineCard> createState() =>
+      _AllProductsOnlineCardState();
+}
+
+class _AllProductsOnlineCardState extends ConsumerState<AllProductsOnlineCard> {
+  late final Stream<({int total, int hidden})> _counts;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _counts = ref.read(databaseProvider).catalogDao.watchShowOnlineCounts();
+  }
+
+  Future<void> _set(bool showOnline) async {
+    if (!Gates.manageListing.allowsNow(ref)) {
+      showGateDenied(context, Gates.manageListing);
+      return;
+    }
+    if (!showOnline) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Hide all products?'),
+          content: const Text(
+            'Shoppers will not see any of your products until you show them again.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Hide all'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
+    setState(() => _busy = true);
+    final result = await ProductListingService(
+      ref.read(databaseProvider).catalogDao,
+    ).setAllShowOnline(
+      showOnline: showOnline,
+      gateContext: ref.read(gateContextProvider),
+    );
+    if (!mounted) return;
+    setState(() => _busy = false);
+    switch (result) {
+      case Ok():
+        AppNotification.showSuccess(context,
+            showOnline ? 'All products are online.' : 'All products are hidden.');
+      case Err(:final error):
+        AppNotification.showError(context, error.message);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    return StreamBuilder<({int total, int hidden})>(
+      stream: _counts,
+      builder: (context, snap) {
+        final counts = snap.data;
+        if (counts == null || counts.total == 0) return const SizedBox.shrink();
+        final allOnline = counts.hidden == 0;
+        return DecoratedBox(
+          decoration: AppDecorations.card(context),
+          child: Material(
+            type: MaterialType.transparency,
+            child: Padding(
+              padding: EdgeInsets.all(context.getRSize(12)),
+              child: SwitchListTile(
+                key: const Key('all-products-online-switch'),
+                contentPadding: EdgeInsets.zero,
+                title: Text('Show all products online',
+                    style: context.boldStyle(15)
+                        .copyWith(color: t.colorScheme.onSurface)),
+                subtitle: Text(
+                  allOnline
+                      ? 'Every product is listed. Hide one from its product page.'
+                      : '${counts.hidden} of ${counts.total} products are hidden '
+                          'from shoppers.',
+                  style: context.regularStyle(12).copyWith(color: muted),
+                ),
+                value: allOnline,
+                onChanged: _busy ? null : _set,
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 }

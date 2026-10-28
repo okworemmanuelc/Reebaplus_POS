@@ -33,6 +33,24 @@ class ProductListingService {
       return Result.err(AppError.io('Could not save online visibility. Try again.'));
     }
   }
+  /// Lists or hides every product at once (#421). Same grant as one product.
+  Future<Result<void, AppError>> setAllShowOnline({
+    required bool showOnline,
+    required GateContext gateContext,
+  }) async {
+    if (!Gates.manageListing.evaluate(gateContext)) {
+      return Result.err(AppError.permission(
+        'You no longer have access to Manage online listings.'));
+    }
+    try {
+      await _catalog.setAllProductsShowOnline(showOnline);
+      return Result.ok(null);
+    } catch (error, stack) {
+      CrashReporter.record(error, stack, context: 'inventory.online_listing');
+      return Result.err(AppError.io('Could not save online visibility. Try again.'));
+    }
+  }
+
   /// Saves the online description, brand and order limits (#473). Rechecks
   /// the grant and the shape (the DB CHECKs are the last line, not the first).
   Future<Result<void, AppError>> saveContent({
