@@ -9,8 +9,12 @@ import 'package:reebaplus_pos/features/browse/screens/storefront_store_screen.da
 import 'package:reebaplus_pos/main.dart';
 
 import 'browse_fixtures.dart';
+import 'package:reebaplus_pos/core/storefront/online_ordering_switch.dart';
 
 void main() {
+  // Online ordering ships switched off; these tests cover it switched on.
+  setUpAll(() => debugOverrideOnlineOrderingEnabled(true));
+  tearDownAll(() => debugOverrideOnlineOrderingEnabled(null));
   tearDown(() => debugOverrideBrowseFirstEnabled(null));
 
   group('entry routing (#425)', () {

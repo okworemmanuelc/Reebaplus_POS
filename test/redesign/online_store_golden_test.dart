@@ -20,16 +20,21 @@ import 'package:reebaplus_pos/core/settings/online_store_settings_screen.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 
 import '../helpers/screen_harness.dart';
+import 'package:reebaplus_pos/core/storefront/online_ordering_switch.dart';
 
 const _grants = {'stores.online_ordering'};
 
 void main() {
+  // Online ordering ships switched off; these tests cover it switched on.
+  setUpAll(() => debugOverrideOnlineOrderingEnabled(true));
+  tearDownAll(() => debugOverrideOnlineOrderingEnabled(null));
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late ScreenTestEnvironment env;
 
   setUp(() async {
-    env = await setupScreenTestEnvironment(productCount: 1, businessName: 'Stallion Global');
+    env = await setupScreenTestEnvironment(productCount: 1, businessName: 'Stallion Global',
+        storeId: '01a18610-0000-7000-8000-000000000001');
     final db = env.db;
     await db.customStatement(
       "UPDATE stores SET name = 'Abuja HQ' WHERE id = '${env.storeId}'",

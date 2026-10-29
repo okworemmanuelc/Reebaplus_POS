@@ -15,10 +15,14 @@ import 'package:reebaplus_pos/features/orders/widgets/online_order_parts.dart';
 
 import '../helpers/screen_harness.dart';
 import 'online_order_fixtures.dart';
+import 'package:reebaplus_pos/core/storefront/online_ordering_switch.dart';
 
 const _viewer = {'online_orders.view'};
 
 void main() {
+  // Online ordering ships switched off; these tests cover it switched on.
+  setUpAll(() => debugOverrideOnlineOrderingEnabled(true));
+  tearDownAll(() => debugOverrideOnlineOrderingEnabled(null));
   late ScreenTestEnvironment env;
   late String orderId;
   late String removedLineId;

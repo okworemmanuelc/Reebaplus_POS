@@ -29,6 +29,7 @@ import 'package:reebaplus_pos/core/services/product_gallery_service.dart';
 import 'package:reebaplus_pos/core/services/product_image_service.dart';
 
 import '../../helpers/dispatch_test_utils.dart';
+import 'package:reebaplus_pos/core/storefront/online_ordering_switch.dart';
 
 const _lister = GateContext(
     grantedKeys: {'products.manage_listing'},
@@ -58,6 +59,9 @@ class _FakeStorage {
 }
 
 void main() {
+  // Online ordering ships switched off; these tests cover it switched on.
+  setUpAll(() => debugOverrideOnlineOrderingEnabled(true));
+  tearDownAll(() => debugOverrideOnlineOrderingEnabled(null));
   late AppDatabase db;
   late String biz;
   late String productId;

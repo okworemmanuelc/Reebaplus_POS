@@ -20,6 +20,7 @@ import 'package:reebaplus_pos/shared/widgets/error_fallback.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/storefront/browse_switch.dart';
+import 'package:reebaplus_pos/core/storefront/online_ordering_switch.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
 import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/welcome_screen.dart';
@@ -370,7 +371,7 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
     // #433: a "New online order" tap opens that order if it is already local,
     // else the Online tab. Never waits on a pull and never throws.
     _pushService.bindOnlineOrderTapAction((onlineOrderId) {
-      if (_auth.currentUser == null) return;
+      if (_auth.currentUser == null || !isOnlineOrderingEnabled()) return;
       unawaited(routeOnlineOrderTap(
         onlineOrderId: onlineOrderId,
         isLocal: (id) => ref.read(databaseProvider).onlineOrdersDao.existsById(id),

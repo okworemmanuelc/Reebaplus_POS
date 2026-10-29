@@ -17,8 +17,12 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/settings/role_permissions_detail_screen.dart';
 import 'package:reebaplus_pos/core/settings/roles_permissions_screen.dart';
 import 'package:reebaplus_pos/core/van_sales/van_sales_switch.dart';
+import 'package:reebaplus_pos/core/storefront/online_ordering_switch.dart';
 
 void main() {
+  // Online ordering ships switched off; these tests cover it switched on.
+  setUpAll(() => debugOverrideOnlineOrderingEnabled(true));
+  tearDownAll(() => debugOverrideOnlineOrderingEnabled(null));
   late AppDatabase db;
   const businessId = 'biz-1';
   const ceoRoleId = 'role-ceo';

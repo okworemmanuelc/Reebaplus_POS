@@ -17,6 +17,7 @@ import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/core/storefront/online_ordering_switch.dart';
 import 'package:reebaplus_pos/core/van_sales/van_sales_switch.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
@@ -46,7 +47,9 @@ const kHiddenPermissionKeys = {
 /// entry, or a key whose feature is switched off (the `van.*` keys while Van
 /// Sales is off — `van_sales_switch.dart`). Filter with this, not the set.
 bool isPermissionKeyHidden(String key) =>
-    kHiddenPermissionKeys.contains(key) || isSwitchedOffPermissionKey(key);
+    kHiddenPermissionKeys.contains(key) ||
+    isSwitchedOffPermissionKey(key) ||
+    (!isOnlineOrderingEnabled() && kOnlineOrderingPermissionKeys.contains(key));
 
 /// Permission categories in master-plan order. `allPermissionsProvider` returns
 /// them alphabetically, so the order is imposed here. Unknown categories (none

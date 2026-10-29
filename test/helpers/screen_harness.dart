@@ -124,6 +124,8 @@ Future<ScreenTestEnvironment> setupScreenTestEnvironment({
   String businessName = 'Test Biz',
   String? businessType,
   Map<String, Object> sharedPreferences = const {},
+  // A fixed id for goldens that print it (e.g. the online store link).
+  String? storeId,
 }) async {
   SharedPreferences.setMockInitialValues(sharedPreferences);
   await initTestSupabase();
@@ -152,15 +154,15 @@ Future<ScreenTestEnvironment> setupScreenTestEnvironment({
         ),
       );
 
-  final storeId = UuidV7.generate();
+  final mainStoreId = storeId ?? UuidV7.generate();
   await db.into(db.stores).insert(
         StoresCompanion.insert(
-          id: Value(storeId),
+          id: Value(mainStoreId),
           businessId: businessId,
           name: 'Main Store',
         ),
       );
-  final store = await db.storesDao.getStore(storeId);
+  final store = await db.storesDao.getStore(mainStoreId);
 
   final categoryId = UuidV7.generate();
   await db.into(db.categories).insert(
@@ -204,7 +206,7 @@ Future<ScreenTestEnvironment> setupScreenTestEnvironment({
           InventoryCompanion.insert(
             id: Value(UuidV7.generate()),
             businessId: businessId,
-            storeId: storeId,
+            storeId: mainStoreId,
             productId: pId,
             quantity: const Value(50),
           ),
@@ -218,7 +220,7 @@ Future<ScreenTestEnvironment> setupScreenTestEnvironment({
   return ScreenTestEnvironment(
     db: db,
     businessId: businessId,
-    storeId: storeId,
+    storeId: mainStoreId,
     store: store!,
     categoryId: categoryId,
     products: seededProducts,
