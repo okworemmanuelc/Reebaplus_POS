@@ -19,10 +19,14 @@ import 'package:reebaplus_pos/features/inventory/widgets/listing_content_fields.
 import '../helpers/dispatch_test_utils.dart';
 import '../helpers/inventory_seed.dart';
 import '../helpers/screen_harness.dart';
+import 'package:reebaplus_pos/core/storefront/online_ordering_switch.dart';
 
 const _grants = {...kInventorySampleGrants, 'products.edit_buying_price'};
 
 void main() {
+  // Online ordering ships switched off; these tests cover it switched on.
+  setUpAll(() => debugOverrideOnlineOrderingEnabled(true));
+  tearDownAll(() => debugOverrideOnlineOrderingEnabled(null));
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late ScreenTestEnvironment env;

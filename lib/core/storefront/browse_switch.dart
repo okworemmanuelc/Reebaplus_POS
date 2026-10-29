@@ -15,6 +15,8 @@ library;
 
 import 'package:flutter/foundation.dart';
 
+import 'package:reebaplus_pos/core/storefront/online_ordering_switch.dart';
+
 /// Whether the app opens on Browse for phones with no business user.
 /// Off for release; a test run can turn it on with
 /// `flutter run --dart-define=BROWSE_FIRST=true` (no code change).
@@ -22,8 +24,10 @@ const bool kBrowseFirstEnabled = bool.fromEnvironment('BROWSE_FIRST');
 
 bool? _override;
 
-/// [kBrowseFirstEnabled], unless a test has overridden it.
-bool isBrowseFirstEnabled() => _override ?? kBrowseFirstEnabled;
+/// [kBrowseFirstEnabled], unless a test has overridden it. Always off while
+/// online ordering is switched off (`online_ordering_switch.dart`).
+bool isBrowseFirstEnabled() =>
+    isOnlineOrderingEnabled() && (_override ?? kBrowseFirstEnabled);
 
 /// Forces the switch for a test; `null` restores [kBrowseFirstEnabled].
 @visibleForTesting

@@ -7,6 +7,11 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Online ordering switched OFF (2026-10-29, owner request)
+- `lib/core/storefront/online_ordering_switch.dart`: `kOnlineOrderingEnabled = false` (same pattern as Van Sales). Flip to `true` and release to turn it back on.
+- Off = the four online gates (manageOnlineStore, manageListing, viewOnlineOrders, answerOnlineOrders) deny for everyone; Settings → Online store row, Store Details online card, the 4 permission toggles, online-order push taps and Browse-first/Shop are hidden. Schema, sync, cloud RPCs and reebaplus.com/shop untouched (prod has 0 online stores).
+- Online-feature tests override the switch on; general goldens regenerated in the off state.
+
 ### Issue #550: First reversal wins, server guard (2026-10-26, ready for review)
 - Cloud 0227 (NOT deployed): cloud-only `order_reversals` (UNIQUE order_id) + `pos_claim_order_reversal` (claim + header flip; same id = replay; other claim or claim-less reversal evidence = P0001 `reversal_already_applied`, DETAIL = cloud header) + sticky-cancel trigger on `orders`. No Drift change (reuses `held_by_order_id`).
 - App: `OrdersDao.beginGuardedReversal`/`commitGuardedReversal` (the seam #551 reuses) hold all reversal rows behind the claim; drain releases on success, `undoRejectedReversal` + `alertRefundRejected` on loss. ADR 0032.

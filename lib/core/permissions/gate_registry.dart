@@ -1,4 +1,5 @@
 import 'package:reebaplus_pos/core/permissions/gate.dart';
+import 'package:reebaplus_pos/core/storefront/online_ordering_switch.dart';
 import 'package:reebaplus_pos/core/van_sales/van_sales_switch.dart';
 
 /// A named entry in the [Gates] registry: one gated action, declared once
@@ -72,7 +73,7 @@ abstract final class Gates {
   static const NamedGate manageListing = NamedGate(
     name: 'manageListing',
     action: 'Manage online listings',
-    rule: Gate.key('products.manage_listing'),
+    rule: AndGate(Gate.when(isOnlineOrderingEnabled), Gate.key('products.manage_listing')),
   );
 
   /// Add a manufacturer from Inventory → Manufacturers (#292; moved off the
@@ -320,10 +321,12 @@ abstract final class Gates {
   /// area, delivery areas, the Online ordering switch, public phone and note.
   /// Its own key (CEO by default, cloud 0199), not `settings.manage` or the
   /// unfinished `stores.manage`.
+  // The four online-ordering gates also require the Online ordering switch
+  // (`online_ordering_switch.dart`); while it is off they deny for everyone.
   static const NamedGate manageOnlineStore = NamedGate(
     name: 'manageOnlineStore',
     action: 'Manage online store',
-    rule: Gate.key('stores.online_ordering'),
+    rule: AndGate(Gate.when(isOnlineOrderingEnabled), Gate.key('stores.online_ordering')),
   );
 
   /// See Online Orders (#427): the Orders screen's Online tab, its New-orders
@@ -332,7 +335,7 @@ abstract final class Gates {
   static const NamedGate viewOnlineOrders = NamedGate(
     name: 'viewOnlineOrders',
     action: 'See online orders',
-    rule: Gate.key('online_orders.view'),
+    rule: AndGate(Gate.when(isOnlineOrderingEnabled), Gate.key('online_orders.view')),
   );
 
   /// Accept / decline an Online Order (#427). The key alone is not enough:
@@ -342,7 +345,7 @@ abstract final class Gates {
   static const NamedGate answerOnlineOrders = NamedGate(
     name: 'answerOnlineOrders',
     action: 'Accept or decline online orders',
-    rule: Gate.key('online_orders.answer'),
+    rule: AndGate(Gate.when(isOnlineOrderingEnabled), Gate.key('online_orders.answer')),
   );
 
   /// Mark a Pay on delivery order paid (#432): the Mark as paid button on the

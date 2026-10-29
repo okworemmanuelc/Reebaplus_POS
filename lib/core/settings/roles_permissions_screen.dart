@@ -11,6 +11,7 @@ import 'package:reebaplus_pos/features/staff/widgets/staff_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/core/storefront/online_ordering_switch.dart';
 import 'package:reebaplus_pos/core/van_sales/van_sales_switch.dart';
 
 /// CEO Settings > Roles & Permissions (§10.1/§10.2). Lists the four system
@@ -74,7 +75,8 @@ class _RoleCard extends ConsumerWidget {
     final total = allPerms == null
         ? 42 -
               kHiddenPermissionKeys.length -
-              (isVanSalesEnabled() ? 0 : kVanSalesPermissionKeys.length)
+              (isVanSalesEnabled() ? 0 : kVanSalesPermissionKeys.length) -
+              (isOnlineOrderingEnabled() ? 0 : kOnlineOrderingPermissionKeys.length)
         : allPerms.where((p) => !isPermissionKeyHidden(p.key)).length;
     // CEO is locked all-on; show the full count regardless of sync state.
     final subtitle = isCeo

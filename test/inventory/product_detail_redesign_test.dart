@@ -23,6 +23,7 @@ import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart
 import '../helpers/inventory_seed.dart';
 import '../helpers/product_detail_seed.dart';
 import '../helpers/screen_harness.dart';
+import 'package:reebaplus_pos/core/storefront/online_ordering_switch.dart';
 
 const _ceoKeys = {
   ...kInventorySampleGrants,
@@ -35,6 +36,9 @@ const _gesture = FakeViewPadding(top: 24, bottom: 24);
 const _sideways = FakeViewPadding(top: 24, right: 48);
 
 void main() {
+  // Online ordering ships switched off; these tests cover it switched on.
+  setUpAll(() => debugOverrideOnlineOrderingEnabled(true));
+  tearDownAll(() => debugOverrideOnlineOrderingEnabled(null));
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late ScreenTestEnvironment env;

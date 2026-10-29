@@ -13,10 +13,14 @@ import 'package:reebaplus_pos/core/settings/online_store_settings_screen.dart';
 import 'package:reebaplus_pos/features/stores/screens/stores_screen.dart';
 
 import '../helpers/screen_harness.dart';
+import 'package:reebaplus_pos/core/storefront/online_ordering_switch.dart';
 
 const _grants = {'stores.online_ordering'};
 
 void main() {
+  // Online ordering ships switched off; these tests cover it switched on.
+  setUpAll(() => debugOverrideOnlineOrderingEnabled(true));
+  tearDownAll(() => debugOverrideOnlineOrderingEnabled(null));
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late ScreenTestEnvironment env;
@@ -109,6 +113,8 @@ void main() {
     expect(rows.every((p) => p.showOnline), isTrue);
     expect(await env.db.select(env.db.syncQueue).get(), isNotEmpty);
     expect(tester.widget<SwitchListTile>(tile).value, isTrue);
+    await tester.pump(const Duration(seconds: 5)); // let the toast expire
+    await tester.pumpAndSettle();
     await disposeScreen(tester);
   });
 
@@ -122,6 +128,8 @@ void main() {
     await deliver(tester);
     final rows = await env.db.select(env.db.products).get();
     expect(rows.any((p) => p.showOnline), isFalse);
+    await tester.pump(const Duration(seconds: 5)); // let the toast expire
+    await tester.pumpAndSettle();
     await disposeScreen(tester);
   });
 

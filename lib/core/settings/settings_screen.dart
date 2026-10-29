@@ -23,6 +23,7 @@ import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/settings/stores_settings_screen.dart';
 import 'package:reebaplus_pos/core/settings/subscription_screen.dart';
 import 'package:reebaplus_pos/core/settings/sync_issues_access_screen.dart';
+import 'package:reebaplus_pos/core/storefront/online_ordering_switch.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
 import 'package:reebaplus_pos/shared/widgets/notifications_modal.dart';
@@ -167,16 +168,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
 
     final q = _query.trim().toLowerCase();
+    // Online store is hidden while online ordering is switched off.
     bool matches(_SettingEntry e) =>
-        e.title.toLowerCase().contains(q) ||
-        e.subtitle.toLowerCase().contains(q);
-    final groups = q.isEmpty
-        ? _groups
-        : [
-            for (final g in _groups)
-              if (g.entries.any(matches))
-                (title: g.title, entries: g.entries.where(matches).toList()),
-          ];
+        (isOnlineOrderingEnabled() || e.screen is! OnlineStoreSettingsScreen) &&
+        (e.title.toLowerCase().contains(q) ||
+            e.subtitle.toLowerCase().contains(q));
+    final groups = [
+      for (final g in _groups)
+        if (g.entries.any(matches))
+          (title: g.title, entries: g.entries.where(matches).toList()),
+    ];
     // Danger Zone (§10.3) — CEO-only, pinned at the bottom. Gated on
     // Gates.deleteBusiness (only the CEO holds settings.delete_business),
     // compounded with the search-match condition.

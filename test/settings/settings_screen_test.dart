@@ -21,6 +21,7 @@ import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
 import '../helpers/screen_harness.dart';
+import 'package:reebaplus_pos/core/storefront/online_ordering_switch.dart';
 
 const _allGrants = {'settings.manage', 'settings.delete_business'};
 
@@ -87,6 +88,9 @@ Finder _header(String title) =>
     find.ancestor(of: find.text(title), matching: find.byType(SectionHeader));
 
 void main() {
+  // Online ordering ships switched off; these tests cover it switched on.
+  setUpAll(() => debugOverrideOnlineOrderingEnabled(true));
+  tearDownAll(() => debugOverrideOnlineOrderingEnabled(null));
   late ScreenTestEnvironment env;
 
   setUp(() async {
@@ -137,6 +141,17 @@ void main() {
   }
 
   group('content kept', () {
+    testWidgets('Online store row is hidden while online ordering is off', (
+      tester,
+    ) async {
+      debugOverrideOnlineOrderingEnabled(false);
+      addTearDown(() => debugOverrideOnlineOrderingEnabled(true));
+      await pump(tester, size: const Size(390, 3000), padding: EdgeInsets.zero);
+      expect(_row('Online store'), findsNothing);
+      expect(_row('Stores'), findsOneWidget);
+      await disposeScreen(tester);
+    });
+
     testWidgets('every row in its group, in order, with its fixed tint', (
       tester,
     ) async {

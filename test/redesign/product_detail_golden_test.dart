@@ -28,6 +28,7 @@ import 'package:reebaplus_pos/features/inventory/screens/product_detail_screen.d
 import '../helpers/inventory_seed.dart';
 import '../helpers/product_detail_seed.dart';
 import '../helpers/screen_harness.dart';
+import 'package:reebaplus_pos/core/storefront/online_ordering_switch.dart';
 
 /// Fixed-date sales and stock movements for Gulder (the sample's own movement
 /// carries the real date, so it is voided; the ledger is append-only).
@@ -277,6 +278,8 @@ void main() {
     testWidgets('product detail, online listing pop-up, $sizeName light', (
       tester,
     ) async {
+      debugOverrideOnlineOrderingEnabled(true);
+      addTearDown(() => debugOverrideOnlineOrderingEnabled(null));
       await seedDetailSample(env, sample);
       await shoot(
         tester,
@@ -302,6 +305,8 @@ void main() {
     ('844x390', Size(844, 390), FakeViewPadding(top: 24, right: 48)),
   ]) {
     testWidgets('product detail, photos card, $sizeName light', (tester) async {
+      debugOverrideOnlineOrderingEnabled(true);
+      addTearDown(() => debugOverrideOnlineOrderingEnabled(null));
       await seedDetailSample(env, sample);
       final productId = sample.productIds['Gulder']!;
       String url(String photo) =>

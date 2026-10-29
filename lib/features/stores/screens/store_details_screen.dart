@@ -12,6 +12,7 @@ import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/online_store_detail_screen.dart';
+import 'package:reebaplus_pos/core/storefront/online_ordering_switch.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
@@ -187,6 +188,7 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
           ),
           SizedBox(height: context.getRSize(16)),
         ],
+        if (isOnlineOrderingEnabled()) ...[
         StoreOnlineCard(
           key: StoresKeys.onlineCard,
           online: _store.onlineOrderingEnabled,
@@ -214,6 +216,7 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
               : null,
         ),
         SizedBox(height: context.getRSize(16)),
+        ],
         _buildQuickActions(),
         SizedBox(height: context.getRSize(24)),
         KeyedSubtree(

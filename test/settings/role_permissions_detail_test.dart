@@ -20,8 +20,12 @@ import 'package:reebaplus_pos/core/settings/role_permissions_detail_screen.dart'
 import 'package:reebaplus_pos/core/van_sales/van_sales_switch.dart';
 
 import '../helpers/dispatch_test_utils.dart';
+import 'package:reebaplus_pos/core/storefront/online_ordering_switch.dart';
 
 void main() {
+  // Online ordering ships switched off; these tests cover it switched on.
+  setUpAll(() => debugOverrideOnlineOrderingEnabled(true));
+  tearDownAll(() => debugOverrideOnlineOrderingEnabled(null));
   late AppDatabase db;
   late RoleData ceoRole;
   late RoleData cashierRole;

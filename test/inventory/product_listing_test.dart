@@ -12,8 +12,12 @@ import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 
 import '../helpers/dispatch_test_utils.dart';
 import '../helpers/in_memory_cloud_transport.dart';
+import 'package:reebaplus_pos/core/storefront/online_ordering_switch.dart';
 
 void main() {
+  // Online ordering ships switched off; these tests cover it switched on.
+  setUpAll(() => debugOverrideOnlineOrderingEnabled(true));
+  tearDownAll(() => debugOverrideOnlineOrderingEnabled(null));
   late AppDatabase db;
   late String businessId;
   late ProductListingService service;
