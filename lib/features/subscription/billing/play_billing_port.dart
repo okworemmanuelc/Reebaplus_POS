@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:in_app_purchase_android/billing_client_wrappers.dart';
 import 'package:in_app_purchase_android/in_app_purchase_android.dart';
 
 import 'package:reebaplus_pos/features/subscription/billing/play_billing_constants.dart';
@@ -32,6 +33,40 @@ class PurchaseEvent {
   });
 }
 
+/// A subscription the Google account on THIS device owns (from the store's
+/// purchase cache). Play does not say which base plan it is on, so the cycle
+/// comes from the business row; this is only the handle to replace it.
+class OwnedSubscription {
+  final String productId;
+  final String purchaseToken;
+
+  /// The business id the purchase was tagged with (obfuscated account id).
+  final String? accountId;
+  final Object? raw; // adapter-private (GooglePlayPurchaseDetails)
+  const OwnedSubscription(
+    this.productId,
+    this.purchaseToken, {
+    this.accountId,
+    this.raw,
+  });
+}
+
+/// How a plan switch replaces the existing subscription (#589).
+enum ReplacementKind {
+  /// Upgrade: takes effect now, the price difference is charged prorated.
+  upgradeNow,
+
+  /// Downgrade: takes effect at the next renewal.
+  downgradeAtRenewal,
+}
+
+/// Replace [old] instead of starting a second subscription.
+class PlanChange {
+  final OwnedSubscription old;
+  final ReplacementKind kind;
+  const PlanChange(this.old, this.kind);
+}
+
 /// Seam over the `in_app_purchase` plugin so the paywall and result handling
 /// are testable without Play Services.
 abstract class PlayBillingPort {
@@ -41,7 +76,11 @@ abstract class PlayBillingPort {
 
   /// Starts the purchase sheet. [accountId] (the business id) is attached as
   /// the obfuscated account id so the server can bind the token to a business.
-  Future<void> buy(StoreOffer offer, {required String accountId});
+  /// With [change] the purchase REPLACES that subscription (never a second one).
+  Future<void> buy(StoreOffer offer, {required String accountId, PlanChange? change});
+
+  /// Our subscription owned by the Google account on this device, if any.
+  Future<OwnedSubscription?> queryOwnedSubscription();
   Future<void> restore();
 
   /// Tell the store the purchase was handled (clears it from the queue). The
@@ -98,15 +137,48 @@ class InAppPurchasePort implements PlayBillingPort {
   }
 
   @override
-  Future<void> buy(StoreOffer offer, {required String accountId}) async {
+  Future<void> buy(StoreOffer offer, {required String accountId, PlanChange? change}) async {
     final d = _details['${offer.productId}|${offer.basePlanId}'];
     if (d == null) throw StateError('Plan not available from the store.');
+    final old = change?.old.raw;
+    if (change != null && old is! GooglePlayPurchaseDetails) {
+      throw StateError('The current subscription could not be read.');
+    }
     final param = GooglePlayPurchaseParam(
       productDetails: d,
       offerToken: offer.token as String?,
       applicationUserName: accountId,
+      changeSubscriptionParam: change == null
+          ? null
+          : ChangeSubscriptionParam(
+              oldPurchaseDetails: old as GooglePlayPurchaseDetails,
+              replacementMode: change.kind == ReplacementKind.upgradeNow
+                  ? ReplacementMode.chargeProratedPrice
+                  : ReplacementMode.deferred,
+            ),
     );
     await _iap.buyNonConsumable(purchaseParam: param);
+  }
+
+  @override
+  Future<OwnedSubscription?> queryOwnedSubscription() async {
+    final addition =
+        _iap.getPlatformAddition<InAppPurchaseAndroidPlatformAddition>();
+    final res = await addition.queryPastPurchases();
+    if (res.error != null) throw StateError(res.error!.message);
+    for (final p in res.pastPurchases) {
+      if (!kSubscriptionProductIds.contains(p.productID)) continue;
+      if (p.billingClientPurchase.purchaseState != PurchaseStateWrapper.purchased) {
+        continue;
+      }
+      return OwnedSubscription(
+        p.productID,
+        p.verificationData.serverVerificationData,
+        accountId: p.billingClientPurchase.obfuscatedAccountId,
+        raw: p,
+      );
+    }
+    return null;
   }
 
   @override

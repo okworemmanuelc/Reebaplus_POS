@@ -28,6 +28,8 @@ export interface VerifiedPurchase {
   acknowledged: boolean;
   obfuscatedAccountId: string | null;
   linkedPurchaseToken: string | null;
+  /** Deferred plan switch (#589): the product taking over at renewal. */
+  deferredProductId: string | null;
 }
 
 const KNOWN_STATES: PlayState[] = [
@@ -58,7 +60,13 @@ export function parseSubscriptionV2(body: unknown): VerifiedPurchase | null {
     .sort((a, c) =>
       Date.parse(c.expiryTime ?? "") - Date.parse(a.expiryTime ?? "")
     );
-  const item = ours[0];
+  // Deferred plan switch (#589): the item the user OWNS now carries
+  // deferredItemReplacement and keeps the entitlement until it expires; the
+  // item being switched to is not owned yet (no latestSuccessfulOrderId), so
+  // it never counts until Play renews into it.
+  const holder = ours.find((i) => typeof i?.deferredItemReplacement?.productId === "string");
+  const owned = ours.find((i) => typeof i?.latestSuccessfulOrderId === "string");
+  const item = holder ?? owned ?? ours[0];
   if (!item) return null;
   const basePlanId = item.offerDetails?.basePlanId;
   if (!(BASE_PLAN_IDS as readonly string[]).includes(basePlanId)) return null;
@@ -72,6 +80,7 @@ export function parseSubscriptionV2(body: unknown): VerifiedPurchase | null {
     obfuscatedAccountId: b.externalAccountIdentifiers?.obfuscatedExternalAccountId ??
       null,
     linkedPurchaseToken: b.linkedPurchaseToken ?? null,
+    deferredProductId: holder?.deferredItemReplacement?.productId ?? null,
   };
 }
 
@@ -83,6 +92,69 @@ export function needsAcknowledge(p: VerifiedPurchase): boolean {
 export function isEntitled(p: Pick<VerifiedPurchase, "state" | "expiryTime">, now = Date.now()): boolean {
   if (p.state === "ACTIVE" || p.state === "IN_GRACE_PERIOD") return true;
   return p.state === "CANCELED" && !!p.expiryTime && Date.parse(p.expiryTime) > now;
+}
+
+/** RTDN SUBSCRIPTION_REVOKED: refunded/revoked, access ends now. */
+export const RTDN_REVOKED = 12;
+
+export type ApplyDecision =
+  | { apply: true }
+  | { apply: false; reason: "replaced" | "early_lapse_held" };
+
+/**
+ * Whether a verified purchase may change the business's plan (#589).
+ *
+ *  - A token REPLACED by a newer one (its row has replaced_by_token) never
+ *    changes entitlement again: the newer token owns it. Covers every order of
+ *    RTDNs once the new token is known.
+ *  - An EXPIRED that cuts a still-paid period short (the stored row was
+ *    entitled with an expiry in the future) and is not a revoke is what a plan
+ *    switch does to the old token. It may arrive before the new token is
+ *    verified, so it is HELD: the business keeps its plan and end date, and
+ *    business_effective_plan() lapses it at that end date anyway if no new
+ *    token ever shows up. A revoke (refund) always applies at once.
+ */
+export function decideApply(args: {
+  verified: Pick<VerifiedPurchase, "state" | "expiryTime">;
+  replacedBy: string | null;
+  prior: { state: string; expiryTime: string | null } | null;
+  notificationType: number | null;
+  now?: number;
+}): ApplyDecision {
+  const now = args.now ?? Date.now();
+  if (args.replacedBy) return { apply: false, reason: "replaced" };
+  const v = args.verified;
+  const p = args.prior;
+  if (
+    v.state === "EXPIRED" &&
+    args.notificationType !== RTDN_REVOKED &&
+    p !== null &&
+    !!p.expiryTime &&
+    Date.parse(p.expiryTime) > now &&
+    isEntitled({ state: normalizeState(p.state), expiryTime: p.expiryTime }, now)
+  ) {
+    return { apply: false, reason: "early_lapse_held" };
+  }
+  return { apply: true };
+}
+
+/** The older token this purchase replaces, if any (never itself). */
+export function replacedToken(token: string, v: Pick<VerifiedPurchase, "linkedPurchaseToken">): string | null {
+  const l = v.linkedPurchaseToken;
+  return l && l !== token ? l : null;
+}
+
+/**
+ * Business for an RTDN token we have never seen: only when Play links it to a
+ * token we know (a plan switch) and the account tag, if any, agrees.
+ */
+export function businessForUnknownToken(
+  v: Pick<VerifiedPurchase, "obfuscatedAccountId">,
+  linkedRowBusinessId: string | null,
+): string | null {
+  if (!linkedRowBusinessId) return null;
+  if (v.obfuscatedAccountId && v.obfuscatedAccountId !== linkedRowBusinessId) return null;
+  return linkedRowBusinessId;
 }
 
 export interface RtdnTarget {

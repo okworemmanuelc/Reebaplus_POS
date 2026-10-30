@@ -20,8 +20,11 @@
 import { corsHeaders, handlePreflight } from "../_shared/cors.ts";
 import { getCallerClient, getServiceClient } from "../_shared/db.ts";
 import {
+  businessForUnknownToken,
+  decideApply,
   decodeRtdn,
   needsAcknowledge,
+  replacedToken,
   parseSubscriptionV2,
   secretMatches,
   type VerifiedPurchase,
@@ -110,7 +113,13 @@ async function persistAndApply(
   v: VerifiedPurchase,
   raw: unknown,
   acknowledged: boolean,
+  notificationType: number | null,
 ) {
+  // The row as it was BEFORE this update (for decideApply).
+  const { data: prior, error: priorErr } = await service.from("play_subscription_purchases")
+    .select("state, expiry_time, replaced_by_token").eq("purchase_token", token).maybeSingle();
+  if (priorErr) throw new Error(`lookup failed: ${priorErr.message}`);
+  const now = new Date().toISOString();
   const { error: upErr } = await service.from("play_subscription_purchases").upsert({
     business_id: businessId,
     purchase_token: token,
@@ -121,9 +130,30 @@ async function persistAndApply(
     expiry_time: v.expiryTime,
     acknowledged,
     raw,
-    updated_at: new Date().toISOString(),
+    linked_purchase_token: v.linkedPurchaseToken,
+    updated_at: now,
   }, { onConflict: "purchase_token" });
   if (upErr) throw new Error(`upsert failed: ${upErr.message}`);
+
+  // Plan switch (#589): this token replaces the linked one, which must never
+  // change the plan again (its lapse/RTDN can arrive in any order). Not for a
+  // payment still pending: the old one stays live until it goes through.
+  const old = replacedToken(token, v);
+  if (old && v.state !== "PENDING" && v.state !== "PENDING_PURCHASE_CANCELED") {
+    const { error: supErr } = await service.from("play_subscription_purchases")
+      .update({ replaced_by_token: token, replaced_at: now, updated_at: now })
+      .eq("purchase_token", old).eq("business_id", businessId).is("replaced_by_token", null);
+    if (supErr) throw new Error(`supersede failed: ${supErr.message}`);
+  }
+
+  const decision = decideApply({
+    verified: v,
+    replacedBy: prior?.replaced_by_token ?? null,
+    prior: prior ? { state: prior.state, expiryTime: prior.expiry_time } : null,
+    notificationType,
+  });
+  if (!decision.apply) return { ok: true, unchanged: true, reason: decision.reason };
+
   const { data, error } = await service.rpc("apply_play_purchase", {
     p_business_id: businessId,
     p_product_id: v.productId,
@@ -178,7 +208,7 @@ async function handleAppVerify(req: Request): Promise<Response> {
     }
     let acked = v.acknowledged;
     if (needsAcknowledge(v)) acked = await acknowledge(pkg, v.productId, token, at);
-    const applied = await persistAndApply(service, businessId, token, v, got.raw, acked);
+    const applied = await persistAndApply(service, businessId, token, v, got.raw, acked, null);
     return json({ ok: true, state: v.state, expiry_time: v.expiryTime, applied });
   } catch (e) {
     console.error("verify failed", e);
@@ -197,19 +227,31 @@ async function handleRtdn(req: Request): Promise<Response> {
   const service = getServiceClient();
   const { data: row } = await service.from("play_subscription_purchases")
     .select("business_id").eq("purchase_token", target.purchaseToken).maybeSingle();
-  // Unknown token: the app hasn't verified it yet (it will, and that call is
-  // authoritative). Ack so Pub/Sub does not hammer us.
-  if (!row) return json({ ok: true, ignored: "unknown_token" });
 
   try {
     const at = await getAccessToken();
     const got = await fetchPurchase(pkg, target.purchaseToken, at);
-    if (!got || !got.parsed) return json({ ok: true, ignored: "unparseable" });
+    if (!got || !got.parsed) return json({ ok: true, ignored: row ? "unparseable" : "unknown_token" });
     const v = got.parsed;
+    let businessId: string | null = row?.business_id ?? null;
+    if (!businessId) {
+      // Unknown token: bind it only when it replaces a token we know (a plan
+      // switch, #589), so the switch lands even if the app never verifies it.
+      // Otherwise the app's verify call is authoritative; ack so Pub/Sub does
+      // not hammer us.
+      const linked = v.linkedPurchaseToken
+        ? (await service.from("play_subscription_purchases")
+          .select("business_id").eq("purchase_token", v.linkedPurchaseToken).maybeSingle()).data
+        : null;
+      businessId = businessForUnknownToken(v, linked?.business_id ?? null);
+      if (!businessId) return json({ ok: true, ignored: "unknown_token" });
+    }
     let acked = v.acknowledged;
     if (needsAcknowledge(v)) acked = await acknowledge(pkg, v.productId, target.purchaseToken, at);
-    await persistAndApply(service, row.business_id, target.purchaseToken, v, got.raw, acked);
-    return json({ ok: true, state: v.state });
+    const applied = await persistAndApply(
+      service, businessId, target.purchaseToken, v, got.raw, acked, target.notificationType,
+    );
+    return json({ ok: true, state: v.state, applied });
   } catch (e) {
     console.error("rtdn failed", e);
     return json({ ok: false, error: "internal" }, 500); // non-2xx => Pub/Sub retries

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/features/subscription/billing/play_billing_constants.dart';
 import 'package:reebaplus_pos/features/subscription/billing/play_billing_controller.dart';
 import 'package:reebaplus_pos/features/subscription/billing/play_billing_port.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_plan.dart';
@@ -29,3 +30,28 @@ final billingBusinessIdProvider = Provider<String?>(
 final billingUsesNairaProvider = Provider<bool>(
   (ref) => pricesInNaira(ref.watch(currencyCodeProvider).valueOrNull),
 );
+
+/// Whether the business pays through a Play subscription (cloud lookup), so a
+/// device without that purchase never starts a second one (#589).
+final playSubscriptionLookupProvider = Provider<PlaySubscriptionLookup>(
+  (ref) => supabasePlaySubscriptionLookup(ref.watch(supabaseClientProvider)),
+);
+
+/// The running paid plan from the synced businesses row; null on free, trial
+/// or a lapsed plan.
+final billingCurrentPlanProvider = Provider<CurrentPlan?>((ref) {
+  final b = ref.watch(currentBusinessProvider);
+  if (b == null || b.subscriptionStatus != 'active') return null;
+  final end = b.currentPeriodEnd;
+  if (end != null && !end.isAfter(DateTime.now())) return null;
+  final tier = switch (b.subscriptionPlan) {
+    kPlanBasic => PlanTier.basic,
+    kPlanPremium => PlanTier.premium,
+    _ => null,
+  };
+  if (tier == null) return null;
+  final cycle = b.billingCycle == kBasePlanYearly
+      ? BillingCycle.yearly
+      : BillingCycle.monthly;
+  return CurrentPlan(tier, cycle, periodEnd: end);
+});

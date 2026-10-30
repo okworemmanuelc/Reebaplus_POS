@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:reebaplus_pos/features/subscription/billing/play_billing_constants.dart';
@@ -38,6 +39,35 @@ PurchaseVerifier supabasePurchaseVerifier(SupabaseClient client) =>
       }
     };
 
+/// Whether the business currently pays through a Google Play subscription
+/// (an entitled row in play_subscription_purchases). Throws when it cannot be
+/// checked (offline).
+typedef PlaySubscriptionLookup = Future<bool> Function(String businessId);
+
+PlaySubscriptionLookup supabasePlaySubscriptionLookup(SupabaseClient client) =>
+    (businessId) async {
+      final rows = await client
+          .from('play_subscription_purchases')
+          .select('id')
+          .eq('business_id', businessId)
+          .inFilter('state', const ['ACTIVE', 'IN_GRACE_PERIOD', 'CANCELED'])
+          .gt('expiry_time', DateTime.now().toUtc().toIso8601String())
+          .limit(1);
+      return rows.isNotEmpty;
+    };
+
+/// The paid plan the business is on right now (from the synced businesses
+/// row). Null when it is not on a running paid plan (free, trial, lapsed).
+class CurrentPlan {
+  final PlanTier tier;
+  final BillingCycle cycle;
+  final DateTime? periodEnd;
+  const CurrentPlan(this.tier, this.cycle, {this.periodEnd});
+}
+
+const String kManageInPlayMessage =
+    'Manage your subscription in Google Play on the phone you bought it with.';
+
 enum BillingPhase { loading, unavailable, ready, purchasing, verifying, success, error }
 
 class BillingState {
@@ -54,11 +84,20 @@ class PlayBillingController extends ChangeNotifier {
     required this.port,
     required this.verify,
     required this.businessId,
-  });
+    CurrentPlan? Function()? currentPlan,
+    PlaySubscriptionLookup? hasPlaySubscription,
+  })  : _currentPlan = currentPlan ?? (() => null),
+        _hasPlaySubscription = hasPlaySubscription;
 
   final PlayBillingPort port;
   final PurchaseVerifier verify;
   final String businessId;
+  final CurrentPlan? Function() _currentPlan;
+  final PlaySubscriptionLookup? _hasPlaySubscription;
+
+  /// Shown instead of "Your plan is active." once a deferred downgrade is
+  /// confirmed by the server.
+  String? _pendingSuccessMessage;
 
   BillingState _state = const BillingState(BillingPhase.loading);
   BillingState get state => _state;
@@ -99,19 +138,91 @@ class PlayBillingController extends ChangeNotifier {
     return null;
   }
 
+  /// True for the plan the business is already on ("Current plan").
+  bool isCurrentPlan(PlanTier t, BillingCycle c) {
+    final cur = _currentPlan();
+    return cur != null && planMove(cur.tier, cur.cycle, t, c) == PlanMove.same;
+  }
+
+  /// Starts a purchase, or a plan switch that REPLACES the existing Play
+  /// subscription (#589): upgrades now (prorated), downgrades at renewal.
   Future<void> subscribe(PlanTier t, BillingCycle c) async {
+    final offers = _state.offers;
     final offer = offerFor(t, c);
     if (offer == null) {
-      _set(BillingState(BillingPhase.error, offers: _state.offers,
+      _set(BillingState(BillingPhase.error, offers: offers,
           message: 'This plan is not available from the store yet. Try again later.'));
       return;
     }
-    _set(BillingState(BillingPhase.purchasing, offers: _state.offers));
-    try {
-      await port.buy(offer, accountId: businessId);
-    } catch (e) {
-      _set(BillingState(BillingPhase.error, offers: _state.offers, message: '$e'));
+    final cur = _currentPlan();
+    if (cur != null && planMove(cur.tier, cur.cycle, t, c) == PlanMove.same) {
+      _set(BillingState(BillingPhase.ready, offers: offers,
+          message: 'This is your current plan.'));
+      return;
     }
+    _set(BillingState(BillingPhase.purchasing, offers: offers));
+    _pendingSuccessMessage = null;
+    try {
+      OwnedSubscription? owned;
+      try {
+        owned = await port.queryOwnedSubscription();
+      } catch (_) {
+        owned = null;
+      }
+      // A subscription tagged for a different business is not ours to replace.
+      if (owned != null &&
+          owned.accountId != null &&
+          owned.accountId!.isNotEmpty &&
+          owned.accountId != businessId) {
+        owned = null;
+      }
+
+      PlanChange? change;
+      if (owned != null) {
+        final fromTier = cur?.tier ?? tierForProduct(owned.productId) ?? t;
+        final fromCycle = cur?.cycle ?? BillingCycle.monthly;
+        final move = planMove(fromTier, fromCycle, t, c);
+        if (move == PlanMove.same) {
+          _set(BillingState(BillingPhase.ready, offers: offers,
+              message: 'You already have this plan. If it is not showing, '
+                  'tap Restore purchases.'));
+          return;
+        }
+        final downgrade = move == PlanMove.downgrade;
+        change = PlanChange(owned,
+            downgrade ? ReplacementKind.downgradeAtRenewal : ReplacementKind.upgradeNow);
+        if (downgrade) _pendingSuccessMessage = _downgradeMessage(t, cur?.periodEnd);
+      } else if (cur != null) {
+        // Paid, but no subscription on this device: if it is a Play
+        // subscription (bought on another phone / Google account), a new
+        // purchase would bill twice. A hand-given plan can be bought over.
+        final lookup = _hasPlaySubscription;
+        bool onPlay;
+        try {
+          onPlay = lookup != null && await lookup(businessId);
+        } catch (_) {
+          _set(BillingState(BillingPhase.error, offers: offers,
+              message: 'We could not check your current subscription. Check '
+                  'your internet connection and try again.'));
+          return;
+        }
+        if (onPlay) {
+          _set(BillingState(BillingPhase.ready, offers: offers,
+              message: kManageInPlayMessage));
+          return;
+        }
+      }
+      await port.buy(offer, accountId: businessId, change: change);
+    } catch (e) {
+      _pendingSuccessMessage = null;
+      _set(BillingState(BillingPhase.error, offers: offers, message: '$e'));
+    }
+  }
+
+  static String _downgradeMessage(PlanTier t, DateTime? on) {
+    final name = t == PlanTier.basic ? 'Basic' : 'Premium';
+    if (on == null) return 'Your plan changes to $name at your next renewal.';
+    return 'Your plan changes to $name on ${DateFormat('d MMM yyyy').format(on.toLocal())}.';
   }
 
   Future<void> restore() async {
@@ -160,8 +271,9 @@ class PlayBillingController extends ChangeNotifier {
         );
         if (out.ok) {
           await port.complete(e);
-          _set(BillingState(BillingPhase.success, offers: offers,
-              message: 'Your plan is active.'));
+          final msg = _pendingSuccessMessage ?? 'Your plan is active.';
+          _pendingSuccessMessage = null;
+          _set(BillingState(BillingPhase.success, offers: offers, message: msg));
         } else {
           // Do NOT complete: the purchase stays queued and is re-delivered to
           // retry verification on the next launch/restore.

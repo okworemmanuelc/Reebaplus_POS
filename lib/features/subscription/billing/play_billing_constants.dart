@@ -46,3 +46,28 @@ String fallbackPrice(PlanTier t, BillingCycle c, {required bool naira}) {
   };
   return (naira ? ngn : usd)[(t, c)]!;
 }
+
+/// The tier a Play product id sells, or null for an unknown product.
+PlanTier? tierForProduct(String productId) => switch (productId) {
+  kProductBasic => PlanTier.basic,
+  kProductPremium => PlanTier.premium,
+  _ => null,
+};
+
+/// How moving from one plan to another replaces the subscription (#589).
+enum PlanMove { same, upgrade, downgrade }
+
+/// Tier decides first (a lower tier is always a downgrade); on the same tier,
+/// monthly -> yearly is an upgrade and yearly -> monthly a downgrade.
+PlanMove planMove(
+  PlanTier fromTier,
+  BillingCycle fromCycle,
+  PlanTier toTier,
+  BillingCycle toCycle,
+) {
+  if (toTier != fromTier) {
+    return toTier.index > fromTier.index ? PlanMove.upgrade : PlanMove.downgrade;
+  }
+  if (toCycle == fromCycle) return PlanMove.same;
+  return toCycle == BillingCycle.yearly ? PlanMove.upgrade : PlanMove.downgrade;
+}
