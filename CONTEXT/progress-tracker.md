@@ -7,6 +7,15 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Architecture refactors #571–#576 (2026-10-30, merged)
+- From the 2026-10-30 architecture review. All behaviour-preserving; no Drift or cloud change, no pos-parity issue needed.
+- #571 (PR #577): `lib/shared/services/orders/sale_totals.dart` — pure kobo **Sale totals** (goods, discount, crate deposit, payable, change); CheckoutPage delegates. Known latent: `saleLineTotal` truncates `(price*qty).toInt()` (display only); goods still enter as the Cart's naira double.
+- #572 (PR #578): every per-table sync fact now lives on `SyncedTable` (push priority, conflict target, deferrable, parent FK, online-order answer, withdrawable reversal, soft-deletable, ledger immutable columns); old names are aliases of derived sets. A new synced table = ONE registry entry, for real now.
+- #573 (PR #580): `lib/shared/services/device_teardown.dart` — `DeviceTeardown.leave(LeaveReason)` runs every wipe path in one fixed order; AuthService methods are one-line delegates. Single-session kick still signs out WITHOUT wiping Drift (unchanged).
+- #574 (PR #579): recon split — `reconcile(ReconInputs)` engine entry, `recon_inputs_adapter.dart` (WidgetRef), reason classifiers in `lib/core/inventory_reasons.dart`, `part` files for loss valuation + day close. `buildReconBuckets` still takes WidgetRef.
+- #575 (PR #581): `test/orders/sale_posting_test.dart` — 7 characterization tests on createOrder/markCancelled.
+- #576 (PR #582): 16 settings screens moved core → features/settings/screens; `test/architecture/core_imports_features_ban_test.dart` with 3 allowlisted files (app_providers, stream_providers, online_order_slip).
+
 ### Online ordering switched OFF (2026-10-29, owner request)
 - `lib/core/storefront/online_ordering_switch.dart`: `kOnlineOrderingEnabled = false` (same pattern as Van Sales). Flip to `true` and release to turn it back on.
 - Off = the four online gates (manageOnlineStore, manageListing, viewOnlineOrders, answerOnlineOrders) deny for everyone; Settings → Online store row, Store Details online card, the 4 permission toggles, online-order push taps and Browse-first/Shop are hidden. Schema, sync, cloud RPCs and reebaplus.com/shop untouched (prod has 0 online stores).

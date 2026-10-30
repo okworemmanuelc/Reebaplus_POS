@@ -159,6 +159,13 @@ legs, deducts inventory, issues crates, writes the Order. The Order is born
 (`completedAt` = the checkout instant, no confirmer). The economic act.
 _Avoid_: settle, record-sale (as user-facing verbs), "complete the sale".
 
+**Sale totals**:
+The figures a Checkout charges, computed by one pure module
+(`sale_totals.dart`): goods (after line discounts), crate deposit (only for a
+registered customer paying Cash/Transfer in a crate business), payable = goods +
+deposit, and change. Screens and receipts read these; they never re-derive them.
+_Avoid_: computing payable or deposit inside a widget.
+
 **Crate-bearing sale**:
 A Sale made by a business that tracks empties (`isCrateBusiness(type)` and
 `tracksEmptyCrates` on) with at least one crate-tracked bottle line (unit
@@ -589,6 +596,14 @@ baked to a missing or stale business at build time.
 _Avoid_: raw `StreamProvider` over a DAO `watch*`, inline businessId guards.
 
 ### Staff & Identity
+
+**Device teardown**:
+Everything that happens when a person stops being signed in on this phone —
+logout, resign, business deleted, single-session kick — run by
+`DeviceTeardown.leave(LeaveReason)` in one fixed order (outbox gate → detach →
+loss record → discard → clear data → sign out → markers). One user per device:
+every reason except the kick wipes local data.
+_Avoid_: writing a new logout path that does its own wipe.
 
 **Suspend**:
 The **reversible** block of a staff membership (`user_businesses.status =
