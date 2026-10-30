@@ -43,6 +43,7 @@ import 'package:reebaplus_pos/shared/services/printer_service.dart';
 import 'package:reebaplus_pos/shared/widgets/receipt_paper_size_prompt.dart';
 import 'package:reebaplus_pos/shared/services/cart_service.dart';
 import 'package:reebaplus_pos/shared/services/orders/debt_limit.dart';
+import 'package:reebaplus_pos/shared/services/orders/sale_totals.dart';
 import 'package:reebaplus_pos/core/online_orders/pay_on_delivery.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -253,7 +254,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         // reads "Cash" / "Transfer" instead of the generic pair.
         final tenderLabel = _tender == 'transfer' ? 'Transfer' : 'Cash';
         if (_isWalkIn) return tenderLabel;
-        final paidKobo = (_cashReceivedValue * 100).round();
+        final paidKobo = koboFromNaira(_cashReceivedValue);
         if (paidKobo >= _totalKobo) return tenderLabel;
         // Partial cash now; the shortfall books to the wallet as debt. (A zero
         // amount is blocked by validation, so we never reach here paid = 0.)
@@ -285,7 +286,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   /// counts; Wallet / Credit Sale pay nothing now, so the full total is charged.
   int get _projectedCreditKobo {
     final paidKobo = _mode == PayMode.cashTransfer
-        ? (_cashReceivedValue * 100).round()
+        ? koboFromNaira(_cashReceivedValue)
         : 0;
     return _currentCustomerCreditKobo + paidKobo - _totalKobo;
   }
@@ -302,7 +303,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   DebtLimitResult get _debtLimitResult {
     if (_isWalkIn) return const DebtLimitOk();
     final paidKobo = _mode == PayMode.cashTransfer
-        ? (_cashReceivedValue * 100).round()
+        ? koboFromNaira(_cashReceivedValue)
         : 0;
     return checkDebtLimit(
       balanceKobo: _currentCustomerCreditKobo,
@@ -339,13 +340,14 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     return live?.walletLimitKobo ?? _initialCustomer?.walletLimitKobo ?? 0;
   }
 
-  int get _goodsTotalKobo => (widget.total * 100).round();
-
-  /// Per-line discounts (§13.3) summed across the cart — already netted out of
-  /// [widget.total], while [widget.subtotal] is still the pre-discount gross.
-  /// #200 / US 33: the receipt prints this on its own line so the printed
-  /// Subtotal → Discount → Total reads as an addition, and so a later reprint
-  /// (which rebuilds the same three figures from the recorded order via
+  /// The sale's figures — goods, discount, deposit, payable — computed by the
+  /// pure Sale totals module (#571). The widget only supplies its state.
+  ///
+  /// Per-line discounts (§13.3) are already netted out of [widget.total], while
+  /// [widget.subtotal] is still the pre-discount gross. #200 / US 33: the
+  /// receipt prints the discount on its own line so the printed Subtotal →
+  /// Discount → Total reads as an addition, and so a later reprint (which
+  /// rebuilds the same three figures from the recorded order via
   /// `receiptTotalsFromOrder`) prints the identical block.
   ///
   /// The printed total stays [_totalKobo] — the payable actually charged — rather
@@ -353,42 +355,38 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   /// till. The two are equal because since #202 the cart's goods total is
   /// exactly subtotal − discounts, with no third term (see
   /// `ReceiptTotals.totalKobo`).
-  int get _discountTotalKobo => widget.cart.fold<int>(
-    0,
-    (s, i) => s + ((i['discountKobo'] as int?) ?? 0),
+  SaleTotals get _sale => SaleTotals.compute(
+    goodsTotalNaira: widget.total,
+    lineDiscountsKobo: widget.cart.map((i) => (i['discountKobo'] as int?) ?? 0),
+    crateLines: widget.crateLines.map(SaleCrateLine.fromMap).toList(),
+    isWalkIn: _isWalkIn,
+    isCashTransfer: _mode == PayMode.cashTransfer,
+    isCrateBusiness: _isCrateBusiness,
+    depositByManufacturer: _depositByMfr,
   );
 
-  /// True when the crate deposit is captured for this sale: a registered
-  /// customer (walk-ins have no wallet to hold it, rule #14) paying Cash /
-  /// Transfer (deposit is cash received now — a Wallet / Credit Sale hands over
-  /// no fresh deposit, so the crates fall back to "owed / crate-track"), with
-  /// crate brands in the cart.
+  int get _discountTotalKobo => _sale.discountKobo;
+
   /// §13.4 / rule #13 — the selected business is Bar / Beer Distributor. The
   /// cart only passes crateLines for a crate business, but guard here too so the
   /// deposit section can never render for a non-crate type (defense in depth).
   bool get _isCrateBusiness =>
       businessTracksCrates(ref.read(currentBusinessProvider));
 
-  bool get _depositApplies =>
-      !_isWalkIn &&
-      _mode == PayMode.cashTransfer &&
-      _isCrateBusiness &&
-      widget.crateLines.isNotEmpty;
+  /// True when the crate deposit is captured for this sale: a registered
+  /// customer paying Cash / Transfer, in a crate business, with crate brands in
+  /// the cart (rules in [SaleTotals.compute]).
+  bool get _depositApplies => _sale.depositApplies;
 
   /// Total deposit PAID at checkout (kobo) — 0 unless [_depositApplies].
-  int get _depositTotalKobo =>
-      _depositApplies ? _depositByMfr.values.fold<int>(0, (s, v) => s + v) : 0;
+  int get _depositTotalKobo => _sale.depositKobo;
 
   /// The full/expected deposit if every brand's crates were deposited in full
   /// (rate × crates summed). Shown as a reference; not added to the payable.
-  int get _fullDepositKobo => widget.crateLines.fold<int>(0, (s, line) {
-    final rateKobo = (line['rateKobo'] as int?) ?? 0;
-    final crates = (line['crates'] as num?)?.toDouble() ?? 0;
-    return s + (rateKobo * crates).round();
-  });
+  int get _fullDepositKobo => _sale.fullDepositKobo;
 
   /// The payable total the customer settles = goods + the deposit held.
-  int get _totalKobo => _goodsTotalKobo + _depositTotalKobo;
+  int get _totalKobo => _sale.payableKobo;
 
   // ── build ──────────────────────────────────────────────────────────────────
   @override
@@ -740,9 +738,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     final mfrId = line['manufacturerId'] as String;
     final name = (line['name'] as String?) ?? 'Brand';
     final crates = (line['crates'] as num?)?.toDouble() ?? 0;
-    final rateKobo = (line['rateKobo'] as int?) ?? 0;
     final paidKobo = _depositByMfr[mfrId] ?? 0;
-    final fullKobo = (rateKobo * crates).round();
+    final fullKobo = SaleCrateLine.fromMap(line).fullDepositKobo;
     final isFull = paidKobo == fullKobo;
     final isNone = paidKobo == 0;
     final tag = isNone ? 'No deposit' : (isFull ? 'Full' : 'Part');
@@ -1009,7 +1006,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     // erroring "enter the amount". An explicit amount is respected (it may be a
     // deliberate split cash + credit), so only switch when the field is empty.
     if (_mode == PayMode.cashTransfer && !_isWalkIn) {
-      final entered = (_cashReceivedValue * 100).round();
+      final entered = koboFromNaira(_cashReceivedValue);
       if (entered <= 0 && _currentCustomerCreditKobo >= _totalKobo) {
         setState(() => _mode = PayMode.wallet);
         AppNotification.showInfo(
@@ -1025,7 +1022,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     // "enter an amount" feedback is immediate (the staleness check is a DB
     // round-trip that could otherwise delay or swallow the error).
     final paidKobo = _mode == PayMode.cashTransfer
-        ? (_cashReceivedValue * 100).round()
+        ? koboFromNaira(_cashReceivedValue)
         : 0;
 
     if (_isWalkIn) {
@@ -1856,7 +1853,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   Widget _resultPreview() {
     final projectedKobo = _projectedCreditKobo; // negative = debt
     final projected = projectedKobo / 100.0;
-    final diffKobo = (_cashReceivedValue * 100).round() - _totalKobo;
+    final diffKobo = _sale.changeKobo(koboFromNaira(_cashReceivedValue));
 
     String hint;
     if (diffKobo < 0) {
@@ -2083,7 +2080,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         ? rawQty.toDouble()
         : double.tryParse(rawQty.toString()) ?? 0.0;
 
-    final int lineTotal = (price * qty).toInt();
+    final int lineTotal = saleLineTotal(price: price, qty: qty);
 
     // The category tile, as the Cart's lines (#385).
     final rawCategory = item['category']?.toString();
