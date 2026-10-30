@@ -2,6 +2,7 @@
 // plugin and the verify Edge Function are faked at their seams.
 
 import 'dart:async';
+import 'package:fake_async/fake_async.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -184,6 +185,25 @@ void main() {
           productId: kProductPremium, purchaseToken: 'new-tok'));
       expect(c.state.phase, BillingPhase.success);
       expect(c.state.message, 'Your plan changes to Basic on 12 Nov 2026.');
+    });
+
+    test('deferred downgrade with no purchase event settles after 60s', () {
+      fakeAsync((async) {
+        final port = FakePort(offers: all)
+          ..owned = const OwnedSubscription(kProductPremium, 'old-tok', accountId: 'biz-1');
+        late PlayBillingController c;
+        ctl(port, CurrentPlan(PlanTier.premium, BillingCycle.monthly,
+                periodEnd: DateTime(2026, 11, 12, 12)))
+            .then((v) => c = v);
+        async.flushMicrotasks();
+        c.subscribe(PlanTier.basic, BillingCycle.monthly);
+        async.flushMicrotasks();
+        expect(c.state.phase, BillingPhase.purchasing);
+        async.elapse(const Duration(seconds: 61));
+        expect(c.state.phase, BillingPhase.ready);
+        expect(c.state.message,
+            'If you confirmed the change: Your plan changes to Basic on 12 Nov 2026.');
+      });
     });
 
     test('same plan never starts a purchase', () async {

@@ -104,6 +104,9 @@ class PlayBillingController extends ChangeNotifier {
   StreamSubscription<PurchaseEvent>? _sub;
   bool _disposed = false;
   Timer? _restoreTimer;
+  // A deferred downgrade may finish with no purchase event (Play can return an
+  // empty update). Settle the paywall instead of spinning forever.
+  Timer? _downgradeTimer;
 
   void _set(BillingState s) {
     if (_disposed) return;
@@ -213,6 +216,16 @@ class PlayBillingController extends ChangeNotifier {
         }
       }
       await port.buy(offer, accountId: businessId, change: change);
+      if (change?.kind == ReplacementKind.downgradeAtRenewal) {
+        final msg = _pendingSuccessMessage;
+        _downgradeTimer?.cancel();
+        _downgradeTimer = Timer(const Duration(seconds: 60), () {
+          if (_state.phase != BillingPhase.purchasing) return;
+          _pendingSuccessMessage = null;
+          _set(BillingState(BillingPhase.ready, offers: _state.offers,
+              message: msg == null ? null : 'If you confirmed the change: $msg'));
+        });
+      }
     } catch (e) {
       _pendingSuccessMessage = null;
       _set(BillingState(BillingPhase.error, offers: offers, message: '$e'));
@@ -288,6 +301,7 @@ class PlayBillingController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _restoreTimer?.cancel();
+    _downgradeTimer?.cancel();
     _sub?.cancel();
     super.dispose();
   }
