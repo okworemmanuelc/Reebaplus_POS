@@ -297,11 +297,9 @@ class SupabaseSyncService {
   /// and back-filled inline — the common "CEO created a supplier / category /
   /// manufacturer on another device and a child references it before its slice
   /// arrived" case. Maps the child row's camelCase FK field to the parent table.
-  static const Map<String, String> _targetedParentFkFields = {
-    'supplierId': 'suppliers',
-    'categoryId': 'categories',
-    'manufacturerId': 'manufacturers',
-  };
+  /// DERIVED from the `SyncedTable` registry (`targetedParentFkField`, #572).
+  static final Map<String, String> _targetedParentFkFields =
+      kSyncTargetedParentFkFields;
 
   /// §3.7 (A2) hard cap on targeted parent fetches per pull, so a flaky link or
   /// a genuinely-absent parent can't turn the heal into an unbounded round-trip
@@ -470,40 +468,10 @@ class SupabaseSyncService {
 
   /// Tables whose rows are referenced by FKs from other tables. They must be
   /// pushed before any child rows in the same batch, otherwise the child push
-  /// fails with a 23503 FK violation. Lower number = pushed first.
-  static const Map<String, int> _tablePushPriority = {
-    'businesses': 0,
-    'profiles': 1,
-    // users must precede every child that FK-references it: stock_adjustments
-    // .performed_by, stock_transactions.performed_by, sessions.user_id, and
-    // the children created server-side by domain RPCs (pos_create_product,
-    // pos_inventory_delta, pos_record_sale).
-    'users': 1,
-    'stores': 2,
-    'manufacturers': 3,
-    'crate_size_groups': 3,
-    'categories': 4,
-    'suppliers': 5,
-    'products': 10,
-    'customers': 11,
-    'inventory': 12,
-    'customer_wallets': 20,
-    'orders': 30,
-    'order_items': 31,
-    'wallet_transactions': 32,
-    'crate_ledger': 33,
-    'store_crate_balances': 35,
-    // #166: the `manufacturer_crate_balances` cache is OFF the push set (the
-    // business-wide empties pool is derived from the ledger — ADR 0020), so it
-    // has no push-priority entry. After this slice NO crate balance is pushed —
-    // only the append-only ledgers sync.
-    // v53 (§3.13) — supplier crate ledger pushes after its parents (suppliers=5,
-    // manufacturers=3) so the FK targets land first. #160: the
-    // `supplier_crate_balances` cache is OFF the push set (supplier crate debt is
-    // derived from the ledger — ADR 0020), so it has no push-priority entry.
-    'supplier_crate_ledger': 36,
-    'system_config': 50,
-  };
+  /// fails with a 23503 FK violation. Lower number = pushed first. DERIVED from
+  /// the `SyncedTable` registry (`pushPriority`, #572). The crate balance
+  /// caches are OFF the push set (#160/#166, ADR 0020), so they carry none.
+  static final Map<String, int> _tablePushPriority = kSyncPushPriority;
 
   int _priorityFor(String actionType) {
     final table = actionType.split(':').first;
@@ -511,21 +479,12 @@ class SupabaseSyncService {
   }
 
   /// Cloud upsert conflict targets for caches identified by a NATURAL key
-  /// rather than their surrogate `id`. `store_crate_balances` has two id-minting
-  /// authorities for the same (business, store, manufacturer): the client
-  /// (UuidV7, via addEmptyCrates / updateManufacturerStock plain-enqueues) and
-  /// the cloud domain RPC pos_transfer_crates (gen_random_uuid). A PK-keyed
-  /// cloud upsert of a client-minted id would INSERT a duplicate and trip the
-  /// cloud UNIQUE(business_id, store_id, manufacturer_id); keying the push on
-  /// the natural key merges into the existing row instead. (The manufacturer and
-  /// customer crate caches are OFF the push set entirely — #166 / #158, ADR 0020
-  /// — so they are never enqueued and need no natural-key entry.)
-  static const Map<String, String> _naturalKeyPushConflictTargets = {
-    'store_crate_balances': 'business_id,store_id,manufacturer_id',
-    // #160: the `supplier_crate_balances` cache is OFF the push set (supplier
-    // crate debt is derived from the append-only `supplier_crate_ledger` — ADR
-    // 0020), so it is never enqueued and needs no natural-key conflict target.
-  };
+  /// rather than their surrogate `id`. DERIVED from the `SyncedTable` registry
+  /// (`pushConflictTarget`, #572 — see that field for why). The manufacturer,
+  /// customer and supplier crate caches are OFF the push set entirely (#166 /
+  /// #158 / #160, ADR 0020), so they need no natural-key entry.
+  static final Map<String, String> _naturalKeyPushConflictTargets =
+      kSyncPushConflictTargets;
 
   /// Per-table whitelist of cloud-pushable columns, DERIVED from the
   /// `SyncedTable` registry (issue #15). Any payload key NOT in the table's
@@ -580,10 +539,8 @@ class SupabaseSyncService {
   }
 
   /// #427: the Online Order tables a shop phone answers through the outbox.
-  static const Set<String> _onlineOrderAnswerTables = {
-    'online_orders',
-    'online_order_lines',
-  };
+  /// DERIVED from the `SyncedTable` registry (`onlineOrderAnswer`, #572).
+  static final Set<String> _onlineOrderAnswerTables = kOnlineOrderAnswerTables;
 
   /// The 0205/0208 transition guard's refusal: an answer to an order that is
   /// no longer open (P0001 `online_order_transition_rejected`).
@@ -2786,34 +2743,10 @@ class SupabaseSyncService {
   static final List<String> _pullOrder = kSyncPullOrder;
 
   /// Tables we treat as "deferrable" on first-pull: leaf tables that nothing
-  /// FK-references, so a missing slice can't trip restore-time FK violations
-  /// in any other table. If only these fail after retry in the per-table
-  /// fallback, the pull proceeds with what arrived and `pullChanges`
-  /// intentionally does NOT advance `last_sync_timestamp::<businessId>`
-  /// so the next pull is another full pull and catches up the deferred
-  /// slices on a (hopefully) better connection.
-  ///
-  /// Adding a table here is a load-bearing safety claim. Before adding,
-  /// confirm there are no inbound FK references with BOTH:
-  ///   grep -nE "\.references\(<TableName>," lib/core/database/app_database.dart
-  ///   grep -nE "REFERENCES public\.<table_name>\b" supabase/migrations/*.sql
-  /// Both must return zero matches. If anything FK-references the table,
-  /// deferring it would break the dependent restore.
-  static const Set<String> _deferrableTables = {
-    'stock_transactions',
-    'sessions',
-    'activity_logs',
-    // v46 (§33) — crash/error log. Leaf table (no inbound FKs), so deferring a
-    // missing slice can't trip restore-time FK violations elsewhere.
-    'error_logs',
-    'notifications',
-    'payment_transactions',
-    'crate_ledger',
-    // v53 (§3.13) — append-only supplier crate ledger. Leaf table (nothing
-    // FK-references it; the balance cache is app-derived, not an FK), so
-    // deferring a missing slice can't trip restore-time FK violations.
-    'supplier_crate_ledger',
-  };
+  /// FK-references. DERIVED from the `SyncedTable` registry (`deferrable`,
+  /// #572) — read [SyncedTable.deferrable] for the load-bearing safety check
+  /// before flagging a table.
+  static final Set<String> _deferrableTables = kSyncDeferrableTables;
 
   /// SharedPreferences key (per-business) carrying the last set of tables
   /// that were leaf-deferred on an otherwise-successful pull. SyncIssues

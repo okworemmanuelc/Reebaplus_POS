@@ -33,36 +33,15 @@ class SyncDiagnostic {
   SyncDiagnostic(this._db, {SupabaseClient? client})
     : _supabase = client ?? Supabase.instance.client;
 
-  /// Canonical tenant-table list. Mirrors the syncOrder used by
-  /// SupabaseSyncService.pullInitialData. `businesses` is excluded because
+  /// Canonical tenant-table list, DERIVED from the `SyncedTable` registry
+  /// (issue #572) in pull order: every business-scoped tenant table plus the
+  /// balance caches (all carry `business_id`). `businesses` is excluded because
   /// it is filtered by `id`, not `business_id`, and there is exactly one row
-  /// per business — the count is uninformative here.
-  static const List<String> tables = [
-    'stores',
-    'manufacturers',
-    'crate_size_groups',
-    'categories',
-    'suppliers',
-    'products',
-    'inventory',
-    'customers',
-    'customer_wallets',
-    'orders',
-    'order_items',
-    'wallet_transactions',
-    'expenses',
-    'expense_categories',
-    'customer_crate_balances',
-    'delivery_receipts',
-    'drivers',
-    'stock_transfers',
-    'stock_adjustments',
-    'activity_logs',
-    'notifications',
-    'stock_transactions',
-    'saved_carts',
-    'pending_crate_returns',
-    'invites',
+  /// per business — the count is uninformative here; the global pull-only
+  /// tables (`profiles`, `system_config`) have no `business_id`.
+  static final List<String> tables = [
+    for (final t in kSyncRegistry)
+      if (t.tenantScoped || t.isCache) t.name,
   ];
 
   Future<List<TableDiagnosticRow>> run(

@@ -2323,7 +2323,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         idsByTable['crate_ledger'] ?? const <String>[],
       );
 
-      for (final table in AppDatabase.kWithdrawableReversalTables) {
+      for (final table in kWithdrawableReversalTables) {
         if (table == 'crate_ledger') continue; // withdrawn by the seam above
         await db.withdrawUnsyncedRows(
           table,

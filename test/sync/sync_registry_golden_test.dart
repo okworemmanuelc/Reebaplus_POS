@@ -26,6 +26,7 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/diagnostics/sync_diagnostic.dart';
 
 void main() {
   test('#472 category mapping stays in tenant sync; public reference stays out', () {
@@ -394,5 +395,320 @@ void main() {
     for (final t in goldenHardDelete) {
       expect(order, contains(t), reason: 'hard-delete table $t missing from pull order');
     }
+  });
+
+  // === #572 — the per-table maps that lived OUTSIDE the registry ===========
+  // Frozen literals of the constructs moved onto SyncedTable fields by #572
+  // (supabase_sync_service: _tablePushPriority, _naturalKeyPushConflictTargets,
+  // _deferrableTables, _targetedParentFkFields, _onlineOrderAnswerTables;
+  // app_database: kWithdrawableReversalTables, _softDeletableTables,
+  // _ledgerTables; sync_diagnostic: SyncDiagnostic.tables). Same rule as above:
+  // a diff here is a sync/schema fact change — update BOTH sides deliberately.
+  group('#572 moved per-table maps', () {
+    const goldenPushPriority = <String, int>{
+      'businesses': 0,
+      'profiles': 1,
+      'users': 1,
+      'stores': 2,
+      'manufacturers': 3,
+      'crate_size_groups': 3,
+      'categories': 4,
+      'suppliers': 5,
+      'products': 10,
+      'customers': 11,
+      'inventory': 12,
+      'customer_wallets': 20,
+      'orders': 30,
+      'order_items': 31,
+      'wallet_transactions': 32,
+      'crate_ledger': 33,
+      'store_crate_balances': 35,
+      'supplier_crate_ledger': 36,
+      'system_config': 50,
+    };
+    const goldenConflictTargets = <String, String>{
+      'store_crate_balances': 'business_id,store_id,manufacturer_id',
+    };
+    const goldenDeferrable = <String>{
+      'stock_transactions',
+      'sessions',
+      'activity_logs',
+      'error_logs',
+      'notifications',
+      'payment_transactions',
+      'crate_ledger',
+      'supplier_crate_ledger',
+    };
+    const goldenTargetedParentFkFields = <String, String>{
+      'supplierId': 'suppliers',
+      'categoryId': 'categories',
+      'manufacturerId': 'manufacturers',
+    };
+    const goldenOnlineOrderAnswer = <String>{
+      'online_orders',
+      'online_order_lines',
+    };
+    const goldenWithdrawable = <String>{
+      'stock_transactions',
+      'stock_adjustments',
+      'payment_transactions',
+      'wallet_transactions',
+      'crate_ledger',
+      'cost_batches',
+    };
+    const goldenSoftDeletable = <String>[
+      'stores',
+      'manufacturers',
+      'crate_size_groups',
+      'categories',
+      'suppliers',
+      'products',
+      'price_lists',
+      'customers',
+      'customer_wallets',
+      'drivers',
+      'expense_categories',
+      'expenses',
+      'expense_budgets',
+      'roles',
+      'invite_codes',
+    ];
+    const goldenLedgerImmutableColumns = <String, List<String>>{
+      'stock_transactions': [
+        'id',
+        'business_id',
+        'product_id',
+        'location_id',
+        'quantity_delta',
+        'movement_type',
+        'order_id',
+        'transfer_id',
+        'adjustment_id',
+        'shipment_id',
+        'performed_by',
+        'created_at',
+      ],
+      'wallet_transactions': [
+        'id',
+        'business_id',
+        'wallet_id',
+        'customer_id',
+        'type',
+        'amount_kobo',
+        'signed_amount_kobo',
+        'reference_type',
+        'order_id',
+        'performed_by',
+        'customer_verified',
+        'created_at',
+      ],
+      'supplier_ledger_entries': [
+        'id',
+        'business_id',
+        'supplier_id',
+        'store_id',
+        'type',
+        'amount_kobo',
+        'signed_amount_kobo',
+        'reference_type',
+        'payment_method',
+        'receipt_path',
+        'reference_note',
+        'activity_date',
+        'performed_by',
+        'created_at',
+      ],
+      'payment_transactions': [
+        'id',
+        'business_id',
+        'store_id',
+        'amount_kobo',
+        'method',
+        'type',
+        'order_id',
+        'shipment_id',
+        'expense_id',
+        'wallet_txn_id',
+        'delivery_id',
+        'van_trip_id',
+        'crate_deposit_id',
+        'performed_by',
+        'created_at',
+      ],
+      'activity_logs': [
+        'id',
+        'business_id',
+        'user_id',
+        'action',
+        'description',
+        'entity_type',
+        'entity_id',
+        'before_json',
+        'after_json',
+        'store_id',
+        'created_at',
+      ],
+      'crate_ledger': [
+        'id',
+        'business_id',
+        'customer_id',
+        'manufacturer_id',
+        'crate_size_group_id',
+        'quantity_delta',
+        'movement_type',
+        'reference_order_id',
+        'reference_return_id',
+        'performed_by',
+        'rate_per_crate_kobo',
+        'reason',
+        'created_at',
+      ],
+      'driver_ledger_entries': [
+        'id',
+        'business_id',
+        'driver_user_id',
+        'trip_id',
+        'type',
+        'amount_kobo',
+        'signed_amount_kobo',
+        'reference_type',
+        'reference_id',
+        'payment_method',
+        'receipt_path',
+        'reference_note',
+        'activity_date',
+        'performed_by',
+        'created_at',
+      ],
+      'supplier_crate_ledger': [
+        'id',
+        'business_id',
+        'supplier_id',
+        'manufacturer_id',
+        'store_id',
+        'quantity_delta',
+        'movement_type',
+        'deposit_paid_kobo',
+        'note',
+        'performed_by',
+        'created_at',
+      ],
+      'supplier_crate_deposits': [
+        'id',
+        'business_id',
+        'supplier_id',
+        'manufacturer_id',
+        'store_id',
+        'movement_type',
+        'signed_amount_kobo',
+        'crate_count',
+        'rate_per_crate_kobo',
+        'request_id',
+        'supplier_crate_ledger_id',
+        'note',
+        'performed_by',
+        'created_at',
+      ],
+      'crate_shortfall_writeoffs': [
+        'id',
+        'business_id',
+        'manufacturer_id',
+        'store_id',
+        'crate_count',
+        'rate_per_crate_kobo',
+        'note',
+        'source',
+        'performed_by',
+        'created_at',
+      ],
+    };
+    // The old SyncDiagnostic.tables literal. It was a stale hand-copy of the
+    // pull order (it even listed the long-gone `invites` table); the derived
+    // list must still cover every real table it named.
+    const goldenDiagnosticTables = <String>[
+      'stores', 'manufacturers', 'crate_size_groups', 'categories',
+      'suppliers', 'products', 'inventory', 'customers', 'customer_wallets',
+      'orders', 'order_items', 'wallet_transactions', 'expenses',
+      'expense_categories', 'customer_crate_balances', 'delivery_receipts',
+      'drivers', 'stock_transfers', 'stock_adjustments', 'activity_logs',
+      'notifications', 'stock_transactions', 'saved_carts',
+      'pending_crate_returns', 'invites',
+    ];
+
+    test('push priority reproduces the frozen map', () {
+      expect(kSyncPushPriority, goldenPushPriority);
+    });
+
+    test('natural-key conflict targets reproduce the frozen map', () {
+      expect(kSyncPushConflictTargets, goldenConflictTargets);
+    });
+
+    test('deferrable tables reproduce the frozen set', () {
+      expect(kSyncDeferrableTables, goldenDeferrable);
+    });
+
+    test('targeted-parent FK fields reproduce the frozen map', () {
+      expect(kSyncTargetedParentFkFields, goldenTargetedParentFkFields);
+    });
+
+    test('online-order answer tables reproduce the frozen set', () {
+      expect(kOnlineOrderAnswerTables, goldenOnlineOrderAnswer);
+    });
+
+    test('withdrawable reversal tables: same members, children first', () {
+      expect(kWithdrawableReversalTables, goldenWithdrawable);
+      // Iteration order (reverse registry) withdraws a referencing row before
+      // the row it references — the two FK pairs inside the set.
+      final order = kWithdrawableReversalTables.toList();
+      expect(order, [
+        'payment_transactions',
+        'crate_ledger',
+        'wallet_transactions',
+        'stock_transactions',
+        'stock_adjustments',
+        'cost_batches',
+      ]);
+      expect(order.indexOf('stock_transactions'),
+          lessThan(order.indexOf('stock_adjustments')));
+      expect(order.indexOf('payment_transactions'),
+          lessThan(order.indexOf('wallet_transactions')));
+    });
+
+    test('soft-delete tables reproduce the frozen set', () {
+      expect(kSoftDeletableTables.toSet(), goldenSoftDeletable.toSet());
+      expect(kSoftDeletableTables.length, goldenSoftDeletable.length);
+    });
+
+    test('ledger immutable columns reproduce the frozen map (column order too)',
+        () {
+      expect(kLedgerImmutableColumns, goldenLedgerImmutableColumns);
+    });
+
+    test('diagnostic tables derive from the registry and cover the old list',
+        () {
+      expect(SyncDiagnostic.tables, [
+        for (final t in kSyncRegistry)
+          if (t.tenantScoped || t.isCache) t.name,
+      ]);
+      expect(SyncDiagnostic.tables, isNot(contains('businesses')));
+      final real = goldenDiagnosticTables.where((t) => t != 'invites');
+      expect(SyncDiagnostic.tables, containsAll(real));
+    });
+
+    test('every moved-map table is a registry table', () {
+      final names = kSyncPullOrder.toSet();
+      for (final t in {
+        ...goldenPushPriority.keys,
+        ...goldenConflictTargets.keys,
+        ...goldenDeferrable,
+        ...goldenTargetedParentFkFields.values,
+        ...goldenOnlineOrderAnswer,
+        ...goldenWithdrawable,
+        ...goldenSoftDeletable,
+        ...goldenLedgerImmutableColumns.keys,
+      }) {
+        expect(names, contains(t), reason: '$t missing from the registry');
+      }
+    });
   });
 }
