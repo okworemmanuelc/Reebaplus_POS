@@ -8,10 +8,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/features/subscription/screens/subscription_locked_screen.dart';
-import 'package:reebaplus_pos/features/subscription/screens/thank_you_subscription_screen.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
 
 import '../helpers/screen_harness.dart';
@@ -28,14 +26,13 @@ void main() {
   };
 
   late ScreenTestEnvironment env;
-  late BusinessData business;
 
   setUp(() async {
     env = await setupScreenTestEnvironment(
       productCount: 0,
       businessName: 'Stallion Global',
     );
-    business = await seedSubscriptionBusiness(env);
+    await seedSubscriptionBusiness(env);
   });
   tearDown(() => env.dispose());
 
@@ -102,17 +99,6 @@ void main() {
           padding: padding,
           brightness: b,
           name: 'subscription_locked_${sizeName}_$theme',
-        );
-      });
-      testWidgets('thank you $sizeName $theme', (tester) async {
-        await golden(
-          tester,
-          screen: ThankYouSubscriptionScreen(business: business),
-          type: ThankYouSubscriptionScreen,
-          size: size,
-          padding: padding,
-          brightness: b,
-          name: 'thank_you_subscription_${sizeName}_$theme',
         );
       });
     });

@@ -7,6 +7,10 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #585: Remove sign-in thank-you screen (2026-10-30, ready for review)
+
+Deleted ThankYouSubscriptionScreen + SubscriptionThanksService and the gate in main.dart home(); it wrongly showed at every sign-in. Part of PRD #584. Locked screen untouched.
+
 ### Architecture refactors #571–#576 (2026-10-30, merged)
 - From the 2026-10-30 architecture review. All behaviour-preserving; no Drift or cloud change, no pos-parity issue needed.
 - #571 (PR #577): `lib/shared/services/orders/sale_totals.dart` — pure kobo **Sale totals** (goods, discount, crate deposit, payable, change); CheckoutPage delegates. Known latent: `saleLineTotal` truncates `(price*qty).toInt()` (display only); goods still enter as the Cart's naira double.

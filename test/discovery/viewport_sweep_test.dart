@@ -72,7 +72,6 @@ import 'package:reebaplus_pos/features/stores/screens/request_stock_screen.dart'
 import 'package:reebaplus_pos/features/stores/screens/store_details_screen.dart';
 import 'package:reebaplus_pos/features/stores/screens/stores_screen.dart';
 import 'package:reebaplus_pos/features/subscription/screens/subscription_locked_screen.dart';
-import 'package:reebaplus_pos/features/subscription/screens/thank_you_subscription_screen.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
 import 'package:reebaplus_pos/features/sync/screens/sync_issues_screen.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/driver_payments_screen.dart';
@@ -288,7 +287,6 @@ final List<_Screen> _screens = [
     'SubscriptionLockedScreen',
     (_) => const SubscriptionLockedScreen(access: SubscriptionAccess.trialExpired),
   ),
-  _Screen('ThankYouSubscriptionScreen', (s) => ThankYouSubscriptionScreen(business: s.business)),
   // Pre-shell (auth). The fuller auth suite already pumps these at 800x360.
   _Screen('WelcomeScreen', (_) => const WelcomeScreen()),
   _Screen('LoginScreen', (_) => const LoginScreen()),
