@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
+import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
 import 'package:reebaplus_pos/features/settings/screens/subscription_screen.dart';
@@ -73,10 +74,13 @@ class TrialReminderBanner extends ConsumerWidget {
 }
 
 /// Pure banner selection (#586). Over-limit beats plan-ended; null = no banner.
+/// [hadPlan]: the business once had a trial or a paid period. A business that
+/// started on Free (no trials, #587) has nothing that "ended", so no banner.
 String? planStatusBannerText({
   required int pausedStaff,
   required int readOnlyShops,
   required SubscriptionAccess access,
+  required bool hadPlan,
 }) {
   if (pausedStaff > 0 || readOnlyShops > 0) {
     final parts = [
@@ -86,7 +90,7 @@ String? planStatusBannerText({
     ];
     return '${parts.join(' · ')} on your plan — Upgrade';
   }
-  if (access.isFreeTier) {
+  if (access.isFreeTier && hadPlan) {
     return "Your plan has ended — you're on Free. Upgrade to get more staff "
         'and shops.';
   }
@@ -101,10 +105,13 @@ class PlanStatusBanner extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (!Gates.manageSettings.allows(ref)) return const SizedBox.shrink();
+    final business = ref.watch(currentBusinessProvider);
     final text = planStatusBannerText(
       pausedStaff: ref.watch(pausedStaffIdsProvider).length,
       readOnlyShops: ref.watch(readOnlyStoreIdsProvider).length,
       access: ref.watch(currentBusinessSubscriptionProvider),
+      hadPlan: business != null &&
+          (business.trialEndsAt != null || business.currentPeriodEnd != null),
     );
     if (text == null) return const SizedBox.shrink();
     final t = Theme.of(context);

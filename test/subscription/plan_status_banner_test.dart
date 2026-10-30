@@ -3,11 +3,13 @@ import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
 import 'package:reebaplus_pos/features/subscription/widgets/plan_limit_widgets.dart';
 
 void main() {
-  String? t(int staff, int shops, SubscriptionAccess a) => planStatusBannerText(
-    pausedStaff: staff,
-    readOnlyShops: shops,
-    access: a,
-  );
+  String? t(int staff, int shops, SubscriptionAccess a, {bool hadPlan = true}) =>
+      planStatusBannerText(
+        pausedStaff: staff,
+        readOnlyShops: shops,
+        access: a,
+        hadPlan: hadPlan,
+      );
 
   test('over-limit beats plan-ended', () {
     expect(
@@ -29,6 +31,13 @@ void main() {
     for (final a in [SubscriptionAccess.inactive, SubscriptionAccess.trialExpired]) {
       expect(t(0, 0, a), contains("you're on Free"));
     }
+  });
+  test('started on Free (never had a plan): no plan-ended banner', () {
+    expect(t(0, 0, SubscriptionAccess.inactive, hadPlan: false), isNull);
+    expect(
+      t(2, 0, SubscriptionAccess.inactive, hadPlan: false),
+      '2 staff paused on your plan — Upgrade',
+    );
   });
   test('no banner otherwise', () {
     for (final a in [
