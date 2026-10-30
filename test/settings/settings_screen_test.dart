@@ -13,8 +13,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-import 'package:reebaplus_pos/core/settings/delete_business_screen.dart';
-import 'package:reebaplus_pos/core/settings/settings_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/delete_business_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/settings_screen.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';

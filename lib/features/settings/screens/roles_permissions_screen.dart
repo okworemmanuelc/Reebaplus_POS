@@ -5,7 +5,7 @@ import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-import 'package:reebaplus_pos/core/settings/role_permissions_detail_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/role_permissions_detail_screen.dart';
 import 'package:reebaplus_pos/features/staff/widgets/permission_parts.dart';
 import 'package:reebaplus_pos/features/staff/widgets/staff_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';

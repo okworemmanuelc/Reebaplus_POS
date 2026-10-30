@@ -12,8 +12,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/core/permissions/gate.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
-import 'package:reebaplus_pos/core/settings/role_permissions_detail_screen.dart';
-import 'package:reebaplus_pos/core/settings/roles_permissions_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/role_permissions_detail_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/roles_permissions_screen.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/features/staff/screens/staff_permissions_screen.dart';
 

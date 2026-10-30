@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:reebaplus_pos/core/permissions/gate.dart';
-import 'package:reebaplus_pos/core/settings/settings_screen.dart'
+import 'package:reebaplus_pos/features/settings/screens/settings_screen.dart'
     show kSettingsMaxContentWidth;
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/features/inventory/screens/supplier_detail_screen.dart';

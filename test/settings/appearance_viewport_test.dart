@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-import 'package:reebaplus_pos/core/settings/appearance_settings_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/appearance_settings_screen.dart';
 import 'package:reebaplus_pos/core/theme/theme_notifier.dart';
 
 import '../helpers/screen_harness.dart';

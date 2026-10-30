@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:reebaplus_pos/core/settings/settings_page_parts.dart';
+import 'package:reebaplus_pos/features/settings/screens/settings_page_parts.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';

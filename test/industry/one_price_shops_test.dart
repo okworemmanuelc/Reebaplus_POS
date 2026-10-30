@@ -16,7 +16,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/gate.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
-import 'package:reebaplus_pos/core/settings/business_info_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/business_info_screen.dart';
 import 'package:reebaplus_pos/features/auth/onboarding/onboarding_draft.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';

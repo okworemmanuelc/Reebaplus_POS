@@ -23,7 +23,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
-import 'package:reebaplus_pos/core/settings/stores_settings_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/stores_settings_screen.dart';
 import 'package:reebaplus_pos/core/stores/van_store.dart';
 import 'package:reebaplus_pos/core/van_sales/van_sales_switch.dart';
 

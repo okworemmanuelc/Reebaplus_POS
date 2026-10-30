@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
-import 'package:reebaplus_pos/core/settings/online_store_detail_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/online_store_detail_screen.dart';
 import 'package:reebaplus_pos/core/listings/listing_quality_providers.dart';
 import 'package:reebaplus_pos/core/result.dart';
 import 'package:reebaplus_pos/core/services/product_listing_service.dart';

@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'package:reebaplus_pos/core/utils/name_case.dart';
-import 'package:reebaplus_pos/core/settings/settings_screen.dart'
+import 'package:reebaplus_pos/features/settings/screens/settings_screen.dart'
     show kSettingsMaxContentWidth;
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';

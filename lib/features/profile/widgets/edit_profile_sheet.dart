@@ -11,7 +11,7 @@ import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
-import 'package:reebaplus_pos/core/settings/settings_page_parts.dart';
+import 'package:reebaplus_pos/features/settings/screens/settings_page_parts.dart';
 import 'package:reebaplus_pos/core/utils/name_case.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';

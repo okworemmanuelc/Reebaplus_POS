@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:reebaplus_pos/core/settings/subscription_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/subscription_screen.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_plan.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_plan_providers.dart';
 

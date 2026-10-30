@@ -11,7 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/gate.dart';
 import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
-import 'package:reebaplus_pos/core/settings/role_permissions_detail_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/role_permissions_detail_screen.dart';
 import 'package:reebaplus_pos/core/van_sales/van_sales_switch.dart';
 
 RoleData _role(String slug) => RoleData(

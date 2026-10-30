@@ -10,7 +10,7 @@ import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
-import 'package:reebaplus_pos/core/settings/receipt_printer_settings_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/receipt_printer_settings_screen.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
 import 'package:reebaplus_pos/shared/services/printer_service.dart';

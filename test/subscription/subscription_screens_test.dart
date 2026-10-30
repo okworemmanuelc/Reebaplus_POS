@@ -17,7 +17,7 @@ import 'package:reebaplus_pos/features/subscription/widgets/subscription_parts.d
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../helpers/screen_harness.dart';
-import 'package:reebaplus_pos/core/settings/subscription_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/subscription_screen.dart';
 import 'subscription_fixture.dart';
 
 void main() {

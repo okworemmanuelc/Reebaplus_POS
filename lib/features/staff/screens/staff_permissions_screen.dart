@@ -7,7 +7,7 @@ import 'package:reebaplus_pos/core/permissions/permission_dependencies.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-import 'package:reebaplus_pos/core/settings/role_permissions_detail_screen.dart'
+import 'package:reebaplus_pos/features/settings/screens/role_permissions_detail_screen.dart'
     show isPermissionKeyHidden;
 import 'package:reebaplus_pos/features/staff/widgets/permission_parts.dart';
 import 'package:reebaplus_pos/features/staff/widgets/staff_parts.dart';

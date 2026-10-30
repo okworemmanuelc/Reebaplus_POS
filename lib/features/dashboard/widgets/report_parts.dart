@@ -9,7 +9,7 @@ import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
-import 'package:reebaplus_pos/core/settings/settings_screen.dart'
+import 'package:reebaplus_pos/features/settings/screens/settings_screen.dart'
     show kSettingsMaxContentWidth;
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
