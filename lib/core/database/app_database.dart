@@ -7025,21 +7025,13 @@ class AppDatabase extends _$AppDatabase {
     }
   }
 
-  /// The tables [withdrawUnsyncedRows] may remove rows from (#550). Each is a
-  /// row the phone wrote for a reversal the cloud REJECTED: the rows never
-  /// uploaded (they were held behind the claim and are discarded with it), so
-  /// removing them is what makes this phone agree with the cloud.
-  static const Set<String> kWithdrawableReversalTables = {
-    'stock_transactions',
-    // #551 — a Return's damage write-off adjustments (after the stock rows that
-    // reference them).
-    'stock_adjustments',
-    'payment_transactions',
-    'wallet_transactions',
-    'crate_ledger',
-    'cost_batches',
-  };
-
+  /// The tables [withdrawUnsyncedRows] may remove rows from (#550) are the
+  /// registry entries flagged `withdrawableReversal` → the top-level
+  /// [kWithdrawableReversalTables] (issue #572). Each is a row the phone wrote
+  /// for a reversal the cloud REJECTED: the rows never uploaded (they were held
+  /// behind the claim and are discarded with it), so removing them is what
+  /// makes this phone agree with the cloud.
+  ///
   /// #550 (ADR 0032) — withdraws a rejected reversal's never-uploaded rows from
   /// [table] by id, scoped to [businessId]. Append-only ledgers carry a
   /// `<table>_no_delete` guard; for THIS deliberate, server-ordered withdrawal
@@ -7488,27 +7480,8 @@ String _sqlEscape(String s) => s.replaceAll("'", "''");
 
 // 0033_staff_lifecycle_hard_delete dropped soft-delete on users and
 // business_members — both the columns and their (business_id, is_deleted)
-// indexes are gone. Fire is now a hard-delete of the membership row; the
-// users row persists for historical FK reference. Keep the other entries
-// intact: products/customers/etc. still soft-delete normally.
-const List<String> _softDeletableTables = [
-  'stores',
-  'manufacturers',
-  'crate_size_groups',
-  'categories',
-  'suppliers',
-  'products',
-  'price_lists',
-  'customers',
-  'customer_wallets',
-  'drivers',
-  'expense_categories',
-  'expenses',
-  'expense_budgets',
-  // v13 additions.
-  'roles',
-  'invite_codes',
-];
+// indexes are gone. The soft-delete tables are now flagged `softDeletable` on
+// their `SyncedTable` registry entry (issue #572) → [kSoftDeletableTables].
 
 class _LedgerImmutability {
   final String table;
@@ -7540,180 +7513,12 @@ List<String> _ledgerTriggerStatements(_LedgerImmutability ledger) {
   ];
 }
 
-const List<_LedgerImmutability> _ledgerTables = [
-  _LedgerImmutability('stock_transactions', [
-    'id',
-    'business_id',
-    'product_id',
-    'location_id',
-    'quantity_delta',
-    'movement_type',
-    'order_id',
-    'transfer_id',
-    'adjustment_id',
-    'shipment_id',
-    'performed_by',
-    'created_at',
-  ]),
-  _LedgerImmutability('wallet_transactions', [
-    'id',
-    'business_id',
-    'wallet_id',
-    'customer_id',
-    'type',
-    'amount_kobo',
-    'signed_amount_kobo',
-    'reference_type',
-    'order_id',
-    'performed_by',
-    'customer_verified',
-    'created_at',
-  ]),
-  // v42 (§21.10) — supplier ledger: only the void columns + last_updated_at
-  // may change after insert. v47 (§21.11) added the immutable store_id.
-  _LedgerImmutability('supplier_ledger_entries', [
-    'id',
-    'business_id',
-    'supplier_id',
-    'store_id',
-    'type',
-    'amount_kobo',
-    'signed_amount_kobo',
-    'reference_type',
-    'payment_method',
-    'receipt_path',
-    'reference_note',
-    'activity_date',
-    'performed_by',
-    'created_at',
-  ]),
-  // v72 (#144) added `van_trip_id` — the sixth parent. It is set at insert and
-  // never changes, exactly like the other five, so it joins the immutable set.
-  // v79 (#212) added `crate_deposit_id`, the seventh, on the same terms.
-  _LedgerImmutability('payment_transactions', [
-    'id',
-    'business_id',
-    'store_id',
-    'amount_kobo',
-    'method',
-    'type',
-    'order_id',
-    'shipment_id',
-    'expense_id',
-    'wallet_txn_id',
-    'delivery_id',
-    'van_trip_id',
-    'crate_deposit_id',
-    'performed_by',
-    'created_at',
-  ]),
-  _LedgerImmutability('activity_logs', [
-    'id',
-    'business_id',
-    'user_id',
-    'action',
-    'description',
-    'entity_type',
-    'entity_id',
-    'before_json',
-    'after_json',
-    'store_id',
-    'created_at',
-  ]),
-  _LedgerImmutability('crate_ledger', [
-    'id',
-    'business_id',
-    'customer_id',
-    'manufacturer_id',
-    'crate_size_group_id',
-    'quantity_delta',
-    'movement_type',
-    'reference_order_id',
-    'reference_return_id',
-    'performed_by',
-    // v82 (PRD #284): a snapshotted value is frozen with the movement it
-    // values — an edit would restate a booked loss (ADR 0021).
-    'rate_per_crate_kobo',
-    // v83 (#297/#299): why a loss was booked is frozen with the loss.
-    'reason',
-    'created_at',
-  ]),
-  // v71 (#141, van-sales spec §4.4) — the driver consignment ledger. Only the
-  // void columns + last_updated_at may change after insert (same contract as
-  // supplier_ledger_entries, which it is modelled on). A correction is an
-  // opposite-sign compensating row, never an edit.
-  _LedgerImmutability('driver_ledger_entries', [
-    'id',
-    'business_id',
-    'driver_user_id',
-    'trip_id',
-    'type',
-    'amount_kobo',
-    'signed_amount_kobo',
-    'reference_type',
-    'reference_id',
-    'payment_method',
-    'receipt_path',
-    'reference_note',
-    'activity_date',
-    'performed_by',
-    'created_at',
-  ]),
-  // v53 (§3.13) — supplier empty-crate ledger. Only the void columns +
-  // last_updated_at may change after insert (same contract as crate_ledger).
-  _LedgerImmutability('supplier_crate_ledger', [
-    'id',
-    'business_id',
-    'supplier_id',
-    'manufacturer_id',
-    'store_id',
-    'quantity_delta',
-    'movement_type',
-    'deposit_paid_kobo',
-    'note',
-    'performed_by',
-    'created_at',
-  ]),
-  // v79 (#212, ADR 0023 rule 1) — the Placed Deposit ledger. It carries NO void
-  // columns, so EVERY column but last_updated_at is immutable: a correction is
-  // a new opposite-signed `adjustment` row, never an edit of a money row.
-  _LedgerImmutability('supplier_crate_deposits', [
-    'id',
-    'business_id',
-    'supplier_id',
-    'manufacturer_id',
-    'store_id',
-    'movement_type',
-    'signed_amount_kobo',
-    'crate_count',
-    'rate_per_crate_kobo',
-    'request_id',
-    'supplier_crate_ledger_id',
-    'note',
-    'performed_by',
-    'created_at',
-  ]),
-  // v80 (#216, ADR 0023 rule 5) — the Crate Shortfall write-off ledger. Like the
-  // Placed Deposit ledger above it carries NO void columns, so every column but
-  // last_updated_at is frozen: an accepted loss is a dated decision, and a
-  // reversal is a new NEGATIVE row booked on ITS own day, never an edit that
-  // would restate a day already closed.
-  _LedgerImmutability('crate_shortfall_writeoffs', [
-    'id',
-    'business_id',
-    'manufacturer_id',
-    'store_id',
-    'crate_count',
-    'rate_per_crate_kobo',
-    'note',
-    // v81 (#217) — the origin is frozen with everything else. A netting row
-    // relabelled `manual` afterwards would hand an owner a loss nobody took
-    // responsibility for; a manual one relabelled `customer_forfeit` would
-    // blame a customer for a decision the owner made.
-    'source',
-    'performed_by',
-    'created_at',
-  ]),
+/// The append-only ledgers + their immutable columns, DERIVED from the
+/// `SyncedTable` registry (`ledgerImmutableColumns`, issue #572) — the one place
+/// each ledger's frozen column set is declared.
+final List<_LedgerImmutability> _ledgerTables = [
+  for (final e in kLedgerImmutableColumns.entries)
+    _LedgerImmutability(e.key, e.value),
 ];
 
 /// The van-sales per-feature indexes (#141). Shared verbatim by
@@ -7879,7 +7684,7 @@ List<String> get _postCreateStatements {
   }
 
   // -- Soft-delete indexes --
-  for (final t in _softDeletableTables) {
+  for (final t in kSoftDeletableTables) {
     stmts.add(
       'CREATE INDEX idx_${t}_business_deleted ON $t (business_id, is_deleted)',
     );
@@ -8007,7 +7812,7 @@ List<String> get _postCreateStatements {
   // The (business_id, last_updated_at) and (business_id, is_deleted)
   // indexes for the v13 synced tables are already created by the
   // loops above (the tables are in `_syncedTenantTables` and
-  // `_softDeletableTables`). These are the per-feature indexes that
+  // `kSoftDeletableTables`). These are the per-feature indexes that
   // those loops don't cover.
   stmts.addAll(_v13HotPathIndexStatements);
 
