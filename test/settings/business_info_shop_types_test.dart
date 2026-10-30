@@ -2,7 +2,7 @@ import 'package:drift/drift.dart' show Variable;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/core/industry/industry.dart';
-import 'package:reebaplus_pos/core/settings/business_info_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/business_info_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 

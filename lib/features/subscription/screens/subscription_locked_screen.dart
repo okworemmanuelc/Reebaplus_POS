@@ -7,7 +7,7 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
-import 'package:reebaplus_pos/core/settings/subscription_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/subscription_screen.dart';
 import 'package:reebaplus_pos/features/subscription/widgets/subscription_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';

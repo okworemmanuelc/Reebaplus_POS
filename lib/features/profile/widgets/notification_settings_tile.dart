@@ -5,7 +5,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/services/push_messaging_port.dart';
-import 'package:reebaplus_pos/core/settings/settings_page_parts.dart';
+import 'package:reebaplus_pos/features/settings/screens/settings_page_parts.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';

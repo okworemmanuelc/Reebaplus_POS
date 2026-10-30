@@ -14,8 +14,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
-import 'package:reebaplus_pos/core/settings/role_permissions_detail_screen.dart';
-import 'package:reebaplus_pos/core/settings/roles_permissions_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/role_permissions_detail_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/roles_permissions_screen.dart';
 import 'package:reebaplus_pos/core/van_sales/van_sales_switch.dart';
 import 'package:reebaplus_pos/core/storefront/online_ordering_switch.dart';
 

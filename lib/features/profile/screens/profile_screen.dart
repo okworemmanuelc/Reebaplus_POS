@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:reebaplus_pos/core/settings/settings_page_parts.dart';
+import 'package:reebaplus_pos/features/settings/screens/settings_page_parts.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
@@ -13,7 +13,7 @@ import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/report_revenue.dart';
 import 'package:reebaplus_pos/shared/utils/role_display.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
-import 'package:reebaplus_pos/core/settings/delete_business_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/delete_business_screen.dart';
 import 'package:reebaplus_pos/features/profile/widgets/edit_profile_sheet.dart';
 import 'package:reebaplus_pos/features/profile/widgets/notification_settings_tile.dart';
 import 'package:reebaplus_pos/features/profile/widgets/profile_ui.dart';

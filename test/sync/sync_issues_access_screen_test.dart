@@ -9,7 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
-import 'package:reebaplus_pos/core/settings/sync_issues_access_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/sync_issues_access_screen.dart';
 import 'package:reebaplus_pos/features/sync/widgets/sync_parts.dart';
 
 import '../helpers/screen_harness.dart';

@@ -16,7 +16,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
-import 'package:reebaplus_pos/core/settings/activity_logs_access_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/activity_logs_access_screen.dart';
 
 import '../helpers/dispatch_test_utils.dart';
 

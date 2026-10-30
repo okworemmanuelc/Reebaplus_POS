@@ -12,10 +12,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-import 'package:reebaplus_pos/core/settings/activity_logs_access_screen.dart';
-import 'package:reebaplus_pos/core/settings/delete_business_screen.dart';
-import 'package:reebaplus_pos/core/settings/security_settings_screen.dart';
-import 'package:reebaplus_pos/core/settings/subscription_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/activity_logs_access_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/delete_business_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/security_settings_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/subscription_screen.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/features/subscription/billing/play_billing_providers.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';

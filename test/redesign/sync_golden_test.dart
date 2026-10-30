@@ -27,7 +27,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
-import 'package:reebaplus_pos/core/settings/sync_issues_access_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/sync_issues_access_screen.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/features/diagnostics/screens/schema_error_screen.dart';
 import 'package:reebaplus_pos/features/sync/screens/sync_issues_screen.dart';

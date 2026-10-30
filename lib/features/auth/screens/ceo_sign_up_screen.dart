@@ -26,7 +26,7 @@ import 'package:reebaplus_pos/features/auth/widgets/shake_widget.dart';
 import 'package:reebaplus_pos/features/auth/widgets/sign_up_step_dots.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/tag_pill.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
-import 'package:reebaplus_pos/core/settings/settings_screen.dart'
+import 'package:reebaplus_pos/features/settings/screens/settings_screen.dart'
     show kSettingsMaxContentWidth;
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 

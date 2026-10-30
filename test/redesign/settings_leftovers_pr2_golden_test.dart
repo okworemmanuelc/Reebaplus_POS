@@ -12,12 +12,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-import 'package:reebaplus_pos/core/settings/appearance_settings_screen.dart';
-import 'package:reebaplus_pos/core/settings/business_info_screen.dart';
-import 'package:reebaplus_pos/core/settings/receipt_printer_settings_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/appearance_settings_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/business_info_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/receipt_printer_settings_screen.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/theme_notifier.dart';
-import 'package:reebaplus_pos/core/theme/theme_settings_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/theme_settings_screen.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
 
 import '../helpers/screen_harness.dart';

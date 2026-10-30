@@ -16,7 +16,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
-import 'package:reebaplus_pos/core/settings/role_permissions_detail_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/role_permissions_detail_screen.dart';
 import 'package:reebaplus_pos/core/van_sales/van_sales_switch.dart';
 
 import '../helpers/dispatch_test_utils.dart';

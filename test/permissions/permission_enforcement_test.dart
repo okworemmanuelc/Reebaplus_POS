@@ -88,7 +88,7 @@ Set<String> _catalogueKeys() {
 /// The quoted entries of the `kHiddenPermissionKeys` set literal in
 /// `role_permissions_detail_screen.dart`.
 Set<String> _hiddenKeys() {
-  final src = File('lib/core/settings/role_permissions_detail_screen.dart')
+  final src = File('lib/features/settings/screens/role_permissions_detail_screen.dart')
       .readAsStringSync();
   final start = src.indexOf('kHiddenPermissionKeys = {');
   if (start < 0) return const {};

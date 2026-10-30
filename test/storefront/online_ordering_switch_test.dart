@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:reebaplus_pos/core/permissions/gate.dart';
 import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
-import 'package:reebaplus_pos/core/settings/role_permissions_detail_screen.dart';
+import 'package:reebaplus_pos/features/settings/screens/role_permissions_detail_screen.dart';
 import 'package:reebaplus_pos/core/storefront/browse_switch.dart';
 import 'package:reebaplus_pos/core/storefront/online_ordering_switch.dart';
 
