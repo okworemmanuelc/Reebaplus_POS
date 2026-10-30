@@ -46,6 +46,7 @@ class SubscriptionScreen extends ConsumerWidget {
                   ),
                   SizedBox(height: context.getRSize(10)),
                   _statusCard(context, ref),
+                  const _OverLimitList(),
                   SizedBox(height: context.getRSize(24)),
                   const PlansPaywall(),
                   SizedBox(height: context.getRSize(12)),
@@ -122,8 +123,8 @@ class SubscriptionScreen extends ConsumerWidget {
       switch (access) {
         SubscriptionAccess.active => ('ACTIVE', TagPillTone.green),
         SubscriptionAccess.trialActive => ('FREE TRIAL', TagPillTone.warning),
-        SubscriptionAccess.trialExpired => ('TRIAL ENDED', TagPillTone.danger),
-        SubscriptionAccess.inactive => ('INACTIVE', TagPillTone.danger),
+        SubscriptionAccess.trialExpired => ('FREE PLAN', TagPillTone.warning),
+        SubscriptionAccess.inactive => ('FREE PLAN', TagPillTone.warning),
         SubscriptionAccess.grace => ('—', TagPillTone.warning),
       };
 
@@ -154,7 +155,7 @@ class SubscriptionScreen extends ConsumerWidget {
         final d = business.trialEndsAt as DateTime?;
         return d == null ? 'Ended' : 'Ended ${fmt.format(d)}';
       case SubscriptionAccess.inactive:
-        return 'Renew to continue';
+        return 'Upgrade to restore staff and shops';
       case SubscriptionAccess.grace:
         return '—';
     }
@@ -188,6 +189,59 @@ class SubscriptionScreen extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// #586: names the staff paused and shops made read-only by the plan limits.
+class _OverLimitList extends ConsumerWidget {
+  const _OverLimitList();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pausedIds = ref.watch(pausedStaffIdsProvider);
+    final roIds = ref.watch(readOnlyStoreIdsProvider);
+    if (pausedIds.isEmpty && roIds.isEmpty) return const SizedBox.shrink();
+    final users = ref.watch(usersByBusinessProvider).valueOrNull ?? const {};
+    final stores = ref.watch(allStoresProvider).valueOrNull ?? const [];
+    final staffNames = [
+      for (final id in pausedIds) users[id]?.name ?? 'Staff member',
+    ];
+    final shopNames = [
+      for (final s in stores)
+        if (roIds.contains(s.id)) s.name,
+    ];
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    return Padding(
+      key: const Key('over-limit-list'),
+      padding: EdgeInsets.only(top: context.getRSize(12)),
+      child: SettingsCard(
+        padding: EdgeInsets.all(context.getRSize(16)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (staffNames.isNotEmpty) ...[
+              Text('Paused staff', style: context.boldStyle(13)),
+              SizedBox(height: context.getRSize(4)),
+              for (final n in staffNames)
+                Text(n, style: context.regularStyle(13).copyWith(color: muted)),
+              SizedBox(height: context.getRSize(10)),
+            ],
+            if (shopNames.isNotEmpty) ...[
+              Text('Read-only shops', style: context.boldStyle(13)),
+              SizedBox(height: context.getRSize(4)),
+              for (final n in shopNames)
+                Text(n, style: context.regularStyle(13).copyWith(color: muted)),
+              SizedBox(height: context.getRSize(10)),
+            ],
+            Text(
+              'Upgrade to Premium to restore them',
+              style: context.semiBoldStyle(13),
+            ),
+          ],
+        ),
       ),
     );
   }

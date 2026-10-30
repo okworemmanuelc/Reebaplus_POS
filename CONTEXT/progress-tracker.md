@@ -7,6 +7,10 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #586: Never lock the app (2026-10-30, ready for review)
+
+Deleted SubscriptionLockedScreen + isLocked gate (and orphaned subscription_parts, its tests/goldens). Lapsed/ended = Free ("FREE PLAN" chip), keeps selling. New owner-only PlanStatusBanner (over-limit beats plan-ended) beside TrialReminderBanner; Subscription screen lists paused staff / read-only shops. Part of PRD #584. No Drift/cloud change.
+
 ### Issue #585: Remove sign-in thank-you screen (2026-10-30, ready for review)
 
 Deleted ThankYouSubscriptionScreen + SubscriptionThanksService and the gate in main.dart home(); it wrongly showed at every sign-in. Part of PRD #584. Locked screen untouched.

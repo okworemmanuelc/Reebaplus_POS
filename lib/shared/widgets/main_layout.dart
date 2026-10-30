@@ -577,7 +577,13 @@ class _MainLayoutState extends ConsumerState<MainLayout>
               top: 0,
               left: 0,
               right: 0,
-              child: SafeArea(bottom: false, child: TrialReminderBanner()),
+              child: SafeArea(
+                bottom: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [TrialReminderBanner(), PlanStatusBanner()],
+                ),
+              ),
             ),
           ],
         ),
