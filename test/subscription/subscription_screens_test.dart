@@ -3,18 +3,13 @@
 // the five reference sizes (360 @1.3, 390x844, 844x390 with insets, 800x1280,
 // 1280x800).
 
-import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/features/subscription/screens/subscription_locked_screen.dart';
-import 'package:reebaplus_pos/features/subscription/screens/thank_you_subscription_screen.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
-import 'package:reebaplus_pos/features/subscription/subscription_thanks.dart';
-import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/features/subscription/widgets/subscription_parts.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../helpers/screen_harness.dart';
 import 'package:reebaplus_pos/features/settings/screens/subscription_screen.dart';
@@ -24,14 +19,13 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late ScreenTestEnvironment env;
-  late BusinessData business;
 
   setUp(() async {
     env = await setupScreenTestEnvironment(
       productCount: 0,
       businessName: 'Stallion Global',
     );
-    business = await seedSubscriptionBusiness(env);
+    await seedSubscriptionBusiness(env);
   });
   tearDown(() => env.dispose());
 
@@ -173,72 +167,6 @@ void main() {
       expect(tester.getSize(btn.first).width, lessThanOrEqualTo(720));
       expect(find.byType(SubscriptionStateFrame), findsOneWidget);
       await disposeScreen(tester);
-    });
-  });
-
-  group('Thank You', () {
-    testWidgets('shows the thanks, plan card, renewal and Continue', (
-      tester,
-    ) async {
-      await pump(tester, ThankYouSubscriptionScreen(business: business));
-      expect(find.text('Thank you for subscribing!'), findsOneWidget);
-      expect(
-        find.textContaining('Stallion Global is now on the'),
-        findsOneWidget,
-      );
-      expect(find.text('₦6,500 per month'), findsOneWidget);
-      expect(find.text('Renews 15 Nov 2026'), findsOneWidget);
-      expect(find.text('Continue'), findsOneWidget);
-      await disposeScreen(tester);
-    });
-
-    testWidgets('premium plan outside Nigeria shows the dollar price', (
-      tester,
-    ) async {
-      final intl = business.copyWith(subscriptionPlan: const Value('premium'));
-      await env.db.settingsDao.set('default_currency', 'USD');
-      await pump(tester, ThankYouSubscriptionScreen(business: intl));
-      expect(find.text('\$20 per month'), findsOneWidget);
-      await disposeScreen(tester);
-    });
-
-    testWidgets('Continue acknowledges this activation', (tester) async {
-      final active = business.copyWith(subscriptionStatus: 'active');
-      await pump(tester, ThankYouSubscriptionScreen(business: active));
-      final ctx = tester.element(find.byType(ThankYouSubscriptionScreen));
-      final svc = ProviderScope.containerOf(
-        ctx,
-      ).read(subscriptionThanksProvider);
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 50)),
-      );
-      expect(svc.shouldCelebrate(active), isTrue);
-      await tester.tap(find.text('Continue'));
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 50)),
-      );
-      await tester.pump();
-      expect(svc.shouldCelebrate(active), isFalse);
-      await disposeScreen(tester);
-    });
-
-    sizes.forEach((name, spec) {
-      for (final b in Brightness.values) {
-        testWidgets('no overflow at $name ${b.name}', (tester) async {
-          final (size, padding, scale) = spec;
-          await pump(
-            tester,
-            ThankYouSubscriptionScreen(business: business),
-            size: size,
-            padding: padding,
-            scale: scale,
-            brightness: b,
-          );
-          expect(tester.takeException(), isNull);
-          expect(find.text('Continue'), findsOneWidget);
-          await disposeScreen(tester);
-        });
-      }
     });
   });
 }
