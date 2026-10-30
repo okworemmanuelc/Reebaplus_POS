@@ -129,6 +129,60 @@ class SyncedTable {
   /// bump trigger — they arrive via snapshot or domain response).
   final bool isCache;
 
+  /// Outbox push priority for tables whose rows other tables FK-reference: they
+  /// must be pushed before any child rows in the same batch, otherwise the child
+  /// push fails with a 23503 FK violation. Lower number = pushed first. `null` ⇒
+  /// the default (100, after every prioritised table).
+  final int? pushPriority;
+
+  /// Cloud upsert `onConflict` target for a cache identified by a NATURAL key
+  /// rather than its surrogate `id` (e.g. `store_crate_balances`, which has two
+  /// id-minting authorities — the client and the cloud domain RPC
+  /// pos_transfer_crates — for the same natural key; a PK-keyed upsert of a
+  /// client-minted id would INSERT a duplicate and trip the cloud UNIQUE).
+  /// `null` ⇒ PostgREST defaults to the primary key.
+  final String? pushConflictTarget;
+
+  /// True for the leaf tables that may be "deferred" on first pull: nothing
+  /// FK-references them, so a missing slice can't trip restore-time FK
+  /// violations in any other table. If only these fail after retry in the
+  /// per-table fallback, the pull proceeds with what arrived and `pullChanges`
+  /// intentionally does NOT advance `last_sync_timestamp::<businessId>` so the
+  /// next pull catches the deferred slices up.
+  ///
+  /// Setting this is a load-bearing safety claim. Before setting it, confirm
+  /// there are no inbound FK references with BOTH:
+  ///   grep -nE "\.references\(<TableName>," lib/core/database/app_database.dart
+  ///   grep -nE "REFERENCES public\.<table_name>\b" supabase/migrations/*.sql
+  /// Both must return zero matches. If anything FK-references the table,
+  /// deferring it would break the dependent restore.
+  final bool deferrable;
+
+  /// §3.7 (A2): set on a PARENT table whose missing row can be fetched by id and
+  /// back-filled inline when a pulled child is FK-orphaned — the camelCase FK
+  /// field on the child row that names this table (e.g. `supplierId` on
+  /// `suppliers`). `null` ⇒ not a targeted-fetch parent.
+  final String? targetedParentFkField;
+
+  /// #427: true for the Online Order tables a shop phone answers through the
+  /// outbox; a push refused by the 0205/0208 transition guard is settled as a
+  /// stale answer rather than a Sync Issues orphan.
+  final bool onlineOrderAnswer;
+
+  /// #550: true for the tables `withdrawUnsyncedRows` may remove rows from —
+  /// rows the phone wrote for a reversal the cloud REJECTED (never uploaded).
+  final bool withdrawableReversal;
+
+  /// True for the tables that soft-delete (`is_deleted`) and so get a
+  /// `(business_id, is_deleted)` index at DB-create time.
+  final bool softDeletable;
+
+  /// Set only for the local append-only ledgers: the columns that may never
+  /// change after insert (only the void columns + last_updated_at may). Emits
+  /// the `<table>_immutable` + `<table>_no_delete` triggers at DB-create and in
+  /// the upgrade steps that rebuild a ledger. `null` ⇒ not a guarded ledger.
+  final List<String>? ledgerImmutableColumns;
+
   const SyncedTable({
     required this.name,
     required this.restore,
@@ -137,6 +191,14 @@ class SyncedTable {
     this.scrubCreatedAt = false,
     this.tenantScoped = false,
     this.isCache = false,
+    this.pushPriority,
+    this.pushConflictTarget,
+    this.deferrable = false,
+    this.targetedParentFkField,
+    this.onlineOrderAnswer = false,
+    this.withdrawableReversal = false,
+    this.softDeletable = false,
+    this.ledgerImmutableColumns,
   });
 }
 
@@ -472,6 +534,7 @@ final List<SyncedTable> kSyncRegistry = [
   // --- roots / login-critical -------------------------------------------
   SyncedTable(
     name: 'businesses',
+    pushPriority: 0,
     // id-keyed, own realtime channel, no business_id ⇒ not tenant-scoped.
     // Cloud lacks the local-only `timezone`; pre-column-window rows lack
     // onboarding_complete / subscription_status. NON-resilient (a root table
@@ -506,6 +569,8 @@ final List<SyncedTable> kSyncRegistry = [
   ),
   SyncedTable(
     name: 'crate_size_groups',
+    pushPriority: 3,
+    softDeletable: true,
     tenantScoped: true,
     restore: Restore.plain(
       (db) => db.crateSizeGroups,
@@ -515,6 +580,9 @@ final List<SyncedTable> kSyncRegistry = [
   ),
   SyncedTable(
     name: 'manufacturers',
+    pushPriority: 3,
+    targetedParentFkField: 'manufacturerId',
+    softDeletable: true,
     tenantScoped: true,
     // #159: `empty_crate_stock` is DEMOTED off the push set — the physical
     // empties pool is DERIVED from the append-only `crate_ledger` (store-stamped,
@@ -551,6 +619,8 @@ final List<SyncedTable> kSyncRegistry = [
   ),
   SyncedTable(
     name: 'stores',
+    pushPriority: 2,
+    softDeletable: true,
     tenantScoped: true,
     restore: Restore.plain(
       (db) => db.stores,
@@ -583,6 +653,11 @@ final List<SyncedTable> kSyncRegistry = [
   ),
   const SyncedTable(
     name: 'users',
+    // users must precede every child that FK-references it: stock_adjustments
+    // .performed_by, stock_transactions.performed_by, sessions.user_id, and
+    // the children created server-side by domain RPCs (pos_create_product,
+    // pos_inventory_delta, pos_record_sale).
+    pushPriority: 1,
     tenantScoped: true,
     // Bespoke: never overwrite device-local auth/UI material (PIN, biometrics,
     // avatar). See [_restoreUsers].
@@ -608,6 +683,7 @@ final List<SyncedTable> kSyncRegistry = [
   // --- roles + membership (§2.4) ----------------------------------------
   SyncedTable(
     name: 'roles',
+    softDeletable: true,
     tenantScoped: true,
     restore: Restore.plain(
       (db) => db.roles,
@@ -709,6 +785,7 @@ final List<SyncedTable> kSyncRegistry = [
   ),
   SyncedTable(
     name: 'invite_codes',
+    softDeletable: true,
     tenantScoped: true,
     restore: Restore.plain(
       (db) => db.inviteCodes,
@@ -720,6 +797,7 @@ final List<SyncedTable> kSyncRegistry = [
   //     guards). Present only for its pull-order + push-whitelist facts. ---
   SyncedTable(
     name: 'profiles',
+    pushPriority: 1,
     restore: Restore.skip(),
     pushColumns: {
       'id',
@@ -734,6 +812,9 @@ final List<SyncedTable> kSyncRegistry = [
   // --- catalogue --------------------------------------------------------
   SyncedTable(
     name: 'categories',
+    pushPriority: 4,
+    targetedParentFkField: 'categoryId',
+    softDeletable: true,
     // #472: CategoryData restores marketplace_category. No whitelist: the
     // complete category row (including explicit null) is pushed unchanged.
     tenantScoped: true,
@@ -745,6 +826,9 @@ final List<SyncedTable> kSyncRegistry = [
   ),
   SyncedTable(
     name: 'suppliers',
+    pushPriority: 5,
+    targetedParentFkField: 'supplierId',
+    softDeletable: true,
     tenantScoped: true,
     restore: Restore.plain(
       (db) => db.suppliers,
@@ -754,6 +838,8 @@ final List<SyncedTable> kSyncRegistry = [
   ),
   SyncedTable(
     name: 'products',
+    pushPriority: 10,
+    softDeletable: true,
     tenantScoped: true,
     restore: Restore.plain(
       (db) => db.products,
@@ -781,6 +867,7 @@ final List<SyncedTable> kSyncRegistry = [
   ),
   SyncedTable(
     name: 'inventory',
+    pushPriority: 12,
     isCache: true,
     // Natural-key cache (business_id, product_id, store_id) — client UuidV7 vs
     // cloud gen_random_uuid diverge; align id + quantity to the cloud row.
@@ -808,6 +895,7 @@ final List<SyncedTable> kSyncRegistry = [
   // slice). No consumer draw-down logic yet — this entry is the sync membership.
   SyncedTable(
     name: 'cost_batches',
+    withdrawableReversal: true,
     tenantScoped: true,
     restore: Restore.plain(
       (db) => db.costBatches,
@@ -817,6 +905,8 @@ final List<SyncedTable> kSyncRegistry = [
   ),
   SyncedTable(
     name: 'customers',
+    pushPriority: 11,
+    softDeletable: true,
     tenantScoped: true,
     // Root table (no parent) — NON-resilient, matching historical behaviour.
     restore: Restore.plain((db) => db.customers, CustomerData.fromJson),
@@ -876,6 +966,27 @@ final List<SyncedTable> kSyncRegistry = [
   // row. See [[project_ledger_void_created_at_scrub]].
   SyncedTable(
     name: 'driver_ledger_entries',
+    // v71 (#141, van-sales spec §4.4) — the driver consignment ledger. Only the
+    // void columns + last_updated_at may change after insert (same contract as
+    // supplier_ledger_entries, which it is modelled on). A correction is an
+    // opposite-sign compensating row, never an edit.
+    ledgerImmutableColumns: [
+      'id',
+      'business_id',
+      'driver_user_id',
+      'trip_id',
+      'type',
+      'amount_kobo',
+      'signed_amount_kobo',
+      'reference_type',
+      'reference_id',
+      'payment_method',
+      'receipt_path',
+      'reference_note',
+      'activity_date',
+      'performed_by',
+      'created_at',
+    ],
     tenantScoped: true,
     scrubCreatedAt: true,
     restore: Restore.ledger(
@@ -893,6 +1004,7 @@ final List<SyncedTable> kSyncRegistry = [
   ),
   const SyncedTable(
     name: 'orders',
+    pushPriority: 30,
     tenantScoped: true,
     // Resilient + §30.8.1 legacy order-number collision heal. FK → van_trips
     // since #142's trip tag, which is why the van block above precedes this one.
@@ -900,6 +1012,7 @@ final List<SyncedTable> kSyncRegistry = [
   ),
   SyncedTable(
     name: 'order_items',
+    pushPriority: 31,
     tenantScoped: true,
     restore: Restore.plain(
       (db) => db.orderItems,
@@ -928,6 +1041,7 @@ final List<SyncedTable> kSyncRegistry = [
   // overwrite an order the shop has already answered.
   SyncedTable(
     name: 'online_orders',
+    onlineOrderAnswer: true,
     tenantScoped: true,
     // #427: the shop's answer pushes only what a shop may change, plus the
     // NOT NULL placement columns the upsert's INSERT tuple needs (exact text,
@@ -961,6 +1075,7 @@ final List<SyncedTable> kSyncRegistry = [
   ),
   SyncedTable(
     name: 'online_order_lines',
+    onlineOrderAnswer: true,
     tenantScoped: true,
     // #427: same rule as online_orders — only accepted_qty is the shop's; the
     // snapshots (and created_at) never cross the wire from a phone.
@@ -998,6 +1113,7 @@ final List<SyncedTable> kSyncRegistry = [
   ),
   SyncedTable(
     name: 'expense_categories',
+    softDeletable: true,
     tenantScoped: true,
     restore: Restore.plain(
       (db) => db.expenseCategories,
@@ -1006,6 +1122,7 @@ final List<SyncedTable> kSyncRegistry = [
   ),
   SyncedTable(
     name: 'expenses',
+    softDeletable: true,
     tenantScoped: true,
     restore: Restore.plain(
       (db) => db.expenses,
@@ -1015,6 +1132,7 @@ final List<SyncedTable> kSyncRegistry = [
   ),
   SyncedTable(
     name: 'expense_budgets',
+    softDeletable: true,
     tenantScoped: true,
     restore: Restore.plain(
       (db) => db.expenseBudgets,
@@ -1050,6 +1168,7 @@ final List<SyncedTable> kSyncRegistry = [
   ),
   SyncedTable(
     name: 'drivers',
+    softDeletable: true,
     tenantScoped: true,
     restore: Restore.plain((db) => db.drivers, DriverData.fromJson),
   ),
@@ -1064,6 +1183,9 @@ final List<SyncedTable> kSyncRegistry = [
   ),
   SyncedTable(
     name: 'stock_adjustments',
+    // #551 — a Return's damage write-off adjustments (withdrawn after the stock
+    // rows that reference them — see kWithdrawableReversalTables).
+    withdrawableReversal: true,
     tenantScoped: true,
     restore: Restore.plain(
       (db) => db.stockAdjustments,
@@ -1097,6 +1219,20 @@ final List<SyncedTable> kSyncRegistry = [
   ),
   SyncedTable(
     name: 'activity_logs',
+    deferrable: true,
+    ledgerImmutableColumns: [
+      'id',
+      'business_id',
+      'user_id',
+      'action',
+      'description',
+      'entity_type',
+      'entity_id',
+      'before_json',
+      'after_json',
+      'store_id',
+      'created_at',
+    ],
     tenantScoped: true,
     restore: Restore.ledger(
       (db) => db.activityLogs,
@@ -1113,6 +1249,8 @@ final List<SyncedTable> kSyncRegistry = [
   ),
   SyncedTable(
     name: 'error_logs',
+    // v46 (§33) — leaf table (no inbound FKs).
+    deferrable: true,
     tenantScoped: true,
     restore: Restore.plain(
       (db) => db.errorLogs,
@@ -1122,6 +1260,7 @@ final List<SyncedTable> kSyncRegistry = [
   ),
   SyncedTable(
     name: 'notifications',
+    deferrable: true,
     tenantScoped: true,
     hardDelete: SyncHardDelete.of(
       (db) => db.notifications,
@@ -1133,6 +1272,22 @@ final List<SyncedTable> kSyncRegistry = [
   ),
   SyncedTable(
     name: 'stock_transactions',
+    deferrable: true,
+    withdrawableReversal: true,
+    ledgerImmutableColumns: [
+      'id',
+      'business_id',
+      'product_id',
+      'location_id',
+      'quantity_delta',
+      'movement_type',
+      'order_id',
+      'transfer_id',
+      'adjustment_id',
+      'shipment_id',
+      'performed_by',
+      'created_at',
+    ],
     tenantScoped: true,
     restore: Restore.ledger(
       (db) => db.stockTransactions,
@@ -1149,6 +1304,8 @@ final List<SyncedTable> kSyncRegistry = [
   ),
   SyncedTable(
     name: 'customer_wallets',
+    pushPriority: 20,
+    softDeletable: true,
     tenantScoped: true,
     restore: Restore.plain(
       (db) => db.customerWallets,
@@ -1158,6 +1315,22 @@ final List<SyncedTable> kSyncRegistry = [
   ),
   SyncedTable(
     name: 'wallet_transactions',
+    pushPriority: 32,
+    withdrawableReversal: true,
+    ledgerImmutableColumns: [
+      'id',
+      'business_id',
+      'wallet_id',
+      'customer_id',
+      'type',
+      'amount_kobo',
+      'signed_amount_kobo',
+      'reference_type',
+      'order_id',
+      'performed_by',
+      'customer_verified',
+      'created_at',
+    ],
     tenantScoped: true,
     scrubCreatedAt: true,
     restore: Restore.ledger(
@@ -1175,6 +1348,24 @@ final List<SyncedTable> kSyncRegistry = [
   ),
   SyncedTable(
     name: 'supplier_ledger_entries',
+    // v42 (§21.10) — supplier ledger: only the void columns + last_updated_at
+    // may change after insert. v47 (§21.11) added the immutable store_id.
+    ledgerImmutableColumns: [
+      'id',
+      'business_id',
+      'supplier_id',
+      'store_id',
+      'type',
+      'amount_kobo',
+      'signed_amount_kobo',
+      'reference_type',
+      'payment_method',
+      'receipt_path',
+      'reference_note',
+      'activity_date',
+      'performed_by',
+      'created_at',
+    ],
     tenantScoped: true,
     scrubCreatedAt: true,
     restore: Restore.ledger(
@@ -1192,6 +1383,26 @@ final List<SyncedTable> kSyncRegistry = [
   ),
   SyncedTable(
     name: 'supplier_crate_ledger',
+    pushPriority: 36,
+    // v53 (§3.13) — leaf (nothing FK-references it; the balance cache is
+    // app-derived, not an FK). Pushes after its parents (suppliers=5,
+    // manufacturers=3).
+    deferrable: true,
+    // v53 (§3.13) — supplier empty-crate ledger. Only the void columns +
+    // last_updated_at may change after insert (same contract as crate_ledger).
+    ledgerImmutableColumns: [
+      'id',
+      'business_id',
+      'supplier_id',
+      'manufacturer_id',
+      'store_id',
+      'quantity_delta',
+      'movement_type',
+      'deposit_paid_kobo',
+      'note',
+      'performed_by',
+      'created_at',
+    ],
     tenantScoped: true,
     // #169: preemptively drop `created_at` on every push so a future void
     // re-push (the money-integrity slices) can't trip the immutable-column
@@ -1234,6 +1445,25 @@ final List<SyncedTable> kSyncRegistry = [
   // see [_restoreSupplierCrateDeposits].
   const SyncedTable(
     name: 'supplier_crate_deposits',
+    // v79 (#212, ADR 0023 rule 1) — the Placed Deposit ledger. It carries NO void
+    // columns, so EVERY column but last_updated_at is immutable: a correction is
+    // a new opposite-signed `adjustment` row, never an edit of a money row.
+    ledgerImmutableColumns: [
+      'id',
+      'business_id',
+      'supplier_id',
+      'manufacturer_id',
+      'store_id',
+      'movement_type',
+      'signed_amount_kobo',
+      'crate_count',
+      'rate_per_crate_kobo',
+      'request_id',
+      'supplier_crate_ledger_id',
+      'note',
+      'performed_by',
+      'created_at',
+    ],
     tenantScoped: true,
     restore: _restoreSupplierCrateDeposits,
   ),
@@ -1246,6 +1476,27 @@ final List<SyncedTable> kSyncRegistry = [
   // `crate_count` row.
   const SyncedTable(
     name: 'crate_shortfall_writeoffs',
+    // v80 (#216, ADR 0023 rule 5) — the Crate Shortfall write-off ledger. Like the
+    // Placed Deposit ledger above it carries NO void columns, so every column but
+    // last_updated_at is frozen: an accepted loss is a dated decision, and a
+    // reversal is a new NEGATIVE row booked on ITS own day, never an edit that
+    // would restate a day already closed.
+    ledgerImmutableColumns: [
+      'id',
+      'business_id',
+      'manufacturer_id',
+      'store_id',
+      'crate_count',
+      'rate_per_crate_kobo',
+      'note',
+      // v81 (#217) — the origin is frozen with everything else. A netting row
+      // relabelled `manual` afterwards would hand an owner a loss nobody took
+      // responsibility for; a manual one relabelled `customer_forfeit` would
+      // blame a customer for a decision the owner made.
+      'source',
+      'performed_by',
+      'created_at',
+    ],
     tenantScoped: true,
     restore: _restoreCrateShortfallWriteoffs,
   ),
@@ -1292,6 +1543,8 @@ final List<SyncedTable> kSyncRegistry = [
   ),
   SyncedTable(
     name: 'store_crate_balances',
+    pushPriority: 35,
+    pushConflictTarget: 'business_id,store_id,manufacturer_id',
     isCache: true,
     restore: Restore.naturalKey(
       (db) => db.storeCrateBalances,
@@ -1328,6 +1581,27 @@ final List<SyncedTable> kSyncRegistry = [
   ),
   SyncedTable(
     name: 'crate_ledger',
+    pushPriority: 33,
+    deferrable: true,
+    withdrawableReversal: true,
+    ledgerImmutableColumns: [
+      'id',
+      'business_id',
+      'customer_id',
+      'manufacturer_id',
+      'crate_size_group_id',
+      'quantity_delta',
+      'movement_type',
+      'reference_order_id',
+      'reference_return_id',
+      'performed_by',
+      // v82 (PRD #284): a snapshotted value is frozen with the movement it
+      // values — an edit would restate a booked loss (ADR 0021).
+      'rate_per_crate_kobo',
+      // v83 (#297/#299): why a loss was booked is frozen with the loss.
+      'reason',
+      'created_at',
+    ],
     tenantScoped: true,
     // #169: preemptively drop `created_at` on every push (see supplier_crate_
     // ledger above) — closes the latent void-push orphan trap before any void
@@ -1350,6 +1624,7 @@ final List<SyncedTable> kSyncRegistry = [
   // LUA. Not tenant-scoped (pull-only). jsonb `value` mirrored as text.
   SyncedTable(
     name: 'system_config',
+    pushPriority: 50,
     restore: Restore.plain(
       (db) => db.systemConfig,
       SystemConfigData.fromJson,
@@ -1358,6 +1633,7 @@ final List<SyncedTable> kSyncRegistry = [
   ),
   SyncedTable(
     name: 'price_lists',
+    softDeletable: true,
     tenantScoped: true,
     restore: Restore.plain(
       (db) => db.priceLists,
@@ -1367,6 +1643,28 @@ final List<SyncedTable> kSyncRegistry = [
   ),
   SyncedTable(
     name: 'payment_transactions',
+    deferrable: true,
+    withdrawableReversal: true,
+    // v72 (#144) added `van_trip_id` — the sixth parent. It is set at insert and
+    // never changes, exactly like the other five, so it joins the immutable set.
+    // v79 (#212) added `crate_deposit_id`, the seventh, on the same terms.
+    ledgerImmutableColumns: [
+      'id',
+      'business_id',
+      'store_id',
+      'amount_kobo',
+      'method',
+      'type',
+      'order_id',
+      'shipment_id',
+      'expense_id',
+      'wallet_txn_id',
+      'delivery_id',
+      'van_trip_id',
+      'crate_deposit_id',
+      'performed_by',
+      'created_at',
+    ],
     tenantScoped: true,
     scrubCreatedAt: true,
     restore: Restore.ledger(
@@ -1406,6 +1704,7 @@ final List<SyncedTable> kSyncRegistry = [
   ),
   SyncedTable(
     name: 'sessions',
+    deferrable: true,
     tenantScoped: true,
     restore: Restore.plain((db) => db.sessions, SessionData.fromJson),
     pushColumns: {
@@ -1695,4 +1994,59 @@ final Set<String> kSyncScrubCreatedAtTables = {
 final Set<String> kHardDeleteReconcileTables = {
   for (final t in kSyncRegistry)
     if (t.hardDelete != null) t.name,
+};
+
+/// Outbox push priority per table (lower = pushed first; absent ⇒ 100).
+final Map<String, int> kSyncPushPriority = {
+  for (final t in kSyncRegistry)
+    if (t.pushPriority != null) t.name: t.pushPriority!,
+};
+
+/// Natural-key cloud upsert conflict targets (absent ⇒ primary key).
+final Map<String, String> kSyncPushConflictTargets = {
+  for (final t in kSyncRegistry)
+    if (t.pushConflictTarget != null) t.name: t.pushConflictTarget!,
+};
+
+/// Leaf tables that may be deferred on first pull (see
+/// [SyncedTable.deferrable] for the safety claim).
+final Set<String> kSyncDeferrableTables = {
+  for (final t in kSyncRegistry)
+    if (t.deferrable) t.name,
+};
+
+/// §3.7 (A2) child camelCase FK field → parent table whose missing row can be
+/// fetched by id. Registry order (parents before children).
+final Map<String, String> kSyncTargetedParentFkFields = {
+  for (final t in kSyncRegistry)
+    if (t.targetedParentFkField != null) t.targetedParentFkField!: t.name,
+};
+
+/// #427 Online Order tables a shop phone answers through the outbox.
+final Set<String> kOnlineOrderAnswerTables = {
+  for (final t in kSyncRegistry)
+    if (t.onlineOrderAnswer) t.name,
+};
+
+/// #550 tables `withdrawUnsyncedRows` may remove rows from, in REVERSE registry
+/// order: children before the parents they reference (e.g. stock_transactions
+/// before the stock_adjustments its `adjustment_id` points at,
+/// payment_transactions before wallet_transactions), so a withdrawal never
+/// deletes a row something still references.
+final Set<String> kWithdrawableReversalTables = {
+  for (final t in kSyncRegistry.reversed)
+    if (t.withdrawableReversal) t.name,
+};
+
+/// Soft-delete tables (get the `(business_id, is_deleted)` index at create).
+final List<String> kSoftDeletableTables = [
+  for (final t in kSyncRegistry)
+    if (t.softDeletable) t.name,
+];
+
+/// Append-only ledger table → immutable columns (see
+/// [SyncedTable.ledgerImmutableColumns]).
+final Map<String, List<String>> kLedgerImmutableColumns = {
+  for (final t in kSyncRegistry)
+    if (t.ledgerImmutableColumns != null) t.name: t.ledgerImmutableColumns!,
 };
