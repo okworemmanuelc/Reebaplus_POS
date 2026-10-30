@@ -14,6 +14,7 @@ import 'package:reebaplus_pos/features/auth/onboarding/onboarding_draft.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
 import 'package:reebaplus_pos/shared/services/device_registry_service.dart';
+import 'package:reebaplus_pos/shared/services/device_teardown.dart';
 import 'package:reebaplus_pos/core/services/first_load_marker_service.dart';
 import 'package:reebaplus_pos/core/services/local_photo_files.dart';
 import 'package:reebaplus_pos/core/services/pending_photo_uploads.dart';
@@ -133,6 +134,18 @@ class AuthService extends ValueNotifier<UserData?> {
   late final DeviceRegistryService _deviceRegistry = DeviceRegistryService(
     _supabase,
     _secure,
+  );
+
+  /// The single place a user is torn off this device (#573). Every leave path
+  /// below delegates here; the step order lives in [DeviceTeardown.leave].
+  late final DeviceTeardown _teardown = DeviceTeardown(
+    assertOutboxClear: _assertOutboxClearBeforeWipe,
+    recordWipeLoss: _recordWipeLoss,
+    discardUnsynced: (businessId) =>
+        _db.syncDao.discardUnsyncedForBusiness(businessId),
+    clearAllData: () => _db.clearAllData(),
+    signOut: fullLogout,
+    clearFirstLoadMarkers: FirstLoadMarkerService.clearAllMarkers,
   );
 
   AuthService(
@@ -1088,33 +1101,12 @@ class AuthService extends ValueNotifier<UserData?> {
       // first. Resolve the tenant from the active user, falling back to the
       // single local business.
       final lostBiz = value?.businessId ?? await _soleLocalBusinessId();
-      if (lostBiz != null) {
-        await _recordWipeLoss(lostBiz, 'business_deleted:active');
-      }
-      // clearAllData failing must NOT block logout — the cloud already
-      // destroyed the business; we just need this device off it.
-      try {
-        await _db.clearAllData();
-      } catch (e) {
-        debugPrint('[AuthService] business-deleted clearAllData error: $e');
-      }
-      await fullLogout();
-      await _clearFirstLoadMarkersAfterWipe();
+      await _teardown.leave(
+        LeaveReason.businessDeletedRemotely,
+        businessId: lostBiz,
+      );
     } finally {
       _handlingBusinessDeleted = false;
-    }
-  }
-
-  /// Clears the first-load markers a second time, once the wiping logout has
-  /// signed the user out. `clearAllData` already cleared them, but a pull that
-  /// was in flight can finish between that wipe and the sign-out and write them
-  /// back — and the next sign-in would then treat an empty phone as one that
-  /// already finished its first download (#313). Best-effort: never throws.
-  Future<void> _clearFirstLoadMarkersAfterWipe() async {
-    try {
-      await FirstLoadMarkerService.clearAllMarkers();
-    } catch (e) {
-      debugPrint('[AuthService] post-wipe marker clear failed: $e');
     }
   }
 
@@ -1173,7 +1165,7 @@ class AuthService extends ValueNotifier<UserData?> {
     _handlingRemoteKick = true;
     try {
       kickedByRemoteSignIn = true;
-      await fullLogout();
+      await _teardown.leave(LeaveReason.sessionKicked);
     } finally {
       _handlingRemoteKick = false;
     }
@@ -1308,6 +1300,18 @@ class AuthService extends ValueNotifier<UserData?> {
       );
     }
 
+    // Detach = the delete_business RPC; on failure it throws before anything
+    // local is touched. Then: record loss → wipe → full logout.
+    await _teardown.leave(
+      LeaveReason.ownerDeletedBusiness,
+      businessId: businessId,
+      detach: () => _deleteBusinessViaRpc(businessId),
+    );
+  }
+
+  /// Calls the `delete_business` RPC directly (never enqueued). Throws
+  /// [DeleteBusinessException] with plain-English copy on any failure.
+  Future<void> _deleteBusinessViaRpc(String businessId) async {
     try {
       await _supabase.rpc(
         'delete_business',
@@ -1325,21 +1329,6 @@ class AuthService extends ValueNotifier<UserData?> {
         'Check your connection and try again.',
       );
     }
-
-    // The cloud confirmed the business is gone. §3.1 business-deleted carve-out:
-    // record any un-synced loss before wiping (the CEO deliberately deleted the
-    // business, so this is expected, but it must never be silent).
-    await _recordWipeLoss(businessId, 'business_deleted:owner_delete');
-
-    // Wipe local data, then full logout to Welcome. clearAllData failing must
-    // NOT block logout — the authoritative delete already succeeded server-side.
-    try {
-      await _db.clearAllData();
-    } catch (e) {
-      debugPrint('[AuthService] deleteBusiness clearAllData error: $e');
-    }
-    await fullLogout();
-    await _clearFirstLoadMarkersAfterWipe();
   }
 
   /// Maps a `delete_business` RPC error to plain English for the CEO.
@@ -1476,16 +1465,7 @@ class AuthService extends ValueNotifier<UserData?> {
     // first") or LogoutBlockedByUnsyncedDataException (only un-pushable orphans
     // remain → the Resolve-unsynced-data flow), and returns only when the
     // outbox is confirmed clean.
-    await _assertOutboxClearBeforeWipe(businessId);
-
-    // Outbox confirmed empty — safe to wipe.
-    try {
-      await _db.clearAllData();
-    } catch (e) {
-      debugPrint('[AuthService] logOutCurrentUser clearAllData error: $e');
-    }
-    await fullLogout();
-    await _clearFirstLoadMarkersAfterWipe();
+    await _teardown.leave(LeaveReason.logout, businessId: businessId);
   }
 
   /// §3.1 wipe gate (E) / Invariant #12. Guards any device-wiping offboard (a
@@ -1591,25 +1571,10 @@ class AuthService extends ValueNotifier<UserData?> {
   Future<void> discardUnsyncedAndLogout() async {
     final user = value;
     if (user == null) return;
-    final businessId = user.businessId;
-    await _recordWipeLoss(businessId, 'logout:user_discarded_unsynced');
-    try {
-      final discarded =
-          await _db.syncDao.discardUnsyncedForBusiness(businessId);
-      debugPrint(
-        '[AuthService] discardUnsyncedAndLogout: discarded $discarded '
-        'outbox row(s) for $businessId',
-      );
-    } catch (e) {
-      debugPrint('[AuthService] discardUnsyncedAndLogout discard error: $e');
-    }
-    try {
-      await _db.clearAllData();
-    } catch (e) {
-      debugPrint('[AuthService] discardUnsyncedAndLogout clearAllData error: $e');
-    }
-    await fullLogout();
-    await _clearFirstLoadMarkersAfterWipe();
+    await _teardown.leave(
+      LeaveReason.logoutDiscardingUnsynced,
+      businessId: user.businessId,
+    );
   }
 
   /// Voluntary self-resign (#117 staff offboarding). A non-owner staff member
@@ -1668,15 +1633,11 @@ class AuthService extends ValueNotifier<UserData?> {
 
     // Gate BEFORE detaching (throws on retryable/orphan rows). Only when it
     // returns cleanly do we detach server-side and wipe.
-    await _assertOutboxClearBeforeWipe(businessId);
-    await _resignViaRpc(businessId);
-    try {
-      await _db.clearAllData();
-    } catch (e) {
-      debugPrint('[AuthService] resignOwnMembership clearAllData error: $e');
-    }
-    await fullLogout();
-    await _clearFirstLoadMarkersAfterWipe();
+    await _teardown.leave(
+      LeaveReason.resign,
+      businessId: businessId,
+      detach: () => _resignViaRpc(businessId),
+    );
   }
 
   /// §3.1 "Resolve unsynced data" terminal for a self-resign (#117). Called by
@@ -1692,25 +1653,11 @@ class AuthService extends ValueNotifier<UserData?> {
     final businessId = user.businessId;
     // Detach server-side before discarding: on failure this throws
     // StaffResignException without touching the outbox, so the user can retry.
-    await _resignViaRpc(businessId);
-    await _recordWipeLoss(businessId, 'resign:user_discarded_unsynced');
-    try {
-      final discarded =
-          await _db.syncDao.discardUnsyncedForBusiness(businessId);
-      debugPrint(
-        '[AuthService] discardUnsyncedAndResign: discarded $discarded '
-        'outbox row(s) for $businessId',
-      );
-    } catch (e) {
-      debugPrint('[AuthService] discardUnsyncedAndResign discard error: $e');
-    }
-    try {
-      await _db.clearAllData();
-    } catch (e) {
-      debugPrint('[AuthService] discardUnsyncedAndResign clearAllData error: $e');
-    }
-    await fullLogout();
-    await _clearFirstLoadMarkersAfterWipe();
+    await _teardown.leave(
+      LeaveReason.resignDiscardingUnsynced,
+      businessId: businessId,
+      detach: () => _resignViaRpc(businessId),
+    );
   }
 
   /// Calls the `resign_own_membership` RPC directly (NOT via the §6 outbox), the
