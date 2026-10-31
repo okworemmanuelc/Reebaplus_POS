@@ -1,6 +1,7 @@
 # Apply plan: 0225 Google Play Billing
 
-Status: NOT APPLIED, NOT DEPLOYED. Needs owner confirmation.
+Status: LIVE on prod. 0224 and 0225 are applied and the `play-billing-verify`
+Edge Function is deployed; 0232/0234 deployed 2026-10-31.
 Issue: https://github.com/okworemmanuelc/reebaplus-web/issues/90 (slice B).
 
 Migration: `supabase/migrations/0225_play_billing.sql`
@@ -29,8 +30,8 @@ Edge Function: `supabase/functions/play-billing-verify`
 
    | Product | monthly | yearly |
    |---|---|---|
-   | reebaplus_basic | NGN 6,500 / USD 5 | NGN 65,000 / USD 50 |
-   | reebaplus_premium | NGN 25,000 / USD 20 | NGN 250,000 / USD 200 |
+   | reebaplus_basic | NGN 1,500 / USD 2 | NGN 15,000 / USD 20 |
+   | reebaplus_premium | NGN 6,500 / USD 5 | NGN 65,000 / USD 50 |
 6. Add license-tester Gmail accounts (Setup > License testing) to test with
    test cards without being charged.
 

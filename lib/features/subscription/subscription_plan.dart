@@ -87,8 +87,8 @@ String planSummary(String? plan) {
 
 /// Price line per plan. Naira for Nigeria, USD elsewhere (decided pricing).
 String planPriceLine(String? plan, {required bool nigeria}) => switch (plan) {
-  kPlanBasic => nigeria ? '₦6,500 per month' : '\$5 per month',
-  kPlanPremium => nigeria ? '₦25,000 per month' : '\$20 per month',
+  kPlanBasic => nigeria ? '₦1,500 per month' : '\$2 per month',
+  kPlanPremium => nigeria ? '₦6,500 per month' : '\$5 per month',
   _ => nigeria ? '₦0' : '\$0',
 };
 
