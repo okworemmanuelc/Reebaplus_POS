@@ -20,6 +20,7 @@
 import { corsHeaders, handlePreflight } from "../_shared/cors.ts";
 import { getCallerClient, getServiceClient } from "../_shared/db.ts";
 import {
+  billingIssueForState,
   businessForUnknownToken,
   decideApply,
   decodeRtdn,
@@ -146,6 +147,8 @@ async function persistAndApply(
     if (supErr) throw new Error(`supersede failed: ${supErr.message}`);
   }
 
+  // Every state, ON_HOLD and IN_GRACE_PERIOD included, reaches
+  // apply_play_purchase, which writes businesses.billing_issue (#591, 0233).
   const decision = decideApply({
     verified: v,
     replacedBy: prior?.replaced_by_token ?? null,
@@ -209,7 +212,13 @@ async function handleAppVerify(req: Request): Promise<Response> {
     let acked = v.acknowledged;
     if (needsAcknowledge(v)) acked = await acknowledge(pkg, v.productId, token, at);
     const applied = await persistAndApply(service, businessId, token, v, got.raw, acked, null);
-    return json({ ok: true, state: v.state, expiry_time: v.expiryTime, applied });
+    return json({
+      ok: true,
+      state: v.state,
+      expiry_time: v.expiryTime,
+      billing_issue: billingIssueForState(v.state),
+      applied,
+    });
   } catch (e) {
     console.error("verify failed", e);
     return json({ ok: false, error: "internal" }, 500);
@@ -251,7 +260,7 @@ async function handleRtdn(req: Request): Promise<Response> {
     const applied = await persistAndApply(
       service, businessId, target.purchaseToken, v, got.raw, acked, target.notificationType,
     );
-    return json({ ok: true, state: v.state, applied });
+    return json({ ok: true, state: v.state, billing_issue: billingIssueForState(v.state), applied });
   } catch (e) {
     console.error("rtdn failed", e);
     return json({ ok: false, error: "internal" }, 500); // non-2xx => Pub/Sub retries

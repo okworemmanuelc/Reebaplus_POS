@@ -91,6 +91,12 @@ class Businesses extends Table {
   // other subscription columns: omitted from the push whitelist. Mirrors
   // businesses.billing_cycle from 0224_subscription_tiers.sql.
   TextColumn get billingCycle => text().nullable()();
+  // Failed Play renewal (#591): null | 'grace' (payment failed, plan kept for
+  // the grace period) | 'hold' (account hold, shop on Free until fixed).
+  // Cloud-authoritative like the other subscription columns: written only by
+  // apply_play_purchase, omitted from the push whitelist, guarded by the 0224
+  // trigger. Mirrors businesses.billing_issue from 0233_business_billing_issue.sql.
+  TextColumn get billingIssue => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -3139,7 +3145,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 95;
+  int get schemaVersion => 96;
 
   /// The v90 (#473) listing columns, pinned to their defaults in every older
   /// products rebuild: TableMigration copies from the CURRENT schema, so a
@@ -6847,6 +6853,21 @@ class AppDatabase extends _$AppDatabase {
           await customStatement(
             'ALTER TABLE businesses ADD COLUMN billing_cycle TEXT',
           );
+        }
+      }
+      if (from < 96) {
+        // ── v96 — #591: mirror businesses.billing_issue ───────────────────
+        //
+        // Mirrors supabase/migrations/0233_business_billing_issue.sql.
+        // Nullable, cloud-authoritative, never pushed. No businesses rebuild
+        // exists in an older step, so no stale-column trap. Guarded so a
+        // re-upgrade is idempotent.
+        final has = await customSelect(
+          "SELECT 1 FROM pragma_table_info('businesses') "
+          "WHERE name = 'billing_issue'",
+        ).get();
+        if (has.isEmpty) {
+          await m.addColumn(businesses, businesses.billingIssue);
         }
       }
     },
