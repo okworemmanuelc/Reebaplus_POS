@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
@@ -13,6 +14,7 @@ import 'package:reebaplus_pos/features/subscription/widgets/thank_you_dialog.dar
 
 import 'package:reebaplus_pos/features/subscription/billing/play_billing_constants.dart';
 import 'package:reebaplus_pos/features/subscription/billing/play_billing_controller.dart';
+import 'package:reebaplus_pos/features/subscription/billing/play_billing_port.dart';
 import 'package:reebaplus_pos/features/subscription/billing/play_billing_providers.dart';
 
 /// Plan chooser embedded in Settings > Subscription (#90 slice B). Android
@@ -223,9 +225,15 @@ class _PlansPaywallState extends ConsumerState<PlansPaywall> {
           SizedBox(height: context.getRSize(8)),
           Text('$price $per',
               key: Key('price-${tier.name}'), style: context.boldStyle(16)),
-          if (_cycle == BillingCycle.yearly)
+          if (_cycle == BillingCycle.yearly &&
+              yearlySaving(ctl.offerFor(tier, BillingCycle.monthly),
+                      ctl.offerFor(tier, BillingCycle.yearly), tier,
+                      naira: naira) !=
+                  null)
             Text(
-              _saving(tier, naira),
+              yearlySaving(ctl.offerFor(tier, BillingCycle.monthly),
+                  ctl.offerFor(tier, BillingCycle.yearly), tier,
+                  naira: naira)!,
               key: Key('saving-${tier.name}'),
               style: context.boldStyle(13).copyWith(color: f.green),
             ),
@@ -246,11 +254,27 @@ class _PlansPaywallState extends ConsumerState<PlansPaywall> {
       ),
     );
   }
+}
 
-  /// Yearly saving vs twelve months: naira shows the amount, USD "2 months
-  /// free" (yearly = 10 x monthly).
-  String _saving(PlanTier tier, bool naira) {
-    if (!naira) return '2 months free';
-    return tier == PlanTier.basic ? 'Save ₦3,000' : 'Save ₦13,000';
+/// Yearly saving vs twelve months (#584). With both store prices known, the
+/// REAL saving from Google Play (null when there is none, so no false claim).
+/// Without store prices, the fallback table's fixed saving (yearly = 10 x).
+String? yearlySaving(StoreOffer? monthly, StoreOffer? yearly, PlanTier tier,
+    {required bool naira}) {
+  if (monthly != null || yearly != null) {
+    final m = monthly?.priceMicros;
+    final y = yearly?.priceMicros;
+    final cur = yearly?.currencyCode;
+    if (m == null || y == null || cur == null || monthly?.currencyCode != cur) {
+      return null;
+    }
+    final save = (12 * m - y) / 1000000;
+    if (save < 1) return null;
+    final amount = cur == 'NGN'
+        ? '₦${NumberFormat('#,##0').format(save.round())}'
+        : NumberFormat.simpleCurrency(name: cur, decimalDigits: 0).format(save);
+    return 'Save $amount';
   }
+  if (!naira) return '2 months free';
+  return tier == PlanTier.basic ? 'Save ₦3,000' : 'Save ₦13,000';
 }
