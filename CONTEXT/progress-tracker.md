@@ -7,6 +7,10 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #608: Play Console recommendations (2026-10-31, ready for review)
+
+Edge-to-edge on Android 10–14 too: `MainActivity` calls `enableEdgeToEdge()` after `super.onCreate`, and `main.dart` sets `SystemUiMode.edgeToEdge`, because without it Flutter re-applies its old flags on resume and undoes it on API 29. Android 15+ was already edge-to-edge (targetSdk 36), so no new inset bugs are possible. Deleted the dead `com.reebaplus.reebaplus_pos.MainActivity`. AGP 8.11.1 → 8.13.2 + `android.r8.optimizedResourceShrinking=true`. Bitmap-downsampling warning = third-party code the app never reaches (no change). AGP 9 = #609 (on hold until Flutter 3.47+ built-in Kotlin). No Drift/cloud change.
+
 ### Issue #587: No more free trials (2026-10-31, ready for review)
 
 Migration **0231** (NOT applied): new businesses start Free (`inactive`/`free`/NULL trial) via the status default + re-issued `set_business_trial_end()` (same signature); customer roles can no longer insert subscription values; operator/console can still set any status (explicit trial still stamped). Ended trials -> inactive/free; running trials untouched. Rollout docs `docs/rollouts/0231-no-trials/` (verify passed on dev in a rolled-back txn). App: TODO(#584) on the running-trial display (FREE TRIAL badge, TrialReminderBanner); Drift 'trial' grace default left (null date = no trial shown). Part of PRD #584; pos-parity issue (supervisor).
