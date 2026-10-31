@@ -35,6 +35,8 @@ class _PlansPaywallState extends ConsumerState<PlansPaywall> {
       port: ref.read(playBillingPortProvider),
       verify: ref.read(purchaseVerifierProvider),
       businessId: businessId,
+      currentPlan: () => ref.read(billingCurrentPlanProvider),
+      hasPlaySubscription: ref.read(playSubscriptionLookupProvider),
     )..addListener(_onChange)
      ..init();
   }
@@ -90,6 +92,7 @@ class _PlansPaywallState extends ConsumerState<PlansPaywall> {
 
     final ctl = _ctl;
     if (ctl == null) return const SizedBox.shrink();
+    ref.watch(billingCurrentPlanProvider); // rebuild when the plan syncs down
     final s = ctl.state;
     final naira = ref.watch(billingUsesNairaProvider);
     final busy = s.phase == BillingPhase.purchasing ||
@@ -168,11 +171,18 @@ class _PlansPaywallState extends ConsumerState<PlansPaywall> {
           Text('$price $per',
               key: Key('price-${tier.name}'), style: context.boldStyle(16)),
           SizedBox(height: context.getRSize(12)),
-          AppButton(
-            text: 'Choose $title',
-            isLoading: busy,
-            onPressed: busy ? null : () => ctl.subscribe(tier, _cycle),
-          ),
+          if (ctl.isCurrentPlan(tier, _cycle))
+            AppButton(
+              key: Key('current-${tier.name}'),
+              text: 'Current plan',
+              onPressed: null,
+            )
+          else
+            AppButton(
+              text: 'Choose $title',
+              isLoading: busy,
+              onPressed: busy ? null : () => ctl.subscribe(tier, _cycle),
+            ),
         ],
       ),
     );

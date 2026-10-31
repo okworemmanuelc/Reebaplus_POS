@@ -1,6 +1,10 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
+  businessForUnknownToken,
+  decideApply,
   decodeRtdn,
+  RTDN_REVOKED,
+  replacedToken,
   isEntitled,
   needsAcknowledge,
   parseSubscriptionV2,
@@ -72,4 +76,169 @@ Deno.test("secret compare", () => {
   assertEquals(secretMatches("abc", "abd"), false);
   assertEquals(secretMatches(undefined, "abc"), false);
   assertEquals(secretMatches("abc", null), false);
+});
+
+// ── #589 plan switching ──────────────────────────────────────────────────────
+
+Deno.test("upgrade: linkedPurchaseToken names the token it replaces", () => {
+  const p = parseSubscriptionV2({ ...base, linkedPurchaseToken: "old" })!;
+  assertEquals(p.linkedPurchaseToken, "old");
+  assertEquals(replacedToken("new", p), "old");
+  assertEquals(replacedToken("old", p), null); // never itself
+  assertEquals(replacedToken("new", parseSubscriptionV2(base)!), null);
+});
+
+Deno.test("deferred downgrade keeps the owned higher plan until renewal", () => {
+  const p = parseSubscriptionV2({
+    ...base,
+    linkedPurchaseToken: "old",
+    lineItems: [
+      { // being switched to: not owned yet, later expiry
+        productId: "reebaplus_basic",
+        expiryTime: "2099-06-01T00:00:00Z",
+        offerDetails: { basePlanId: "monthly" },
+      },
+      { // owned now, ends at renewal
+        productId: "reebaplus_premium",
+        expiryTime: "2099-01-01T00:00:00Z",
+        latestSuccessfulOrderId: "GPA.1",
+        offerDetails: { basePlanId: "yearly" },
+        deferredItemReplacement: { productId: "reebaplus_basic" },
+      },
+    ],
+  })!;
+  assertEquals(p.productId, "reebaplus_premium");
+  assertEquals(p.basePlanId, "yearly");
+  assertEquals(p.expiryTime, "2099-01-01T00:00:00Z");
+  assertEquals(p.deferredProductId, "reebaplus_basic");
+});
+
+Deno.test("deferred same-product cycle change (yearly -> monthly) keeps yearly", () => {
+  const p = parseSubscriptionV2({
+    ...base,
+    lineItems: [
+      {
+        productId: "reebaplus_premium",
+        expiryTime: "2099-02-01T00:00:00Z",
+        offerDetails: { basePlanId: "monthly" },
+      },
+      {
+        productId: "reebaplus_premium",
+        expiryTime: "2099-01-01T00:00:00Z",
+        latestSuccessfulOrderId: "GPA.1",
+        offerDetails: { basePlanId: "yearly" },
+        deferredItemReplacement: { productId: "reebaplus_premium" },
+      },
+    ],
+  })!;
+  assertEquals(p.basePlanId, "yearly");
+});
+
+Deno.test("after renewal into the deferred plan, the new plan applies", () => {
+  const p = parseSubscriptionV2({
+    ...base,
+    lineItems: [{
+      productId: "reebaplus_basic",
+      expiryTime: "2099-02-01T00:00:00Z",
+      latestSuccessfulOrderId: "GPA.2",
+      offerDetails: { basePlanId: "monthly" },
+    }],
+  })!;
+  assertEquals(p.productId, "reebaplus_basic");
+  assertEquals(p.deferredProductId, null);
+});
+
+const NOW = Date.parse("2026-06-01T00:00:00Z");
+const paidPrior = { state: "ACTIVE", expiryTime: "2026-07-01T00:00:00Z" };
+
+Deno.test("a replaced token never changes the plan, whatever it says", () => {
+  for (const state of ["EXPIRED", "ACTIVE", "CANCELED", "ON_HOLD"] as const) {
+    assertEquals(
+      decideApply({
+        verified: { state, expiryTime: "2026-07-01T00:00:00Z" },
+        replacedBy: "new",
+        prior: paidPrior,
+        notificationType: 13,
+        now: NOW,
+      }),
+      { apply: false, reason: "replaced" },
+    );
+  }
+});
+
+Deno.test("old-token lapse arriving BEFORE the new token is held, not downgraded", () => {
+  assertEquals(
+    decideApply({
+      verified: { state: "EXPIRED", expiryTime: "2026-06-01T00:00:00Z" },
+      replacedBy: null,
+      prior: paidPrior,
+      notificationType: 13,
+      now: NOW,
+    }),
+    { apply: false, reason: "early_lapse_held" },
+  );
+});
+
+Deno.test("a revoke (refund) applies at once even mid-period", () => {
+  assertEquals(
+    decideApply({
+      verified: { state: "EXPIRED", expiryTime: "2026-06-01T00:00:00Z" },
+      replacedBy: null,
+      prior: paidPrior,
+      notificationType: RTDN_REVOKED,
+      now: NOW,
+    }),
+    { apply: true },
+  );
+});
+
+Deno.test("a natural lapse after the paid period applies", () => {
+  assertEquals(
+    decideApply({
+      verified: { state: "EXPIRED", expiryTime: "2026-05-31T00:00:00Z" },
+      replacedBy: null,
+      prior: { state: "CANCELED", expiryTime: "2026-05-31T00:00:00Z" },
+      notificationType: 13,
+      now: NOW,
+    }),
+    { apply: true },
+  );
+  // ON_HOLD / unknown prior / entitled updates are never held.
+  assertEquals(
+    decideApply({
+      verified: { state: "ON_HOLD", expiryTime: null },
+      replacedBy: null,
+      prior: paidPrior,
+      notificationType: 5,
+      now: NOW,
+    }).apply,
+    true,
+  );
+  assertEquals(
+    decideApply({
+      verified: { state: "EXPIRED", expiryTime: null },
+      replacedBy: null,
+      prior: null,
+      notificationType: 13,
+      now: NOW,
+    }).apply,
+    true,
+  );
+  assertEquals(
+    decideApply({
+      verified: { state: "ACTIVE", expiryTime: "2026-07-01T00:00:00Z" },
+      replacedBy: null,
+      prior: paidPrior,
+      notificationType: 2,
+      now: NOW,
+    }).apply,
+    true,
+  );
+});
+
+Deno.test("an unknown RTDN token binds only through a known linked token", () => {
+  assertEquals(businessForUnknownToken({ obfuscatedAccountId: null }, "biz-1"), "biz-1");
+  assertEquals(businessForUnknownToken({ obfuscatedAccountId: "biz-1" }, "biz-1"), "biz-1");
+  assertEquals(businessForUnknownToken({ obfuscatedAccountId: "biz-2" }, "biz-1"), null);
+  assertEquals(businessForUnknownToken({ obfuscatedAccountId: "biz-1" }, null), null);
 });
