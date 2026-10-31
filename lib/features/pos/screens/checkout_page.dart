@@ -12,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/features/pos/services/receipt_extras.dart';
 import 'package:reebaplus_pos/shared/widgets/receipt_widget.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/logger.dart';
@@ -1234,7 +1235,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           );
 
       // ── Success Flow ────────────────────────────────────────────────
+      // #605 — read AFTER the order is written so the crate balance includes it.
+      _saleAt = DateTime.now();
+      final loadedExtras = await _loadReceiptExtras();
       if (mounted) {
+        if (loadedExtras != null) _extras = loadedExtras;
         setState(() {
           _amountPaid = amountPaidKobo / 100.0;
           // True post-sale credit balance net = old + credit(paid) − debit(total).
@@ -1277,6 +1282,37 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     }
   }
 
+  /// #605 — real cashier / contact / VAT / crate-balance fields for the
+  /// receipt. Loaded AFTER the order is written (so the crate balance already
+  /// includes this sale) and refreshed before each print.
+  ReceiptExtras _extras = ReceiptExtras.none;
+  DateTime? _saleAt;
+
+  Future<ReceiptExtras?> _loadReceiptExtras() async {
+    try {
+      final vat = await ref.read(vatConfigProvider.future);
+      final crates = widget.crateLines.map(SaleCrateLine.fromMap).toList();
+      return await loadReceiptExtras(
+        ref.read(databaseProvider),
+        business: ref.read(currentBusinessProvider),
+        vat: vat,
+        totalKobo: _totalKobo,
+        depositKobo: _depositTotalKobo,
+        saleDate: _saleAt ?? DateTime.now(),
+        cashierName: ref.read(authProvider).currentUser?.name,
+        customerId: _isWalkIn ? null : _initialCustomer?.id,
+        fullDepositKobo: crates.fold<int>(0, (s, c) => s + c.fullDepositKobo),
+        depositCrates: {
+          for (final c in crates)
+            if ((_depositByMfr[c.manufacturerId] ?? 0) > 0)
+              c.manufacturerId: c.crates.round(),
+        },
+      );
+    } catch (_) {
+      return null; // the receipt simply omits the optional lines
+    }
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // RECEIPT VIEW (shown after payment confirmed)
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1310,6 +1346,14 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                   walletBalance: _receiptCreditBalance,
                   showWalletInfo: !_isWalkIn && _addCreditInfoToReceipt,
                   manufacturerNames: _manufacturerNames,
+                  businessPhone: _extras.businessPhone,
+                  businessEmail: _extras.businessEmail,
+                  cashierName: _extras.cashierName,
+                  saleDate: _extras.saleDate,
+                  vatRateBps: _extras.vatRateBps,
+                  vatIncluded: _extras.vatIncluded,
+                  cratesOwedByManufacturer: _extras.cratesOwedByManufacturer,
+                  crateDepositFull: _extras.crateDepositFull,
                   storeAddress: _storeAddress,
                   businessName: ref.watch(currentBusinessNameProvider),
                   tracksCrates: businessTracksCrates(
@@ -1525,6 +1569,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
       // Built per paper width: the picker fallback below may land on a
       // different printer with a different roll, and rebuilds for it.
+      // Latest crate balance for the printed copy (includes this sale).
+      final refreshed = await _loadReceiptExtras();
+      if (!mounted) return;
+      if (refreshed != null) _extras = refreshed;
+      final extras = _extras;
       Future<List<int>> buildBytes(
         ReceiptPaperSize paperSize,
       ) => ThermalReceiptService.buildReceipt(
@@ -1542,6 +1591,14 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         walletBalance: _receiptCreditBalance,
         showWalletInfo: !_isWalkIn && _addCreditInfoToReceipt,
         storeAddress: _storeAddress,
+        businessPhone: extras.businessPhone,
+        businessEmail: extras.businessEmail,
+        cashierName: extras.cashierName,
+        saleDate: extras.saleDate,
+        vatRateBps: extras.vatRateBps,
+        vatIncluded: extras.vatIncluded,
+        cratesOwedByManufacturer: extras.cratesOwedByManufacturer,
+        crateDepositFull: extras.crateDepositFull,
         businessName: ref.read(currentBusinessNameProvider),
         tracksCrates: businessTracksCrates(
           ref.read(currentBusinessProvider),

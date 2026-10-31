@@ -69,6 +69,10 @@ class ReceiptWidget extends StatelessWidget {
   /// sale's crates when a manufacturer is missing (walk-ins).
   final Map<String, double>? cratesOwedByManufacturer;
 
+  /// The full deposit when only part was paid. Non-null AND above
+  /// [crateDeposit] switches the crates note to "Deposit paid ₦X of ₦Y."
+  final double? crateDepositFull;
+
   /// Whether the business counts empty crates —
   /// `businessTracksCrates(currentBusiness)`. Only then does a `Bottle` line
   /// read "Bottle Crate <name>" (#487); every other shop prints "Bottle".
@@ -102,6 +106,7 @@ class ReceiptWidget extends StatelessWidget {
     this.vatRateBps,
     this.vatIncluded,
     this.cratesOwedByManufacturer,
+    this.crateDepositFull,
     required this.tracksCrates,
   });
 
@@ -566,7 +571,9 @@ class ReceiptWidget extends StatelessWidget {
           if (crateDeposit > 0) ...[
             SizedBox(height: context.getRSize(8)),
             Text(
-              'The ${formatCurrency(crateDeposit)} deposit is refunded when the crates are returned.',
+              (crateDepositFull != null && crateDepositFull! > crateDeposit)
+                  ? 'Deposit paid ${formatCurrency(crateDeposit)} of ${formatCurrency(crateDepositFull!)}.'
+                  : 'The ${formatCurrency(crateDeposit)} deposit is refunded when the crates are returned.',
               style: TextStyle(fontSize: context.getRFontSize(12), color: _sub),
             ),
           ],

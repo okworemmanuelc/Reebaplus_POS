@@ -47,6 +47,7 @@ class ThermalReceiptService {
     int? vatRateBps,
     double? vatIncluded,
     Map<String, double>? cratesOwedByManufacturer,
+    double? crateDepositFull,
     Map<String, String>? manufacturerNames,
     String? logoPath,
     ReceiptPaperSize paperSize = ReceiptPaperSize.mm58,
@@ -80,6 +81,7 @@ class ThermalReceiptService {
       vatRateBps: vatRateBps,
       vatIncluded: vatIncluded,
       cratesOwedByManufacturer: cratesOwedByManufacturer,
+      crateDepositFull: crateDepositFull,
       tracksCrates: tracksCrates,
     );
 
