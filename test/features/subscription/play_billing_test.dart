@@ -114,9 +114,9 @@ void main() {
           const VerifyOutcome(true));
       await c.init();
       expect(c.priceFor(PlanTier.basic, BillingCycle.monthly, naira: true), '₦6,999.00');
-      expect(c.priceFor(PlanTier.basic, BillingCycle.yearly, naira: true), '₦65,000');
-      expect(c.priceFor(PlanTier.premium, BillingCycle.monthly, naira: false), '\$20');
-      expect(c.priceFor(PlanTier.basic, BillingCycle.yearly, naira: false), '\$50');
+      expect(c.priceFor(PlanTier.basic, BillingCycle.yearly, naira: true), '₦15,000');
+      expect(c.priceFor(PlanTier.premium, BillingCycle.monthly, naira: false), '\$5');
+      expect(c.priceFor(PlanTier.basic, BillingCycle.yearly, naira: false), '\$20');
       c.dispose();
     });
   });
@@ -289,15 +289,35 @@ void main() {
       await pump(tester, android: false);
       expect(find.byKey(const Key('paywall-non-android')), findsOneWidget);
       expect(find.byKey(const Key('paywall')), findsNothing);
+      expect(find.textContaining('Choose'), findsNothing);
+      expect(find.textContaining('WhatsApp'), findsNothing);
+      expect(find.textContaining('Android'), findsNothing);
+      expect(find.byKey(const Key('paywall-current-plan')), findsOneWidget);
+    });
+
+    testWidgets('Premium is tagged Unlimited shops & staff', (tester) async {
+      await pump(tester);
+      expect(find.byKey(const Key('premium-tag')), findsOneWidget);
+      expect(find.text('Unlimited shops & staff'), findsOneWidget);
+    });
+
+    testWidgets('yearly shows the saving: naira amounts, USD 2 months free',
+        (tester) async {
+      await pump(tester);
+      expect(find.textContaining('Save'), findsNothing);
+      await tester.tap(find.text('Yearly (2 months free)'));
+      await tester.pumpAndSettle();
+      expect(find.text('Save ₦3,000'), findsOneWidget);
+      expect(find.text('Save ₦13,000'), findsOneWidget);
     });
 
     testWidgets('Android shows store price, fallback, and toggles yearly', (tester) async {
       await pump(tester);
       expect(find.text('₦6,999.00 per month'), findsOneWidget); // store
-      expect(find.text('₦25,000 per month'), findsOneWidget); // fallback
+      expect(find.text('₦6,500 per month'), findsOneWidget); // fallback
       await tester.tap(find.text('Yearly (2 months free)'));
       await tester.pumpAndSettle();
-      expect(find.text('₦65,000 per year'), findsOneWidget); // fallback
+      expect(find.text('₦15,000 per year'), findsOneWidget); // fallback
       expect(find.text('₦251,000.00 per year'), findsOneWidget); // store
     });
 

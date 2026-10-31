@@ -15,10 +15,6 @@ const Set<String> kSubscriptionProductIds = {kProductBasic, kProductPremium};
 const String kBasePlanMonthly = 'monthly';
 const String kBasePlanYearly = 'yearly';
 
-/// WhatsApp number (international format, digits only) for the interim
-/// "contact us" path. Empty = hide the button until the owner supplies it.
-const String kSupportWhatsAppNumber = '';
-
 /// Name of the Supabase Edge Function that verifies Play purchases.
 const String kPlayBillingVerifyFunction = 'play-billing-verify';
 
@@ -33,16 +29,16 @@ String basePlanFor(BillingCycle c) =>
 /// Nigeria sees naira, everyone else dollars (decided in #90).
 String fallbackPrice(PlanTier t, BillingCycle c, {required bool naira}) {
   const ngn = {
-    (PlanTier.basic, BillingCycle.monthly): '₦6,500',
-    (PlanTier.basic, BillingCycle.yearly): '₦65,000',
-    (PlanTier.premium, BillingCycle.monthly): '₦25,000',
-    (PlanTier.premium, BillingCycle.yearly): '₦250,000',
+    (PlanTier.basic, BillingCycle.monthly): '₦1,500',
+    (PlanTier.basic, BillingCycle.yearly): '₦15,000',
+    (PlanTier.premium, BillingCycle.monthly): '₦6,500',
+    (PlanTier.premium, BillingCycle.yearly): '₦65,000',
   };
   const usd = {
-    (PlanTier.basic, BillingCycle.monthly): '\$5',
-    (PlanTier.basic, BillingCycle.yearly): '\$50',
-    (PlanTier.premium, BillingCycle.monthly): '\$20',
-    (PlanTier.premium, BillingCycle.yearly): '\$200',
+    (PlanTier.basic, BillingCycle.monthly): '\$2',
+    (PlanTier.basic, BillingCycle.yearly): '\$20',
+    (PlanTier.premium, BillingCycle.monthly): '\$5',
+    (PlanTier.premium, BillingCycle.yearly): '\$50',
   };
   return (naira ? ngn : usd)[(t, c)]!;
 }
