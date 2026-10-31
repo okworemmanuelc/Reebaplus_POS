@@ -53,6 +53,7 @@ extension SubscriptionAccessX on SubscriptionAccess {
   /// show no tag.
   String? get badgeLabel => switch (this) {
     SubscriptionAccess.active => 'PRO',
+    // TODO(#584): remove once no legacy trials remain
     SubscriptionAccess.trialActive => 'FREE TRIAL',
     SubscriptionAccess.trialExpired ||
     SubscriptionAccess.inactive ||

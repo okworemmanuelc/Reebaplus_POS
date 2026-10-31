@@ -581,6 +581,7 @@ class _MainLayoutState extends ConsumerState<MainLayout>
                 bottom: false,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
+                  // TODO(#584): remove once no legacy trials remain
                   children: [TrialReminderBanner(), PlanStatusBanner()],
                 ),
               ),

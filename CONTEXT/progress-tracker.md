@@ -7,6 +7,10 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #587: No more free trials (2026-10-31, ready for review)
+
+Migration **0231** (NOT applied): new businesses start Free (`inactive`/`free`/NULL trial) via the status default + re-issued `set_business_trial_end()` (same signature); customer roles can no longer insert subscription values; operator/console can still set any status (explicit trial still stamped). Ended trials -> inactive/free; running trials untouched. Rollout docs `docs/rollouts/0231-no-trials/` (verify passed on dev in a rolled-back txn). App: TODO(#584) on the running-trial display (FREE TRIAL badge, TrialReminderBanner); Drift 'trial' grace default left (null date = no trial shown). Part of PRD #584; pos-parity issue (supervisor).
+
 ### Issue #586: Never lock the app (2026-10-30, ready for review)
 
 Deleted SubscriptionLockedScreen + isLocked gate (and orphaned subscription_parts, its tests/goldens). Lapsed/ended = Free ("FREE PLAN" chip), keeps selling. New owner-only PlanStatusBanner (over-limit beats plan-ended) beside TrialReminderBanner; Subscription screen lists paused staff / read-only shops. Part of PRD #584. No Drift/cloud change.
