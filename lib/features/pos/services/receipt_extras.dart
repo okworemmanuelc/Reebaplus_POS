@@ -49,6 +49,7 @@ ReceiptExtras composeReceiptExtras({
   int depositKobo = 0,
   int? fullDepositKobo,
   List<CrateBalanceEntry>? crateBalances,
+  Map<String, int> depositCrates = const {},
 }) {
   final vatOn = vat.enabled && vat.rateBps > 0;
   final goodsKobo = totalKobo - depositKobo;
@@ -63,17 +64,33 @@ ReceiptExtras composeReceiptExtras({
         ? computeVatKobo(goodsKobo, vat.rateBps, basis: VatBasis.inclusive) /
               100.0
         : null,
-    // Positive ledger balance = the customer owes us empties; floored at 0.
     cratesOwedByManufacturer: crateBalances == null
         ? null
-        : {
-            for (final b in crateBalances)
-              b.manufacturerId: b.balance > 0 ? b.balance.toDouble() : 0.0,
-          },
+        : _cratesOwed(crateBalances, depositCrates),
     crateDepositFull: (fullDepositKobo != null && fullDepositKobo > depositKobo)
         ? fullDepositKobo / 100.0
         : null,
   );
+}
+
+/// "Crates still to bring back", per brand (owner decision, #605): the
+/// customer's no-deposit ledger debt (positive = owes us empties, floored at 0)
+/// plus the crates THIS sale took under a deposit. The ledger only records
+/// crates taken with no deposit, so without the second term a deposit sale
+/// would print "Owed: 0". Older deposit-covered crates are not tracked per
+/// customer, so they are not counted.
+Map<String, double> _cratesOwed(
+  List<CrateBalanceEntry> balances,
+  Map<String, int> depositCrates,
+) {
+  final owed = <String, double>{
+    for (final b in balances)
+      b.manufacturerId: b.balance > 0 ? b.balance.toDouble() : 0.0,
+  };
+  depositCrates.forEach((mfrId, crates) {
+    owed[mfrId] = (owed[mfrId] ?? 0) + crates;
+  });
+  return owed;
 }
 
 /// Reads what the call site does not already hold, then composes.
@@ -94,17 +111,23 @@ Future<ReceiptExtras> loadReceiptExtras(
   String? customerId,
   String? orderId,
   int? fullDepositKobo,
+  Map<String, int>? depositCrates,
 }) async {
   var cashier = cashierName;
   if (cashier == null && staffId != null) {
     cashier = (await db.storesDao.getUserById(staffId))?.name;
   }
   var full = fullDepositKobo;
-  if (full == null && orderId != null) {
+  var covered = depositCrates;
+  if ((full == null || covered == null) && orderId != null) {
     final lines = await db.orderCrateLinesDao.getForOrder(orderId);
-    if (lines.isNotEmpty) {
+    if (full == null && lines.isNotEmpty) {
       full = lines.fold<int>(0, (s, l) => s + l.cratesTaken * l.depositRateKobo);
     }
+    covered ??= {
+      for (final l in lines)
+        if (l.depositPaidKobo > 0) l.manufacturerId: l.cratesTaken,
+    };
   }
   List<CrateBalanceEntry>? balances;
   if (customerId != null) {
@@ -122,6 +145,7 @@ Future<ReceiptExtras> loadReceiptExtras(
     depositKobo: depositKobo,
     fullDepositKobo: full,
     crateBalances: balances,
+    depositCrates: covered ?? const {},
   );
 }
 

@@ -1302,6 +1302,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         cashierName: ref.read(authProvider).currentUser?.name,
         customerId: _isWalkIn ? null : _initialCustomer?.id,
         fullDepositKobo: crates.fold<int>(0, (s, c) => s + c.fullDepositKobo),
+        depositCrates: {
+          for (final c in crates)
+            if ((_depositByMfr[c.manufacturerId] ?? 0) > 0)
+              c.manufacturerId: c.crates.round(),
+        },
       );
     } catch (_) {
       return null; // the receipt simply omits the optional lines

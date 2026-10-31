@@ -76,6 +76,20 @@ void main() {
       expect(composeReceiptExtras(totalKobo: 1000).cratesOwedByManufacturer, isNull);
     });
 
+    test('owed adds the crates this sale took under a deposit', () {
+      // The ledger only records no-deposit crates, so a deposit sale must still
+      // show its own crates as "still to bring back" (#605 owner decision).
+      final x = composeReceiptExtras(
+        totalKobo: 1000,
+        crateBalances: [
+          CrateBalanceEntry(manufacturerId: 'a', manufacturerName: 'A', balance: 2),
+          CrateBalanceEntry(manufacturerId: 'b', manufacturerName: 'B', balance: -3),
+        ],
+        depositCrates: {'a': 1, 'b': 1, 'c': 4},
+      );
+      expect(x.cratesOwedByManufacturer, {'a': 3.0, 'b': 1.0, 'c': 4.0});
+    });
+
     test('full deposit only when above what was paid', () {
       expect(
         composeReceiptExtras(totalKobo: 1, depositKobo: 100000, fullDepositKobo: 300000)
