@@ -1288,16 +1288,12 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                                 currentOrder.paymentType,
                             customerName:
                                 richOrder.customer?.name ?? 'Walk-in Customer',
-                            customerAddress:
-                                richOrder.customer?.addressText ?? 'N/A',
                             cashReceived:
                                 currentOrder.paymentType == 'Wallet Payment'
                                 ? currentOrder.netAmountKobo / 100.0
                                 : currentOrder.amountPaidKobo / 100.0,
                             reprintDate: reprintDate,
                             reshareDate: reshareDate,
-                            riderName: currentOrder.riderName,
-                            deliveryRef: null,
                             orderStatus: currentOrder.status,
                             refundAmount: currentOrder.amountPaidKobo / 100.0,
                             storeAddress: storeAddress,

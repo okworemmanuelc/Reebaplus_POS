@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/core/settings/vat_settings.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/name_case.dart';
@@ -15,17 +16,14 @@ class ReceiptWidget extends StatelessWidget {
   /// Discount given on this sale (#200 / US 33). [subtotal] is always the goods
   /// at their FULL price, so the discount prints on its own line between the
   /// subtotal and the total — otherwise a discounted receipt shows a total that
-  /// is lower than its subtotal with nothing on paper explaining why, and the
-  /// original and a reprint disagree about which figure "Subtotal" means. 0
-  /// (the default) prints no line. See [ReceiptTotals].
+  /// is lower than its subtotal with nothing on paper explaining why. 0 (the
+  /// default) prints no line. See [ReceiptTotals].
   final double discount;
 
   final double crateDeposit;
   final double total;
   final String paymentMethod;
   final String? customerName;
-  final String? customerAddress;
-  final String? customerPhone;
   final double? cashReceived;
   final double? walletBalance;
 
@@ -35,31 +33,44 @@ class ReceiptWidget extends StatelessWidget {
 
   final DateTime? reprintDate;
   final DateTime? reshareDate;
-  final String? riderName;
-  final String? deliveryRef;
   final String? orderStatus;
   final double? refundAmount;
 
-  /// manufacturerId → name — used to label crate deposit rows by manufacturer.
+  /// manufacturerId → name — used to label crate rows by manufacturer.
   final Map<String, String>? manufacturerNames;
 
   /// Address of the store that processed this sale, country excluded (§15.1).
-  /// Resolved from the order's `store_id`, so reprints show the recording store.
   final String? storeAddress;
 
-  /// The business name (§15.1) — shown as the receipt header. Read live from
-  /// the `businesses` row so a rename in Business Info (§10.1) reflects here.
+  /// The business name (§15.1) — shown as the receipt header.
   final String? businessName;
 
-  /// Local file path of the business logo (cached by [BusinessLogoService]).
-  /// When provided the logo is rendered above the business name. Null falls
-  /// back to name-only display so offline / no-logo receipts work identically.
+  /// Local file path of the business logo. Shown only when set AND the file
+  /// exists; otherwise nothing renders (no box, no placeholder).
   final String? logoPath;
+
+  /// Business contact line ("phone · email"); each part shows only when set.
+  final String? businessPhone;
+  final String? businessEmail;
+
+  /// The staff member who made the sale.
+  final String? cashierName;
+
+  /// When the sale happened. Null falls back to now (fresh checkout).
+  final DateTime? saleDate;
+
+  /// VAT included in the price (display only — never changes [total]). The row
+  /// shows only when [vatIncluded] is non-null.
+  final int? vatRateBps;
+  final double? vatIncluded;
+
+  /// manufacturerId → the customer's total crates owed. Falls back to this
+  /// sale's crates when a manufacturer is missing (walk-ins).
+  final Map<String, double>? cratesOwedByManufacturer;
 
   /// Whether the business counts empty crates —
   /// `businessTracksCrates(currentBusiness)`. Only then does a `Bottle` line
   /// read "Bottle Crate <name>" (#487); every other shop prints "Bottle".
-  /// Required so no receipt forgets which kind of shop it is for.
   final bool tracksCrates;
 
   const ReceiptWidget({
@@ -72,41 +83,73 @@ class ReceiptWidget extends StatelessWidget {
     required this.total,
     required this.paymentMethod,
     this.customerName,
-    this.customerAddress,
-    this.customerPhone,
     this.cashReceived,
     this.walletBalance,
     this.showWalletInfo = false,
     this.reprintDate,
     this.reshareDate,
-    this.riderName,
-    this.deliveryRef,
     this.orderStatus,
     this.refundAmount,
     this.manufacturerNames,
     this.storeAddress,
     this.businessName,
     this.logoPath,
+    this.businessPhone,
+    this.businessEmail,
+    this.cashierName,
+    this.saleDate,
+    this.vatRateBps,
+    this.vatIncluded,
+    this.cratesOwedByManufacturer,
     required this.tracksCrates,
   });
+
+  static const _textCol = Color(0xFF111111);
+  static const _sub = Color(0xFF555555);
+  static const _divCol = Color(0xFFDDDDDD);
+
+  static int _kobo(double v) => (v * 100).round();
+
+  static String _qty(double q) => q == q.roundToDouble()
+      ? q.toStringAsFixed(0)
+      : q.toStringAsFixed(2).replaceFirst(RegExp(r'0+$'), '');
+
+  static double _num(dynamic v) =>
+      v is num ? v.toDouble() : double.tryParse('$v') ?? 0.0;
 
   @override
   Widget build(BuildContext context) {
     // Receipts always use black-on-white regardless of app theme.
-    const bg = Colors.white;
-    const textCol = Color(0xFF111111);
-    const sub = Color(0xFF555555);
-    const divCol = Color(0xFFDDDDDD);
-    // Use the app's theme for the primary color instead of hardcoded amber.
     final primary = Theme.of(context).colorScheme.primary;
+    final hasLogo = logoPath != null && File(logoPath!).existsSync();
+    final name = businessName?.trim() ?? '';
+    final contact = [
+      if (businessPhone != null && businessPhone!.trim().isNotEmpty)
+        businessPhone!.trim(),
+      if (businessEmail != null && businessEmail!.trim().isNotEmpty)
+        businessEmail!.trim(),
+    ].join(' · ');
+    final cust = customerName?.trim() ?? '';
+    final showCustomer = cust.isNotEmpty && cust.toLowerCase() != 'walk-in customer';
+    final cashier = cashierName?.trim() ?? '';
+
+    final totalKobo = _kobo(total);
+    final paidKobo = _kobo(cashReceived ?? total);
+    final changeKobo = paidKobo - totalKobo;
+    final pm = paymentMethod.toLowerCase();
+    final methodLabel = (pm == 'wallet payment' || pm == 'wallet')
+        ? 'Credit'
+        : paymentMethod;
+
+    final unitsTotal = cart.fold<double>(0, (a, i) => a + _num(i['qty']));
 
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all(context.getRSize(24)),
+      padding: EdgeInsets.all(context.getRSize(20)),
       decoration: BoxDecoration(
-        color: bg,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: divCol),
+        border: Border.all(color: _divCol),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.05),
@@ -116,416 +159,433 @@ class ReceiptWidget extends StatelessWidget {
         ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (reprintDate != null) ...[
-            Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: context.getRSize(12),
-                vertical: context.getRSize(4),
-              ),
-              decoration: BoxDecoration(
-                color: Colors.red.withValues(alpha: 0.1),
-                border: Border.all(color: Colors.red.withValues(alpha: 0.5)),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                'REPRINTED',
-                style: TextStyle(
-                  fontSize: context.getRFontSize(16),
-                  fontWeight: FontWeight.w900,
-                  color: Colors.red,
-                  letterSpacing: 2,
+          if (reprintDate != null) _stamp(context, 'REPRINTED', Colors.red, 16, 2),
+          if (reshareDate != null) _stamp(context, 'RESHARED', Colors.red, 16, 2),
+          if (orderStatus == 'Refunded')
+            _stamp(
+              context,
+              'REFUNDED ${formatCurrency(refundAmount ?? total)}',
+              primary,
+              14,
+              1,
+            ),
+          if (hasLogo) ...[
+            Center(
+              child: Container(
+                width: context.getRSize(72),
+                height: context.getRSize(72),
+                padding: EdgeInsets.all(context.getRSize(6)),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: _textCol),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.file(File(logoPath!), fit: BoxFit.contain),
                 ),
               ),
             ),
-            SizedBox(height: context.getRSize(12)),
+            SizedBox(height: context.getRSize(10)),
           ],
-          if (reshareDate != null) ...[
-            Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: context.getRSize(12),
-                vertical: context.getRSize(4),
-              ),
-              decoration: BoxDecoration(
-                color: Colors.red.withValues(alpha: 0.1),
-                border: Border.all(color: Colors.red.withValues(alpha: 0.5)),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                'RESHARED',
-                style: TextStyle(
-                  fontSize: context.getRFontSize(16),
-                  fontWeight: FontWeight.w900,
-                  color: Colors.red,
-                  letterSpacing: 2,
-                ),
-              ),
-            ),
-            SizedBox(height: context.getRSize(12)),
-          ],
-          if (orderStatus == 'Refunded') ...[
-            Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: context.getRSize(12),
-                vertical: context.getRSize(4),
-              ),
-              decoration: BoxDecoration(
-                color: primary.withValues(alpha: 0.1),
-                border: Border.all(color: primary.withValues(alpha: 0.5)),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                'REFUNDED ${formatCurrency(refundAmount ?? total)}',
-                style: TextStyle(
-                  fontSize: context.getRFontSize(14),
-                  fontWeight: FontWeight.w900,
-                  color: primary,
-                  letterSpacing: 1,
-                ),
-              ),
-            ),
-            SizedBox(height: context.getRSize(12)),
-          ],
-          if (logoPath != null && File(logoPath!).existsSync()) ...[
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.file(
-                File(logoPath!),
-                width: context.getRSize(64),
-                height: context.getRSize(64),
-                fit: BoxFit.cover,
-              ),
-            ),
-            SizedBox(height: context.getRSize(8)),
-          ],
-          if (businessName != null && businessName!.trim().isNotEmpty)
+          if (name.isNotEmpty)
             Text(
-              toNameCase(businessName!),
+              toNameCase(name),
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: context.getRFontSize(20),
+                fontSize: context.getRFontSize(22),
                 fontWeight: FontWeight.w800,
-                color: textCol,
+                color: _textCol,
               ),
             ),
-          if (storeAddress != null && storeAddress!.isNotEmpty) ...[
-            Text(
-              storeAddress!,
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: context.getRFontSize(12), color: sub),
-            ),
-          ],
-          Text(
-            deliveryRef != null ? 'Delivery Receipt' : 'Sales Receipt',
-            style: TextStyle(fontSize: context.getRFontSize(12), color: sub),
-          ),
-          if (deliveryRef != null) ...[
-            SizedBox(height: context.getRSize(4)),
-            Text(
-              'Ref: $deliveryRef',
-              style: TextStyle(
-                fontSize: context.getRFontSize(13),
-                fontWeight: FontWeight.bold,
-                color: primary,
-              ),
-            ),
-          ],
-          SizedBox(height: context.getRSize(16)),
-          Container(height: 1, color: divCol),
-          SizedBox(height: context.getRSize(12)),
-
-          if (customerName != null &&
-              customerName!.isNotEmpty &&
-              customerName!.toLowerCase() != 'walk-in customer') ...[
-            Align(
-              alignment: Alignment.centerLeft,
+          if (storeAddress != null && storeAddress!.trim().isNotEmpty)
+            Padding(
+              padding: EdgeInsets.only(top: context.getRSize(4)),
               child: Text(
-                [
-                  toNameCase(customerName!),
-                  if (customerAddress != null &&
-                      customerAddress!.isNotEmpty &&
-                      customerAddress != 'N/A')
-                    customerAddress!,
-                  if (customerPhone != null && customerPhone!.isNotEmpty)
-                    customerPhone!,
-                ].join('\n'),
-                style: TextStyle(
-                  fontSize: context.getRFontSize(13),
-                  fontWeight: FontWeight.bold,
-                  color: textCol,
+                storeAddress!,
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: context.getRFontSize(12), color: _sub),
+              ),
+            ),
+          if (contact.isNotEmpty)
+            Padding(
+              padding: EdgeInsets.only(top: context.getRSize(2)),
+              child: Text(
+                contact,
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: context.getRFontSize(12), color: _sub),
+              ),
+            ),
+          _rule(context, 14),
+
+          // Details grid (2 x 2).
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: _detail(context, 'Receipt No.', orderId)),
+              SizedBox(width: context.getRSize(12)),
+              Expanded(
+                child: _detail(
+                  context,
+                  'Date and time',
+                  _formatDate(saleDate ?? DateTime.now()),
                 ),
               ),
-            ),
-            SizedBox(height: context.getRSize(8)),
-          ],
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Column(
+            ],
+          ),
+          if (cashier.isNotEmpty || showCustomer) ...[
+            SizedBox(height: context.getRSize(10)),
+            Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Order: #$orderId',
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(12),
-                    color: sub,
-                  ),
+                Expanded(
+                  child: cashier.isNotEmpty
+                      ? _detail(context, 'Cashier', toNameCase(cashier))
+                      : const SizedBox.shrink(),
                 ),
-                Text(
-                  'Date: ${_formatDate(DateTime.now())}',
-                  style: TextStyle(
-                    fontSize: context.getRFontSize(12),
-                    color: sub,
-                  ),
+                SizedBox(width: context.getRSize(12)),
+                Expanded(
+                  child: showCustomer
+                      ? _detail(context, 'Customer', toNameCase(cust))
+                      : const SizedBox.shrink(),
                 ),
-                if (reprintDate != null)
-                  Text(
-                    'Reprinted: ${_formatDate(reprintDate!)}',
-                    style: TextStyle(
-                      fontSize: context.getRFontSize(12),
-                      color: Colors.red.shade700,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
               ],
             ),
+          ],
+          _rule(context, 14),
+
+          // Items.
+          Row(
+            children: [
+              Text('ITEM', style: _caps(context)),
+              const Spacer(),
+              Text('AMOUNT', style: _caps(context)),
+            ],
           ),
-
-          SizedBox(height: context.getRSize(12)),
-          Container(height: 1, color: divCol),
-          SizedBox(height: context.getRSize(12)),
-
+          SizedBox(height: context.getRSize(6)),
           ...cart.map((item) {
-            final rawQty = item['qty'];
-            final double qty = rawQty is num
-                ? rawQty.toDouble()
-                : double.tryParse(rawQty.toString()) ?? 0.0;
-
-            final rawPrice = item['price'];
-            final double price = rawPrice is num
-                ? rawPrice.toDouble()
-                : double.tryParse(rawPrice.toString()) ?? 0.0;
-
+            final qty = _num(item['qty']);
+            final price = _num(item['price']);
             final lineTotal = stockValue(price, qty).round();
-            return Padding(
-              padding: EdgeInsets.symmetric(vertical: context.getRSize(4)),
+            final label = productDisplayName(
+              item['name'] as String,
+              item['size'] as String?,
+              unit: item['unit'] as String?,
+              crates: tracksCrates,
+            );
+            return Container(
+              padding: EdgeInsets.symmetric(vertical: context.getRSize(8)),
+              decoration: const BoxDecoration(
+                border: Border(top: BorderSide(color: _divCol)),
+              ),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: Text(
-                      '${productDisplayName(item['name'] as String, item['size'] as String?, unit: item['unit'] as String?, crates: tracksCrates)}  ×${qty.toStringAsFixed(1)}',
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(13),
-                        color: textCol,
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          label,
+                          style: TextStyle(
+                            fontSize: context.getRFontSize(14),
+                            fontWeight: FontWeight.w700,
+                            color: _textCol,
+                          ),
+                        ),
+                        Text(
+                          '${_qty(qty)} × ${formatCurrency(price)}',
+                          style: TextStyle(
+                            fontSize: context.getRFontSize(12),
+                            color: _sub,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
+                  SizedBox(width: context.getRSize(8)),
                   Text(
                     formatCurrency(lineTotal),
                     style: TextStyle(
-                      fontSize: context.getRFontSize(13),
-                      fontWeight: FontWeight.w600,
-                      color: textCol,
+                      fontSize: context.getRFontSize(14),
+                      fontWeight: FontWeight.w700,
+                      color: _textCol,
                     ),
                   ),
                 ],
               ),
             );
           }),
+          Container(height: 1, color: _divCol),
+          SizedBox(height: context.getRSize(10)),
 
-          () {
-            final Map<String, double> empties = _computeEmpties();
-            if (empties.isEmpty) return const SizedBox.shrink();
+          _row(
+            context,
+            'Subtotal (${_qty(unitsTotal)} ${unitsTotal == 1 ? 'item' : 'items'})',
+            formatCurrency(subtotal),
+          ),
+          // #200 / US 33 — the discount that explains Total < Subtotal.
+          if (discount > 0) _row(context, 'Discount', formatCurrency(-discount)),
+          if (vatIncluded != null)
+            _row(
+              context,
+              vatRateBps != null
+                  ? 'VAT (${VatConfig(enabled: true, rateBps: vatRateBps!).ratePercentLabel}%) included'
+                  : 'VAT included',
+              formatCurrency(vatIncluded!),
+            ),
+          if (crateDeposit > 0)
+            _row(context, 'Crate deposit', formatCurrency(crateDeposit)),
 
-            final sortedEntries = empties.entries.toList()
-              ..sort((a, b) {
-                final nameA = manufacturerNames?[a.key] ?? 'Unknown';
-                final nameB = manufacturerNames?[b.key] ?? 'Unknown';
-                return nameA.compareTo(nameB);
-              });
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          SizedBox(height: context.getRSize(8)),
+          Container(height: 1, color: _divCol),
+          Padding(
+            padding: EdgeInsets.symmetric(vertical: context.getRSize(10)),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                SizedBox(height: context.getRSize(12)),
-                Container(height: 1, color: divCol),
-                SizedBox(height: context.getRSize(12)),
                 Text(
-                  'Empty Crates',
+                  'TOTAL',
                   style: TextStyle(
-                    fontSize: context.getRFontSize(13),
-                    fontWeight: FontWeight.bold,
-                    color: textCol,
+                    fontSize: context.getRFontSize(16),
+                    fontWeight: FontWeight.w800,
+                    color: _textCol,
                   ),
                 ),
-                SizedBox(height: context.getRSize(4)),
-                ...sortedEntries.map((e) {
-                  final mfrName = manufacturerNames?[e.key] ?? 'Unknown';
-                  return Padding(
-                    padding: EdgeInsets.symmetric(vertical: context.getRSize(2)),
-                    child: Text(
-                      '$mfrName (${e.value.toStringAsFixed(0)} crates)',
-                      style: TextStyle(
-                        fontSize: context.getRFontSize(13),
-                        color: sub,
-                      ),
+                SizedBox(width: context.getRSize(8)),
+                Expanded(
+                  child: Text(
+                    formatCurrency(total),
+                    textAlign: TextAlign.right,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(24),
+                      fontWeight: FontWeight.w800,
+                      color: primary,
                     ),
-                  );
-                }),
+                  ),
+                ),
               ],
-            );
-          }(),
-
-          SizedBox(height: context.getRSize(12)),
-          Container(height: 1, color: divCol),
-          SizedBox(height: context.getRSize(12)),
-
-          _infoRow(context, 'Subtotal', subtotal, sub),
-          // #200 / US 33 — the discount that explains Total < Subtotal. Printed
-          // negative (formatCurrency renders the minus sign) so the three lines
-          // read as an addition down to TOTAL.
-          if (discount > 0) ...[
-            SizedBox(height: context.getRSize(4)),
-            _infoRow(context, 'Discount', -discount, sub),
-          ],
-          if (crateDeposit > 0) ...[
-            SizedBox(height: context.getRSize(4)),
-            _infoRow(context, 'Crate Deposit', crateDeposit, sub),
-          ],
-
-          SizedBox(height: context.getRSize(12)),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'TOTAL',
-                style: TextStyle(
-                  fontSize: context.getRFontSize(16),
-                  fontWeight: FontWeight.bold,
-                  color: textCol,
-                ),
-              ),
-              Text(
-                formatCurrency(total),
-                style: TextStyle(
-                  fontSize: context.getRFontSize(18),
-                  fontWeight: FontWeight.w800,
-                  color: primary,
-                ),
-              ),
-            ],
-          ),
-
-          SizedBox(height: context.getRSize(16)),
-          Container(height: 1, color: divCol),
-          SizedBox(height: context.getRSize(16)),
-
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              'Payment Method: ${paymentMethod.toLowerCase() == 'wallet payment' || paymentMethod.toLowerCase() == 'wallet' ? 'Credit Payment' : paymentMethod}',
-              style: TextStyle(
-                fontSize: context.getRFontSize(13),
-                fontWeight: FontWeight.w600,
-                color: textCol,
-              ),
             ),
           ),
-          SizedBox(height: context.getRSize(4)),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              'Amount Paid: ${formatCurrency(cashReceived ?? total)}',
-              style: TextStyle(fontSize: context.getRFontSize(13), color: sub),
-            ),
-          ),
+          Container(height: 1, color: _divCol),
+          SizedBox(height: context.getRSize(10)),
+
+          _row(context, 'Payment method', methodLabel, boldValue: true),
+          _row(context, 'Amount paid', formatCurrency(cashReceived ?? total),
+              boldValue: true),
+          if (changeKobo > 0)
+            _row(context, 'Change', formatCurrency(changeKobo / 100.0),
+                boldValue: true)
+          else if (changeKobo < 0)
+            _row(context, 'Balance owed', formatCurrency(-changeKobo / 100.0),
+                boldValue: true),
           // §15.1 — wallet info, only when ticked at checkout.
-          if (showWalletInfo && walletBalance != null) ...[
-            SizedBox(height: context.getRSize(4)),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                // Sign conveys credit vs debt — no "(credit)/(debt)" suffix.
-                'Credits Balance: ${formatCurrency(walletBalance!)}',
-                style: TextStyle(
-                  fontSize: context.getRFontSize(13),
-                  fontWeight: FontWeight.w600,
-                  color: textCol,
-                ),
-              ),
-            ),
-          ],
+          if (showWalletInfo && walletBalance != null)
+            // Sign conveys credit vs debt — no "(credit)/(debt)" suffix.
+            _row(context, 'Credits balance', formatCurrency(walletBalance!),
+                boldValue: true),
 
-          SizedBox(height: context.getRSize(24)),
-          Text(
-            'Rider: ${riderName ?? 'Pick-up'}',
-            style: TextStyle(
-              fontSize: context.getRFontSize(13),
-              fontWeight: FontWeight.bold,
-              color: textCol,
-            ),
-          ),
-          SizedBox(height: context.getRSize(24)),
+          _cratesPanel(context),
 
-          Text(
-            'Thank you for your patronage!',
-            style: TextStyle(
-              fontSize: context.getRFontSize(13),
-              fontWeight: FontWeight.w600,
-              fontStyle: FontStyle.italic,
-              color: sub,
+          _rule(context, 14),
+          Center(
+            child: Text(
+              'Powered by Reebaplus',
+              style: TextStyle(fontSize: context.getRFontSize(11), color: _sub),
             ),
-          ),
-          SizedBox(height: context.getRSize(4)),
-          Text(
-            'Powered by Reebaplus+',
-            style: TextStyle(fontSize: context.getRFontSize(10), color: sub),
           ),
         ],
       ),
     );
   }
 
-  Widget _infoRow(BuildContext context, String label, double value, Color col) {
+  Widget _stamp(BuildContext context, String text, Color color, double size,
+      double spacing) {
     return Padding(
-      padding: EdgeInsets.symmetric(vertical: context.getRSize(2)),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: TextStyle(fontSize: context.getRFontSize(13), color: col),
+      padding: EdgeInsets.only(bottom: context.getRSize(12)),
+      child: Center(
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: context.getRSize(12),
+            vertical: context.getRSize(4),
           ),
-          Text(
-            formatCurrency(value),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            border: Border.all(color: color.withValues(alpha: 0.5)),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            text,
             style: TextStyle(
-              fontSize: context.getRFontSize(13),
-              fontWeight: FontWeight.w600,
-              color: col,
+              fontSize: context.getRFontSize(size),
+              fontWeight: FontWeight.w900,
+              color: color,
+              letterSpacing: spacing,
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _rule(BuildContext context, double gap) => Padding(
+    padding: EdgeInsets.symmetric(vertical: context.getRSize(gap)),
+    child: Container(height: 1, color: _divCol),
+  );
+
+  TextStyle _caps(BuildContext context) => TextStyle(
+    fontSize: context.getRFontSize(11),
+    fontWeight: FontWeight.w700,
+    color: _sub,
+    letterSpacing: 0.5,
+  );
+
+  Widget _detail(BuildContext context, String label, String value) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(label,
+          style: TextStyle(fontSize: context.getRFontSize(12), color: _sub)),
+      Text(
+        value,
+        style: TextStyle(
+          fontSize: context.getRFontSize(14),
+          fontWeight: FontWeight.w700,
+          color: _textCol,
+        ),
+      ),
+    ],
+  );
+
+  Widget _row(BuildContext context, String label, String value,
+      {bool boldValue = false}) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: context.getRSize(3)),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(fontSize: context.getRFontSize(14), color: _sub),
+            ),
+          ),
+          SizedBox(width: context.getRSize(8)),
+          Text(
+            value,
+            textAlign: TextAlign.right,
+            style: TextStyle(
+              fontSize: context.getRFontSize(14),
+              fontWeight: boldValue ? FontWeight.w700 : FontWeight.w400,
+              color: boldValue ? _textCol : _sub,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _cratesPanel(BuildContext context) {
+    final empties = _computeEmpties();
+    if (empties.isEmpty) return const SizedBox.shrink();
+    final entries = empties.entries.toList()
+      ..sort((a, b) => (manufacturerNames?[a.key] ?? 'Unknown')
+          .compareTo(manufacturerNames?[b.key] ?? 'Unknown'));
+
+    TextStyle head() =>
+        TextStyle(fontSize: context.getRFontSize(12), color: _sub);
+    final numW = context.getRSize(56);
+    final retW = context.getRSize(64);
+
+    Widget numCell(String t, double w, {bool bold = false, bool header = false}) =>
+        SizedBox(
+          width: w,
+          child: Text(
+            t,
+            textAlign: TextAlign.right,
+            style: header
+                ? head()
+                : TextStyle(
+                    fontSize: context.getRFontSize(14),
+                    fontWeight: FontWeight.w700,
+                    color: _textCol,
+                  ),
+          ),
+        );
+
+    return Container(
+      margin: EdgeInsets.only(top: context.getRSize(12)),
+      padding: EdgeInsets.all(context.getRSize(14)),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0F2F6),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Empty Crates',
+            style: TextStyle(
+              fontSize: context.getRFontSize(14),
+              fontWeight: FontWeight.w700,
+              color: _textCol,
+            ),
+          ),
+          SizedBox(height: context.getRSize(8)),
+          Row(
+            children: [
+              Expanded(child: Text('Product', style: head())),
+              numCell('Taken', numW, header: true),
+              numCell('Returned', retW, header: true),
+              numCell('Owed', numW, header: true),
+            ],
+          ),
+          ...entries.map((e) {
+            final owed = cratesOwedByManufacturer?[e.key] ?? e.value;
+            return Padding(
+              padding: EdgeInsets.only(top: context.getRSize(6)),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      manufacturerNames?[e.key] ?? 'Unknown',
+                      style: TextStyle(
+                        fontSize: context.getRFontSize(14),
+                        fontWeight: FontWeight.w700,
+                        color: _textCol,
+                      ),
+                    ),
+                  ),
+                  numCell(_qty(e.value), numW),
+                  numCell('0', retW),
+                  numCell(_qty(owed), numW),
+                ],
+              ),
+            );
+          }),
+          if (crateDeposit > 0) ...[
+            SizedBox(height: context.getRSize(8)),
+            Text(
+              'The ${formatCurrency(crateDeposit)} deposit is refunded when the crates are returned.',
+              style: TextStyle(fontSize: context.getRFontSize(12), color: _sub),
+            ),
+          ],
         ],
       ),
     );
   }
 
   String _formatDate(DateTime dt) {
-    final months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
     ];
+    final h12 = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final ampm = dt.hour < 12 ? 'AM' : 'PM';
     return '${dt.day} ${months[dt.month - 1]} ${dt.year}, '
-        '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+        '$h12:${dt.minute.toString().padLeft(2, '0')}\u00A0$ampm';
   }
 
   Map<String, double> _computeEmpties() {

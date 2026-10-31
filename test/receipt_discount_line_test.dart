@@ -140,12 +140,12 @@ void main() {
         crateDeposit: depositKobo / 100.0,
         total: paidKobo / 100.0,
       );
-      expect(lines, contains('Subtotal'));
+      expect(lines, contains('Subtotal (2 items)'));
       expect(lines, contains('₦2,000'));
       expect(lines, contains('Discount'));
       // The discount reads as a deduction, so Subtotal → Total is an addition.
       expect(lines, contains('-₦500'));
-      expect(lines, contains('Crate Deposit'));
+      expect(lines, contains('Crate deposit'));
       expect(lines, contains('₦300'));
       expect(lines, contains('TOTAL'));
       expect(lines, contains('₦1,800'));
@@ -182,7 +182,7 @@ void main() {
       // The REPRINTED stamp and its date are the only things that may differ.
       String money(List<String> lines, String label) =>
           lines[lines.indexOf(label) + 1];
-      for (final label in ['Subtotal', 'Discount', 'Crate Deposit', 'TOTAL']) {
+      for (final label in ['Subtotal (2 items)', 'Discount', 'Crate deposit', 'TOTAL']) {
         expect(
           money(reprint, label),
           money(original, label),

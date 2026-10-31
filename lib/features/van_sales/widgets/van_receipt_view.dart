@@ -141,7 +141,6 @@ class _VanReceiptViewState extends ConsumerState<VanReceiptView> {
             orderStatus: widget.orderStatus,
             reprintDate: _reprintAt,
             reshareDate: _reshareAt,
-            riderName: 'Van Sale',
             businessName: ref.watch(currentBusinessNameProvider),
             tracksCrates: businessTracksCrates(
               ref.watch(currentBusinessProvider),

@@ -898,13 +898,10 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                                     ?.label ??
                                 paymentMethodLabel(order.paymentType),
                             customerName: _name,
-                            customerPhone: _phone,
-                            customerAddress: _address,
                             cashReceived: order.amountPaidKobo / 100.0,
                             orderStatus:
                                 order.status[0].toUpperCase() +
                                 order.status.substring(1),
-                            riderName: order.riderName,
                             reprintDate: reprintDate,
                             reshareDate: reshareDate,
                             storeAddress: storeAddress,
