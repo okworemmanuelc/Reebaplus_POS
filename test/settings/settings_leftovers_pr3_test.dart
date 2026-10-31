@@ -95,6 +95,7 @@ void main() {
       expect(find.text('Renews'), findsOneWidget);
       expect(find.text('14 Apr 2099'), findsOneWidget);
       expect(find.byKey(const Key('paywall-non-android')), findsOneWidget);
+      expect(find.text('Current plan: Basic'), findsOneWidget);
       // Read-only: the cloud-owned columns are untouched.
       final b = await (env.db.select(
         env.db.businesses,
