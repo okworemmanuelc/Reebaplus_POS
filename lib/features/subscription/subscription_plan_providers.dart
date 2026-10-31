@@ -57,6 +57,7 @@ final planUsageProvider = Provider<PlanUsage>((ref) {
   );
 });
 
+// TODO(#584): remove once no legacy trials remain
 /// Null when the trial reminder is not due; otherwise the reminder day (7 or 1)
 /// and the plan that keeps the current setup.
 final trialReminderProvider = Provider<({int day, String plan})?>((ref) {

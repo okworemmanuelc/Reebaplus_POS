@@ -43,6 +43,7 @@ Future<void> showPlanLimitDialog(
   );
 }
 
+// TODO(#584): remove once no legacy trials remain
 /// In-app trial reminder: shown at 7 days and 1 day before the trial ends,
 /// naming the plan that keeps the current setup. Renders nothing otherwise.
 class TrialReminderBanner extends ConsumerWidget {

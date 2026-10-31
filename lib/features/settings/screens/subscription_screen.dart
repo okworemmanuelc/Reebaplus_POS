@@ -122,6 +122,7 @@ class SubscriptionScreen extends ConsumerWidget {
   (String, TagPillTone) _statusChip(SubscriptionAccess access) =>
       switch (access) {
         SubscriptionAccess.active => ('ACTIVE', TagPillTone.green),
+        // TODO(#584): remove once no legacy trials remain
         SubscriptionAccess.trialActive => ('FREE TRIAL', TagPillTone.warning),
         SubscriptionAccess.trialExpired => ('FREE PLAN', TagPillTone.warning),
         SubscriptionAccess.inactive => ('FREE PLAN', TagPillTone.warning),
