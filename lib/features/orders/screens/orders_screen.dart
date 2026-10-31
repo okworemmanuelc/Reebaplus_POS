@@ -1462,8 +1462,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       );
       // Built per paper width: the picker fallback below may land on a
       // different printer with a different roll, and rebuilds for it.
-      Future<List<int>> buildBytes(ReceiptPaperSize paperSize) =>
+      Future<List<int>> buildBytes(ReceiptPaperSize paperSize) async =>
           ThermalReceiptService.buildReceipt(
+            printStyle: await printer.currentPrintStyle(),
             orderId: order.orderNumber,
             cart: receiptMapping,
             subtotal: totals.subtotalKobo / 100.0,

@@ -31,6 +31,7 @@ class _ReceiptPrinterSettingsScreenState
   bool _loading = true;
   List<BluetoothInfo> _devices = [];
   Map<String, ReceiptPaperSize?> _sizes = {};
+  Map<String, ReceiptPrintStyle> _styles = {};
   String? _lastMac;
 
   @override
@@ -44,6 +45,7 @@ class _ReceiptPrinterSettingsScreenState
     final printer = ref.read(printerServiceProvider);
     List<BluetoothInfo> devices = [];
     final sizes = <String, ReceiptPaperSize?>{};
+    final styles = <String, ReceiptPrintStyle>{};
     String? lastMac;
     try {
       await printer.requestPermissions();
@@ -51,6 +53,7 @@ class _ReceiptPrinterSettingsScreenState
       lastMac = await printer.lastConnectedMac();
       for (final d in devices) {
         sizes[d.macAdress] = await printer.paperSizeFor(d.macAdress);
+        styles[d.macAdress] = await printer.printStyleFor(d.macAdress);
       }
     } catch (_) {
       // No Bluetooth adapter / read failed — show the empty state.
@@ -65,6 +68,7 @@ class _ReceiptPrinterSettingsScreenState
     setState(() {
       _devices = devices;
       _sizes = sizes;
+      _styles = styles;
       _lastMac = lastMac;
       _loading = false;
     });
@@ -73,6 +77,11 @@ class _ReceiptPrinterSettingsScreenState
   Future<void> _setSize(String mac, ReceiptPaperSize size) async {
     setState(() => _sizes[mac] = size);
     await ref.read(printerServiceProvider).savePaperSizeFor(mac, size);
+  }
+
+  Future<void> _setStyle(String mac, ReceiptPrintStyle style) async {
+    setState(() => _styles[mac] = style);
+    await ref.read(printerServiceProvider).savePrintStyleFor(mac, style);
   }
 
   @override
@@ -140,6 +149,9 @@ class _ReceiptPrinterSettingsScreenState
   Widget _printerCard(BuildContext context, BluetoothInfo device) {
     final size = _sizes[device.macAdress];
     final isLast = device.macAdress == _lastMac;
+    final style = _styles[device.macAdress] ?? ReceiptPrintStyle.text;
+    final muted = Theme.of(context).textTheme.bodySmall?.color ??
+        Theme.of(context).colorScheme.onSurface;
 
     return SettingsCard(
       child: Column(
@@ -177,6 +189,37 @@ class _ReceiptPrinterSettingsScreenState
                 _setSize(device.macAdress, selection.first);
               },
             ),
+          ),
+          SizedBox(height: context.getRSize(14)),
+          Text('Print style', style: context.regularStyle(13)),
+          SizedBox(height: context.getRSize(6)),
+          SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<ReceiptPrintStyle>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(
+                  value: ReceiptPrintStyle.text,
+                  label: Text('Text'),
+                ),
+                ButtonSegment(
+                  value: ReceiptPrintStyle.picture,
+                  label: Text('Picture'),
+                ),
+              ],
+              selected: {style},
+              onSelectionChanged: (selection) {
+                if (selection.isEmpty) return;
+                _setStyle(device.macAdress, selection.first);
+              },
+            ),
+          ),
+          SizedBox(height: context.getRSize(6)),
+          Text(
+            style == ReceiptPrintStyle.text
+                ? 'Text: fast and sharp (recommended)'
+                : 'Picture: matches the design exactly',
+            style: context.regularStyle(12).copyWith(color: muted),
           ),
         ],
       ),

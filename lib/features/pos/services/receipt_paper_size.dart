@@ -32,10 +32,31 @@ enum ReceiptPaperSize {
         ReceiptPaperSize.mm80 => 576,
       };
 
+  /// Side in dots of the outlined logo box on a text receipt (the only
+  /// picture on it).
+  int get logoBoxPx => switch (this) {
+        ReceiptPaperSize.mm58 => 120,
+        ReceiptPaperSize.mm80 => 144,
+      };
+
   /// Rebuilds a value from the string persisted by `PrinterService`. Any
   /// unknown or absent value falls back to the 58mm default.
   static ReceiptPaperSize fromStorage(String? value) => switch (value) {
         'mm80' => ReceiptPaperSize.mm80,
         _ => ReceiptPaperSize.mm58,
+      };
+}
+
+/// How a paper receipt is sent to the printer. [text] uses the printer's own
+/// font (fast, sharp; only the logo is a picture). [picture] renders the whole
+/// receipt as a raster so it matches the design exactly. Remembered per
+/// printer next to the paper size; unknown or absent means [text].
+enum ReceiptPrintStyle {
+  text,
+  picture;
+
+  static ReceiptPrintStyle fromStorage(String? value) => switch (value) {
+        'picture' => ReceiptPrintStyle.picture,
+        _ => ReceiptPrintStyle.text,
       };
 }

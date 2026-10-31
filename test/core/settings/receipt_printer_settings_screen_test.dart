@@ -84,4 +84,20 @@ void main() {
     expect(await printer.paperSizeFor(_large), ReceiptPaperSize.mm80);
     expect(await printer.paperSizeFor(_small), ReceiptPaperSize.mm58);
   });
+
+  testWidgets('print style defaults to text and switching saves it per printer',
+      (tester) async {
+    final printer = await _pump(tester);
+    expect(await printer.printStyleFor(_large), ReceiptPrintStyle.text);
+    expect(find.text('Text: fast and sharp (recommended)'), findsNWidgets(2));
+
+    await tester.ensureVisible(find.text('Picture').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Picture').last);
+    await tester.pumpAndSettle();
+
+    expect(await printer.printStyleFor(_large), ReceiptPrintStyle.picture);
+    expect(await printer.printStyleFor(_small), ReceiptPrintStyle.text);
+    expect(find.text('Picture: matches the design exactly'), findsOneWidget);
+  });
 }

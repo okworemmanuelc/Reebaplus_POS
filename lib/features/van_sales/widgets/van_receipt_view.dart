@@ -238,8 +238,9 @@ class _VanReceiptViewState extends ConsumerState<VanReceiptView> {
       }
       // Built per paper width: the picker fallback below may land on a
       // different printer with a different roll, and rebuilds for it.
-      Future<List<int>> buildBytes(ReceiptPaperSize paperSize) =>
+      Future<List<int>> buildBytes(ReceiptPaperSize paperSize) async =>
           ThermalReceiptService.buildReceipt(
+            printStyle: await printer.currentPrintStyle(),
             orderId: widget.orderNumber,
             cart: widget.cart,
             subtotal: widget.totalKobo / 100.0,

@@ -1576,7 +1576,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       final extras = _extras;
       Future<List<int>> buildBytes(
         ReceiptPaperSize paperSize,
-      ) => ThermalReceiptService.buildReceipt(
+      ) async => ThermalReceiptService.buildReceipt(
+        printStyle: await printer.currentPrintStyle(),
         orderId: _currentOrderId,
         cart: widget.cart,
         subtotal: widget.subtotal,

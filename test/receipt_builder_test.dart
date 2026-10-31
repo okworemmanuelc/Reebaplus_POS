@@ -5,7 +5,10 @@
 // formatters it delegates to (formatItemLine / formatTwoColumnLine) plus the
 // ReceiptPaperSize enum that is their single source of truth.
 
+import 'dart:io';
+
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
+import 'package:image/image.dart' as img;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_builder.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
@@ -131,8 +134,13 @@ void main() {
     });
   });
 
-  group('buildReceipt prints the receipt as a picture', () {
-    Future<List<int>> build(ReceiptPaperSize size, WidgetTester tester) async {
+  group('buildReceipt bytes', () {
+    Future<List<int>> build(
+      ReceiptPaperSize size,
+      WidgetTester tester, {
+      ReceiptPrintStyle style = ReceiptPrintStyle.picture,
+      String? logoPath,
+    }) async {
       late List<int> bytes;
       await tester.runAsync(() async {
         bytes = await ThermalReceiptService.buildReceipt(
@@ -146,6 +154,8 @@ void main() {
           paymentMethod: 'Cash',
           businessName: 'Test Shop',
           paperSize: size,
+          printStyle: style,
+          logoPath: logoPath,
           tracksCrates: false,
         );
       });
@@ -167,7 +177,30 @@ void main() {
     }
 
     for (final size in [mm58, mm80]) {
-      testWidgets('${size.name}: ESC @ first, GS v 0 raster, cut last',
+      testWidgets('${size.name}: text style has no raster without a logo',
+          (tester) async {
+        final bytes = await build(size, tester, style: ReceiptPrintStyle.text);
+        expect(bytes.sublist(0, 2), [0x1B, 0x40]);
+        expect(hasSeq(bytes, [0x1D, 0x76, 0x30]), isFalse);
+        expect(hasSeq(bytes, 'Spaghetti 500g'.codeUnits), isTrue);
+        expect(hasSeq(bytes.sublist(bytes.length - 4), [0x1D, 0x56]), isTrue);
+      });
+
+      testWidgets('${size.name}: text style rasters only the logo',
+          (tester) async {
+        final dir = Directory.systemTemp.createTempSync('logo');
+        addTearDown(() => dir.deleteSync(recursive: true));
+        final png = img.Image(width: 20, height: 10);
+        img.fill(png, color: img.ColorRgb8(0, 0, 0));
+        final f = File('${dir.path}/logo.png')
+          ..writeAsBytesSync(img.encodePng(png));
+        final bytes = await build(size, tester,
+            style: ReceiptPrintStyle.text, logoPath: f.path);
+        expect(hasSeq(bytes, [0x1D, 0x76, 0x30]), isTrue);
+        expect(hasSeq(bytes.sublist(bytes.length - 4), [0x1D, 0x56]), isTrue);
+      });
+
+      testWidgets('${size.name}: picture style: ESC @ first, GS v 0 raster, cut last',
           (tester) async {
         final bytes = await build(size, tester);
         expect(bytes.sublist(0, 2), [0x1B, 0x40]);

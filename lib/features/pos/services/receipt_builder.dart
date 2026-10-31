@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
@@ -6,13 +8,17 @@ import 'package:image/image.dart' as img;
 import 'package:screenshot/screenshot.dart';
 
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/features/pos/services/receipt_lines.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
 import 'package:reebaplus_pos/features/pos/widgets/paper_receipt.dart';
 
-/// Builds the ESC/POS bytes for a paper receipt (#605). The receipt is drawn
-/// as a [PaperReceipt] widget off-screen, turned into a crisp black-and-white
-/// picture and sent as raster bands — so paper matches the mockups' fonts,
-/// bold text, columns and logo outline.
+/// Builds the ESC/POS bytes for a paper receipt (#605).
+///
+/// [ReceiptPrintStyle.text] (default): the printer's own font via
+/// [buildReceiptLines]; only the logo is a small picture. Fast and sharp.
+/// [ReceiptPrintStyle.picture]: the receipt is drawn as a [PaperReceipt]
+/// widget off-screen, turned into a black-and-white picture and sent as raster
+/// bands, so paper matches the mockups exactly.
 class ThermalReceiptService {
   /// Tallest raster band sent in one command; cheap printers choke on one
   /// very tall image.
@@ -51,8 +57,48 @@ class ThermalReceiptService {
     Map<String, String>? manufacturerNames,
     String? logoPath,
     ReceiptPaperSize paperSize = ReceiptPaperSize.mm58,
+    ReceiptPrintStyle printStyle = ReceiptPrintStyle.text,
     required bool tracksCrates,
   }) async {
+    if (printStyle == ReceiptPrintStyle.text) {
+      final hasLogo = logoPath != null && File(logoPath).existsSync();
+      final lines = buildReceiptLines(
+        paperSize: paperSize,
+        orderId: orderId,
+        cart: cart,
+        subtotal: subtotal,
+        discount: discount,
+        crateDeposit: crateDeposit,
+        total: total,
+        paymentMethod: paymentMethod,
+        customerName: customerName,
+        cashReceived: cashReceived,
+        walletBalance: walletBalance,
+        showWalletInfo: showWalletInfo,
+        reprintDate: reprintDate,
+        reshareDate: reshareDate,
+        orderStatus: orderStatus,
+        refundAmount: refundAmount,
+        manufacturerNames: manufacturerNames,
+        storeAddress: storeAddress,
+        businessName: businessName,
+        hasLogo: hasLogo,
+        businessPhone: businessPhone,
+        businessEmail: businessEmail,
+        cashierName: cashierName,
+        saleDate: saleDate,
+        vatRateBps: vatRateBps,
+        vatIncluded: vatIncluded,
+        cratesOwedByManufacturer: cratesOwedByManufacturer,
+        crateDepositFull: crateDepositFull,
+        tracksCrates: tracksCrates,
+      );
+      final logo = hasLogo
+          ? await _buildLogo(logoPath, paperSize.logoBoxPx)
+          : null;
+      return _emitText(lines, paperSize, logo);
+    }
+
     final receipt = PaperReceipt(
       paperSize: paperSize,
       orderId: orderId,
@@ -117,6 +163,101 @@ class ThermalReceiptService {
     bytes.addAll(generator.feed(2));
     bytes.addAll(generator.cut());
     return bytes;
+  }
+
+  /// Maps [lines] to ESC/POS. Single-style lines go through `generator.text`;
+  /// mixed bold lines set the style per segment and write the bytes raw.
+  static Future<List<int>> _emitText(
+    List<ReceiptLine> lines,
+    ReceiptPaperSize paperSize,
+    img.Image? logo,
+  ) async {
+    final profile = await CapabilityProfile.load();
+    final generator = Generator(paperSize.escPos, profile);
+    final bytes = <int>[...generator.reset()];
+    for (final line in lines) {
+      switch (line.kind) {
+        case ReceiptLineKind.logo:
+          if (logo != null) {
+            bytes.addAll(generator.imageRaster(logo, align: PosAlign.center));
+          }
+        case ReceiptLineKind.feed:
+          bytes.addAll(generator.feed(line.feedLines));
+        case ReceiptLineKind.text:
+          final size = switch (line.size) {
+            ReceiptTextSize.normal => PosTextSize.size1,
+            ReceiptTextSize.tall => PosTextSize.size1,
+            ReceiptTextSize.big => PosTextSize.size2,
+          };
+          final height = line.size == ReceiptTextSize.normal
+              ? PosTextSize.size1
+              : PosTextSize.size2;
+          final align = switch (line.align) {
+            ReceiptAlign.left => PosAlign.left,
+            ReceiptAlign.center => PosAlign.center,
+            ReceiptAlign.right => PosAlign.right,
+          };
+          PosStyles style(bool bold) => PosStyles(
+                bold: bold,
+                align: align,
+                width: size,
+                height: height,
+              );
+          if (line.segments.length == 1) {
+            final s = line.segments.first;
+            bytes.addAll(generator.text(s.text, styles: style(s.bold)));
+          } else {
+            for (final s in line.segments) {
+              bytes.addAll(generator.setStyles(style(s.bold)));
+              bytes.addAll(generator.rawBytes(latin1.encode(s.text)));
+            }
+            bytes.addAll(generator.rawBytes([0x0A]));
+          }
+      }
+    }
+    bytes.addAll(generator.cut());
+    return bytes;
+  }
+
+  /// A white square of [box] dots with a rounded black outline and the logo
+  /// fitted inside (aspect kept), thresholded to pure black and white.
+  /// Null when the file cannot be read as an image.
+  static Future<img.Image?> _buildLogo(String path, int box) async {
+    try {
+      final src = img.decodeImage(await File(path).readAsBytes());
+      if (src == null) return null;
+      final out = img.Image(width: box, height: box);
+      img.fill(out, color: img.ColorRgb8(255, 255, 255));
+      img.drawRect(
+        out,
+        x1: 1,
+        y1: 1,
+        x2: box - 2,
+        y2: box - 2,
+        color: img.ColorRgb8(0, 0, 0),
+        thickness: 3,
+        radius: box * 0.12,
+      );
+      final inner = box - 2 * (box * 0.15).round();
+      final fitted = src.width >= src.height
+          ? img.copyResize(src, width: inner)
+          : img.copyResize(src, height: inner);
+      img.compositeImage(
+        out,
+        fitted,
+        dstX: (box - fitted.width) ~/ 2,
+        dstY: (box - fitted.height) ~/ 2,
+      );
+      for (var y = 0; y < box; y++) {
+        for (var x = 0; x < box; x++) {
+          final v = img.getLuminance(out.getPixel(x, y)) < _threshold ? 0 : 255;
+          out.setPixelRgb(x, y, v, v, v);
+        }
+      }
+      return out;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Decodes [png], trims the empty white tail, forces [width] and applies a
