@@ -156,7 +156,7 @@ class _ThankYouDialogState extends State<ThankYouDialog>
                   padding: EdgeInsets.only(bottom: context.getRSize(6)),
                   child: Row(
                     children: [
-                      Icon(Icons.check_circle, color: fixed.green, size: 20),
+                      Icon(AppIcons.checkCircle, color: fixed.green, size: 20),
                       SizedBox(width: context.getRSize(10)),
                       Expanded(
                         child: Text(perk, style: context.boldStyle(14)),
