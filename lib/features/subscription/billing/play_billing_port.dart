@@ -12,7 +12,12 @@ class StoreOffer {
   final String basePlanId;
   final String price;
   final Object? token; // adapter-private handle (offer token / details)
-  const StoreOffer(this.productId, this.basePlanId, this.price, [this.token]);
+  /// Store price in micros + ISO currency, so the paywall can work out the
+  /// real yearly saving. Null when the store did not give them.
+  final int? priceMicros;
+  final String? currencyCode;
+  const StoreOffer(this.productId, this.basePlanId, this.price,
+      [this.token, this.priceMicros, this.currencyCode]);
 }
 
 enum PurchaseEventStatus { pending, purchased, restored, canceled, error }
@@ -105,10 +110,11 @@ class InAppPurchasePort implements PlayBillingPort {
       for (final o in d.productDetails.subscriptionOfferDetails ?? const []) {
         // Only the base-plan price (no promo offer): offerId == null.
         if (o.offerId != null || o.pricingPhases.isEmpty) continue;
-        final price = o.pricingPhases.last.formattedPrice;
+        final phase = o.pricingPhases.last;
         final key = '${d.id}|${o.basePlanId}';
         _details[key] = d;
-        out.add(StoreOffer(d.id, o.basePlanId, price, o.offerIdToken));
+        out.add(StoreOffer(d.id, o.basePlanId, phase.formattedPrice,
+            o.offerIdToken, phase.priceAmountMicros, phase.priceCurrencyCode));
       }
     }
     return out;

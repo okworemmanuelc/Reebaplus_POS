@@ -312,12 +312,33 @@ void main() {
 
     testWidgets('yearly shows the saving: naira amounts, USD 2 months free',
         (tester) async {
-      await pump(tester);
+      await pump(tester, offers: const []); // store silent: fallback savings
       expect(find.textContaining('Save'), findsNothing);
       await tester.tap(find.text('Yearly (2 months free)'));
       await tester.pumpAndSettle();
       expect(find.text('Save ₦3,000'), findsOneWidget);
       expect(find.text('Save ₦13,000'), findsOneWidget);
+    });
+
+    test('yearly saving comes from real store prices when known', () {
+      const m = StoreOffer(kProductBasic, kBasePlanMonthly, '₦1,500', null,
+          1500000000, 'NGN');
+      const y = StoreOffer(kProductBasic, kBasePlanYearly, '₦15,000', null,
+          15000000000, 'NGN');
+      expect(yearlySaving(m, y, PlanTier.basic, naira: true), 'Save ₦3,000');
+      // Store yearly costs more than 12 months: no false "Save" claim.
+      const dear = StoreOffer(kProductBasic, kBasePlanYearly, '₦251,000', null,
+          251000000000, 'NGN');
+      expect(yearlySaving(m, dear, PlanTier.basic, naira: true), isNull);
+      // Only one store price known (no micros): no claim either.
+      const bare = StoreOffer(kProductBasic, kBasePlanYearly, '₦15,000');
+      expect(yearlySaving(null, bare, PlanTier.basic, naira: true), isNull);
+      // Store silent: fallback table.
+      expect(yearlySaving(null, null, PlanTier.premium, naira: true), 'Save ₦13,000');
+      expect(yearlySaving(null, null, PlanTier.premium, naira: false), '2 months free');
+      const um = StoreOffer(kProductPremium, kBasePlanMonthly, r'$5', null, 5000000, 'USD');
+      const uy = StoreOffer(kProductPremium, kBasePlanYearly, r'$50', null, 50000000, 'USD');
+      expect(yearlySaving(um, uy, PlanTier.premium, naira: false), r'Save $10');
     });
 
     testWidgets('Android shows store price, fallback, and toggles yearly', (tester) async {
