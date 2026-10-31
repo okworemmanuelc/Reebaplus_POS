@@ -1,5 +1,6 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
+  billingIssueForState,
   businessForUnknownToken,
   decideApply,
   decodeRtdn,
@@ -241,4 +242,32 @@ Deno.test("an unknown RTDN token binds only through a known linked token", () =>
   assertEquals(businessForUnknownToken({ obfuscatedAccountId: "biz-1" }, "biz-1"), "biz-1");
   assertEquals(businessForUnknownToken({ obfuscatedAccountId: "biz-2" }, "biz-1"), null);
   assertEquals(businessForUnknownToken({ obfuscatedAccountId: "biz-1" }, null), null);
+});
+
+Deno.test("billing issue (#591): grace and hold from the Play state, else cleared", () => {
+  assertEquals(billingIssueForState("IN_GRACE_PERIOD"), "grace");
+  assertEquals(billingIssueForState("ON_HOLD"), "hold");
+  for (const s of ["ACTIVE", "CANCELED", "EXPIRED", "PAUSED", "PENDING", "UNSPECIFIED"] as const) {
+    assertEquals(billingIssueForState(s), null);
+  }
+  // Parsed straight from a Play response.
+  const grace = parseSubscriptionV2({ ...base, subscriptionState: "SUBSCRIPTION_STATE_IN_GRACE_PERIOD" })!;
+  assertEquals(billingIssueForState(grace.state), "grace");
+  const hold = parseSubscriptionV2({ ...base, subscriptionState: "SUBSCRIPTION_STATE_ON_HOLD" })!;
+  assertEquals(billingIssueForState(hold.state), "hold");
+});
+
+Deno.test("billing issue (#591): ON_HOLD and grace always reach apply_play_purchase", () => {
+  for (const state of ["ON_HOLD", "IN_GRACE_PERIOD"] as const) {
+    assertEquals(
+      decideApply({
+        verified: { state, expiryTime: "2026-06-01T00:00:00Z" },
+        replacedBy: null,
+        prior: { state: "ACTIVE", expiryTime: "2026-06-01T00:00:00Z" },
+        notificationType: state === "ON_HOLD" ? 5 : 6,
+        now: Date.parse("2026-06-02T00:00:00Z"),
+      }).apply,
+      true,
+    );
+  }
 });

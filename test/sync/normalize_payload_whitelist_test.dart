@@ -68,12 +68,14 @@ void main() {
         'trial_ends_at': '2026-12-31T00:00:00Z',
         'current_period_end': '2026-12-31T00:00:00Z',
         'billing_cycle': 'yearly',
+        'billing_issue': 'grace',
       });
       expect(scrubbed.containsKey('subscription_status'), isFalse);
       expect(scrubbed.containsKey('subscription_plan'), isFalse);
       expect(scrubbed.containsKey('trial_ends_at'), isFalse);
       expect(scrubbed.containsKey('current_period_end'), isFalse);
       expect(scrubbed.containsKey('billing_cycle'), isFalse);
+      expect(scrubbed.containsKey('billing_issue'), isFalse);
       expect(scrubbed['name'], 'Acme');
     });
 

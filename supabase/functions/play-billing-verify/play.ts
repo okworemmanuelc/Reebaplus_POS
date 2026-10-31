@@ -94,6 +94,21 @@ export function isEntitled(p: Pick<VerifiedPurchase, "state" | "expiryTime">, no
   return p.state === "CANCELED" && !!p.expiryTime && Date.parse(p.expiryTime) > now;
 }
 
+export type BillingIssue = "grace" | "hold" | null;
+
+/**
+ * Failed renewal (#591): the businesses.billing_issue a Play state means.
+ * Mirrors apply_play_purchase (0235): IN_GRACE_PERIOD keeps the plan and is
+ * 'grace'; ON_HOLD is 'hold'; every other state clears it. The SQL refines two
+ * cases: an ON_HOLD lapse kept by a manual grant or another entitled purchase
+ * clears it (the shop keeps a paid plan), and PENDING leaves it unchanged.
+ */
+export function billingIssueForState(state: PlayState): BillingIssue {
+  if (state === "IN_GRACE_PERIOD") return "grace";
+  if (state === "ON_HOLD") return "hold";
+  return null;
+}
+
 /** RTDN SUBSCRIPTION_REVOKED: refunded/revoked, access ends now. */
 export const RTDN_REVOKED = 12;
 
