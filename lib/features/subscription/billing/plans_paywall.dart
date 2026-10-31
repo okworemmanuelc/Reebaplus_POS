@@ -101,7 +101,7 @@ class _PlansPaywallState extends ConsumerState<PlansPaywall> {
     if (s.phase == BillingPhase.unavailable) {
       return Text(
         'Google Play is not available on this device, so plans cannot be '
-        'purchased here. Contact us on WhatsApp to subscribe.',
+        'purchased here. Open the app on a phone with Google Play to subscribe.',
         key: const Key('paywall-unavailable'),
         textAlign: TextAlign.center,
         style: context.regularStyle(14).copyWith(color: muted),
