@@ -1624,7 +1624,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         }
       }
 
-      _showPrinterPicker(printer, target.paperSize, receiptBytes, buildBytes);
+      _showPrinterPicker(printer, buildBytes);
     } catch (e) {
       if (mounted) {
         AppNotification.showError(context, 'Print error: $e');
@@ -1636,8 +1636,6 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
   void _showPrinterPicker(
     PrinterService printer,
-    ReceiptPaperSize builtFor,
-    List<int> receiptBytes,
     Future<List<int>> Function(ReceiptPaperSize) buildBytes,
   ) {
     showModalBottomSheet(
@@ -1665,12 +1663,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
             if (connected) {
               // The picked printer may be new (asks once) or use a different
-              // roll than the one the bytes were laid out for.
+              // roll or print style than the one the bytes were built for, so rebuild.
               final target = await prepareReceiptPrinter(context, printer);
               if (!mounted) return;
-              final bytes = target.paperSize == builtFor
-                  ? receiptBytes
-                  : await buildBytes(target.paperSize);
+              final bytes = await buildBytes(target.paperSize);
               final success = await printer.printBytesDirectly(bytes);
               if (!mounted) return;
               if (success) {
