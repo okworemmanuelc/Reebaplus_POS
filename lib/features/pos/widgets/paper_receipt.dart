@@ -41,6 +41,9 @@ class PaperReceipt extends StatelessWidget {
   final int? vatRateBps;
   final double? vatIncluded;
   final Map<String, double>? cratesOwedByManufacturer;
+
+  /// Full deposit when only part was paid (see ReceiptWidget).
+  final double? crateDepositFull;
   final bool tracksCrates;
 
   const PaperReceipt({
@@ -72,6 +75,7 @@ class PaperReceipt extends StatelessWidget {
     this.vatRateBps,
     this.vatIncluded,
     this.cratesOwedByManufacturer,
+    this.crateDepositFull,
     required this.tracksCrates,
   });
 
@@ -435,7 +439,9 @@ class PaperReceipt extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.only(top: 4),
           child: Text(
-            'The ${formatCurrency(crateDeposit)} deposit is refunded when the crates are returned.',
+            (crateDepositFull != null && crateDepositFull! > crateDeposit)
+                ? 'Deposit paid ${formatCurrency(crateDeposit)} of ${formatCurrency(crateDepositFull!)}.'
+                : 'The ${formatCurrency(crateDeposit)} deposit is refunded when the crates are returned.',
             style: _t(),
           ),
         ),

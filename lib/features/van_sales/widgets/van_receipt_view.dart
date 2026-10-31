@@ -9,6 +9,8 @@ import 'package:screenshot/screenshot.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/features/pos/services/receipt_extras.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -75,6 +77,12 @@ class VanReceiptView extends ConsumerStatefulWidget {
   /// driver terminal) leaves it false: its first copy *is* the original.
   final bool isReopened;
 
+  /// #605 — the recorded sale's time and cashier, when a RE-OPENED order
+  /// supplies them. A fresh till sale leaves both null: the date is now and
+  /// the cashier is the signed-in driver.
+  final DateTime? saleDate;
+  final String? staffId;
+
   const VanReceiptView({
     super.key,
     required this.orderNumber,
@@ -84,6 +92,8 @@ class VanReceiptView extends ConsumerStatefulWidget {
     this.orderStatus,
     this.autoPrint = false,
     this.isReopened = false,
+    this.saleDate,
+    this.staffId,
   });
 
   @override
@@ -100,9 +110,31 @@ class _VanReceiptViewState extends ConsumerState<VanReceiptView> {
   DateTime? _reprintAt;
   DateTime? _reshareAt;
 
+  /// #605 — loaded once; a road sale has no deposit and no registered customer.
+  ReceiptExtras _extras = ReceiptExtras.none;
+
+  Future<void> _loadExtras() async {
+    try {
+      final signedIn = ref.read(authProvider).currentUser;
+      final loaded = await loadReceiptExtras(
+        ref.read(databaseProvider),
+        business: ref.read(currentBusinessProvider),
+        vat: await ref.read(vatConfigProvider.future),
+        totalKobo: widget.totalKobo,
+        saleDate: widget.saleDate ?? DateTime.now(),
+        staffId: widget.staffId,
+        cashierName: widget.staffId == null ? signedIn?.name : null,
+      );
+      if (mounted) setState(() => _extras = loaded);
+    } catch (_) {
+      // optional lines are simply omitted
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    unawaited(_loadExtras());
     if (widget.autoPrint) {
       // After the first frame: the receipt has to exist on screen before the
       // "Printing receipt…" line above it means anything.
@@ -142,6 +174,14 @@ class _VanReceiptViewState extends ConsumerState<VanReceiptView> {
             reprintDate: _reprintAt,
             reshareDate: _reshareAt,
             businessName: ref.watch(currentBusinessNameProvider),
+            businessPhone: _extras.businessPhone,
+            businessEmail: _extras.businessEmail,
+            cashierName: _extras.cashierName,
+            saleDate: _extras.saleDate,
+            vatRateBps: _extras.vatRateBps,
+            vatIncluded: _extras.vatIncluded,
+            cratesOwedByManufacturer: _extras.cratesOwedByManufacturer,
+            crateDepositFull: _extras.crateDepositFull,
             tracksCrates: businessTracksCrates(
               ref.watch(currentBusinessProvider),
             ),
@@ -212,6 +252,14 @@ class _VanReceiptViewState extends ConsumerState<VanReceiptView> {
             orderStatus: widget.orderStatus,
             reprintDate: _reprintAt,
             businessName: ref.read(currentBusinessNameProvider),
+            businessPhone: _extras.businessPhone,
+            businessEmail: _extras.businessEmail,
+            cashierName: _extras.cashierName,
+            saleDate: _extras.saleDate,
+            vatRateBps: _extras.vatRateBps,
+            vatIncluded: _extras.vatIncluded,
+            cratesOwedByManufacturer: _extras.cratesOwedByManufacturer,
+            crateDepositFull: _extras.crateDepositFull,
             tracksCrates: businessTracksCrates(
               ref.read(currentBusinessProvider),
             ),

@@ -32,6 +32,7 @@ import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/features/pos/services/receipt_extras.dart';
 import 'package:reebaplus_pos/shared/models/receipt_totals.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
@@ -1182,6 +1183,19 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     }
   }
 
+  Future<ReceiptExtras> _receiptExtrasFor(OrderData order) async {
+    try {
+      return await loadReceiptExtrasForOrder(
+        ref.read(databaseProvider),
+        order,
+        business: ref.read(currentBusinessProvider),
+        vat: await ref.read(vatConfigProvider.future),
+      );
+    } catch (_) {
+      return ReceiptExtras.none; // optional lines are simply omitted
+    }
+  }
+
   void _viewReceipt(BuildContext context, OrderWithItems richOrder) async {
     DateTime? reshareDate;
     DateTime? reprintDate;
@@ -1192,6 +1206,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     final db = ref.read(databaseProvider);
     final mfrList = await db.inventoryDao.watchAllManufacturers().first;
     final manufacturerNames = {for (final m in mfrList) m.id: m.name};
+    // #605 — cashier, contact, VAT line, crate balance, real sale date.
+    final extras = await _receiptExtrasFor(richOrder.order);
 
     if (!context.mounted) return;
 
@@ -1298,6 +1314,14 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                             refundAmount: currentOrder.amountPaidKobo / 100.0,
                             storeAddress: storeAddress,
                             businessName: ref.read(currentBusinessNameProvider),
+                            businessPhone: extras.businessPhone,
+                            businessEmail: extras.businessEmail,
+                            cashierName: extras.cashierName,
+                            saleDate: extras.saleDate,
+                            vatRateBps: extras.vatRateBps,
+                            vatIncluded: extras.vatIncluded,
+                            cratesOwedByManufacturer: extras.cratesOwedByManufacturer,
+                            crateDepositFull: extras.crateDepositFull,
                             // Watched, so the label follows the business row
                             // even when nothing else keeps it loaded (#487).
                             tracksCrates: businessTracksCrates(
@@ -1423,6 +1447,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       final mfrList = await db.inventoryDao.watchAllManufacturers().first;
       final manufacturerNames = {for (final m in mfrList) m.id: m.name};
 
+      final extras = await _receiptExtrasFor(order);
+
       // #176 — real goods/deposit split on the thermal reprint (see the
       // on-screen reprint above): goods = grand total − deposit, deposit on its
       // own line, grand total = goods net + deposit. The old
@@ -1458,6 +1484,14 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
             refundAmount: order.amountPaidKobo / 100.0,
             storeAddress: finalStoreAddress,
             businessName: ref.read(currentBusinessNameProvider),
+            businessPhone: extras.businessPhone,
+            businessEmail: extras.businessEmail,
+            cashierName: extras.cashierName,
+            saleDate: extras.saleDate,
+            vatRateBps: extras.vatRateBps,
+            vatIncluded: extras.vatIncluded,
+            cratesOwedByManufacturer: extras.cratesOwedByManufacturer,
+            crateDepositFull: extras.crateDepositFull,
             tracksCrates: businessTracksCrates(
               ref.read(currentBusinessProvider),
             ),

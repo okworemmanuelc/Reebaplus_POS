@@ -90,6 +90,8 @@ class VanSaleReceiptSheet extends StatelessWidget {
                   cashReceivedKobo: order.amountPaidKobo,
                   orderStatus: order.status,
                   isReopened: true,
+                  saleDate: order.createdAt,
+                  staffId: order.staffId,
                 ),
                 SizedBox(height: context.getRSize(16)),
                 SizedBox(
