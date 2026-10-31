@@ -95,6 +95,10 @@ Future<void> _bootstrap() async {
   // lib/core/database/db_wipe.dart for the rationale.
   await wipeLegacyDatabaseIfPresent();
 
+  // #608: edge-to-edge on Android 10–14 too (Android 15+ forces it).
+  // MainActivity calls enableEdgeToEdge(); this mode stops Flutter from
+  // re-applying its old window flags on every resume, which would undo it.
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(statusBarColor: Colors.transparent),
   );
