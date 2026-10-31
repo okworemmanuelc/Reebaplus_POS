@@ -1,6 +1,7 @@
--- Rollback for 0233_business_billing_issue.sql (#591).
+-- Rollback for 0235_business_billing_issue.sql (#591).
 -- Restores apply_play_purchase to the 0234 body (same signature), the UPDATE
--- guard to the 0224 body and the INSERT guard to the 0231 body; drops the grace
+-- guard to the 0224 body (the INSERT guard is untouched: its billing_issue line
+-- lives in 0236, rolled back with 0231); drops the grace
 -- push trigger, the helpers and businesses.billing_issue; deletes the
 -- schema_migrations row. Plan / status / end-date values are not touched.
 -- App v96 keeps working: billing_issue is nullable locally and simply stays
@@ -24,44 +25,6 @@ BEGIN
   RETURN NEW;
 END $$;
 
--- INSERT guard: 0231 body.
-CREATE OR REPLACE FUNCTION public.set_business_trial_end()
-RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-  v_days integer;
-BEGIN
-  -- Customer roles never choose their own subscription (no self-granted trial
-  -- or paid plan via a raw PostgREST insert).
-  IF current_user IN ('authenticated', 'anon') THEN
-    NEW.subscription_status := 'inactive';
-    NEW.subscription_plan   := 'free';
-    NEW.billing_cycle       := NULL;
-    NEW.trial_ends_at       := NULL;
-    NEW.current_period_end  := NULL;
-    RETURN NEW;
-  END IF;
-
-  -- Explicit trial from the console / operator: keep the old stamping.
-  IF NEW.subscription_status = 'trial' THEN
-    IF NEW.trial_ends_at IS NULL THEN
-      BEGIN
-        v_days := public.console_get_trial_days();
-      EXCEPTION WHEN undefined_function THEN
-        v_days := 30;
-      END;
-      IF v_days IS NULL OR v_days < 1 OR v_days > 365 THEN
-        v_days := 30;
-      END IF;
-      NEW.trial_ends_at := now() + make_interval(days => v_days);
-    END IF;
-    IF NEW.subscription_plan IS NULL THEN
-      NEW.subscription_plan := 'premium';
-    END IF;
-  ELSIF NEW.subscription_status = 'inactive' AND NEW.subscription_plan IS NULL THEN
-    NEW.subscription_plan := 'free';
-  END IF;
-  RETURN NEW;
-END $$;
 
 -- apply_play_purchase: 0234 body.
 CREATE OR REPLACE FUNCTION public.apply_play_purchase(
@@ -208,6 +171,6 @@ DROP FUNCTION IF EXISTS public._business_values_play_stamped(uuid, text, timesta
 ALTER TABLE public.businesses DROP CONSTRAINT IF EXISTS businesses_billing_issue_check;
 ALTER TABLE public.businesses DROP COLUMN IF EXISTS billing_issue;
 
-DELETE FROM supabase_migrations.schema_migrations WHERE version = '0233';
+DELETE FROM supabase_migrations.schema_migrations WHERE version = '0235';
 
 COMMIT;

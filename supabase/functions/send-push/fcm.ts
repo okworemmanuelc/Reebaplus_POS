@@ -53,7 +53,7 @@ const nonEmpty = (v: unknown): v is string =>
 
 /// Targeted staff push types (#433). Routed by an explicit `user_ids` list.
 /// `billing_issue` (#591): the owner alone, on entering a Play grace period
-/// (0233 trigger).
+/// (0235 trigger).
 export const TARGETED_STAFF_PUSH_TYPES = ["online_order", "billing_issue"];
 
 /// Route a hook record to its recipient, or null to skip it. A record never

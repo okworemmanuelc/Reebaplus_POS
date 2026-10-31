@@ -148,7 +148,7 @@ async function persistAndApply(
   }
 
   // Every state, ON_HOLD and IN_GRACE_PERIOD included, reaches
-  // apply_play_purchase, which writes businesses.billing_issue (#591, 0233).
+  // apply_play_purchase, which writes businesses.billing_issue (#591, 0235).
   const decision = decideApply({
     verified: v,
     replacedBy: prior?.replaced_by_token ?? null,

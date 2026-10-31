@@ -1,19 +1,19 @@
-# Apply plan: 0233 failed-renewal billing issue (grace / hold)
+# Apply plan: 0235 failed-renewal billing issue (grace / hold)
 
 Status: NOT APPLIED. Issue #591 (PRD #584 slice 7).
-Migration: `supabase/migrations/0233_business_billing_issue.sql`.
-Depends on 0224 + 0225 + 0231 + 0232 + **0234** (all must be on prod first).
+Migration: `supabase/migrations/0235_business_billing_issue.sql`.
+Depends on 0224 + 0225 + 0232 + **0234** (all on prod since 2026-10-31). Does NOT
+depend on the gated 0231.
 
-## Numbering warning
-The number 0233 was reserved, but 0234 already re-issues `apply_play_purchase`.
-0233 MUST run **after** 0234. If 0234 is ever (re-)run after 0233, re-run 0233,
-or `billing_issue` stops being written. `supabase db push` will see 0233 as
-"before the last remote migration"; apply it by hand as below (no db push).
+## Gated companion: 0236
+`0236_insert_guard_billing_issue.sql` adds `billing_issue := NULL` to the
+INSERT guard. It re-issues the 0231 body, so it ships **with 0231** (after phones
+run the #586 never-lock release), never alone.
 
 ## What it does
 * `businesses.billing_issue text NULL CHECK IN ('grace','hold')`.
-  Cloud-authoritative / app-read-only: the 0224 UPDATE guard resets it and the
-  0231 INSERT guard nulls it for authenticated/anon; not on the app push whitelist.
+  Cloud-authoritative / app-read-only: the 0224 UPDATE guard resets it and (from
+  0236) the INSERT guard nulls it for authenticated/anon; not on the app push whitelist.
 * `apply_play_purchase` (same signature, same grants) writes it:
   IN_GRACE_PERIOD -> `grace` (plan kept); ON_HOLD that downgrades -> `hold`;
   ACTIVE / CANCELED / EXPIRED / PAUSED -> NULL; a lapse kept by a manual grant or
@@ -28,9 +28,10 @@ or `billing_issue` stops being written. `supabase db push` will see 0233 as
 ## Deploy order
 1. Run `verify_post_apply.sql` on reebaplus-dev (dev lacks 0224+: apply them
    in one aborted transaction, as done for this PR).
-2. `supabase db query --linked -f supabase/migrations/0233_business_billing_issue.sql`
-3. Record: `insert into supabase_migrations.schema_migrations(version, name) values ('0233','business_billing_issue');`
-4. `supabase db query --linked -f docs/rollouts/0233-billing-issue/verify_post_apply.sql`
+2. From a temp worktree with the gated files removed (0193, 0231, 0236):
+   `supabase db push --include-all` (applies 0235 only).
+3. (nothing to record by hand: db push records 0235)
+4. `supabase db query --linked -f docs/rollouts/0235-billing-issue/verify_post_apply.sql`
    (BEGIN … ROLLBACK, keeps nothing; passing = no error).
 5. `supabase functions deploy send-push --no-verify-jwt`
    (until then the `billing_issue` push is skipped as not_routable: harmless).
@@ -41,7 +42,7 @@ or `billing_issue` stops being written. `supabase db push` will see 0233 as
 Owner, in Play Console: 7-day grace period, then account hold.
 
 ## Rollback
-`rollback.sql` restores the 0234 / 0224 / 0231 bodies, drops the trigger,
+`rollback.sql` restores the 0234 / 0224 bodies (INSERT guard untouched), drops the trigger,
 helpers and column, and deletes the schema_migrations row. Tested on dev.
 
 ## POS parity

@@ -98,7 +98,7 @@ export type BillingIssue = "grace" | "hold" | null;
 
 /**
  * Failed renewal (#591): the businesses.billing_issue a Play state means.
- * Mirrors apply_play_purchase (0233): IN_GRACE_PERIOD keeps the plan and is
+ * Mirrors apply_play_purchase (0235): IN_GRACE_PERIOD keeps the plan and is
  * 'grace'; ON_HOLD is 'hold'; every other state clears it. The SQL refines two
  * cases: an ON_HOLD lapse kept by a manual grant or another entitled purchase
  * clears it (the shop keeps a paid plan), and PENDING leaves it unchanged.

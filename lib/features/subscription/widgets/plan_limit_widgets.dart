@@ -77,7 +77,7 @@ class TrialReminderBanner extends ConsumerWidget {
   }
 }
 
-/// `businesses.billing_issue` values (#591, cloud 0233).
+/// `businesses.billing_issue` values (#591, cloud 0235).
 const String kBillingIssueGrace = 'grace';
 const String kBillingIssueHold = 'hold';
 

@@ -1,23 +1,18 @@
--- 0233_business_billing_issue.sql
+-- 0235_business_billing_issue.sql
 --
 -- #591 (PRD #584 slice 7). Failed Play renewal: grace period + account hold.
--- DEPENDS ON 0224 + 0225 + 0231 + 0232 + 0234 (applied AFTER 0234 on prod,
--- although its number is lower: the number was reserved). Re-issues
+-- DEPENDS ON 0224 + 0225 + 0232 + 0234 (NOT on the gated 0231). Re-issues
 -- apply_play_purchase() with the SAME signature (no overload / PGRST203) and
 -- keeps 0232's manual-grant rule and 0234's replaced-token rule intact.
 -- Idempotent: safe to run twice.
---
--- REPLAY WARNING: 0234 also CREATE OR REPLACEs apply_play_purchase. On any
--- database where 0234 runs AFTER this file (a fresh replay in file order),
--- re-run this file afterwards or billing_issue is never written.
 --
 -- WHAT THIS ADDS
 --   1. businesses.billing_issue text NULL, CHECK IN ('grace','hold').
 --      Cloud-authoritative, app-read-only (like subscription_*):
 --        * the 0224 UPDATE guard (enforce_subscription_immutable) resets it
 --          for authenticated / anon;
---        * the 0231 INSERT guard (set_business_trial_end) forces it NULL for
---          authenticated / anon;
+--        * the INSERT guard nulls it for authenticated / anon from 0236
+--          (deployed together with the gated 0231);
 --        * the app never pushes it (not in the businesses push whitelist).
 --   2. apply_play_purchase() writes it from the Play state:
 --        IN_GRACE_PERIOD (entitled, keeps the plan)          -> 'grace'
@@ -118,45 +113,10 @@ BEGIN
   RETURN NEW;
 END $$;
 
--- 4. INSERT guard (0231 body + billing_issue) ---------------------------------
-CREATE OR REPLACE FUNCTION public.set_business_trial_end()
-RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-  v_days integer;
-BEGIN
-  -- Customer roles never choose their own subscription (no self-granted trial
-  -- or paid plan via a raw PostgREST insert).
-  IF current_user IN ('authenticated', 'anon') THEN
-    NEW.subscription_status := 'inactive';
-    NEW.subscription_plan   := 'free';
-    NEW.billing_cycle       := NULL;
-    NEW.trial_ends_at       := NULL;
-    NEW.current_period_end  := NULL;
-    NEW.billing_issue       := NULL;
-    RETURN NEW;
-  END IF;
-
-  -- Explicit trial from the console / operator: keep the old stamping.
-  IF NEW.subscription_status = 'trial' THEN
-    IF NEW.trial_ends_at IS NULL THEN
-      BEGIN
-        v_days := public.console_get_trial_days();
-      EXCEPTION WHEN undefined_function THEN
-        v_days := 30;
-      END;
-      IF v_days IS NULL OR v_days < 1 OR v_days > 365 THEN
-        v_days := 30;
-      END IF;
-      NEW.trial_ends_at := now() + make_interval(days => v_days);
-    END IF;
-    IF NEW.subscription_plan IS NULL THEN
-      NEW.subscription_plan := 'premium';
-    END IF;
-  ELSIF NEW.subscription_status = 'inactive' AND NEW.subscription_plan IS NULL THEN
-    NEW.subscription_plan := 'free';
-  END IF;
-  RETURN NEW;
-END $$;
+-- 4. (moved) The INSERT-guard change for billing_issue lives in 0236, which
+--    ships with the gated 0231 (no trials). Until then a customer-role insert
+--    could set billing_issue on its own new row: harmless (it only shows that
+--    owner a payment banner) and the next Play apply overwrites it.
 
 -- 5. apply_play_purchase (0234 body + billing_issue) --------------------------
 CREATE OR REPLACE FUNCTION public.apply_play_purchase(
