@@ -1,382 +1,175 @@
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
+import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
+import 'package:screenshot/screenshot.dart';
 
-import 'package:reebaplus_pos/core/utils/number_format.dart'; // assuming fmtNumber is exported here
-import 'package:reebaplus_pos/core/utils/name_case.dart';
-import 'package:reebaplus_pos/core/utils/product_name.dart';
-import 'package:reebaplus_pos/core/utils/stock_calculator.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
+import 'package:reebaplus_pos/features/pos/widgets/paper_receipt.dart';
 
+/// Builds the ESC/POS bytes for a paper receipt (#605). The receipt is drawn
+/// as a [PaperReceipt] widget off-screen, turned into a crisp black-and-white
+/// picture and sent as raster bands — so paper matches the mockups' fonts,
+/// bold text, columns and logo outline.
 class ThermalReceiptService {
-  /// Builds a byte array of ESC/POS commands for the given [paperSize].
-  /// Defaults to 58mm (32 chars/line) so existing callers are unchanged.
+  /// Tallest raster band sent in one command; cheap printers choke on one
+  /// very tall image.
+  static const int maxBandRows = 256;
+
+  /// Luminance below this prints black.
+  static const int _threshold = 160;
+
+  /// Defaults to 58mm so existing callers are unchanged.
   static Future<List<int>> buildReceipt({
     required String orderId,
     required List<Map<String, dynamic>> cart,
     required double subtotal,
-    /// Discount given on this sale (#200 / US 33). [subtotal] is always the goods
-    /// at their FULL price, so the discount prints on its own line between the
-    /// subtotal and the total — keeping the paper copy and the on-screen
-    /// [ReceiptWidget] identical, on the original print and on every reprint.
-    /// 0 (the default) prints no line.
     double discount = 0,
     required double crateDeposit,
     required double total,
     required String paymentMethod,
     String? customerName,
-    String? customerAddress,
-    String? customerPhone,
     double? cashReceived,
     double? walletBalance,
     bool showWalletInfo = false,
     DateTime? reprintDate,
     DateTime? reshareDate,
-    String? riderName,
-    String? deliveryRef,
     String? orderStatus,
     double? refundAmount,
     String? storeAddress,
     String? businessName,
+    String? businessPhone,
+    String? businessEmail,
+    String? cashierName,
+    DateTime? saleDate,
+    int? vatRateBps,
+    double? vatIncluded,
+    Map<String, double>? cratesOwedByManufacturer,
     Map<String, String>? manufacturerNames,
-    /// Local file path of the cached business logo. When present the image is
-    /// converted to a monochrome raster and emitted before the business name.
-    /// Falls back to name-only when null or the file is missing.
     String? logoPath,
-    /// Physical paper width. Defaults to 58mm so existing callers and the
-    /// existing 58mm output are unchanged.
     ReceiptPaperSize paperSize = ReceiptPaperSize.mm58,
-    /// Whether the business counts empty crates —
-    /// `businessTracksCrates(currentBusiness)`. Only then does a `Bottle` line
-    /// print "Bottle Crate <name>" (#487); every other shop prints "Bottle".
     required bool tracksCrates,
   }) async {
+    final receipt = PaperReceipt(
+      paperSize: paperSize,
+      orderId: orderId,
+      cart: cart,
+      subtotal: subtotal,
+      discount: discount,
+      crateDeposit: crateDeposit,
+      total: total,
+      paymentMethod: paymentMethod,
+      customerName: customerName,
+      cashReceived: cashReceived,
+      walletBalance: walletBalance,
+      showWalletInfo: showWalletInfo,
+      reprintDate: reprintDate,
+      reshareDate: reshareDate,
+      orderStatus: orderStatus,
+      refundAmount: refundAmount,
+      manufacturerNames: manufacturerNames,
+      storeAddress: storeAddress,
+      businessName: businessName,
+      logoPath: logoPath,
+      businessPhone: businessPhone,
+      businessEmail: businessEmail,
+      cashierName: cashierName,
+      saleDate: saleDate,
+      vatRateBps: vatRateBps,
+      vatIncluded: vatIncluded,
+      cratesOwedByManufacturer: cratesOwedByManufacturer,
+      tracksCrates: tracksCrates,
+    );
+
+    final png = await ScreenshotController().captureFromWidget(
+      MediaQuery(
+        data: const MediaQueryData(textScaler: TextScaler.noScaling),
+        child: Directionality(
+          textDirection: TextDirection.ltr,
+          child: Theme(
+            data: ThemeData(fontFamily: appFontFamily),
+            child: Material(
+              color: Colors.white,
+              child: Align(alignment: Alignment.topCenter, child: receipt),
+            ),
+          ),
+        ),
+      ),
+      pixelRatio: 2,
+      delay: const Duration(milliseconds: 50),
+      targetSize: Size(paperSize.rasterWidthPx / 2, 3000),
+    );
+
+    final bw = _toBlackAndWhite(png, paperSize.rasterWidthPx);
+
     final profile = await CapabilityProfile.load();
     final generator = Generator(paperSize.escPos, profile);
-    final int charsPerLine = paperSize.charsPerLine;
-    List<int> bytes = [];
-
-    // Reset printer hardware and synchronize generator style state (emits ESC @).
-    bytes += generator.reset();
-
-    // --- 0. REFUND STAMP ---
-    if (orderStatus == 'Refunded') {
-      bytes += generator.text(
-        'REFUNDED',
-        styles: const PosStyles(
-          align: PosAlign.center,
-          height: PosTextSize.size2,
-          width: PosTextSize.size2,
-          bold: true,
-        ),
-      );
-      bytes += generator.text(
-        'Amount: ${formatCurrency(refundAmount ?? total).replaceAll('₦', 'N')}',
-        styles: const PosStyles(align: PosAlign.center, bold: true),
-      );
-      bytes += generator.hr();
+    final bytes = <int>[...generator.reset()];
+    for (var y = 0; y < bw.height; y += maxBandRows) {
+      final h = (y + maxBandRows > bw.height) ? bw.height - y : maxBandRows;
+      final band = img.copyCrop(bw, x: 0, y: y, width: bw.width, height: h);
+      bytes.addAll(generator.imageRaster(band, align: PosAlign.center));
     }
-
-    // --- 1. HEADER ---
-    if (reprintDate != null) {
-      bytes += generator.text(
-        'REPRINTED',
-        styles: const PosStyles(
-          align: PosAlign.center,
-          height: PosTextSize.size2,
-          width: PosTextSize.size2,
-          bold: true,
-        ),
-      );
-      bytes += generator.hr();
-    }
-    if (reshareDate != null) {
-      bytes += generator.text(
-        'RESHARED',
-        styles: const PosStyles(
-          align: PosAlign.center,
-          height: PosTextSize.size2,
-          width: PosTextSize.size2,
-          bold: true,
-        ),
-      );
-      bytes += generator.hr();
-    }
-    // --- Logo (before business name) ---
-    if (logoPath != null) {
-      final logoFile = File(logoPath);
-      if (logoFile.existsSync()) {
-        final rawBytes = await logoFile.readAsBytes();
-        final decoded = img.decodeImage(rawBytes);
-        if (decoded != null) {
-          // Resize to the paper's print width in dots, convert to mono.
-          final resized = img.copyResize(decoded, width: paperSize.logoWidthPx);
-          img.grayscale(resized);
-          bytes += generator.image(resized, align: PosAlign.center);
-        }
-      }
-    }
-    if (businessName != null && businessName.trim().isNotEmpty) {
-      bytes += generator.text(
-        toNameCase(businessName),
-        styles: const PosStyles(
-          align: PosAlign.center,
-          height: PosTextSize.size2,
-          width: PosTextSize.size2,
-          bold: true,
-        ),
-      );
-    }
-    if (storeAddress != null && storeAddress.isNotEmpty) {
-      bytes += generator.text(
-        storeAddress,
-        styles: const PosStyles(align: PosAlign.center),
-      );
-    }
-    bytes += generator.text(
-      deliveryRef != null ? 'DELIVERY RECEIPT' : 'SALES RECEIPT',
-      styles: const PosStyles(align: PosAlign.center, bold: true),
-    );
-    bytes += generator.hr(); // "--------------------------------"
-
-    // --- 2. CUSTOMER & TRANSACTION DETAILS ---
-    if (customerName != null &&
-        customerName.isNotEmpty &&
-        customerName.toLowerCase() != 'walk-in customer') {
-      bytes += generator.text(
-        toNameCase(customerName),
-        styles: const PosStyles(bold: true),
-      );
-      if (customerAddress != null &&
-          customerAddress.isNotEmpty &&
-          customerAddress != 'N/A') {
-        bytes += generator.text(customerAddress);
-      }
-      if (customerPhone != null && customerPhone.isNotEmpty) {
-        bytes += generator.text(customerPhone);
-      }
-      bytes += generator.text('');
-    }
-
-    final now = DateTime.now();
-    final dateStr =
-        '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
-
-    bytes += generator.text('Order #$orderId');
-    if (deliveryRef != null) {
-      bytes += generator.text(
-        'Delivery Ref: $deliveryRef',
-        styles: const PosStyles(bold: true),
-      );
-    }
-    bytes += generator.text('Date: $dateStr');
-    if (reprintDate != null) {
-      final rDateStr =
-          '${reprintDate.day.toString().padLeft(2, '0')}/${reprintDate.month.toString().padLeft(2, '0')}/${reprintDate.year} ${reprintDate.hour.toString().padLeft(2, '0')}:${reprintDate.minute.toString().padLeft(2, '0')}';
-      bytes += generator.text('Reprinted: $rDateStr');
-    }
-    bytes += generator.hr();
-
-    // --- 3. ITEMS LIST ---
-    // Single line per item: [qty]x [product name]         [price]
-    for (var item in cart) {
-      final String name = productDisplayName(
-        item['name'].toString(),
-        item['size'] as String?,
-        unit: item['unit'] as String?,
-        crates: tracksCrates,
-      );
-      final double qty = (item['qty'] as num).toDouble();
-      final double price = (item['price'] as num).toDouble();
-      final double lineTotal = stockValue(price, qty);
-
-      final String qtyStr = '${qty.toStringAsFixed(1)}x ';
-      final String priceStr = formatCurrency(lineTotal).replaceAll('₦', 'N');
-
-      bytes += generator.text(
-        formatItemLine(
-          qtyLabel: qtyStr,
-          name: name,
-          priceLabel: priceStr,
-          charsPerLine: charsPerLine,
-        ),
-        styles: const PosStyles(bold: false, fontType: PosFontType.fontA),
-      );
-    }
-    bytes += generator.hr();
-
-    // --- 4. EMPTY CRATES SECTION ---
-    final Map<String, double> empties = {};
-    for (final item in cart) {
-      final unit = (item['unit'] as String?)?.toLowerCase();
-      final trackEmpties = (item['trackEmpties'] as bool?) ?? false;
-
-      if (unit == 'bottle' && trackEmpties) {
-        final mid = item['manufacturerId'];
-        if (mid is String) {
-          empties[mid] = (empties[mid] ?? 0) + (item['qty'] as num).toDouble();
-        }
-      }
-    }
-
-    if (empties.isNotEmpty) {
-      bytes += generator.text('Empty Crates', styles: const PosStyles(bold: true));
-      final sortedEntries = empties.entries.toList()
-        ..sort((a, b) {
-          final nameA = manufacturerNames?[a.key] ?? 'Unknown';
-          final nameB = manufacturerNames?[b.key] ?? 'Unknown';
-          return nameA.compareTo(nameB);
-        });
-
-      for (final e in sortedEntries) {
-        final mfrName = manufacturerNames?[e.key] ?? 'Unknown';
-        bytes += generator.text('$mfrName (${e.value.toStringAsFixed(0)} crates)');
-      }
-      bytes += generator.hr();
-    }
-
-    // --- 5. TOTALS SECTION ---
-    bytes += _buildTwoColumnRow(
-      generator,
-      'Subtotal',
-      formatCurrency(subtotal).replaceAll('₦', 'N'),
-      charsPerLine,
-    );
-
-    // #200 / US 33 — the discount that explains Total < Subtotal. Printed
-    // negative (formatCurrency renders the minus sign) so the totals block
-    // reads as an addition down to TOTAL, exactly as the on-screen receipt does.
-    if (discount > 0) {
-      bytes += _buildTwoColumnRow(
-        generator,
-        'Discount',
-        formatCurrency(-discount).replaceAll('₦', 'N'),
-        charsPerLine,
-      );
-    }
-
-    if (crateDeposit > 0) {
-      bytes += _buildTwoColumnRow(
-        generator,
-        'Crate Deposit',
-        formatCurrency(crateDeposit).replaceAll('₦', 'N'),
-        charsPerLine,
-      );
-    }
-    bytes += generator.hr();
-
-    // BIG TOTAL
-    bytes += generator.row([
-      PosColumn(
-        text: 'TOTAL',
-        width: 6,
-        styles: const PosStyles(bold: true, align: PosAlign.left),
-      ),
-      PosColumn(
-        text: formatCurrency(total).replaceAll('₦', 'N'),
-        width: 6,
-        styles: const PosStyles(bold: true, align: PosAlign.right),
-      ),
-    ]);
-    bytes += generator.hr();
-
-    // --- 5. PAYMENT SECTION ---
-    bytes += generator.text(
-      'Payment Method: ${paymentMethod.toLowerCase() == 'wallet payment' || paymentMethod.toLowerCase() == 'wallet' ? 'Credit Payment' : paymentMethod}',
-      styles: const PosStyles(bold: true),
-    );
-
-    bytes += _buildTwoColumnRow(
-      generator,
-      'Amount Paid:',
-      formatCurrency(cashReceived ?? total).replaceAll('₦', 'N'),
-      charsPerLine,
-    );
-
-    // §15.1 — wallet info, only when ticked at checkout. Sign conveys credit
-    // vs debt — no "(credit)/(debt)" suffix.
-    if (showWalletInfo && walletBalance != null) {
-      bytes += _buildTwoColumnRow(
-        generator,
-        'Credits Balance:',
-        formatCurrency(walletBalance).replaceAll('₦', 'N'),
-        charsPerLine,
-      );
-    }
-
-    bytes += generator.text('');
-
-    // --- 6. FOOTER ---
-    bytes += generator.text(
-      'Rider: ${riderName ?? 'Pick-up'}',
-      styles: const PosStyles(align: PosAlign.center, bold: true),
-    );
-    bytes += generator.text('');
-    bytes += generator.text(
-      'Goods received in good condition',
-      styles: const PosStyles(align: PosAlign.center),
-    );
-    bytes += generator.text(
-      'Powered by Reebaplus+',
-      styles: const PosStyles(
-        align: PosAlign.center,
-        fontType: PosFontType.fontB,
-      ),
-    );
-
-    // Minimal feed + cut to reduce paper waste
-    bytes += generator.feed(2);
-    bytes += generator.cut();
-
+    bytes.addAll(generator.feed(2));
+    bytes.addAll(generator.cut());
     return bytes;
   }
 
-  /// Emits a label/value row padded to [charsPerLine] characters.
-  static List<int> _buildTwoColumnRow(
-    Generator generator,
-    String label,
-    String value,
-    int charsPerLine,
-  ) {
-    return generator.text(
-      formatTwoColumnLine(
-        label: label,
-        value: value,
-        charsPerLine: charsPerLine,
-      ),
-    );
+  /// Decodes [png], trims the empty white tail, forces [width] and applies a
+  /// hard black/white threshold (printers dither badly on greys).
+  static img.Image _toBlackAndWhite(Uint8List png, int width) {
+    var src = img.decodeImage(png)!;
+    if (src.width != width) src = img.copyResize(src, width: width);
+    // Trim trailing blank rows (the capture is taller than the content).
+    var last = src.height - 1;
+    bool rowBlank(int y) {
+      for (var x = 0; x < src.width; x++) {
+        final p = src.getPixel(x, y);
+        if (p.a > 0 && img.getLuminance(p) < 250) return false;
+      }
+      return true;
+    }
+
+    while (last > 0 && rowBlank(last)) {
+      last--;
+    }
+    final h = (last + 1 + 8).clamp(1, src.height);
+    final out = img.Image(width: width, height: h);
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < width; x++) {
+        final p = src.getPixel(x, y);
+        final lum = p.a == 0 ? 255 : img.getLuminance(p);
+        final v = lum < _threshold ? 0 : 255;
+        out.setPixelRgb(x, y, v, v, v);
+      }
+    }
+    return out;
   }
 
   /// Formats one item line — `"[qty]x [name]      [price]"` — to fit exactly
-  /// [charsPerLine] characters: the name is truncated when too long, and the
-  /// gap between name and price is padded (at least one space). Pure so the
-  /// 32-char (58mm) / 48-char (80mm) contract is unit-testable directly.
+  /// [charsPerLine] characters. Still used by the text-only online-order slip.
   static String formatItemLine({
     required String qtyLabel,
     required String name,
     required String priceLabel,
     required int charsPerLine,
   }) {
-    // Leave room for the qty label, the price, and at least one space.
     final int maxNameLen = charsPerLine - qtyLabel.length - priceLabel.length - 1;
     String nameStr = name;
     if (maxNameLen <= 0) {
-      // Qty + price already consume the whole line; drop the name.
       nameStr = '';
     } else if (nameStr.length > maxNameLen) {
       nameStr = nameStr.substring(0, maxNameLen);
     }
-
     final String leftPart = '$qtyLabel$nameStr';
     int spaceCount = charsPerLine - leftPart.length - priceLabel.length;
     if (spaceCount < 1) spaceCount = 1;
     return '$leftPart${' ' * spaceCount}$priceLabel';
   }
 
-  /// Formats a `"label        value"` row padded to [charsPerLine] characters
-  /// (at least one space between the two). Pure; shared by the totals and
-  /// payment rows via [_buildTwoColumnRow].
+  /// A `"label        value"` row padded to [charsPerLine] characters.
   static String formatTwoColumnLine({
     required String label,
     required String value,

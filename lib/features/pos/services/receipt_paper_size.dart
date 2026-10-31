@@ -6,13 +6,13 @@ import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 /// decoupled from the print library's [PaperSize] enum and from the persisted
 /// string so a library change or a stray stored value can't reshape a receipt.
 ///
-/// 58mm is the default: keeps 32 chars/line, [PaperSize.mm58], and a 200px logo raster.
+/// 58mm is the default: maps to [PaperSize.mm58] and a 384-dot picture.
 enum ReceiptPaperSize {
   mm58,
   mm80;
 
-  /// Monospace characters that fit on one Font-A line at this width
-  /// (≈203 DPI thermal head): 58mm ≈ 32, 80mm ≈ 48.
+  /// Monospace characters that fit on one Font-A line (text-only slips such
+  /// as the online-order slip): 58mm ≈ 32, 80mm ≈ 48.
   int get charsPerLine => switch (this) {
         ReceiptPaperSize.mm58 => 32,
         ReceiptPaperSize.mm80 => 48,
@@ -24,12 +24,12 @@ enum ReceiptPaperSize {
         ReceiptPaperSize.mm80 => PaperSize.mm80,
       };
 
-  /// Logo raster width in printer dots. The 58mm print area is ≈384 dots (keep
-  /// the pre-#116 200px); the 80mm area is ≈576 dots, so 384px fills it with a
-  /// small margin. A judgment call within the sensible ~380–512 range.
-  int get logoWidthPx => switch (this) {
-        ReceiptPaperSize.mm58 => 200,
-        ReceiptPaperSize.mm80 => 384,
+  /// Width in dots of the printed picture (≈203 DPI head): 58mm = 384,
+  /// 80mm = 576. The paper receipt is laid out at half this in logical pixels
+  /// and rendered at pixelRatio 2.
+  int get rasterWidthPx => switch (this) {
+        ReceiptPaperSize.mm58 => 384,
+        ReceiptPaperSize.mm80 => 576,
       };
 
   /// Rebuilds a value from the string persisted by `PrinterService`. Any

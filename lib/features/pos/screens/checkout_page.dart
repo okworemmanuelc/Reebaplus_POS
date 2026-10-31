@@ -1536,14 +1536,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         total: _totalKobo / 100.0,
         paymentMethod: _receiptPaymentLabel,
         customerName: _customerDisplayName,
-        customerAddress: widget.customer?.addressText,
-        customerPhone: widget.customer?.phone,
         cashReceived: _amountPaid,
         // Use the post-sale snapshot (set at confirm) — the live provider has
         // already updated, so recomputing here would double-count the legs.
         walletBalance: _receiptCreditBalance,
         showWalletInfo: !_isWalkIn && _addCreditInfoToReceipt,
-        riderName: 'Pick-up Order',
         storeAddress: _storeAddress,
         businessName: ref.read(currentBusinessNameProvider),
         tracksCrates: businessTracksCrates(

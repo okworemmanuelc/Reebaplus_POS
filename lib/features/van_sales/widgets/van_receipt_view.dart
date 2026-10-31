@@ -211,7 +211,6 @@ class _VanReceiptViewState extends ConsumerState<VanReceiptView> {
             showWalletInfo: false,
             orderStatus: widget.orderStatus,
             reprintDate: _reprintAt,
-            riderName: 'Van Sale',
             businessName: ref.read(currentBusinessNameProvider),
             tracksCrates: businessTracksCrates(
               ref.read(currentBusinessProvider),
