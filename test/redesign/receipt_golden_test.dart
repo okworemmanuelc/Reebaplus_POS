@@ -13,7 +13,7 @@ void main() {
   tearDownAll(() => WidgetsApp.debugAllowBannerOverride = true);
 
   testWidgets('phone receipt golden', (tester) async {
-    tester.view.physicalSize = const Size(390, 1060);
+    tester.view.physicalSize = const Size(390, 1120);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
