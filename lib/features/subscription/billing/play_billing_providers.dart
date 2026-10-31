@@ -55,3 +55,11 @@ final billingCurrentPlanProvider = Provider<CurrentPlan?>((ref) {
       : BillingCycle.monthly;
   return CurrentPlan(tier, cycle, periodEnd: end);
 });
+
+/// What the thank-you pop-up names (#590): business name and, when the synced
+/// row already knows it, the period end.
+final billingThankYouInfoProvider =
+    Provider<({String name, DateTime? periodEnd})>((ref) {
+  final b = ref.watch(currentBusinessProvider);
+  return (name: b?.name ?? 'Your business', periodEnd: b?.currentPeriodEnd);
+});

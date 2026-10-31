@@ -70,12 +70,34 @@ const String kManageInPlayMessage =
 
 enum BillingPhase { loading, unavailable, ready, purchasing, verifying, success, error }
 
+/// What a `success` was, so the paywall can decide the thank-you (#590).
+/// newPurchase / upgrade: the user started it on this phone in this session.
+/// restored: a restore or an unsolicited redelivery (no pop-up).
+/// downgradeScheduled: a plan change that takes effect at renewal (no pop-up).
+enum SuccessKind { newPurchase, upgrade, restored, downgradeScheduled }
+
 class BillingState {
   final BillingPhase phase;
   final List<StoreOffer> offers;
   final String? message;
-  const BillingState(this.phase, {this.offers = const [], this.message});
+
+  /// Set only when [phase] is success.
+  final SuccessKind? successKind;
+
+  /// The plan and cycle the user chose (set for newPurchase / upgrade).
+  final PlanTier? successTier;
+  final BillingCycle? successCycle;
+  const BillingState(
+    this.phase, {
+    this.offers = const [],
+    this.message,
+    this.successKind,
+    this.successTier,
+    this.successCycle,
+  });
 }
+
+const String kPlanRestoredMessage = 'Your plan has been restored';
 
 /// Drives the plans paywall: loads store offers, starts purchases/restores and
 /// turns purchase events into a server verification + a user-facing result.
@@ -98,6 +120,12 @@ class PlayBillingController extends ChangeNotifier {
   /// Shown instead of "Your plan is active." once a deferred downgrade is
   /// confirmed by the server.
   String? _pendingSuccessMessage;
+
+  // In-memory only (never stored or synced): the plan the user chose through
+  // subscribe() in this controller's life, until that purchase settles.
+  PlanTier? _userTier;
+  BillingCycle? _userCycle;
+  bool _userUpgrade = false;
 
   BillingState _state = const BillingState(BillingPhase.loading);
   BillingState get state => _state;
@@ -165,6 +193,7 @@ class PlayBillingController extends ChangeNotifier {
     }
     _set(BillingState(BillingPhase.purchasing, offers: offers));
     _pendingSuccessMessage = null;
+    _clearUserStarted();
     try {
       OwnedSubscription? owned;
       try {
@@ -215,6 +244,9 @@ class PlayBillingController extends ChangeNotifier {
           return;
         }
       }
+      _userTier = t;
+      _userCycle = c;
+      _userUpgrade = change?.kind == ReplacementKind.upgradeNow;
       await port.buy(offer, accountId: businessId, change: change);
       if (change?.kind == ReplacementKind.downgradeAtRenewal) {
         final msg = _pendingSuccessMessage;
@@ -228,8 +260,15 @@ class PlayBillingController extends ChangeNotifier {
       }
     } catch (e) {
       _pendingSuccessMessage = null;
+      _clearUserStarted();
       _set(BillingState(BillingPhase.error, offers: offers, message: '$e'));
     }
+  }
+
+  void _clearUserStarted() {
+    _userTier = null;
+    _userCycle = null;
+    _userUpgrade = false;
   }
 
   static String _downgradeMessage(PlanTier t, DateTime? on) {
@@ -239,6 +278,7 @@ class PlayBillingController extends ChangeNotifier {
   }
 
   Future<void> restore() async {
+    _clearUserStarted();
     _set(BillingState(BillingPhase.purchasing, offers: _state.offers));
     try {
       await port.restore();
@@ -263,8 +303,10 @@ class PlayBillingController extends ChangeNotifier {
         _set(BillingState(BillingPhase.purchasing, offers: offers,
             message: 'Waiting for payment to complete...'));
       case PurchaseEventStatus.canceled:
+        _clearUserStarted();
         _set(BillingState(BillingPhase.ready, offers: offers));
       case PurchaseEventStatus.error:
+        _clearUserStarted();
         _set(BillingState(BillingPhase.error, offers: offers,
             message: e.message ?? 'The purchase failed.'));
       case PurchaseEventStatus.purchased:
@@ -284,12 +326,36 @@ class PlayBillingController extends ChangeNotifier {
         );
         if (out.ok) {
           await port.complete(e);
-          final msg = _pendingSuccessMessage ?? 'Your plan is active.';
+          final deferred = _pendingSuccessMessage;
+          final userTier = _userTier;
+          final userCycle = _userCycle;
+          final userStarted = userTier != null &&
+              userCycle != null &&
+              e.status == PurchaseEventStatus.purchased;
+          final kind = deferred != null
+              ? SuccessKind.downgradeScheduled
+              : !userStarted
+                  ? SuccessKind.restored
+                  : _userUpgrade
+                      ? SuccessKind.upgrade
+                      : SuccessKind.newPurchase;
           _pendingSuccessMessage = null;
-          _set(BillingState(BillingPhase.success, offers: offers, message: msg));
+          _clearUserStarted();
+          _set(BillingState(
+            BillingPhase.success,
+            offers: offers,
+            message: deferred ??
+                (kind == SuccessKind.restored
+                    ? kPlanRestoredMessage
+                    : 'Your plan is active.'),
+            successKind: kind,
+            successTier: userTier,
+            successCycle: userCycle,
+          ));
         } else {
           // Do NOT complete: the purchase stays queued and is re-delivered to
-          // retry verification on the next launch/restore.
+          // retry verification on the next launch/restore. Keep the user's
+          // choice so a successful retry in this session still counts.
           _set(BillingState(BillingPhase.error, offers: offers,
               message: 'We could not confirm your purchase yet. It will be '
                   'retried; if your plan does not update, tap Restore purchases.'));

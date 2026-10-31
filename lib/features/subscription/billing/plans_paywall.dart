@@ -8,6 +8,8 @@ import 'package:reebaplus_pos/features/subscription/subscription_plan.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/core/utils/notifications.dart';
+import 'package:reebaplus_pos/features/subscription/widgets/thank_you_dialog.dart';
 
 import 'package:reebaplus_pos/features/subscription/billing/play_billing_constants.dart';
 import 'package:reebaplus_pos/features/subscription/billing/play_billing_controller.dart';
@@ -43,14 +45,45 @@ class _PlansPaywallState extends ConsumerState<PlansPaywall> {
      ..init();
   }
 
-  BillingPhase? _lastPhase;
+  // Per-state guard (never persisted): each success state is handled once.
+  BillingState? _handledSuccess;
   void _onChange() {
     final s = _ctl!.state;
-    if (s.phase == BillingPhase.success && _lastPhase != BillingPhase.success) {
-      // The businesses row syncs down to this device; nothing else to do.
+    if (s.phase == BillingPhase.success && !identical(s, _handledSuccess)) {
+      _handledSuccess = s;
+      _onSuccess(s);
     }
-    _lastPhase = s.phase;
     if (mounted) setState(() {});
+  }
+
+  void _onSuccess(BillingState s) {
+    // The businesses row syncs down to this device on its own.
+    switch (s.successKind) {
+      case SuccessKind.restored:
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) AppNotification.showSuccess(context, kPlanRestoredMessage);
+        });
+      case SuccessKind.newPurchase || SuccessKind.upgrade:
+        final tier = s.successTier;
+        final cycle = s.successCycle;
+        if (tier == null || cycle == null) return;
+        final info = ref.read(billingThankYouInfoProvider);
+        final price = _ctl!.priceFor(tier, cycle,
+            naira: ref.read(billingUsesNairaProvider));
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          showThankYouDialog(
+            context,
+            businessName: info.name,
+            tier: tier,
+            cycle: cycle,
+            price: price,
+            renewsOn: info.periodEnd,
+          );
+        });
+      case SuccessKind.downgradeScheduled || null:
+        break;
+    }
   }
 
   @override
