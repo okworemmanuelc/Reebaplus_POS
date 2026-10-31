@@ -49,10 +49,6 @@ import 'package:reebaplus_pos/features/auth/screens/access_granted_screen.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/driver_terminal_screen.dart';
 import 'package:reebaplus_pos/features/diagnostics/screens/schema_error_screen.dart';
 
-import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
-import 'package:reebaplus_pos/features/subscription/subscription_thanks.dart';
-import 'package:reebaplus_pos/features/subscription/screens/thank_you_subscription_screen.dart';
-import 'package:reebaplus_pos/features/subscription/screens/subscription_locked_screen.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_plan_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/reebaplus_logo.dart';
 
@@ -765,17 +761,11 @@ class _HomeRouter extends ConsumerWidget {
     final auth = ref.watch(authProvider);
     final user = auth.value;
     final localBusinessesAsync = ref.watch(localBusinessesProvider);
-    final subAccess = ref.watch(currentBusinessSubscriptionProvider);
-    final subBusiness = ref.watch(currentBusinessProvider);
-    final subThanks = ref.watch(subscriptionThanksProvider);
 
     final screen = _resolve(
       auth: auth,
       user: user,
       localBusinessesAsync: localBusinessesAsync,
-      subAccess: subAccess,
-      subBusiness: subBusiness,
-      subThanks: subThanks,
       // #142 — resolved here (in `build`) so the router rebuilds when the
       // driver's permissions land, rather than reading a stale one-shot.
       isDriverTerminal: ref.watch(driverTerminalActiveProvider),
@@ -796,9 +786,6 @@ class _HomeRouter extends ConsumerWidget {
     required AuthService auth,
     required UserData? user,
     required AsyncValue<List<BusinessData>> localBusinessesAsync,
-    required SubscriptionAccess subAccess,
-    required BusinessData? subBusiness,
-    required SubscriptionThanksService subThanks,
     required bool isDriverTerminal,
   }) {
     if (user == null) {
@@ -867,13 +854,8 @@ class _HomeRouter extends ConsumerWidget {
       }
     }
 
-    // Subscription gate (master plan §32).
-    if (subAccess.isLocked) {
-      return SubscriptionLockedScreen(access: subAccess);
-    }
-    if (subBusiness != null && subThanks.shouldCelebrate(subBusiness)) {
-      return ThankYouSubscriptionScreen(business: subBusiness);
-    }
+    // #586: the app never locks. A lapsed plan drops to Free; owner banners
+    // (main_layout) explain it.
 
     // #142 (PRD #139 / ADR 0019, van-sales spec §9.2) — a DRIVER never sees the
     // shop. They get the stripped terminal INSTEAD of [MainLayout], not a mode

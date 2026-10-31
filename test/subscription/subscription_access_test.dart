@@ -63,13 +63,13 @@ void main() {
     });
   });
 
-  group('isLocked', () {
-    test('only trialExpired and inactive lock', () {
-      expect(SubscriptionAccess.trialExpired.isLocked, isTrue);
-      expect(SubscriptionAccess.inactive.isLocked, isTrue);
-      expect(SubscriptionAccess.active.isLocked, isFalse);
-      expect(SubscriptionAccess.trialActive.isLocked, isFalse);
-      expect(SubscriptionAccess.grace.isLocked, isFalse);
+  group('isFreeTier', () {
+    test('only trialExpired and inactive are on Free', () {
+      expect(SubscriptionAccess.trialExpired.isFreeTier, isTrue);
+      expect(SubscriptionAccess.inactive.isFreeTier, isTrue);
+      expect(SubscriptionAccess.active.isFreeTier, isFalse);
+      expect(SubscriptionAccess.trialActive.isFreeTier, isFalse);
+      expect(SubscriptionAccess.grace.isFreeTier, isFalse);
     });
   });
 
