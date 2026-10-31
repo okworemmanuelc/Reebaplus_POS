@@ -187,6 +187,27 @@ Deno.test("online_order message: own title + data, token filter has users", () =
   assertEquals(m.message.data.type, "online_order"); // not overridable
 });
 
+Deno.test("billing_issue (#591): owner-only targeted push, own title", () => {
+  const r: PushRecord = {
+    id: "n-1",
+    type: "billing_issue",
+    message: "Your Reebaplus payment didn't go through. Update it in Google Play to keep your plan.",
+    severity: "warning",
+    title: "Payment didn't go through",
+    business_id: "biz-1",
+    user_ids: ["owner"],
+    data: { type: "billing_issue", billing_issue: "grace" },
+  };
+  const rec = resolveRecipient(r)!;
+  assertEquals(rec, { audience: "staff", businessId: "biz-1", userIds: ["owner"] });
+  assertEquals(tokenFilterFor(rec).userIds, ["owner"]);
+  const [m] = buildFcmMessages(r, ["tok"], rec.audience);
+  assertEquals(m.message.notification.title, "Payment didn't go through");
+  assertEquals(m.message.data.billing_issue, "grace");
+  // Never the whole business: no user_ids means skipped.
+  assertEquals(resolveRecipient({ ...r, user_ids: [] }), null);
+});
+
 // ── #434: Shopper order updates carry their data keys ────────────────────────
 
 Deno.test("buildFcmMessages: Shopper order update carries order id + event", () => {

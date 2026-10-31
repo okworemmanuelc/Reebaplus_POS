@@ -4414,4 +4414,18 @@ void main() {
       db = await openAndInit(); // idempotent re-upgrade
     } finally { await db.close(); }
   });
+
+  test('v95 to v96 adds businesses.billing_issue (#591)', () async {
+    var db = await openAndInit();
+    await db.customStatement('ALTER TABLE businesses DROP COLUMN billing_issue');
+    await db.customStatement('PRAGMA user_version = 95');
+    await db.close();
+    db = await openAndInit();
+    try {
+      expect(await columnsOf(db, 'businesses'), contains('billing_issue'));
+      await db.customStatement('PRAGMA user_version = 95');
+      await db.close();
+      db = await openAndInit(); // idempotent re-upgrade
+    } finally { await db.close(); }
+  });
 }
