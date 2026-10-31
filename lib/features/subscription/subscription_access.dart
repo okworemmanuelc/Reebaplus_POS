@@ -43,8 +43,8 @@ SubscriptionAccess computeSubscriptionAccess(
 }
 
 extension SubscriptionAccessX on SubscriptionAccess {
-  /// Whether this state should replace the whole app with the locked screen.
-  bool get isLocked =>
+  /// The plan has ended: the shop is on Free (never locked, #586).
+  bool get isFreeTier =>
       this == SubscriptionAccess.trialExpired ||
       this == SubscriptionAccess.inactive;
 
