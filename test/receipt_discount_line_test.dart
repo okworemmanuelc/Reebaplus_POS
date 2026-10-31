@@ -18,6 +18,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:reebaplus_pos/features/pos/services/receipt_lines.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
 import 'package:reebaplus_pos/features/pos/widgets/paper_receipt.dart';
 import 'package:reebaplus_pos/shared/models/receipt_totals.dart';
@@ -293,6 +294,74 @@ void main() {
         total: grossKobo / 100.0,
       );
       expect(lines, isNot(contains('Discount')));
+    });
+  });
+
+  group('text receipt — the default printed receipt', () {
+    List<String> printed({
+      required double subtotal,
+      required double discount,
+      required double crateDeposit,
+      required double total,
+    }) => buildReceiptLines(
+      paperSize: ReceiptPaperSize.mm58,
+      orderId: 'ORD-000009',
+      cart: cart,
+      subtotal: subtotal,
+      discount: discount,
+      crateDeposit: crateDeposit,
+      total: total,
+      paymentMethod: 'Cash',
+      tracksCrates: true,
+    ).map((l) => l.plain).toList();
+
+    test('prints Subtotal, Discount, Crate deposit, TOTAL in that order', () {
+      final l = printed(
+        subtotal: grossKobo / 100.0,
+        discount: discountKobo / 100.0,
+        crateDeposit: depositKobo / 100.0,
+        total: paidKobo / 100.0,
+      );
+      int at(String p) => l.indexWhere((x) => x.startsWith(p));
+      expect(at('Subtotal'), isNonNegative);
+      expect(at('Discount'), greaterThan(at('Subtotal')));
+      expect(at('Crate deposit'), greaterThan(at('Discount')));
+      expect(at('TOTAL'), greaterThan(at('Crate deposit')));
+      expect(l[at('Discount')], endsWith('-N500'));
+    });
+
+    test('a reprint prints the same figures as the original', () {
+      final original = printed(
+        subtotal: grossKobo / 100.0,
+        discount: discountKobo / 100.0,
+        crateDeposit: depositKobo / 100.0,
+        total: paidKobo / 100.0,
+      );
+      final t = receiptTotalsFromOrder(
+        totalAmountKobo: paidKobo,
+        crateDepositPaidKobo: depositKobo,
+        discountKobo: discountKobo,
+      );
+      final reprint = printed(
+        subtotal: t.subtotalKobo / 100.0,
+        discount: t.discountKobo / 100.0,
+        crateDeposit: t.depositKobo / 100.0,
+        total: t.totalKobo / 100.0,
+      );
+      for (final label in ['Subtotal', 'Discount', 'Crate deposit', 'TOTAL']) {
+        String row(List<String> l) => l.firstWhere((x) => x.startsWith(label));
+        expect(row(reprint), row(original), reason: label);
+      }
+    });
+
+    test('no discount row when nothing was discounted', () {
+      final l = printed(
+        subtotal: grossKobo / 100.0,
+        discount: 0,
+        crateDeposit: 0,
+        total: grossKobo / 100.0,
+      );
+      expect(l.any((x) => x.startsWith('Discount')), isFalse);
     });
   });
 }

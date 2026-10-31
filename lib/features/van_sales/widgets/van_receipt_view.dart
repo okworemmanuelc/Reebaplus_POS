@@ -238,8 +238,9 @@ class _VanReceiptViewState extends ConsumerState<VanReceiptView> {
       }
       // Built per paper width: the picker fallback below may land on a
       // different printer with a different roll, and rebuilds for it.
-      Future<List<int>> buildBytes(ReceiptPaperSize paperSize) =>
+      Future<List<int>> buildBytes(ReceiptPaperSize paperSize) async =>
           ThermalReceiptService.buildReceipt(
+            printStyle: await printer.currentPrintStyle(),
             orderId: widget.orderNumber,
             cart: widget.cart,
             subtotal: widget.totalKobo / 100.0,
@@ -279,7 +280,7 @@ class _VanReceiptViewState extends ConsumerState<VanReceiptView> {
           return;
         }
       }
-      _showPrinterPicker(printer, target.paperSize, bytes, buildBytes);
+      _showPrinterPicker(printer, buildBytes);
     } catch (e) {
       if (mounted) AppNotification.showError(context, 'Print error: $e');
     } finally {
@@ -291,8 +292,6 @@ class _VanReceiptViewState extends ConsumerState<VanReceiptView> {
   /// same sheet the shop till falls back to.
   void _showPrinterPicker(
     PrinterService printer,
-    ReceiptPaperSize builtFor,
-    List<int> receiptBytes,
     Future<List<int>> Function(ReceiptPaperSize) buildBytes,
   ) {
     showModalBottomSheet<void>(
@@ -317,12 +316,10 @@ class _VanReceiptViewState extends ConsumerState<VanReceiptView> {
             if (!mounted) return;
             if (connected) {
               // The picked printer may be new (asks once) or use a different
-              // roll than the one the bytes were laid out for.
+              // roll or print style than the one the bytes were built for, so rebuild.
               final target = await prepareReceiptPrinter(context, printer);
               if (!mounted) return;
-              final bytes = target.paperSize == builtFor
-                  ? receiptBytes
-                  : await buildBytes(target.paperSize);
+              final bytes = await buildBytes(target.paperSize);
               await printer.printBytesDirectly(bytes);
               if (!mounted) return;
               AppNotification.showSuccess(context, 'Print successful');

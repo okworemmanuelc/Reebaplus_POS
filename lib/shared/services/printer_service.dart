@@ -12,6 +12,7 @@ class PrinterService {
   static const _legacyPaperSizeKey = 'printer_paper_size';
   // Per-printer paper size: `printer_paper_size:<mac>`.
   static const _paperSizeKeyPrefix = 'printer_paper_size:';
+  static const _printStyleKeyPrefix = 'printer_print_style:';
 
   // Settle window for Android Bluetooth SPP link before commands can be processed.
   static const _androidConnectSettle = Duration(milliseconds: 1000);
@@ -165,6 +166,27 @@ class PrinterService {
     final prefs = await SharedPreferences.getInstance();
     await _migrateLegacyPaperSize(prefs);
     await prefs.setString('$_paperSizeKeyPrefix$mac', size.name);
+  }
+
+  /// The print style saved for the printer at [mac]; text when unset.
+  Future<ReceiptPrintStyle> printStyleFor(String mac) async {
+    final prefs = await SharedPreferences.getInstance();
+    return ReceiptPrintStyle.fromStorage(
+      prefs.getString('$_printStyleKeyPrefix$mac'),
+    );
+  }
+
+  /// Saves the print style for the printer at [mac].
+  Future<void> savePrintStyleFor(String mac, ReceiptPrintStyle style) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('$_printStyleKeyPrefix$mac', style.name);
+  }
+
+  /// The print style of the printer the app last connected to (text when
+  /// there is none).
+  Future<ReceiptPrintStyle> currentPrintStyle() async {
+    final mac = await lastConnectedMac();
+    return mac == null ? ReceiptPrintStyle.text : printStyleFor(mac);
   }
 
   /// One-time move of the old device-wide paper size onto the printer that

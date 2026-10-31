@@ -1031,8 +1031,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
       );
       // Built per paper width: the picker fallback below may land on a
       // different printer with a different roll, and rebuilds for it.
-      Future<List<int>> buildBytes(ReceiptPaperSize paperSize) =>
+      Future<List<int>> buildBytes(ReceiptPaperSize paperSize) async =>
           ThermalReceiptService.buildReceipt(
+            printStyle: await printer.currentPrintStyle(),
             orderId: order.orderNumber,
             cart: items,
             subtotal: totals.subtotalKobo / 100.0,
@@ -1104,11 +1105,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
               if (connected) {
                 if (!ctx.mounted) return;
                 // The picked printer may be new (asks once) or use a different
-                // roll than the one the bytes were laid out for.
+                // roll or print style than the one the bytes were built for, so rebuild.
                 final picked = await prepareReceiptPrinter(ctx, printer);
-                final pickedBytes = picked.paperSize == target.paperSize
-                    ? bytes
-                    : await buildBytes(picked.paperSize);
+                final pickedBytes = await buildBytes(picked.paperSize);
                 await printer.printBytes(pickedBytes);
                 if (!ctx.mounted) return;
                 AppNotification.showSuccess(ctx, 'Print successful');
