@@ -1397,10 +1397,6 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         )
         .toList();
 
-    final deliveryReceipt = ref
-        .read(deliveryReceiptServiceProvider)
-        .getByOrderId(order.id.toString());
-
     AppNotification.showInfo(context, 'Preparing receipt...');
 
     try {
@@ -1453,14 +1449,11 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                 ref.read(payOnDeliveryByOrderProvider)[order.id]?.label ??
                 order.paymentType,
             customerName: richOrder.customer?.name ?? 'Walk-in Customer',
-            customerAddress: richOrder.customer?.addressText ?? 'N/A',
             cashReceived: order.paymentType == 'Wallet Payment'
                 ? order.netAmountKobo / 100.0
                 : order.amountPaidKobo / 100.0,
             walletBalance: walletBalance,
             reprintDate: DateTime.now(),
-            riderName: order.riderName,
-            deliveryRef: deliveryReceipt?.referenceNumber,
             orderStatus: order.status,
             refundAmount: order.amountPaidKobo / 100.0,
             storeAddress: finalStoreAddress,

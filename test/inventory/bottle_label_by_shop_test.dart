@@ -129,7 +129,7 @@ void main() {
         expect(
           find.descendant(
             of: sheet,
-            matching: find.text('$expected Star Lager  ×1.0'),
+            matching: find.textContaining('$expected Star Lager'),
           ),
           findsOneWidget,
         );

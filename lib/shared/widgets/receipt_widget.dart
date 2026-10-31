@@ -7,6 +7,7 @@ import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/name_case.dart';
 import 'package:reebaplus_pos/core/utils/product_name.dart';
 import 'package:reebaplus_pos/core/utils/stock_calculator.dart';
+import 'package:reebaplus_pos/shared/widgets/receipt_format.dart';
 
 class ReceiptWidget extends StatelessWidget {
   final String orderId;
@@ -110,12 +111,9 @@ class ReceiptWidget extends StatelessWidget {
 
   static int _kobo(double v) => (v * 100).round();
 
-  static String _qty(double q) => q == q.roundToDouble()
-      ? q.toStringAsFixed(0)
-      : q.toStringAsFixed(2).replaceFirst(RegExp(r'0+$'), '');
+  static String _qty(double q) => ReceiptFormat.qty(q);
 
-  static double _num(dynamic v) =>
-      v is num ? v.toDouble() : double.tryParse('$v') ?? 0.0;
+  static double _num(dynamic v) => ReceiptFormat.num(v);
 
   @override
   Widget build(BuildContext context) {
@@ -588,19 +586,6 @@ class ReceiptWidget extends StatelessWidget {
         '$h12:${dt.minute.toString().padLeft(2, '0')}\u00A0$ampm';
   }
 
-  Map<String, double> _computeEmpties() {
-    final Map<String, double> mfrQty = {};
-    for (final item in cart) {
-      final unit = (item['unit'] as String?)?.toLowerCase();
-      final trackEmpties = (item['trackEmpties'] as bool?) ?? false;
-
-      if (unit == 'bottle' && trackEmpties) {
-        final mid = item['manufacturerId'];
-        if (mid is String) {
-          mfrQty[mid] = (mfrQty[mid] ?? 0) + (item['qty'] as num).toDouble();
-        }
-      }
-    }
-    return mfrQty;
-  }
+  Map<String, double> _computeEmpties() =>
+      ReceiptFormat.emptiesByManufacturer(cart);
 }

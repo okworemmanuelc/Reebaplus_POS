@@ -1019,10 +1019,8 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                 ref.read(payOnDeliveryByOrderProvider)[order.id]?.label ??
                 paymentMethodLabel(order.paymentType),
             customerName: _name,
-            customerAddress: _address,
             cashReceived: order.amountPaidKobo / 100.0,
             reprintDate: DateTime.now(),
-            riderName: order.riderName,
             orderStatus: order.status,
             refundAmount: order.amountPaidKobo / 100.0,
             storeAddress: storeAddress,

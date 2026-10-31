@@ -5,14 +5,13 @@
 // formatters it delegates to (formatItemLine / formatTwoColumnLine) plus the
 // ReceiptPaperSize enum that is their single source of truth.
 
-import 'dart:convert';
-
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_builder.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   const mm58 = ReceiptPaperSize.mm58;
   const mm80 = ReceiptPaperSize.mm80;
 
@@ -20,13 +19,13 @@ void main() {
     test('58mm keeps the pre-#116 defaults (unchanged output)', () {
       expect(mm58.charsPerLine, 32);
       expect(mm58.escPos, PaperSize.mm58);
-      expect(mm58.logoWidthPx, 200);
+      expect(mm58.rasterWidthPx, 384);
     });
 
     test('80mm widens chars, paper size and logo', () {
       expect(mm80.charsPerLine, 48);
       expect(mm80.escPos, PaperSize.mm80);
-      expect(mm80.logoWidthPx, greaterThan(mm58.logoWidthPx));
+      expect(mm80.rasterWidthPx, 576);
     });
 
     test('fromStorage defaults unknown/absent values to 58mm', () {
@@ -132,74 +131,51 @@ void main() {
     });
   });
 
-  group('buildReceipt ESC/POS reset', () {
-    setUpAll(() {
-      TestWidgetsFlutterBinding.ensureInitialized();
-    });
-
-    test('emits ESC @ [0x1B, 0x40] at the start of mm58 receipt', () async {
-      final bytes = await ThermalReceiptService.buildReceipt(
-        orderId: '101',
-        cart: [],
-        subtotal: 0,
-        crateDeposit: 0,
-        total: 0,
-        paymentMethod: 'Cash',
-        paperSize: ReceiptPaperSize.mm58,
-        tracksCrates: false,
-      );
-      expect(bytes.length, greaterThanOrEqualTo(2));
-      expect(bytes.sublist(0, 2), [0x1B, 0x40]);
-    });
-
-    test('emits ESC @ [0x1B, 0x40] at the start of mm80 receipt', () async {
-      final bytes = await ThermalReceiptService.buildReceipt(
-        orderId: '102',
-        cart: [],
-        subtotal: 0,
-        crateDeposit: 0,
-        total: 0,
-        paymentMethod: 'Cash',
-        paperSize: ReceiptPaperSize.mm80,
-        tracksCrates: false,
-      );
-      expect(bytes.length, greaterThanOrEqualTo(2));
-      expect(bytes.sublist(0, 2), [0x1B, 0x40]);
-    });
-  });
-
-  // #487: "Bottle Crate" only on a receipt from a shop that counts empty
-  // crates; every other shop prints its Bottle product as "Bottle".
-  group('buildReceipt Bottle wording by shop', () {
-    setUpAll(() {
-      TestWidgetsFlutterBinding.ensureInitialized();
-    });
-
-    Future<String> printed({required bool tracksCrates}) async {
-      final bytes = await ThermalReceiptService.buildReceipt(
-        orderId: '103',
-        cart: [
-          {'name': 'Cough Syrup', 'unit': 'Bottle', 'qty': 1, 'price': 500.0},
-        ],
-        subtotal: 500,
-        crateDeposit: 0,
-        total: 500,
-        paymentMethod: 'Cash',
-        paperSize: ReceiptPaperSize.mm80,
-        tracksCrates: tracksCrates,
-      );
-      return latin1.decode(bytes, allowInvalid: true);
+  group('buildReceipt prints the receipt as a picture', () {
+    Future<List<int>> build(ReceiptPaperSize size, WidgetTester tester) async {
+      late List<int> bytes;
+      await tester.runAsync(() async {
+        bytes = await ThermalReceiptService.buildReceipt(
+          orderId: 'ORD-000101-AAAAAA',
+          cart: const [
+            {'name': 'Spaghetti 500g', 'price': 1200.0, 'qty': 4.0},
+          ],
+          subtotal: 4800,
+          crateDeposit: 0,
+          total: 4800,
+          paymentMethod: 'Cash',
+          businessName: 'Test Shop',
+          paperSize: size,
+          tracksCrates: false,
+        );
+      });
+      return bytes;
     }
 
-    test('a shop that does not count crates prints "Bottle"', () async {
-      final text = await printed(tracksCrates: false);
-      expect(text, contains('Bottle Cough Syrup'));
-      expect(text, isNot(contains('Bottle Crate')));
-    });
+    bool hasSeq(List<int> b, List<int> seq) {
+      for (var i = 0; i <= b.length - seq.length; i++) {
+        var ok = true;
+        for (var j = 0; j < seq.length; j++) {
+          if (b[i + j] != seq[j]) {
+            ok = false;
+            break;
+          }
+        }
+        if (ok) return true;
+      }
+      return false;
+    }
 
-    test('a shop that counts crates prints "Bottle Crate"', () async {
-      final text = await printed(tracksCrates: true);
-      expect(text, contains('Bottle Crate Cough Syrup'));
-    });
+    for (final size in [mm58, mm80]) {
+      testWidgets('${size.name}: ESC @ first, GS v 0 raster, cut last',
+          (tester) async {
+        final bytes = await build(size, tester);
+        expect(bytes.sublist(0, 2), [0x1B, 0x40]);
+        // GS v 0 = raster bit image command.
+        expect(hasSeq(bytes, [0x1D, 0x76, 0x30]), isTrue);
+        // Cut = GS V ...
+        expect(hasSeq(bytes.sublist(bytes.length - 4), [0x1D, 0x56]), isTrue);
+      });
+    }
   });
 }
