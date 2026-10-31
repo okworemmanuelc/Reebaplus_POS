@@ -14,13 +14,12 @@
 //   1. the derivation ties to the recorded order by construction,
 //   2. the on-screen receipt renders identical Subtotal / Discount / TOTAL for
 //      the original's arguments and its reprint's arguments,
-//   3. the thermal receipt prints the same block.
-
-import 'dart:convert';
+//   3. the paper receipt (printed as a picture of PaperReceipt) shows the same block.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:reebaplus_pos/features/pos/services/receipt_builder.dart';
+import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
+import 'package:reebaplus_pos/features/pos/widgets/paper_receipt.dart';
 import 'package:reebaplus_pos/shared/models/receipt_totals.dart';
 import 'package:reebaplus_pos/shared/widgets/receipt_widget.dart';
 
@@ -203,47 +202,64 @@ void main() {
     });
   });
 
-  group('ThermalReceiptService — the paper receipt', () {
-    Future<String> printed({
+  group('PaperReceipt — the printed receipt', () {
+    // The paper receipt is printed as a picture of [PaperReceipt] (#605), so its
+    // money block is pinned on the widget, read back as rendered Text.
+    Future<List<String>> printed(
+      WidgetTester tester, {
       required double subtotal,
       required double discount,
       required double crateDeposit,
       required double total,
     }) async {
-      final bytes = await ThermalReceiptService.buildReceipt(
-        orderId: 'ORD-000009',
-        cart: cart,
-        subtotal: subtotal,
-        discount: discount,
-        crateDeposit: crateDeposit,
-        total: total,
-        paymentMethod: 'Cash',
-        tracksCrates: true,
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: PaperReceipt(
+                paperSize: ReceiptPaperSize.mm58,
+                orderId: 'ORD-000009',
+                cart: cart,
+                subtotal: subtotal,
+                discount: discount,
+                crateDeposit: crateDeposit,
+                total: total,
+                paymentMethod: 'Cash',
+                tracksCrates: true,
+              ),
+            ),
+          ),
+        ),
       );
-      return latin1.decode(bytes, allowInvalid: true);
+      return tester
+          .widgetList<Text>(find.byType(Text))
+          .map((t) => t.data ?? '')
+          .toList();
     }
 
-    test('prints the discount between Subtotal and the deposit', () async {
-      final text = await printed(
+    testWidgets('prints the discount between Subtotal and the deposit',
+        (tester) async {
+      final lines = await printed(
+        tester,
         subtotal: grossKobo / 100.0,
         discount: discountKobo / 100.0,
         crateDeposit: depositKobo / 100.0,
         total: paidKobo / 100.0,
       );
-      expect(text, contains('Subtotal'));
-      expect(text, contains('Discount'));
-      expect(text, contains('-N500')); // '₦' is transliterated for the printer
-      expect(text, contains('Crate Deposit'));
-      expect(text.indexOf('Discount'), greaterThan(text.indexOf('Subtotal')));
-      expect(
-        text.indexOf('Crate Deposit'),
-        greaterThan(text.indexOf('Discount')),
-      );
-      expect(text.indexOf('TOTAL'), greaterThan(text.indexOf('Crate Deposit')));
+      final sub = lines.indexWhere((l) => l.startsWith('Subtotal'));
+      final disc = lines.indexOf('Discount');
+      final dep = lines.indexOf('Crate deposit');
+      expect(sub, isNonNegative);
+      expect(lines, contains('-₦500'));
+      expect(disc, greaterThan(sub));
+      expect(dep, greaterThan(disc));
+      expect(lines.indexOf('TOTAL'), greaterThan(dep));
     });
 
-    test('a reprint prints the same figures as the original', () async {
+    testWidgets('a reprint prints the same figures as the original',
+        (tester) async {
       final original = await printed(
+        tester,
         subtotal: grossKobo / 100.0,
         discount: discountKobo / 100.0,
         crateDeposit: depositKobo / 100.0,
@@ -255,30 +271,28 @@ void main() {
         discountKobo: discountKobo,
       );
       final reprint = await printed(
+        tester,
         subtotal: t.subtotalKobo / 100.0,
         discount: t.discountKobo / 100.0,
         crateDeposit: t.depositKobo / 100.0,
         total: t.totalKobo / 100.0,
       );
-      // The padded two-column row is byte-identical on both copies.
-      String row(String text, String label) {
-        final i = text.indexOf(label);
-        return text.substring(i, text.indexOf('\n', i));
-      }
-
-      for (final label in ['Subtotal', 'Discount', 'Crate Deposit']) {
-        expect(row(reprint, label), row(original, label), reason: label);
+      String money(List<String> lines, String label) =>
+          lines[lines.indexWhere((l) => l.startsWith(label)) + 1];
+      for (final label in ['Subtotal', 'Discount', 'Crate deposit', 'TOTAL']) {
+        expect(money(reprint, label), money(original, label), reason: label);
       }
     });
 
-    test('no discount row when nothing was discounted', () async {
-      final text = await printed(
+    testWidgets('no discount row when nothing was discounted', (tester) async {
+      final lines = await printed(
+        tester,
         subtotal: grossKobo / 100.0,
         discount: 0,
         crateDeposit: 0,
         total: grossKobo / 100.0,
       );
-      expect(text, isNot(contains('Discount')));
+      expect(lines, isNot(contains('Discount')));
     });
   });
 }
