@@ -104,7 +104,7 @@ void main() {
       await disposeScreen(tester);
     });
 
-    testWidgets('an ended trial shows TRIAL ENDED', (tester) async {
+    testWidgets('an ended trial shows FREE PLAN (never locked, #586)', (tester) async {
       await seedSubscription(env, trialEnds: DateTime(2026, 2, 1));
       await pumpSettingsPage(
         tester,
@@ -117,7 +117,7 @@ void main() {
           ),
         ],
       );
-      expect(find.text('TRIAL ENDED'), findsOneWidget);
+      expect(find.text('FREE PLAN'), findsOneWidget);
       expect(find.text('Trial ends'), findsOneWidget);
       expect(find.text('Ended 1 Feb 2026'), findsOneWidget);
       await disposeScreen(tester);
