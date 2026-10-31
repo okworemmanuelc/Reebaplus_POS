@@ -83,7 +83,10 @@ class _ThankYouDialogState extends State<ThankYouDialog>
     final fixed = theme.extension<AppFixedColors>() ?? AppFixedColors.light;
     final planName = widget.tier == PlanTier.basic ? 'Basic' : 'Premium';
     final per = widget.cycle == BillingCycle.monthly ? 'month' : 'year';
-    final renews = widget.renewsOn == null
+    // The new period end may not have synced down yet; a past date is a stale
+    // (pre-purchase) value, so leave the renew part out rather than show it.
+    final renews =
+        widget.renewsOn == null || widget.renewsOn!.isBefore(DateTime.now())
         ? ''
         : ' · Renews ${DateFormat('d MMM').format(widget.renewsOn!.toLocal())}';
     final ring = context.getRSize(110);

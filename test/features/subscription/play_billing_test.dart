@@ -7,6 +7,7 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/intl.dart';
 
 import 'package:reebaplus_pos/features/subscription/billing/play_billing_constants.dart';
 import 'package:reebaplus_pos/features/subscription/billing/play_billing_controller.dart';
@@ -556,12 +557,23 @@ void main() {
     }
 
     testWidgets('Basic contents', (tester) async {
-      await pumpDialog(tester, PlanTier.basic, renews: DateTime(2026, 11, 30));
+      final renews = DateTime.now().add(const Duration(days: 30));
+      await pumpDialog(tester, PlanTier.basic, renews: renews);
       expect(find.text('Thank you for subscribing!'), findsOneWidget);
       expect(find.text('Mama Put is now on Basic.'), findsOneWidget);
       expect(find.text('Up to 5 staff'), findsOneWidget);
       expect(find.text('Unlimited shops'), findsNothing);
-      expect(find.text('₦1,500 / month · Renews 30 Nov'), findsOneWidget);
+      expect(
+        find.text('₦1,500 / month · Renews ${DateFormat('d MMM').format(renews)}'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a past (not yet synced) renew date is left out', (tester) async {
+      await pumpDialog(tester, PlanTier.basic,
+          renews: DateTime.now().subtract(const Duration(days: 20)));
+      expect(find.text('₦1,500 / month'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
