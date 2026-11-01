@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
+import 'package:reebaplus_pos/shared/utils/quantity_input.dart';
 import 'package:reebaplus_pos/features/subscription/read_only_store_gate.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
@@ -143,6 +143,21 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
     return null;
   }
 
+  /// The counted figure typed for line [index], or null when it is blank or not
+  /// a quantity this product can be counted in (quarter steps; whole numbers
+  /// when the product's parts switch is off, #630).
+  double? _typedActual(int index) => parseStockQty(
+    _controllers[index].text,
+    allowParts: _items[index].product.allowFractionalSales,
+  );
+
+  /// Lines whose typed figure cannot be saved (e.g. `0.3`, or `1.5` on a
+  /// whole-only product). Blank lines are fine: they mean "not counted".
+  List<int> _invalidLines() => [
+    for (var i = 0; i < _items.length; i++)
+      if (_controllers[i].text.trim().isNotEmpty && _typedActual(i) == null) i,
+  ];
+
   double _diff(int index) {
     // A blank ACTUAL field means "not counted yet", NOT "counted zero" — don't
     // coerce it to 0, or saving would drive that product's stock to 0 and record
@@ -150,7 +165,8 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
     // real count of zero and still produces a diff.
     final raw = _controllers[index].text.trim();
     if (raw.isEmpty) return 0;
-    final actual = (int.tryParse(raw) ?? 0).toDouble();
+    final actual = _typedActual(index);
+    if (actual == null) return 0;
     return actual - _items[index].totalStock;
   }
 
@@ -158,6 +174,15 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
   /// so the user can verify figures before committing. Save Count only proceeds
   /// on explicit confirmation.
   Future<void> _confirmAndSave() async {
+    final invalid = _invalidLines();
+    if (invalid.isNotEmpty) {
+      final first = _items[invalid.first];
+      AppNotification.showError(
+        context,
+        '${first.product.name}: ${stockQtyError(_controllers[invalid.first].text, allowParts: first.product.allowFractionalSales)}',
+      );
+      return;
+    }
     // Snapshot diffs now; the text-field controllers may change while the sheet
     // is open if the user scrolls, so we capture once before showing.
     final changedIndexes = <int>[];
@@ -437,7 +462,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
         countedBy: staffId,
       );
 
-      final shortages = changedLines.where((l) => (l['d'] as int) < 0).length;
+      final shortages = changedLines.where((l) => (l['d'] as num) < 0).length;
       // §26.4: stock count saved → reconciliation report ready (Manager, CEO).
       await _notifyManagersAndCeo(
         db,
@@ -521,6 +546,16 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
     _damageQtyCtrl.clear();
     bool submitting = false;
 
+    // Parts of a damaged product need its switch on. A tracked bottle also
+    // damages its crate (#299), and crates in parts belong to the empties
+    // work (S4, #620), so those stay whole here.
+    bool partsAllowedFor(ProductStockWithStore? it) =>
+        it != null &&
+        it.product.allowFractionalSales &&
+        !(tracksCrates &&
+            it.product.unit?.toLowerCase() == 'bottle' &&
+            it.product.trackEmpties);
+
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -529,7 +564,13 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
         return StatefulBuilder(
           builder: (sheetCtx, setSheet) {
             Future<void> submit() async {
-              final qty = int.tryParse(_damageQtyCtrl.text.trim()) ?? 0;
+              final qty =
+                  parseStockQty(
+                    _damageQtyCtrl.text,
+                    allowParts: partsAllowedFor(product),
+                    allowZero: false,
+                  ) ??
+                  0.0;
               if (product == null) {
                 AppNotification.showError(
                   sheetCtx,
@@ -538,7 +579,15 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                 return;
               }
               if (qty <= 0) {
-                AppNotification.showError(sheetCtx, 'Enter a quantity.');
+                AppNotification.showError(
+                  sheetCtx,
+                  _damageQtyCtrl.text.trim().isEmpty
+                      ? 'Enter a quantity.'
+                      : stockQtyError(
+                          _damageQtyCtrl.text,
+                          allowParts: partsAllowedFor(product),
+                        ),
+                );
                 return;
               }
 
@@ -577,7 +626,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                   await db.inventoryDao.adjustStock(
                     p.product.id,
                     p.storeId,
-                    -qty.toDouble(),
+                    -qty,
                     reason,
                     staffId,
                   );
@@ -588,7 +637,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                     await db.cratePoolDao.recordFullCrateDamage(
                       manufacturerId: p.product.manufacturerId!,
                       storeId: p.storeId,
-                      crates: qty.toDouble(),
+                      crates: qty,
                       performedBy: staffId,
                       reason: reasonKey,
                     );
@@ -608,7 +657,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                 // §17.2: logs to History.
                 await logService.logAction(
                   'stock_damage',
-                  'Damage recorded: $qty × ${p.product.name} ($reasonLabel)',
+                  'Damage recorded: ${formatQty(qty)} × ${p.product.name} ($reasonLabel)',
                   productId: p.product.id,
                   storeId: p.storeId,
                 );
@@ -617,7 +666,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                   db,
                   type: 'stock_damage',
                   message:
-                      'Damage recorded: $qty × ${p.product.name} ($reasonLabel).',
+                      'Damage recorded: ${formatQty(qty)} × ${p.product.name} ($reasonLabel).',
                   severity: 'warning',
                 );
 
@@ -627,7 +676,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                 if (!context.mounted) return;
                 AppNotification.showSuccess(
                   context,
-                  'Damage recorded — stock reduced by $qty.',
+                  'Damage recorded — stock reduced by ${formatQty(qty)}.',
                 );
               } catch (_) {
                 if (!sheetCtx.mounted) return;
@@ -637,7 +686,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                 if (!context.mounted) return;
                 AppNotification.showError(
                   context,
-                  'Stock reduced by $qty, but logging the activity failed.',
+                  'Stock reduced by ${formatQty(qty)}, but logging the activity failed.',
                 );
               }
             }
@@ -695,8 +744,12 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                       controller: _damageQtyCtrl,
                       labelText: 'Quantity',
                       hintText: 'How many were damaged',
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      keyboardType: stockQtyKeyboard(
+                        allowParts: partsAllowedFor(product),
+                      ),
+                      inputFormatters: stockQtyFormatters(
+                        allowParts: partsAllowedFor(product),
+                      ),
                     ),
                     SizedBox(height: sheetCtx.getRSize(14)),
                     AppDropdown<String>(
@@ -1019,7 +1072,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
     final t = Theme.of(context);
     final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
     final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
-    final d = (l['d'] as num?)?.toInt() ?? 0;
+    final d = Qty.fromJson(l['d']);
     final color = d < 0 ? f.danger : (d > 0 ? f.green : muted);
     final name = l['n']?.toString() ?? 'Product';
     final sign = d > 0 ? '+' : '';
@@ -1037,14 +1090,14 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
             ),
           ),
           Text(
-            '${l['s']} → ${l['a']}',
+            '${formatQty(Qty.fromJson(l['s']))} → ${formatQty(Qty.fromJson(l['a']))}',
             style: context.regularStyle(11).copyWith(color: muted),
           ),
           SizedBox(width: context.getRSize(8)),
           SizedBox(
             width: context.getRSize(40),
             child: Text(
-              '$sign$d',
+              '$sign${formatQty(d)}',
               textAlign: TextAlign.right,
               style: context.boldStyle(12).copyWith(color: color),
             ),
@@ -1366,8 +1419,12 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                 width: context.getRSize(84),
                 child: AppInput(
                   controller: _controllers[i],
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  keyboardType: stockQtyKeyboard(
+                    allowParts: item.product.allowFractionalSales,
+                  ),
+                  inputFormatters: stockQtyFormatters(
+                    allowParts: item.product.allowFractionalSales,
+                  ),
                   onChanged: (_) => setRowState(() {}),
                   textAlign: TextAlign.center,
                   // 48dp tall: the box is its text line plus this padding.

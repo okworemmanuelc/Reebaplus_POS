@@ -2,6 +2,7 @@ import 'dart:math' as dm;
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:flutter/services.dart';
 
 import 'package:reebaplus_pos/core/listings/listing_content.dart';
@@ -685,7 +686,7 @@ class StoreStockRow {
 
   final String storeId;
   final String name;
-  final int quantity;
+  final double quantity;
 }
 
 class ProductStockByStoreCard extends StatelessWidget {
@@ -707,7 +708,7 @@ class ProductStockByStoreCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    final total = rows.fold<int>(0, (s, r) => s + r.quantity);
+    final total = rows.fold<double>(0, (s, r) => s + r.quantity);
     return DetailPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -716,7 +717,7 @@ class ProductStockByStoreCard extends StatelessWidget {
             icon: AppIcons.warehouse,
             title: 'Stock by Store',
             trailing: Text(
-              '$total ${unitCountNoun(unit, total, crates: crates)}',
+              '${formatQty(total)} ${unitCountNoun(unit, total, crates: crates)}',
               style: context
                   .extraBoldStyle(16)
                   .copyWith(color: t.colorScheme.onSurface),
@@ -793,7 +794,7 @@ class _StoreRow extends StatelessWidget {
           ),
           SizedBox(width: context.getRSize(8)),
           Text(
-            '${row.quantity}',
+            formatQty(row.quantity),
             style: context
                 .extraBoldStyle(22)
                 .copyWith(color: t.colorScheme.onSurface),

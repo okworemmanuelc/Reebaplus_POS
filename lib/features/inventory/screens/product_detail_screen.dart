@@ -2,6 +2,8 @@ import 'dart:math' as math;
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
+import 'package:reebaplus_pos/shared/utils/quantity_input.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/features/subscription/read_only_store_gate.dart';
@@ -390,18 +392,18 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     final stores = ref.watch(allStoresProvider).valueOrNull ?? const [];
     final stockMap =
         ref.watch(productStockByStoreProvider(widget.item.id)).valueOrNull ??
-        const <String, int>{};
+        const <String, double>{};
     final rows = [
       for (final s in stores)
         StoreStockRow(
           storeId: s.id,
           name: s.name,
-          quantity: (stockMap[s.id] ?? 0).round(), // whole until S3 (#620)
+          quantity: stockMap[s.id] ?? 0,
         ),
     ];
     final total = stores.isEmpty
-        ? widget.item.totalStock.toInt()
-        : rows.fold<int>(0, (a, r) => a + r.quantity);
+        ? widget.item.totalStock
+        : rows.fold<double>(0, (a, r) => a + r.quantity);
 
     final hero = _buildHero(context, total);
     final description = ProductDescriptionCard(
@@ -477,7 +479,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   // CARDS
   // ═══════════════════════════════════════════════════════════════════════════
 
-  Widget _buildHero(BuildContext context, int total) {
+  Widget _buildHero(BuildContext context, double total) {
     final p = _productData;
     final level = stockLevelOf(total, _alertAt);
     final categories = ref.watch(allCategoriesProvider).valueOrNull ?? const [];
@@ -515,7 +517,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       categoryName: categoryName,
       stockLabel: level == StockLevel.out
           ? 'Out of stock'
-          : '$total ${unitCountNoun(_unit, total, crates: _crates)} in stock',
+          : '${formatQty(total)} ${unitCountNoun(_unit, total, crates: _crates)} in stock',
       stockLevel: level,
       imagePath: _imagePath,
       // The same category picture as the POS and Receive Stock tiles.
@@ -1190,7 +1192,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         onSave:
             ({
               required bool isRemove,
-              required int qty,
+              required double qty,
               required StoreData store,
               String? reason,
               required String notes,
@@ -1214,7 +1216,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                 crates: businessTracksCrates(ref.read(currentBusinessProvider)),
               );
               final summary =
-                  '$actorName ${isRemove ? 'removed' : 'added'} $qty '
+                  '$actorName ${isRemove ? 'removed' : 'added'} ${formatQty(qty)} '
                   '${unitWord != null ? '$unitWord(s) ' : ''}of ${product.name} '
                   '(${store.name})'
                   '${isRemove ? ' — ${reason!}' : ''}';
@@ -1232,7 +1234,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                   await db.stockAdjustmentRequestsDao.requestStockAdjustment(
                     productId: product.id,
                     storeId: store.id,
-                    quantityDiff: delta.toDouble(),
+                    quantityDiff: delta,
                     reason: note,
                     summary: summary,
                     requestedBy: auth.currentUser?.id,
@@ -1248,7 +1250,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                 await db.inventoryDao.adjustStock(
                   product.id,
                   store.id,
-                  delta.toDouble(),
+                  delta,
                   note,
                   auth.currentUser?.id,
                   inflowUnitCostKobo: unitCostKobo,
@@ -1502,7 +1504,7 @@ class _UpdateStockSheet extends ConsumerStatefulWidget {
   // a removal, and null on an add where the user stated nothing.
   final Future<String?> Function({
     required bool isRemove,
-    required int qty,
+    required double qty,
     required StoreData store,
     String? reason,
     required String notes,
@@ -1594,9 +1596,19 @@ class _UpdateStockSheetState extends ConsumerState<_UpdateStockSheet> {
   }
 
   Future<void> _doSave() async {
-    final qty = int.tryParse(_qtyCtrl.text.trim()) ?? 0;
-    if (qty <= 0) {
-      AppNotification.showError(context, 'Quantity must be greater than 0.');
+    final allowParts = widget.product.allowFractionalSales;
+    final qty = parseStockQty(
+      _qtyCtrl.text,
+      allowParts: allowParts,
+      allowZero: false,
+    );
+    if (qty == null) {
+      AppNotification.showError(
+        context,
+        _qtyCtrl.text.trim().isEmpty || Qty.parse(_qtyCtrl.text) == 0
+            ? 'Quantity must be greater than 0.'
+            : stockQtyError(_qtyCtrl.text, allowParts: allowParts),
+      );
       return;
     }
     if (_isRemove && _reason == null) {
@@ -1754,7 +1766,12 @@ class _UpdateStockSheetState extends ConsumerState<_UpdateStockSheet> {
               controller: _qtyCtrl,
               labelText: 'Quantity *',
               hintText: '0',
-              keyboardType: TextInputType.number,
+              keyboardType: stockQtyKeyboard(
+                allowParts: widget.product.allowFractionalSales,
+              ),
+              inputFormatters: stockQtyFormatters(
+                allowParts: widget.product.allowFractionalSales,
+              ),
             ),
             // #197 (US 22): what the goods cost. Add mode only — a removal is
             // valued by drawing this store's FIFO queue (#7a), which the person
