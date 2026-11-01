@@ -17,6 +17,9 @@ typedef ReceiptPrinterTarget = ({bool connected, ReceiptPaperSize paperSize});
 /// prints to a printer it has not seen before, it asks the user once and
 /// remembers the answer for that printer. Later prints never ask again.
 ///
+/// A plugged-in USB printer (#614) wins and never asks: it is saved as 80mm
+/// the first time it is seen, and changed in Settings if needed.
+///
 /// When no printer could be connected, `connected` is false and the caller
 /// should open the printer picker, then call this again once the picked
 /// printer is connected (which asks for that printer if it is new).
@@ -24,6 +27,13 @@ Future<ReceiptPrinterTarget> prepareReceiptPrinter(
   BuildContext context,
   PrinterService printer,
 ) async {
+  final usb = await printer.attachedUsbPrinter();
+  if (usb != null) {
+    return (
+      connected: true,
+      paperSize: await printer.paperSizeFor(usb.id) ?? ReceiptPaperSize.mm80,
+    );
+  }
   final connected = await printer.isConnected || await printer.autoConnect();
   final mac = await printer.lastConnectedMac();
   if (mac == null) {

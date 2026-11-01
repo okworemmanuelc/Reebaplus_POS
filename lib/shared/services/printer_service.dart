@@ -4,7 +4,13 @@ import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reebaplus_pos/core/utils/logger.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
+import 'package:reebaplus_pos/shared/services/usb_printer_channel.dart';
 
+/// Receipt printing. Two transports (#614): a USB printer plugged into this
+/// device (Android tablets) is used first; the saved Bluetooth printer is the
+/// backup. Printers are keyed by an id — the Bluetooth MAC, or
+/// `usb:<vendorId>:<productId>[:<serial>]` — and paper size / print style are
+/// saved per id.
 class PrinterService {
   static const _lastMacKey = 'last_printer_mac';
   // Pre-per-printer (#116) single paper size for the whole device. Read once
@@ -26,7 +32,9 @@ class PrinterService {
     Future<bool> Function(String mac)? connectToPrinter,
     Future<void> Function(Duration duration)? wait,
     bool? isAndroid,
-  })  : _writeBytes = writeBytes ?? PrintBluetoothThermal.writeBytes,
+    UsbPrinterChannel? usb,
+  })  : _usb = usb ?? UsbPrinterChannel(),
+        _writeBytes = writeBytes ?? PrintBluetoothThermal.writeBytes,
         _connectToPrinter = connectToPrinter ??
             ((mac) => PrintBluetoothThermal.connect(macPrinterAddress: mac)),
         _wait = wait ?? ((d) => Future<void>.delayed(d)),
@@ -36,8 +44,23 @@ class PrinterService {
   final Future<bool> Function(String mac) _connectToPrinter;
   final Future<void> Function(Duration duration) _wait;
   final bool _isAndroid;
+  final UsbPrinterChannel _usb;
 
+  /// USB printers whose permission prompt was already shown this app run, so
+  /// one print never stacks several system prompts after a "Deny".
+  final Set<String> _usbPermissionAsked = {};
+
+  /// Whether this device can use USB printers at all (Android only).
+  bool get supportsUsb => _usb.isSupported;
+
+  /// True when the app may print: Bluetooth access was granted, or a USB
+  /// printer is plugged in and allowed (USB needs no Bluetooth access).
   Future<bool> requestPermissions() async {
+    if (await _requestBluetoothPermissions()) return true;
+    return await attachedUsbPrinter() != null;
+  }
+
+  Future<bool> _requestBluetoothPermissions() async {
     if (!Platform.isAndroid) {
       // iOS / macOS use CoreBluetooth, not runtime permissions — there is no
       // dialog to request here. The native Bluetooth-access prompt fires the
@@ -182,11 +205,123 @@ class PrinterService {
     await prefs.setString('$_printStyleKeyPrefix$mac', style.name);
   }
 
-  /// The print style of the printer the app last connected to (text when
-  /// there is none).
+  /// The print style of the printer receipts go to right now (see
+  /// [currentPrinterId]); text when there is none.
   Future<ReceiptPrintStyle> currentPrintStyle() async {
-    final mac = await lastConnectedMac();
-    return mac == null ? ReceiptPrintStyle.text : printStyleFor(mac);
+    final id = await currentPrinterId();
+    return id == null ? ReceiptPrintStyle.text : printStyleFor(id);
+  }
+
+  /// The printer receipts go to right now: an attached, allowed USB printer
+  /// first, else the Bluetooth printer last connected to. Never shows the USB
+  /// permission prompt.
+  Future<String?> currentPrinterId() async {
+    final usb = await attachedUsbPrinter(askPermission: false);
+    return usb?.id ?? await lastConnectedMac();
+  }
+
+  // ── USB (#614) ────────────────────────────────────────────────────────
+
+  /// Every USB printer plugged in right now. Each one seen for the first time
+  /// is saved as 80mm + Text (the owner's default for USB till printers), so
+  /// the paper-size question is never asked for USB. With [askPermission],
+  /// printers not yet allowed get Android's permission prompt.
+  Future<List<UsbPrinterInfo>> usbPrinters({bool askPermission = false}) async {
+    try {
+      final listed = (await _usb.list()).where((p) => p.id.isNotEmpty);
+      final result = <UsbPrinterInfo>[];
+      for (final p in listed) {
+        await _ensureUsbDefaults(p.id);
+        if (p.hasPermission || !askPermission) {
+          result.add(p);
+          continue;
+        }
+        _usbPermissionAsked.add(p.id);
+        final granted = await _usb.requestPermission(p.id);
+        result.add(p.copyWith(hasPermission: granted));
+      }
+      return result;
+    } catch (e) {
+      AppLogger.error('Listing USB printers failed: $e');
+      return const [];
+    }
+  }
+
+  /// The USB printer to print on, or null. Takes the first attached printer;
+  /// when Android has not allowed it yet, asks once per app run (unless
+  /// [askPermission] is false) and returns it only if allowed.
+  Future<UsbPrinterInfo?> attachedUsbPrinter({bool askPermission = true}) async {
+    try {
+      final listed = (await _usb.list()).where((p) => p.id.isNotEmpty);
+      if (listed.isEmpty) return null;
+      final first = listed.first;
+      await _ensureUsbDefaults(first.id);
+      if (first.hasPermission) return first;
+      if (!askPermission || _usbPermissionAsked.contains(first.id)) {
+        return null;
+      }
+      _usbPermissionAsked.add(first.id);
+      final granted = await _usb.requestPermission(first.id);
+      return granted ? first.copyWith(hasPermission: true) : null;
+    } catch (e) {
+      AppLogger.error('USB printer lookup failed: $e');
+      return null;
+    }
+  }
+
+  /// Sends a short test slip to the USB printer [id]. True when it printed.
+  Future<bool> testPrintUsb(String id, {String? businessName}) async {
+    final bytes = buildTestPrintBytes(
+      businessName: businessName,
+      paperSize: await paperSizeFor(id) ?? ReceiptPaperSize.mm80,
+      printStyle: await printStyleFor(id),
+    );
+    return _usb.write(id, bytes);
+  }
+
+  /// A plain ESC/POS test slip: business name, "Test print", paper size and
+  /// print style, then a cut. Printer font only (ASCII), so it works on any
+  /// ESC/POS printer before anything else is set up.
+  static List<int> buildTestPrintBytes({
+    String? businessName,
+    required ReceiptPaperSize paperSize,
+    required ReceiptPrintStyle printStyle,
+  }) {
+    List<int> line(String text) => [
+      for (final c in text.codeUnits) (c >= 0x20 && c < 0x7F) ? c : 0x3F,
+      0x0A,
+    ];
+    final name = (businessName ?? '').trim();
+    return [
+      0x1B, 0x40, // ESC @ initialise
+      0x1B, 0x61, 0x01, // ESC a 1 centre
+      if (name.isNotEmpty) ...[
+        0x1B, 0x45, 0x01, // bold on
+        ...line(name),
+        0x1B, 0x45, 0x00, // bold off
+      ],
+      ...line('Test print'),
+      ...line(
+        'Paper: ${paperSize == ReceiptPaperSize.mm80 ? '80mm' : '58mm'}',
+      ),
+      ...line(
+        'Style: ${printStyle == ReceiptPrintStyle.text ? 'Text' : 'Picture'}',
+      ),
+      0x1B, 0x64, 0x04, // ESC d 4 feed
+      0x1D, 0x56, 0x42, 0x00, // GS V B 0 feed + partial cut
+    ];
+  }
+
+  Future<void> _ensureUsbDefaults(String id) async {
+    final prefs = await SharedPreferences.getInstance();
+    final sizeKey = '$_paperSizeKeyPrefix$id';
+    final styleKey = '$_printStyleKeyPrefix$id';
+    if (!prefs.containsKey(sizeKey)) {
+      await prefs.setString(sizeKey, ReceiptPaperSize.mm80.name);
+    }
+    if (!prefs.containsKey(styleKey)) {
+      await prefs.setString(styleKey, ReceiptPrintStyle.text.name);
+    }
   }
 
   /// One-time move of the old device-wide paper size onto the printer that
@@ -265,13 +400,27 @@ class PrinterService {
     return await _writeBytes(bytes);
   }
 
+  /// Prints a complete job: on the attached USB printer first; if there is
+  /// none, or the USB write fails, on the Bluetooth printer (auto-connecting).
+  /// USB gets the bytes as they are — no ESC @ wake gap, which only Bluetooth
+  /// links need, and receipts already start with ESC @.
   Future<bool> printBytes(List<int> bytes) async {
+    final usb = await attachedUsbPrinter();
+    if (usb != null) {
+      if (await _usb.write(usb.id, bytes)) {
+        AppLogger.info('Printed on USB printer ${usb.name}');
+        return true;
+      }
+      AppLogger.error('USB print failed on ${usb.name}; trying Bluetooth');
+    }
     try {
       if (!await isConnected) {
         final connected = await autoConnect();
         if (!connected) return false;
       }
-      return await _writeJob(bytes);
+      final ok = await _writeJob(bytes);
+      if (ok) AppLogger.info('Printed on Bluetooth printer');
+      return ok;
     } catch (e) {
       AppLogger.error('Printing failed: $e');
       return false;
@@ -279,7 +428,8 @@ class PrinterService {
   }
 
   /// Writes bytes without attempting auto-connect. Use this after the user
-  /// has manually selected a device through the [PrinterPicker].
+  /// has manually selected a device through the [PrinterPicker]. Bluetooth
+  /// only: it follows a manual Bluetooth pick.
   Future<bool> printBytesDirectly(List<int> bytes) async {
     try {
       if (!await isConnected) return false;

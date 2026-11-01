@@ -4,12 +4,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
 import 'package:reebaplus_pos/shared/services/printer_service.dart';
 
+import '../../helpers/fake_usb_printer_channel.dart';
+
 class _FakePrinterService extends PrinterService {
   _FakePrinterService({
     super.writeBytes,
     super.connectToPrinter,
     super.wait,
     super.isAndroid,
+    super.usb,
     this.connected = true,
   });
 
@@ -233,6 +236,183 @@ void main() {
       expect(await service.paperSizeFor(printerA), isNull);
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.containsKey('printer_paper_size'), isFalse);
+    });
+  });
+
+  group('USB first, Bluetooth backup (#614)', () {
+    const btMac = '00:11:22:33:44:55';
+    final body = [0x1B, 0x40, 0x41, 0x42];
+
+    ({_FakePrinterService service, List<List<int>> btWrites}) build(
+      FakeUsbPrinterChannel usb,
+    ) {
+      final btWrites = <List<int>>[];
+      final service = _FakePrinterService(
+        isAndroid: true,
+        usb: usb,
+        wait: (_) async {},
+        writeBytes: (bytes) async {
+          btWrites.add(bytes);
+          return true;
+        },
+      );
+      return (service: service, btWrites: btWrites);
+    }
+
+    test('an attached USB printer gets the bytes as-is, no Bluetooth',
+        () async {
+      final usb = FakeUsbPrinterChannel(printers: [fakeUsbPrinter()]);
+      final r = build(usb);
+
+      expect(await r.service.printBytes(body), isTrue);
+      expect(usb.writes.single.$1, 'usb:1208:514');
+      // No ESC @ wake write and no wake gap: the job goes over unchanged.
+      expect(usb.writes.single.$2, body);
+      expect(r.btWrites, isEmpty);
+    });
+
+    test('a failed USB write falls back to Bluetooth', () async {
+      final usb = FakeUsbPrinterChannel(
+        printers: [fakeUsbPrinter()],
+        writeSucceeds: false,
+      );
+      final r = build(usb);
+
+      expect(await r.service.printBytes(body), isTrue);
+      expect(usb.writes, hasLength(1));
+      expect(r.btWrites, [
+        [0x1B, 0x40],
+        body,
+      ]);
+    });
+
+    test('no USB printer prints on Bluetooth', () async {
+      final usb = FakeUsbPrinterChannel();
+      final r = build(usb);
+
+      expect(await r.service.printBytes(body), isTrue);
+      expect(usb.writes, isEmpty);
+      expect(r.btWrites.last, body);
+    });
+
+    test('USB access denied prints on Bluetooth and asks only once', () async {
+      final usb = FakeUsbPrinterChannel(
+        printers: [fakeUsbPrinter(hasPermission: false)],
+        grantPermission: false,
+      );
+      final r = build(usb);
+
+      expect(await r.service.printBytes(body), isTrue);
+      expect(await r.service.printBytes(body), isTrue);
+      expect(usb.permissionRequests, ['usb:1208:514']);
+      expect(usb.writes, isEmpty);
+      expect(r.btWrites.where((b) => b == body), hasLength(2));
+    });
+
+    test('USB access granted on the prompt prints on USB', () async {
+      final usb = FakeUsbPrinterChannel(
+        printers: [fakeUsbPrinter(hasPermission: false)],
+      );
+      final r = build(usb);
+
+      expect(await r.service.printBytes(body), isTrue);
+      expect(usb.writes, hasLength(1));
+      expect(r.btWrites, isEmpty);
+    });
+
+    test('a USB printer seen for the first time is saved as 80mm + Text',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'printer_print_style:usb:9:9': 'picture',
+      });
+      final usb = FakeUsbPrinterChannel(
+        printers: [fakeUsbPrinter(), fakeUsbPrinter(id: 'usb:9:9')],
+      );
+      final service = build(usb).service;
+
+      await service.usbPrinters();
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('printer_paper_size:usb:1208:514'), 'mm80');
+      expect(prefs.getString('printer_print_style:usb:1208:514'), 'text');
+      // An existing choice is never overwritten.
+      expect(await service.printStyleFor('usb:9:9'), ReceiptPrintStyle.picture);
+    });
+
+    test('a saved USB choice is kept on the next sighting', () async {
+      SharedPreferences.setMockInitialValues({
+        'printer_paper_size:usb:1208:514': 'mm58',
+      });
+      final service =
+          build(FakeUsbPrinterChannel(printers: [fakeUsbPrinter()])).service;
+
+      await service.attachedUsbPrinter();
+
+      expect(
+        await service.paperSizeFor('usb:1208:514'),
+        ReceiptPaperSize.mm58,
+      );
+    });
+
+    test('currentPrinterId: allowed USB, else last Bluetooth, else none',
+        () async {
+      SharedPreferences.setMockInitialValues({'last_printer_mac': btMac});
+      final usb = FakeUsbPrinterChannel(printers: [fakeUsbPrinter()]);
+      final service = build(usb).service;
+
+      expect(await service.currentPrinterId(), 'usb:1208:514');
+
+      usb.printers = [fakeUsbPrinter(hasPermission: false)];
+      expect(await service.currentPrinterId(), btMac);
+      // Looking up the current printer never shows the permission prompt.
+      expect(usb.permissionRequests, isEmpty);
+
+      usb.printers = [];
+      expect(await service.currentPrinterId(), btMac);
+
+      SharedPreferences.setMockInitialValues({});
+      expect(await service.currentPrinterId(), isNull);
+    });
+
+    test('currentPrintStyle reads the USB printer when one is attached',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'last_printer_mac': btMac,
+        'printer_print_style:$btMac': 'picture',
+        'printer_print_style:usb:1208:514': 'text',
+      });
+      final usb = FakeUsbPrinterChannel(printers: [fakeUsbPrinter()]);
+      final service = build(usb).service;
+
+      expect(await service.currentPrintStyle(), ReceiptPrintStyle.text);
+      usb.printers = [];
+      expect(await service.currentPrintStyle(), ReceiptPrintStyle.picture);
+    });
+
+    test('printBytesDirectly stays Bluetooth-only', () async {
+      final usb = FakeUsbPrinterChannel(printers: [fakeUsbPrinter()]);
+      final r = build(usb);
+
+      expect(await r.service.printBytesDirectly(body), isTrue);
+      expect(usb.writes, isEmpty);
+      expect(r.btWrites.last, body);
+    });
+
+    test('test print writes a cut slip to the USB printer', () async {
+      final usb = FakeUsbPrinterChannel(printers: [fakeUsbPrinter()]);
+      final service = build(usb).service;
+
+      expect(
+        await service.testPrintUsb('usb:1208:514', businessName: 'Ada Bar'),
+        isTrue,
+      );
+      final bytes = usb.writes.single.$2;
+      expect(bytes.take(2), [0x1B, 0x40]);
+      expect(bytes.skip(bytes.length - 4), [0x1D, 0x56, 0x42, 0x00]);
+      final text = String.fromCharCodes(bytes);
+      expect(text, contains('Ada Bar'));
+      expect(text, contains('Test print'));
+      expect(text, contains('Paper: 80mm'));
     });
   });
 }
