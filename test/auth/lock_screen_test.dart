@@ -26,6 +26,7 @@ import 'package:reebaplus_pos/core/services/supabase_cloud_transport.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
 import 'package:reebaplus_pos/features/auth/widgets/pin_keypad.dart';
+import 'package:reebaplus_pos/shared/services/active_store_memory.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/services/pin_hasher.dart';
@@ -152,6 +153,43 @@ void main() {
     expect(auth.value, isNull);
     expect(await auth.getDeviceUserId(), alice.id);
     expect(auth.deviceUserIdNotifier.value, alice.id);
+  });
+
+  test('lockApp keeps the picked store and its saved key (#653)', () async {
+    final alice = await addStaff('Alice');
+    await auth.saveDeviceUserId(alice.id);
+    auth.value = alice;
+    final nav = NavigationService();
+    nav.beginStoreRestore(businessId: biz, userId: alice.id);
+    nav.setLockedStore('store-b');
+    await pumpEventQueue();
+
+    auth.lockApp();
+    await pumpEventQueue();
+
+    expect(nav.lockedStoreId.value, 'store-b');
+    expect(nav.storeExplicitlyChosen.value, isTrue);
+    expect(await ActiveStoreMemory.read(biz, alice.id),
+        const SavedStorePick.store('store-b'));
+    nav.forgetSavedStore();
+    nav.clearStoreLock();
+  });
+
+  test('log out wipes the remembered store (#653)', () async {
+    final alice = await addStaff('Alice');
+    await auth.saveDeviceUserId(alice.id);
+    auth.value = alice;
+    final nav = NavigationService();
+    nav.beginStoreRestore(businessId: biz, userId: alice.id);
+    nav.setLockedStore('store-b');
+    await pumpEventQueue();
+    expect(await ActiveStoreMemory.read(biz, alice.id), isNotNull);
+
+    await auth.logOutCurrentUser();
+    await pumpEventQueue();
+
+    expect(await ActiveStoreMemory.read(biz, alice.id), isNull);
+    expect(nav.lockedStoreId.value, isNull);
   });
 
   test('log out wipes the device even when another staff member has a PIN',

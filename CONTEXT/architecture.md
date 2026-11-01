@@ -389,6 +389,7 @@ exists; the Browse product sheet shows them as a swipeable gallery.
 | Active user PIN hash | flutter_secure_storage | Device-local unlock factor. Never leaves the device. | **Never** |
 | Auth refresh token / JWT | flutter_secure_storage | Session credential. | **Never** (re-issued by Supabase Auth) |
 | Active business ID, active store ID, last-active staff pointer | flutter_secure_storage | Session pointers for cold start and the lock screen. | No |
+| Selected store (`active_store.<businessId>.<userId>` = store id, or `__all__` for a deliberate All Stores pick, #653) | SharedPreferences | Only an explicit pick through the store picker is saved (the silent first-store default never is). Restored as an explicit pick at session start (unlock or cold start) once validated against the user's selectable stores (and all-stores access for `__all__`); an invalid pick is dropped and its key deleted. Locking keeps it; logout and every wipe (`clearAllData`, per-business `clearBusinessData`) remove it. Local preference, not synced. | No |
 | Subscription status (Trial/Active/Inactive) | Drift (SQLite), read-only mirror | Surfaced in Settings and name badges. Written only by the Admin Hub via sync pull. | Pulled, never pushed |
 | In-flight cart, transient UI state | Riverpod (memory) | Ephemeral working state for the current screen. | No |
 

@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:reebaplus_pos/shared/services/active_store_memory.dart';
+
+/// Where the remembered-store restore is (#653). `idle` = nothing to wait for;
+/// `reading` = the saved pick is being read; `pickReady` = a saved pick waits
+/// for [NavigationService.applySavedStorePick].
+enum StoreRestorePhase { idle, reading, pickReady }
 
 class NavigationService {
   static final NavigationService _instance = NavigationService._internal();
@@ -411,12 +417,112 @@ class NavigationService {
     allStoresChosen.value = false;
   }
 
-  /// Called on logout — removes all store restrictions.
+  /// Called on logout — removes all store restrictions (in memory only). The
+  /// lock path (`AuthService.lockApp`) deliberately does NOT call this (#653):
+  /// the picked store survives a lock.
   void clearStoreLock() {
     storeLocked.value = false;
     lockedStoreId.value = null;
     storeExplicitlyChosen.value = false;
     allStoresChosen.value = false;
+    _savedPick = null;
+    _restoreEpoch++;
+    storeRestorePhase.value = StoreRestorePhase.idle;
+  }
+
+  // ── Remembered store (#653) ───────────────────────────────────────────────
+  //
+  // An explicit pick is saved per business + user ([ActiveStoreMemory]) and put
+  // back on the next session start (unlock or cold start). Ordering matters so
+  // the first store never flashes before the saved one: [beginStoreRestore]
+  // runs synchronously from `AuthService.setCurrentUser` and raises
+  // [storeRestorePhase]; MainLayout holds its silent first-store default while
+  // it is true and calls [applySavedStorePick] once the selectable stores are
+  // known.
+
+  String? _memoryBusinessId;
+  String? _memoryUserId;
+  SavedStorePick? _savedPick;
+  int _restoreEpoch = 0;
+
+  /// Not idle from the start of a session until the saved pick has been applied,
+  /// discarded, or found absent. MainLayout's silent default waits for idle.
+  final ValueNotifier<StoreRestorePhase> storeRestorePhase =
+      ValueNotifier<StoreRestorePhase>(StoreRestorePhase.idle);
+
+  /// True when a saved pick was read and is waiting for [applySavedStorePick].
+  bool get hasSavedStorePick => _savedPick != null;
+
+  /// True when the waiting pick is a deliberate "All Stores" (applying it needs
+  /// the user's role resolved, to know they may still view all stores).
+  bool get savedPickIsAllStores => _savedPick?.isAllStores ?? false;
+
+  /// Starts the restore for a session. Synchronous part: remember the scope
+  /// and raise [storeRestorePhase]. Then reads the saved pick; with nothing
+  /// saved (or on a read error) the pending flag drops and the default runs.
+  void beginStoreRestore({required String businessId, required String userId}) {
+    _memoryBusinessId = businessId;
+    _memoryUserId = userId;
+    _savedPick = null;
+    final epoch = ++_restoreEpoch;
+    storeRestorePhase.value = StoreRestorePhase.reading;
+    ActiveStoreMemory.read(businessId, userId).then<void>((pick) {
+      if (epoch != _restoreEpoch) return; // a newer session / logout won
+      _savedPick = pick;
+      storeRestorePhase.value = pick == null
+          ? StoreRestorePhase.idle
+          : StoreRestorePhase.pickReady;
+    }).catchError((Object e) {
+      debugPrint('[NavigationService] active store read failed: $e');
+      if (epoch == _restoreEpoch) storeRestorePhase.value = StoreRestorePhase.idle;
+    });
+  }
+
+  /// Applies the waiting saved pick as an EXPLICIT pick when it is still valid
+  /// for this user: a concrete store must be in [selectableStoreIds]; "All
+  /// Stores" needs [canViewAllStores]. An invalid pick is dropped and its key
+  /// deleted, so MainLayout's default takes over. Always ends the pending
+  /// state. Returns true when a pick was applied.
+  bool applySavedStorePick({
+    required Set<String> selectableStoreIds,
+    required bool canViewAllStores,
+  }) {
+    final pick = _savedPick;
+    _savedPick = null;
+    var applied = false;
+    if (pick != null) {
+      final valid = pick.isAllStores
+          ? canViewAllStores
+          : selectableStoreIds.contains(pick.storeId);
+      if (valid) {
+        _applyStore(pick.storeId, explicit: true);
+        applied = true;
+      } else {
+        _deleteSavedKey();
+      }
+    }
+    storeRestorePhase.value = StoreRestorePhase.idle;
+    return applied;
+  }
+
+  /// Logout / full logout: forget the saved pick for the current session user
+  /// (the device is wiped; the next user must not inherit it).
+  void forgetSavedStore() {
+    _deleteSavedKey();
+    _memoryBusinessId = null;
+    _memoryUserId = null;
+    _savedPick = null;
+    _restoreEpoch++;
+    storeRestorePhase.value = StoreRestorePhase.idle;
+  }
+
+  void _deleteSavedKey() {
+    final b = _memoryBusinessId;
+    final u = _memoryUserId;
+    if (b == null || u == null) return;
+    ActiveStoreMemory.clear(b, u).catchError(
+      (Object e) => debugPrint('[NavigationService] active store clear: $e'),
+    );
   }
 
   /// Resets navigation state to defaults. Call on logout/lock so the next
@@ -447,6 +553,21 @@ class NavigationService {
   /// prompting multi-store users until they choose. MainLayout's silent
   /// confined-user default passes `explicit: false`.
   void setLockedStore(String? id, {bool explicit = true}) {
+    _applyStore(id, explicit: explicit);
+    if (!explicit) return;
+    // A deliberate pick wins over any pick still waiting to be restored (#653),
+    // and is remembered. Fire-and-forget: a prefs hiccup must never fail a pick.
+    _savedPick = null;
+    storeRestorePhase.value = StoreRestorePhase.idle;
+    final b = _memoryBusinessId;
+    final u = _memoryUserId;
+    if (b == null || u == null) return;
+    ActiveStoreMemory.save(b, u, id).catchError(
+      (Object e) => debugPrint('[NavigationService] active store save: $e'),
+    );
+  }
+
+  void _applyStore(String? id, {required bool explicit}) {
     lockedStoreId.value = id;
     storeExplicitlyChosen.value = explicit && id != null;
     // Only a deliberate "All Stores" pick (explicit, id == null) latches the

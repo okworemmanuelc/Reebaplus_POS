@@ -7,6 +7,9 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #653: Remember the selected store (2026-11-01, branch `feat/653-remember-selected-store`)
+A deliberate store pick (store picker, deep links) is saved per business and user in SharedPreferences (`ActiveStoreMemory`, key `active_store.<businessId>.<userId>`, `__all__` for All Stores) and put back as an explicit pick on unlock and cold start, so POS does not ask again. `setCurrentUser` calls `NavigationService.beginStoreRestore` (phase `reading`); MainLayout holds its silent first-store default until the pick is applied or found absent/invalid (no flash). `lockApp()` no longer clears the store; logout/`fullLogout` forget it and `clearAllData`/`clearBusinessData` remove the keys. No Drift or cloud change.
+
 ### Issue #648: Customers list search, debtors first, phone optional (2026-11-01, branch `feat/648-customers-search-debt-first`)
 The Customers list has a "Search name or phone" field as its first scrolling item (name, or phone ignoring spaces and symbols; address not searched). Customers who owe (`balance < 0`) come first, biggest debt first, ties by name; the rest keep the name order; same order while searching. Phone is optional on the Add and Edit sheets. New `customerListView` / `customerMatchesQuery` in `features/customers/data/customer_list_view.dart`; the payment sheet picker now uses the same matcher (Cart picker untouched). App-only: no table, sync or money change, so no pos-parity issue. Tests: `test/customers/customer_list_view_test.dart` and the list/sheet cases in `customers_screen_redesign_test.dart`; customers goldens regenerated.
 

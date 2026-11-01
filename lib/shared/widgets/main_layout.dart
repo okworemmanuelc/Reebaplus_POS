@@ -401,7 +401,34 @@ class _MainLayoutState extends ConsumerState<MainLayout>
     // which we must NOT override here. The mutation is deferred to post-frame so
     // it never runs during build (lockedStoreId has listeners that rebuild).
     final selectableStores = ref.watch(selectableStoresProvider);
-    if (selectableStores.isNotEmpty) {
+    // #653: the store this user last picked is put back BEFORE the silent
+    // default below may run, so the first store never flashes and then jumps.
+    // `storeRestorePhase` leaves idle synchronously at session start and returns
+    // to idle when the pick is applied (or found absent / invalid). A deliberate
+    // "All Stores" also needs the role resolved: whether the user may still view
+    // all stores is only known then.
+    final restorePhase = ref.watch(storeRestorePhaseProvider).value;
+    final role = ref.watch(currentUserRoleProvider);
+    final permsResolved =
+        role != null && ref.watch(rolePermissionsProvider(role.id)).hasValue;
+    if (restorePhase != StoreRestorePhase.idle) {
+      if (restorePhase == StoreRestorePhase.pickReady &&
+          selectableStores.isNotEmpty &&
+          (!nav.savedPickIsAllStores || permsResolved)) {
+        final ids = selectableStores.map((s) => s.id).toSet();
+        final canViewAll = ref.read(canViewAllStoresProvider);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          if (nav.storeRestorePhase.value != StoreRestorePhase.pickReady) {
+            return;
+          }
+          nav.applySavedStorePick(
+            selectableStoreIds: ids,
+            canViewAllStores: canViewAll,
+          );
+        });
+      }
+    } else if (selectableStores.isNotEmpty) {
       final active = nav.lockedStoreId.value;
       final activeValid =
           active != null && selectableStores.any((s) => s.id == active);
@@ -436,9 +463,6 @@ class _MainLayoutState extends ConsumerState<MainLayout>
     // the role resolves is cheap, and it will not yank a user who has already
     // moved to another tab.
     final canSell = Gates.makeSale.allows(ref);
-    final role = ref.watch(currentUserRoleProvider);
-    final permsResolved =
-        role != null && ref.watch(rolePermissionsProvider(role.id)).hasValue;
     if (permsResolved) {
       final landing = canSell
           ? NavigationService.landingTabForRole(role.slug)
