@@ -89,9 +89,7 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
           ),
         ),
         // One line: test/tour/drawer_presence_ban_test.dart reads it line by line.
-        drawer: context.isRailLayout
-            ? null
-            : const AppDrawer(activeRoute: 'customers'),
+        drawer: context.isRailLayout ? null : const AppDrawer(activeRoute: 'customers'),
         body: DrawerHost(
           // Side insets (a cutout, a sideways nav bar) are cleared here; under
           // MainLayout they are already removed, so this is a no-op there.
