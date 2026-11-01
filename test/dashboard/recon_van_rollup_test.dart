@@ -127,7 +127,7 @@ OrderWithItems _roadSale({
           orderId: id,
           productId: product.id,
           storeId: _van,
-          quantity: qty,
+          quantity: qty.toDouble(),
           unitPriceKobo: unitPriceKobo,
           // A road line books no per-sale COGS by design (ADR 0019).
           buyingPriceKobo: 0,

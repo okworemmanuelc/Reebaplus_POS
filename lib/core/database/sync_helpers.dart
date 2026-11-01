@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 
 /// Converts a camelCase string to snake_case. If the string already contains
@@ -30,6 +32,7 @@ class CloudValueSerializer extends ValueSerializer {
     if (value is DateTime) {
       return value.toUtc().toIso8601String();
     }
+    if (value is double) return _wholeAsInt(value);
     return _defaultSerializer.toJson<T>(value);
   }
 
@@ -40,6 +43,32 @@ class CloudValueSerializer extends ValueSerializer {
 }
 
 const _cloudSerializer = CloudValueSerializer();
+
+/// Quarter quantities (#627) are RealColumns, so a whole stock count like `5`
+/// is a Dart `5.0`, which `jsonEncode` writes as `5.0`. A cloud `integer`
+/// column (before migration 0239) or an RPC `::int` cast rejects `5.0`, and an
+/// older app version could mis-read it. Whole doubles therefore go out as
+/// JSON integers (`5`); `0.5` stays `0.5`. Safe for every other real column
+/// too: Postgres `double precision` / `numeric` accept `5`.
+dynamic _wholeAsInt(double v) =>
+    v.isFinite && v == v.roundToDouble() && v.abs() < 9007199254740992
+    ? v.toInt()
+    : v;
+
+/// `jsonEncode` for outbox / RPC payloads: every whole-valued double (a `5.0`
+/// stock quantity) is written as a JSON integer (`5`), nested maps and lists
+/// included. See [_wholeAsInt] for why. Fractions (`0.5`) pass through.
+String encodeSyncPayload(Object? payload) =>
+    jsonEncode(_normalizeWholeNumbers(payload));
+
+dynamic _normalizeWholeNumbers(dynamic v) {
+  if (v is double) return _wholeAsInt(v);
+  if (v is Map) {
+    return {for (final e in v.entries) e.key: _normalizeWholeNumbers(e.value)};
+  }
+  if (v is List) return [for (final e in v) _normalizeWholeNumbers(e)];
+  return v;
+}
 
 /// Robust serialization helper to extract cloud-ready key-value maps
 /// from any Drift `Insertable` (supporting both `DataClass` and `Companion`).
@@ -69,6 +98,8 @@ Map<String, dynamic> serializeInsertable(Insertable row) {
     var val = v;
     if (val is DateTime) {
       val = _cloudSerializer.toJson(val);
+    } else if (val is double) {
+      val = _wholeAsInt(val);
     }
     return MapEntry(snakeKey, val);
   });

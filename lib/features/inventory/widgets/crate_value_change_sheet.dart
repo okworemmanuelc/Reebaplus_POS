@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/crates/crate_value_change_impact.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -88,7 +89,7 @@ class CrateValueChangeSheet extends StatelessWidget {
                 Padding(
                   padding: EdgeInsets.only(bottom: context.getRSize(4)),
                   child: Text(
-                    '${m.label} (${m.count} crates): '
+                    '${m.label} (${formatQty(m.count)} crates): '
                     '${formatCurrency(m.beforeKobo / 100)} to '
                     '${formatCurrency(m.afterKobo / 100)} '
                     '(${_signed(m.deltaKobo)})',

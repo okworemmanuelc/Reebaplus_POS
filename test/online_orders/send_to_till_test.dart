@@ -315,7 +315,7 @@ void main() {
   });
 
   test('crates behave exactly as in a till sale', () async {
-    Future<({List<OrderCrateLineData> lines, int ledger})> crates(
+    Future<({List<OrderCrateLineData> lines, double ledger})> crates(
       String orderNumber,
     ) async {
       final o = await (db.select(db.orders)
@@ -329,7 +329,7 @@ void main() {
           .get();
       return (
         lines: lines,
-        ledger: ledger.fold<int>(0, (s, r) => s + r.quantityDelta),
+        ledger: ledger.fold<double>(0, (s, r) => s + r.quantityDelta),
       );
     }
 
@@ -382,7 +382,7 @@ Future<String> _product(
       businessId: businessId,
       productId: id,
       storeId: storeId,
-      quantity: Value(stock),
+      quantity: Value(stock.toDouble()),
     ),
   );
   return id;

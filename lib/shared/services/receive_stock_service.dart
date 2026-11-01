@@ -139,7 +139,7 @@ class ReceiveStockService {
         await _db.inventoryDao.adjustStock(
           line.productId,
           storeId,
-          line.qty,
+          line.qty.toDouble(),
           'Stock received',
           staffId,
           trackCost: false,
@@ -160,7 +160,7 @@ class ReceiveStockService {
         await _db.costBatchesDao.recordInflowBatch(
           productId: line.productId,
           storeId: storeId,
-          quantity: line.qty,
+          quantity: line.qty.toDouble(),
           costKobo: line.buyingPriceKobo,
           receivedAt: dateReceived,
         );
@@ -192,7 +192,7 @@ class ReceiveStockService {
           await _db.cratePoolDao.recordReceiveFromSupplier(
             supplierId: supplierId!,
             manufacturerId: manufacturerId,
-            quantity: cratesReceived,
+            quantity: cratesReceived.toDouble(),
             performedBy: staffId,
             storeId: storeId,
             // #212, ADR 0023 rule 6 — the MONEY half of the same event needs no
@@ -216,14 +216,14 @@ class ReceiveStockService {
         if (emptiesReturned > 0) {
           await _db.cratePoolDao.recordCrateReturnByManufacturer(
             manufacturerId: manufacturerId,
-            quantity: emptiesReturned,
+            quantity: emptiesReturned.toDouble(),
             performedBy: staffId,
             storeId: storeId,
           );
           await _db.cratePoolDao.recordReturnToSupplier(
             supplierId: supplierId!,
             manufacturerId: manufacturerId,
-            quantity: emptiesReturned,
+            quantity: emptiesReturned.toDouble(),
             performedBy: staffId,
             storeId: storeId,
           );

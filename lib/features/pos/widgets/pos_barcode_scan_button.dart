@@ -303,7 +303,7 @@ class _PosBarcodeScanButtonState extends ConsumerState<PosBarcodeScanButton> {
     final outcome = resolveProduct(
       product: product,
       storeProducts: [
-        ProductDataWithStock(product: product, totalStock: stock),
+        ProductDataWithStock(product: product, totalStock: stock.toDouble()),
       ],
       cartQty: _cartQtyOf(product.id),
       tier: widget.tier,

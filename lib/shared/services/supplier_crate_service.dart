@@ -1,3 +1,4 @@
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 
@@ -22,7 +23,7 @@ class SupplierCrateService {
     required String supplierName,
     required String manufacturerId,
     required String manufacturerName,
-    required int quantity,
+    required double quantity,
     required String staffId,
     String? storeId,
     int depositPaidKobo = 0,
@@ -47,7 +48,7 @@ class SupplierCrateService {
       await _db.activityLogDao.logActivity(
         action: 'supplier.crate_received',
         description:
-            'Received $quantity $manufacturerName crate${quantity == 1 ? '' : 's'} '
+            'Received ${formatQty(quantity)} $manufacturerName crate${quantity == 1 ? '' : 's'} '
             'from $supplierName$depositSuffix',
         staffId: staffId,
         storeId: storeId,
@@ -64,7 +65,7 @@ class SupplierCrateService {
     required String supplierName,
     required String manufacturerId,
     required String manufacturerName,
-    required int quantity,
+    required double quantity,
     required String staffId,
     String? storeId,
     int depositRefundedKobo = 0,
@@ -89,7 +90,7 @@ class SupplierCrateService {
       await _db.activityLogDao.logActivity(
         action: 'supplier.crate_returned',
         description:
-            'Returned $quantity $manufacturerName crate${quantity == 1 ? '' : 's'} '
+            'Returned ${formatQty(quantity)} $manufacturerName crate${quantity == 1 ? '' : 's'} '
             'to $supplierName$depositSuffix',
         staffId: staffId,
         storeId: storeId,

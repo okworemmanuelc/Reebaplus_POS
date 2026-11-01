@@ -62,11 +62,11 @@ void main() {
         manufacturerId: manufacturerId,
         storeId: store,
         performedBy: userId,
-        quantity: quantity,
+        quantity: quantity.toDouble(),
         pricePerCrateKobo: pricePerCrateKobo,
       );
 
-  Future<int> pool({String? store}) async =>
+  Future<double> pool({String? store}) async =>
       (await db.cratePoolDao
               .watchEmptiesPoolByManufacturer(storeId: store)
               .first)[manufacturerId] ??

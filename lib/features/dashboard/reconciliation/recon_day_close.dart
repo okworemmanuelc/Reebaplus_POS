@@ -45,7 +45,7 @@ DailyClosingFigures dailyClosingFiguresFrom(ReconData d) => DailyClosingFigures(
   stockCogsKobo: d.stockCogsKobo,
   stockExpectedClosingKobo: d.stockExpectedClosingKobo,
   itemsSold: d.itemsSold,
-  shortageUnits: d.shortageUnits,
+  shortageUnits: d.shortageUnits.toDouble(),
 );
 
 /// One reconciliation card's AS-REVIEWED vs CURRENT figure, for the persisted
@@ -241,7 +241,7 @@ ReconClosingComparison reconClosingComparison(
     current: live.itemsSold,
   ),
   shortageUnits: ReconFigureDelta(
-    reviewed: snapshot.shortageUnits,
+    reviewed: snapshot.shortageUnits.round(),
     current: live.shortageUnits,
   ),
 );

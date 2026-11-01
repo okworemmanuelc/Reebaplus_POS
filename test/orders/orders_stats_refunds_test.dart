@@ -96,7 +96,7 @@ void main() {
           orderId: 'placeholder',
           productId: Value(productId),
           storeId: storeId,
-          quantity: qty,
+          quantity: qty.toDouble(),
           unitPriceKobo: 100000,
           totalKobo: goodsKobo,
         ),

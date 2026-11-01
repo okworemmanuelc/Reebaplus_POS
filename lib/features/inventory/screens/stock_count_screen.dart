@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/features/subscription/read_only_store_gate.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
@@ -126,7 +127,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
       _controllers.clear();
       for (final item in items) {
         _controllers.add(
-          TextEditingController(text: item.totalStock.toString()),
+          TextEditingController(text: formatQty(item.totalStock)),
         );
       }
       _loading = false;
@@ -142,14 +143,14 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
     return null;
   }
 
-  int _diff(int index) {
+  double _diff(int index) {
     // A blank ACTUAL field means "not counted yet", NOT "counted zero" — don't
     // coerce it to 0, or saving would drive that product's stock to 0 and record
     // a false shortage. Blank → no change (skipped on save). A typed "0" is a
     // real count of zero and still produces a diff.
     final raw = _controllers[index].text.trim();
     if (raw.isEmpty) return 0;
-    final actual = int.tryParse(raw) ?? 0;
+    final actual = (int.tryParse(raw) ?? 0).toDouble();
     return actual - _items[index].totalStock;
   }
 
@@ -364,12 +365,12 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
           ),
           SizedBox(width: ctx.getRSize(8)),
           Text(
-            '${item.totalStock} → $actual',
+            '${formatQty(item.totalStock)} → ${formatQty(actual)}',
             style: ctx.regularStyle(12).copyWith(color: muted),
           ),
           SizedBox(width: ctx.getRSize(10)),
           TagPill(
-            label: '$sign$d',
+            label: '$sign${formatQty(d)}',
             tone: d < 0 ? TagPillTone.danger : TagPillTone.green,
           ),
         ],
@@ -408,8 +409,8 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
         final sign = diff > 0 ? '+' : '';
         await logService.logAction(
           'stock_count',
-          'Stock count: ${item.product.name} adjusted by $sign$diff '
-              '(system: ${item.totalStock}, actual: ${item.totalStock + diff})',
+          'Stock count: ${item.product.name} adjusted by $sign${formatQty(diff)} '
+              '(system: ${formatQty(item.totalStock)}, actual: ${formatQty(item.totalStock + diff)})',
           productId: item.product.id,
           storeId: item.storeId,
         );
@@ -417,9 +418,10 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
         changedLines.add({
           'p': item.product.id,
           'n': item.product.name,
-          's': item.totalStock,
-          'a': item.totalStock + diff,
-          'd': diff,
+          // Whole values stay JSON integers (lines_json is synced text).
+          's': Qty.toJson(item.totalStock),
+          'a': Qty.toJson(item.totalStock + diff),
+          'd': Qty.toJson(diff),
         });
       }
 
@@ -556,7 +558,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
               if (qty > p.totalStock) {
                 AppNotification.showError(
                   sheetCtx,
-                  'Only ${p.totalStock} in stock.',
+                  'Only ${formatQty(p.totalStock)} in stock.',
                 );
                 return;
               }
@@ -575,7 +577,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                   await db.inventoryDao.adjustStock(
                     p.product.id,
                     p.storeId,
-                    -qty,
+                    -qty.toDouble(),
                     reason,
                     staffId,
                   );
@@ -586,7 +588,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                     await db.cratePoolDao.recordFullCrateDamage(
                       manufacturerId: p.product.manufacturerId!,
                       storeId: p.storeId,
-                      crates: qty,
+                      crates: qty.toDouble(),
                       performedBy: staffId,
                       reason: reasonKey,
                     );
@@ -679,7 +681,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
                         return DropdownMenuItem(
                           value: it,
                           child: Text(
-                            '${it.product.name} (${it.totalStock})',
+                            '${it.product.name} (${formatQty(it.totalStock)})',
                             overflow: TextOverflow.ellipsis,
                           ),
                         );
@@ -1322,7 +1324,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
             : diff < 0
             ? f.danger
             : _subtext;
-        final diffLabel = diff == 0 ? '—' : (diff > 0 ? '+$diff' : '$diff');
+        final diffLabel = diff == 0 ? '—' : (diff > 0 ? '+${formatQty(diff)}' : formatQty(diff));
 
         return Container(
           margin: EdgeInsets.only(bottom: context.getRSize(8)),
@@ -1355,7 +1357,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
               SizedBox(
                 width: context.getRSize(56),
                 child: Text(
-                  '$systemStock',
+                  formatQty(systemStock),
                   textAlign: TextAlign.center,
                   style: context.semiBoldStyle(13).copyWith(color: _subtext),
                 ),

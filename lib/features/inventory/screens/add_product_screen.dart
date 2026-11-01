@@ -1,3 +1,4 @@
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'dart:async';
 
 import 'package:drift/drift.dart' as drift;
@@ -1027,7 +1028,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         ),
         // Receive Stock routes the opening quantity to its delivery list
         // below instead of into a store.
-        initialStock: widget.receiveMode ? null : intent.initialStock,
+        initialStock: widget.receiveMode ? null : intent.initialStock.toDouble(),
         storeId: intent.storeId,
         performedBy: auth.currentUser?.id,
       );
@@ -1285,7 +1286,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
           ),
         ),
         content: Text(
-          'You sold ${offer.unitsUncosted} unit(s) of "$productName" before a '
+          'You sold ${formatQty(offer.unitsUncosted)} unit(s) of "$productName" before a '
           'cost was recorded. Apply $costLabel per unit to those past sales so '
           'their profit is restated in the period they happened?',
         ),
@@ -1305,7 +1306,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     final restated = await db.costBatchesDao.applyCostBackfill(
       offer,
       description:
-          '$productName: applied $costLabel/unit to ${offer.unitsUncosted} '
+          '$productName: applied $costLabel/unit to ${formatQty(offer.unitsUncosted)} '
           'unit(s) across ${offer.lineIds.length} past uncosted sale(s)',
       staffId: staffId,
     );

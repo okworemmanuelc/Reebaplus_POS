@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/utils/number_format.dart';
@@ -344,8 +345,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           if (!inScope(i.item.storeId)) continue;
           if (i.item.buyingPriceKobo > 0) {
             pricedRevenue +=
-                sign * i.item.quantity * i.item.unitPriceKobo / 100.0;
-            cogs += sign * i.item.quantity * i.item.buyingPriceKobo / 100.0;
+                sign *
+                lineTotalKobo(i.item.unitPriceKobo, i.item.quantity) /
+                100.0;
+            cogs +=
+                sign *
+                lineTotalKobo(i.item.buyingPriceKobo, i.item.quantity) /
+                100.0;
           }
         }
         discounts += sign * orderDiscountKobo(o, inScope: inScope) / 100.0;

@@ -37,7 +37,7 @@ class ShipmentsDao extends DatabaseAccessor<AppDatabase>
 
 class LastShipmentInfo {
   final DateTime date;
-  final int quantity;
+  final double quantity;
   final int unitPriceKobo;
   final int totalKobo;
 
@@ -339,7 +339,7 @@ class SupplierLedgerStats {
 class SupplierCrateBalanceWithManufacturer {
   final String manufacturerId;
   final String manufacturerName;
-  final int balance;
+  final double balance;
   final int depositRateKobo;
   SupplierCrateBalanceWithManufacturer({
     required this.manufacturerId,
@@ -369,7 +369,7 @@ class SupplierCrateLedgerDao extends DatabaseAccessor<AppDatabase>
   Future<void> recordCrateReceiptFromSupplier({
     required String supplierId,
     required String manufacturerId,
-    required int quantity,
+    required double quantity,
     required String performedBy,
     String? storeId,
     int depositPaidKobo = 0,
@@ -393,7 +393,7 @@ class SupplierCrateLedgerDao extends DatabaseAccessor<AppDatabase>
   Future<void> recordCrateReturnToSupplier({
     required String supplierId,
     required String manufacturerId,
-    required int quantity,
+    required double quantity,
     required String performedBy,
     String? storeId,
     int depositRefundedKobo = 0,
@@ -448,7 +448,7 @@ class SupplierCrateLedgerDao extends DatabaseAccessor<AppDatabase>
   /// the running totals, NOT the net balance. Both are non-negative. Driven off
   /// `quantity_delta` (+ on `received`, − on `returned`) grouped by movement
   /// type; `adjusted` corrections are excluded from these gross counts.
-  Stream<({int received, int returned})> watchMovementTotals(
+  Stream<({double received, double returned})> watchMovementTotals(
     String supplierId,
   ) {
     final qtySum = supplierCrateLedger.quantityDelta.sum();
@@ -460,11 +460,11 @@ class SupplierCrateLedgerDao extends DatabaseAccessor<AppDatabase>
       )
       ..groupBy([supplierCrateLedger.movementType]);
     return query.watch().map((rows) {
-      var received = 0;
-      var returned = 0;
+      var received = 0.0;
+      var returned = 0.0;
       for (final r in rows) {
         final type = r.read(supplierCrateLedger.movementType);
-        final sum = r.read(qtySum) ?? 0;
+        final sum = r.read(qtySum) ?? 0.0;
         if (type == 'received') {
           received += sum;
         } else if (type == 'returned') {
@@ -497,7 +497,7 @@ class SupplierCrateBalancesDao extends DatabaseAccessor<AppDatabase>
   }
 
   /// Net crates we owe this supplier across all manufacturers (positive = owed).
-  Stream<int> watchTotalOwed(String supplierId) {
+  Stream<double> watchTotalOwed(String supplierId) {
     final sumExpr = supplierCrateBalances.balance.sum();
     final query = selectOnly(supplierCrateBalances)
       ..addColumns([sumExpr])
@@ -505,6 +505,6 @@ class SupplierCrateBalancesDao extends DatabaseAccessor<AppDatabase>
         whereBusiness(supplierCrateBalances) &
             supplierCrateBalances.supplierId.equals(supplierId),
       );
-    return query.watchSingleOrNull().map((row) => row?.read(sumExpr) ?? 0);
+    return query.watchSingleOrNull().map((row) => row?.read(sumExpr) ?? 0.0);
   }
 }

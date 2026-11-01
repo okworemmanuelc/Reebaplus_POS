@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -131,7 +132,7 @@ class _RequestProductTileState extends ConsumerState<_RequestProductTile> {
     return ProductTile(
       name: product.name,
       subtitle: subtitle.isEmpty ? null : subtitle,
-      stockLabel: '$stock in stock',
+      stockLabel: '${formatQty(stock)} in stock',
       stockLevel: stock <= product.lowStockThreshold
           ? StockLevel.low
           : StockLevel.ok,

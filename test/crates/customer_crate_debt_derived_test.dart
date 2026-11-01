@@ -69,7 +69,7 @@ void main() {
 
     tearDown(() => db.close());
 
-    Future<Map<String, int>> derived() async {
+    Future<Map<String, double>> derived() async {
       final rows = await db.cratePoolDao.watchCustomerCrateDebt(customerId).first;
       return {for (final r in rows) r.manufacturerId: r.balance};
     }
@@ -118,7 +118,7 @@ void main() {
 
     test('watchCrateBalancesWithGroups (the Crates-tab read) derives + re-emits '
         'live', () async {
-      final emissions = <Map<String, int>>[];
+      final emissions = <Map<String, double>>[];
       final sub = db.customersDao
           .watchCrateBalancesWithGroups(customerId)
           .map((rows) => {for (final e in rows) e.manufacturerId: e.balance})

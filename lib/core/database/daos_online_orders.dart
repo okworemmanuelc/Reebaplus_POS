@@ -407,7 +407,7 @@ class OnlineOrdersDao extends DatabaseAccessor<AppDatabase>
                 ..limit(1))
               .getSingleOrNull();
       out.add(
-        OnlineOrderTillLine(line: l, product: product, stock: inv?.quantity ?? 0),
+        OnlineOrderTillLine(line: l, product: product, stock: (inv?.quantity ?? 0).floor()),
       );
     }
     final customerId = order.customerId;

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -112,7 +113,7 @@ class StoreTransferHub extends ConsumerWidget {
                 p.unit?.toLowerCase() == 'bottle' &&
                 p.trackEmpties;
             final availableEmpties = manufacturerId != null
-                ? (emptiesMap[manufacturerId] ?? 0)
+                ? (emptiesMap[manufacturerId] ?? 0).floor()
                 : 0;
             return _TransferActionCard(
               transfer: t,
@@ -120,7 +121,7 @@ class StoreTransferHub extends ConsumerWidget {
               productName: productNames[t.productId] ?? 'Product',
               counterpartyStore: storeNames[t.toLocationId] ?? 'a store',
               byUser: users[t.initiatedBy]?.name,
-              availableHere: hereStock[t.productId] ?? 0,
+              availableHere: (hereStock[t.productId] ?? 0).floor(),
               manufacturerId: manufacturerId,
               isCrateEligible: isCrateEligible,
               availableEmpties: availableEmpties,
@@ -265,7 +266,7 @@ class StoreTransferHub extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '$productName · ${tr.quantity} unit(s)',
+                              '$productName · ${formatQty(tr.quantity)} unit(s)',
                               style: context
                                   .boldStyle(13)
                                   .copyWith(color: text),
@@ -405,8 +406,8 @@ class _TransferActionCardState extends ConsumerState<_TransferActionCard> {
           .dispatchTransfer(
             transferId: widget.transfer.id,
             dispatchedBy: uid,
-            quantity: qty,
-            emptyCratesToSend: empties,
+            quantity: qty.toDouble(),
+            emptyCratesToSend: empties.toDouble(),
           ),
       empties > 0
           ? 'Dispatched $qty unit(s) + $empties empty crate(s) to ${widget.counterpartyStore}.'
@@ -448,7 +449,7 @@ class _TransferActionCardState extends ConsumerState<_TransferActionCard> {
     return showDialog<({int quantity, int empties})>(
       context: context,
       builder: (_) => _DispatchDialog(
-        requested: widget.transfer.quantity,
+        requested: widget.transfer.quantity.round(), // whole until S5 (#620)
         availableHere: widget.availableHere,
         showEmptiesField: showEmptiesField,
         availableEmpties: widget.availableEmpties,
@@ -496,7 +497,7 @@ class _TransferActionCardState extends ConsumerState<_TransferActionCard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${widget.productName} · ${widget.transfer.quantity} unit(s)',
+                      '${widget.productName} · ${formatQty(widget.transfer.quantity)} unit(s)',
                       style: context.boldStyle(14).copyWith(color: text),
                     ),
                     SizedBox(height: context.getRSize(4)),

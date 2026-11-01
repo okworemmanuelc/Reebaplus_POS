@@ -396,7 +396,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         StoreStockRow(
           storeId: s.id,
           name: s.name,
-          quantity: stockMap[s.id] ?? 0,
+          quantity: (stockMap[s.id] ?? 0).round(), // whole until S3 (#620)
         ),
     ];
     final total = stores.isEmpty
@@ -827,17 +827,19 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   }
 
   /// Units sold so far this (business-local) month, from the Sales card's days.
-  int get _monthUnits {
+  double get _monthUnits {
     final days = _salesDays;
     if (days == null || days.isEmpty) return 0;
     final m = days.last.date.month;
-    return days.where((d) => d.date.month == m).fold(0, (a, d) => a + d.units);
+    return days
+        .where((d) => d.date.month == m)
+        .fold<double>(0, (a, d) => a + d.units);
   }
 
   Widget _buildTarget(BuildContext context) {
     return ProductSalesTargetCard(
       figures: SalesTargetFigures(
-        sold: _monthUnits,
+        sold: _monthUnits.round(), // whole until S3 (#620)
         target: _productData?.monthlyTargetUnits ?? 0,
         now: _now,
       ),
@@ -1230,7 +1232,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                   await db.stockAdjustmentRequestsDao.requestStockAdjustment(
                     productId: product.id,
                     storeId: store.id,
-                    quantityDiff: delta,
+                    quantityDiff: delta.toDouble(),
                     reason: note,
                     summary: summary,
                     requestedBy: auth.currentUser?.id,
@@ -1246,7 +1248,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                 await db.inventoryDao.adjustStock(
                   product.id,
                   store.id,
-                  delta,
+                  delta.toDouble(),
                   note,
                   auth.currentUser?.id,
                   inflowUnitCostKobo: unitCostKobo,

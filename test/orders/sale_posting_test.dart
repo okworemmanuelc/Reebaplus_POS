@@ -72,13 +72,13 @@ void main() {
         businessId: businessId,
         productId: productId,
         storeId: storeId,
-        qtyRemaining: qty,
-        qtyOriginal: qty,
+        qtyRemaining: qty.toDouble(),
+        qtyOriginal: qty.toDouble(),
         costKobo: Value(costKobo),
         receivedAt: Value(at)));
   }
 
-  Future<int> stock(String productId, String storeId) async {
+  Future<double> stock(String productId, String storeId) async {
     final row = await (db.select(db.inventory)
           ..where(
               (i) => i.productId.equals(productId) & i.storeId.equals(storeId)))
@@ -146,7 +146,7 @@ void main() {
           orderId: 'placeholder',
           productId: Value(productId),
           storeId: storeId,
-          quantity: qty,
+          quantity: qty.toDouble(),
           unitPriceKobo: 100000,
           totalKobo: goods,
         ),

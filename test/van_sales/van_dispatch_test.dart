@@ -107,7 +107,7 @@ void main() {
     await db.inventoryDao.adjustStock(
       p,
       store,
-      qty,
+      qty.toDouble(),
       'opening',
       managerId,
       trackCost: false,
@@ -115,13 +115,13 @@ void main() {
     await db.costBatchesDao.recordInflowBatch(
       productId: p,
       storeId: store,
-      quantity: qty,
+      quantity: qty.toDouble(),
       costKobo: unitCostKobo,
       receivedAt: receivedAt,
     );
   }
 
-  Future<int> onHand(String store, {String? product}) async {
+  Future<double> onHand(String store, {String? product}) async {
     final row = await (db.select(db.inventory)
           ..where((t) =>
               t.productId.equals(product ?? productId) &
@@ -134,10 +134,10 @@ void main() {
   /// Total units still covered by cost batches at [store] — the figure that has
   /// to keep matching physical stock, or the warehouse is holding "phantom
   /// coverage" for goods that drove away (the exact break ADR 0019 fixes).
-  Future<int> batchUnits(String store, {String? product}) async {
+  Future<double> batchUnits(String store, {String? product}) async {
     final batches = await db.costBatchesDao
         .queueFor(product ?? productId, store);
-    return batches.fold<int>(0, (sum, b) => sum + b.qtyRemaining);
+    return batches.fold<double>(0, (sum, b) => sum + b.qtyRemaining);
   }
 
   /// Total kobo still covered by cost batches at [store].
@@ -146,7 +146,7 @@ void main() {
         .queueFor(product ?? productId, store);
     return batches.fold<int>(
       0,
-      (sum, b) => sum + b.qtyRemaining * b.costKobo,
+      (sum, b) => sum + (b.qtyRemaining * b.costKobo).round(),
     );
   }
 

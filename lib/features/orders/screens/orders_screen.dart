@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
@@ -1128,7 +1129,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
           ReturnLineInput(
             lineId: l.item.id,
             name: l.displayName,
-            quantity: l.item.quantity,
+            quantity: l.item.quantity.round(), // whole until S3 (#620)
             canBeDamaged: l.item.productId != null,
           ),
       ],
@@ -2098,7 +2099,7 @@ class _OrderCard extends ConsumerWidget {
                                         ),
                                         Expanded(
                                           child: Text(
-                                            '${item.quantity}× ${richItem.displayName}',
+                                            '${formatQty(item.quantity)}× ${richItem.displayName}',
                                             style: context
                                                 .mediumStyle(13)
                                                 .copyWith(color: textCol),

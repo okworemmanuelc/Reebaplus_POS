@@ -83,7 +83,7 @@ Future<StoreDetailsSeed> seedStoreDetails(ScreenTestEnvironment env) async {
             fromLocationId: from,
             toLocationId: to,
             productId: env.products[product].id,
-            quantity: quantity,
+            quantity: quantity.toDouble(),
             status: Value(status),
             initiatedBy: 'test-user-id',
             initiatedAt: Value(at),

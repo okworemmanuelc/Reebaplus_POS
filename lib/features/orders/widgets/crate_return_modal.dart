@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -152,11 +153,11 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
           manufacturerId: l.manufacturerId,
           name:
               mfrNames[l.manufacturerId] ?? 'Manufacturer ${l.manufacturerId}',
-          expectedQty: l.cratesTaken,
+          expectedQty: l.cratesTaken.round(), // whole until S4 (#620)
           rateKobo: l.depositRateKobo,
           paidKobo: l.depositPaidKobo,
           controller: TextEditingController(
-            text: isPart ? '' : l.cratesTaken.toString(),
+            text: isPart ? '' : formatQty(l.cratesTaken),
           ),
         );
       }).toList();
@@ -188,7 +189,7 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
             name: mfrNames[mfId] ?? 'Manufacturer $mfId',
           ),
         );
-        accum[mfId]!.totalQty += ri.item.quantity;
+        accum[mfId]!.totalQty += ri.item.quantity.round();
       }
 
       final brands = accum.values.toList();

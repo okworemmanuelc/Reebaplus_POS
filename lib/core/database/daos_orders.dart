@@ -162,7 +162,9 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         orders.staffId.equals(staffId) &
         orders.status.isIn(orderRevenueStatuses.toList());
 
-    final grossCol = (orderItems.quantity * orderItems.unitPriceKobo).sum();
+    // Σ line totals: each `total_kobo` is the rounded unit price x quantity
+    // (#627), so a fractional quantity needs no per-row maths here.
+    final grossCol = orderItems.totalKobo.sum();
     final grossRow =
         await (selectOnly(orderItems).join([
                 innerJoin(orders, orders.id.equalsExp(orderItems.orderId)),
@@ -856,7 +858,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       if (customerId != null &&
           isCrateBusiness(crateBiz?.type) &&
           (crateBiz?.tracksEmptyCrates ?? true)) {
-        final cratesByManufacturer = <String, int>{};
+        final cratesByManufacturer = <String, double>{};
         for (final item in items) {
           final productId = item.productId.value;
           if (productId == null) continue; // quick-sale line: no product
@@ -1007,7 +1009,11 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         final grossKobo = thinItems.fold<int>(
           0,
           (sum, it) =>
-              sum + (it['quantity'] as int) * (it['unit_price_kobo'] as int),
+              sum +
+              lineTotalKobo(
+                it['unit_price_kobo'] as int,
+                Qty.fromJson(it['quantity']),
+              ),
         );
         final goodsPayableKobo =
             (orderJson['total_amount_kobo'] as int) -
@@ -1061,7 +1067,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         )).difference(queueBeforeChildren).toList();
         await db.syncDao.enqueue(
           'domain:pos_record_sale_v2',
-          jsonEncode(payload),
+          encodeSyncPayload(payload),
         );
         await db.syncDao.holdRowsByOrder(childQueueIds, orderId);
         return orderId;
@@ -1826,7 +1832,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         };
         await db.syncDao.enqueue(
           'domain:pos_cancel_order',
-          jsonEncode(payload),
+          encodeSyncPayload(payload),
         );
         return;
       }
@@ -2066,10 +2072,13 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         await db.inventoryDao.adjustStock(
           productId,
           line.storeId,
-          -damaged,
+          -damaged.toDouble(),
           'damage:$damageReasonKey',
           staffId,
-          outflowValueKobo: damaged * line.buyingPriceKobo,
+          outflowValueKobo: lineTotalKobo(
+            line.buyingPriceKobo,
+            damaged.toDouble(),
+          ),
         );
       }
 
@@ -2307,7 +2316,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
             'UPDATE inventory SET quantity = quantity - ? '
             'WHERE business_id = ? AND product_id = ? AND store_id = ?',
             variables: [
-              Variable<int>(r.quantityDelta),
+              Variable<double>(r.quantityDelta),
               Variable<String>(businessId),
               Variable<String>(r.productId),
               Variable<String>(r.locationId),
@@ -2445,7 +2454,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   /// cancelled or absent.
   Future<void> reverseRejectedSaleLocal({
     required String orderId,
-    required List<({String productId, String storeId, int quantity})> items,
+    required List<({String productId, String storeId, double quantity})> items,
     required String staffId,
   }) async {
     await db.transaction(() async {
@@ -2481,7 +2490,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           'UPDATE inventory SET quantity = quantity + ?, last_updated_at = ? '
           'WHERE business_id = ? AND product_id = ? AND store_id = ?',
           variables: [
-            Variable<int>(line.quantity),
+            Variable<double>(line.quantity),
             Variable<DateTime>(now),
             Variable<String>(requireBusinessId()),
             Variable<String>(line.productId),
@@ -2640,9 +2649,8 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
 
     final rows = await query.get();
 
-    int todayUnits = 0, todayRevKobo = 0;
-    int weekUnits = 0, weekRevKobo = 0;
-    int monthUnits = 0, monthRevKobo = 0;
+    double todayUnits = 0, weekUnits = 0, monthUnits = 0;
+    int todayRevKobo = 0, weekRevKobo = 0, monthRevKobo = 0;
 
     for (final row in rows) {
       final item = row.readTable(orderItems);
@@ -2738,7 +2746,8 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       acc.units += item.quantity;
       acc.revenue += item.totalKobo;
       if (item.buyingPriceKobo > 0) {
-        acc.profit += item.totalKobo - item.buyingPriceKobo * item.quantity;
+        acc.profit +=
+            item.totalKobo - lineTotalKobo(item.buyingPriceKobo, item.quantity);
       } else {
         acc.uncosted = true;
       }
@@ -2880,14 +2889,15 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
 }
 
 class _DayAcc {
-  int units = 0, revenue = 0, profit = 0;
+  double units = 0;
+  int revenue = 0, profit = 0;
   bool uncosted = false;
 }
 
 /// One local day of a product's sales (see [OrdersDao.getProductSalesByDay]).
 class ProductDaySales {
   final DateTime date; // local calendar day, y/m/d only
-  final int units;
+  final double units;
   final int revenueKobo;
   final int profitKobo;
   final bool hasUncosted;
@@ -2901,11 +2911,11 @@ class ProductDaySales {
 }
 
 class ProductSalesSummary {
-  final int todayUnits;
+  final double todayUnits;
   final int todayRevenueKobo;
-  final int weekUnits;
+  final double weekUnits;
   final int weekRevenueKobo;
-  final int monthUnits;
+  final double monthUnits;
   final int monthRevenueKobo;
 
   const ProductSalesSummary({
@@ -2994,14 +3004,14 @@ class OrderItemDataWithProductData {
 
 class InsufficientStockException implements Exception {
   final String productId;
-  final int requested;
+  final double requested;
   const InsufficientStockException({
     required this.productId,
     required this.requested,
   });
   @override
   String toString() =>
-      'InsufficientStockException: product $productId, requested $requested';
+      'InsufficientStockException: product $productId, requested ${formatQty(requested)}';
 }
 
 class CartStaleItem {
@@ -3042,7 +3052,7 @@ class CrateBalanceEntry {
   // v28/v29: crate balances are keyed by manufacturer (§13.4), not crate size.
   final String manufacturerId;
   final String manufacturerName;
-  final int balance;
+  final double balance;
   CrateBalanceEntry({
     required this.manufacturerId,
     required this.manufacturerName,

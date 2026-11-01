@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -224,7 +225,7 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
       if (line.quantity > line.product.totalStock) {
         AppNotification.showError(
           context,
-          'Only ${line.product.totalStock} of '
+          'Only ${formatQty(line.product.totalStock)} of '
           '${line.product.product.name} in ${source.name}.',
         );
         return;
@@ -649,7 +650,7 @@ class _LineCard extends StatelessWidget {
             ],
           ),
           Text(
-            'In stock: ${line.product.totalStock}',
+            'In stock: ${formatQty(line.product.totalStock)}',
             style: t.textTheme.bodySmall?.copyWith(color: subtext),
           ),
           SizedBox(height: context.getRSize(10)),

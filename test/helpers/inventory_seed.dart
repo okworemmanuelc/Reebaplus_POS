@@ -138,7 +138,7 @@ Future<InventorySample> seedInventorySample(ScreenTestEnvironment env) async {
             businessId: b,
             storeId: env.storeId,
             productId: id,
-            quantity: Value(stock),
+            quantity: Value(stock.toDouble()),
           ),
         );
     productIds[name] = id;
@@ -164,7 +164,7 @@ Future<InventorySample> seedInventorySample(ScreenTestEnvironment env) async {
       manufacturerId: manufacturerIds[mfr]!,
       storeId: env.storeId,
       performedBy: staffId,
-      countedEmpties: empties,
+      countedEmpties: empties.toDouble(),
     );
   }
 
@@ -202,7 +202,7 @@ Future<InventorySample> seedInventorySample(ScreenTestEnvironment env) async {
             businessId: b,
             productId: productIds[product]!,
             storeId: env.storeId,
-            quantityDiff: delta,
+            quantityDiff: delta.toDouble(),
             reason: 'Sample',
             performedBy: Value(staffId),
             createdAt: Value(at),
@@ -217,7 +217,7 @@ Future<InventorySample> seedInventorySample(ScreenTestEnvironment env) async {
             businessId: b,
             productId: productIds[product]!,
             locationId: env.storeId,
-            quantityDelta: delta,
+            quantityDelta: delta.toDouble(),
             movementType: type,
             adjustmentId: Value(adjustmentId),
             performedBy: Value(staffId),

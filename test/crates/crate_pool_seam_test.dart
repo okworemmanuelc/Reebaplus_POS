@@ -56,7 +56,7 @@ void main() {
 
     tearDown(() => db.close());
 
-    Future<int> scalar() async {
+    Future<double> scalar() async {
       final m = await (db.select(db.manufacturers)
             ..where((t) => t.id.equals(manufacturerId)))
           .getSingle();
@@ -140,13 +140,13 @@ void main() {
           manufacturerId: manufacturerId,
           storeId: store,
           performedBy: userId,
-          countedEmpties: counted,
+          countedEmpties: counted.toDouble(),
         );
 
     // Insertion (rowid) order — a plain scan of the table.
     Future<List<CrateLedgerData>> ledger() => db.select(db.crateLedger).get();
 
-    Future<int> pool({String? store}) async =>
+    Future<double> pool({String? store}) async =>
         (await db.cratePoolDao
                 .watchEmptiesPoolByManufacturer(storeId: store)
                 .first)[manufacturerId] ??

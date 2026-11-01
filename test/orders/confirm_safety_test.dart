@@ -119,7 +119,7 @@ void main() {
           orderId: 'placeholder',
           productId: Value(productId),
           storeId: storeId,
-          quantity: crates,
+          quantity: crates.toDouble(),
           unitPriceKobo: 100000,
           totalKobo: goodsKobo,
         ),
@@ -152,7 +152,7 @@ void main() {
     return rows.length;
   }
 
-  Future<int> emptyStock(String mfrId) async {
+  Future<double> emptyStock(String mfrId) async {
     final m = await (db.select(db.manufacturers)..where((x) => x.id.equals(mfrId)))
         .getSingle();
     return m.emptyCrateStock;
@@ -417,7 +417,7 @@ void main() {
             orderId: orderId,
             productId: Value(productId),
             storeId: storeId,
-            quantity: crates,
+            quantity: crates.toDouble(),
             unitPriceKobo: 100000,
             totalKobo: goodsKobo,
           ));
@@ -427,7 +427,7 @@ void main() {
               businessId: bizId,
               orderId: orderId,
               manufacturerId: mfrId,
-              cratesTaken: crates,
+              cratesTaken: crates.toDouble(),
               depositRateKobo: const Value(rateKobo),
               depositPaidKobo: Value(depositPaid)));
       if (moneyTrack) {
@@ -451,7 +451,7 @@ void main() {
         await device.cratePoolDao.recordCrateIssueByCustomer(
           customerId: customerId,
           manufacturerId: mfrId,
-          quantity: crates,
+          quantity: crates.toDouble(),
           performedBy: sellerId,
           orderId: orderId,
         );

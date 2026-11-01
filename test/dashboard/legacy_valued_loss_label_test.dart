@@ -101,7 +101,7 @@ void main() {
               businessId: businessId,
               productId: productId,
               storeId: store ?? storeId,
-              quantityDiff: quantityDiff,
+              quantityDiff: quantityDiff.toDouble(),
               reason: reason,
               // unitCostKobo / valueKobo left Absent → NULL (legacy).
             ),
@@ -296,7 +296,7 @@ void main() {
           productsCounted: 1,
           shortageCount: 1,
           surplusCount: 0,
-          shortageUnits: units,
+          shortageUnits: units.toDouble(),
           surplusUnits: 0,
           linesJson:
               '[{"p":"$productId","n":"Star 60cl","s":20,"a":${20 - units},'

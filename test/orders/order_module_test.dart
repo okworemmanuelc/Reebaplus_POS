@@ -250,7 +250,7 @@ void main() {
             orderId: 'placeholder',
             productId: Value(productId),
             storeId: storeId,
-            quantity: crates,
+            quantity: crates.toDouble(),
             unitPriceKobo: 100000,
             totalKobo: goodsKobo,
           ),

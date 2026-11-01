@@ -178,7 +178,7 @@ void main() {
     // faithful projection of the append-only ledger, not an independent counter
     // that can drift under reprocessing.
     final deltaSum = (await db.select(db.stockTransactions).get())
-        .fold<int>(0, (s, r) => s + r.quantityDelta);
+        .fold<double>(0, (s, r) => s + r.quantityDelta);
     expect(5 + deltaSum, 4);
   });
 }

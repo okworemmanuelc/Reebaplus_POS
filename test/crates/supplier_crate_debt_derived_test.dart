@@ -104,7 +104,7 @@ void main() {
 
     tearDown(() => db.close());
 
-    Future<Map<String, int>> derived(String supplierId) async {
+    Future<Map<String, double>> derived(String supplierId) async {
       final rows =
           await db.cratePoolDao.watchSupplierCrateDebt(supplierId).first;
       return {for (final r in rows) r.manufacturerId: r.balance};
@@ -221,7 +221,7 @@ void main() {
       return row.read<int>('s');
     }
 
-    Future<int> supplierDebt(String supplierId, String manufacturerId) async {
+    Future<double> supplierDebt(String supplierId, String manufacturerId) async {
       final rows =
           await db.cratePoolDao.watchSupplierCrateDebt(supplierId).first;
       final match =
@@ -339,7 +339,7 @@ void main() {
 
     tearDown(() => db.close());
 
-    Future<int> supplierDebt(String supplierId, String manufacturerId) async {
+    Future<double> supplierDebt(String supplierId, String manufacturerId) async {
       final rows =
           await db.cratePoolDao.watchSupplierCrateDebt(supplierId).first;
       final match =

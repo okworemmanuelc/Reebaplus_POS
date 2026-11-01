@@ -1150,13 +1150,13 @@ class $CrateSizeGroupsTable extends CrateSizeGroups
     'emptyCrateStock',
   );
   @override
-  late final GeneratedColumn<int> emptyCrateStock = GeneratedColumn<int>(
+  late final GeneratedColumn<double> emptyCrateStock = GeneratedColumn<double>(
     'empty_crate_stock',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.double,
     requiredDuringInsert: false,
-    defaultValue: const Constant(0),
+    defaultValue: const Constant(0.0),
   );
   static const VerificationMeta _depositAmountKoboMeta = const VerificationMeta(
     'depositAmountKobo',
@@ -1327,7 +1327,7 @@ class $CrateSizeGroupsTable extends CrateSizeGroups
         data['${effectivePrefix}crate_size_label'],
       )!,
       emptyCrateStock: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
+        DriftSqlType.double,
         data['${effectivePrefix}empty_crate_stock'],
       )!,
       depositAmountKobo: attachedDatabase.typeMapping.read(
@@ -1361,7 +1361,7 @@ class CrateSizeGroupData extends DataClass
   final String businessId;
   final String name;
   final String crateSizeLabel;
-  final int emptyCrateStock;
+  final double emptyCrateStock;
   final int depositAmountKobo;
   final bool isDeleted;
   final DateTime createdAt;
@@ -1384,7 +1384,7 @@ class CrateSizeGroupData extends DataClass
     map['business_id'] = Variable<String>(businessId);
     map['name'] = Variable<String>(name);
     map['crate_size_label'] = Variable<String>(crateSizeLabel);
-    map['empty_crate_stock'] = Variable<int>(emptyCrateStock);
+    map['empty_crate_stock'] = Variable<double>(emptyCrateStock);
     map['deposit_amount_kobo'] = Variable<int>(depositAmountKobo);
     map['is_deleted'] = Variable<bool>(isDeleted);
     map['created_at'] = Variable<DateTime>(createdAt);
@@ -1416,7 +1416,7 @@ class CrateSizeGroupData extends DataClass
       businessId: serializer.fromJson<String>(json['businessId']),
       name: serializer.fromJson<String>(json['name']),
       crateSizeLabel: serializer.fromJson<String>(json['crateSizeLabel']),
-      emptyCrateStock: serializer.fromJson<int>(json['emptyCrateStock']),
+      emptyCrateStock: serializer.fromJson<double>(json['emptyCrateStock']),
       depositAmountKobo: serializer.fromJson<int>(json['depositAmountKobo']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -1431,7 +1431,7 @@ class CrateSizeGroupData extends DataClass
       'businessId': serializer.toJson<String>(businessId),
       'name': serializer.toJson<String>(name),
       'crateSizeLabel': serializer.toJson<String>(crateSizeLabel),
-      'emptyCrateStock': serializer.toJson<int>(emptyCrateStock),
+      'emptyCrateStock': serializer.toJson<double>(emptyCrateStock),
       'depositAmountKobo': serializer.toJson<int>(depositAmountKobo),
       'isDeleted': serializer.toJson<bool>(isDeleted),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -1444,7 +1444,7 @@ class CrateSizeGroupData extends DataClass
     String? businessId,
     String? name,
     String? crateSizeLabel,
-    int? emptyCrateStock,
+    double? emptyCrateStock,
     int? depositAmountKobo,
     bool? isDeleted,
     DateTime? createdAt,
@@ -1532,7 +1532,7 @@ class CrateSizeGroupsCompanion extends UpdateCompanion<CrateSizeGroupData> {
   final Value<String> businessId;
   final Value<String> name;
   final Value<String> crateSizeLabel;
-  final Value<int> emptyCrateStock;
+  final Value<double> emptyCrateStock;
   final Value<int> depositAmountKobo;
   final Value<bool> isDeleted;
   final Value<DateTime> createdAt;
@@ -1568,7 +1568,7 @@ class CrateSizeGroupsCompanion extends UpdateCompanion<CrateSizeGroupData> {
     Expression<String>? businessId,
     Expression<String>? name,
     Expression<String>? crateSizeLabel,
-    Expression<int>? emptyCrateStock,
+    Expression<double>? emptyCrateStock,
     Expression<int>? depositAmountKobo,
     Expression<bool>? isDeleted,
     Expression<DateTime>? createdAt,
@@ -1594,7 +1594,7 @@ class CrateSizeGroupsCompanion extends UpdateCompanion<CrateSizeGroupData> {
     Value<String>? businessId,
     Value<String>? name,
     Value<String>? crateSizeLabel,
-    Value<int>? emptyCrateStock,
+    Value<double>? emptyCrateStock,
     Value<int>? depositAmountKobo,
     Value<bool>? isDeleted,
     Value<DateTime>? createdAt,
@@ -1631,7 +1631,7 @@ class CrateSizeGroupsCompanion extends UpdateCompanion<CrateSizeGroupData> {
       map['crate_size_label'] = Variable<String>(crateSizeLabel.value);
     }
     if (emptyCrateStock.present) {
-      map['empty_crate_stock'] = Variable<int>(emptyCrateStock.value);
+      map['empty_crate_stock'] = Variable<double>(emptyCrateStock.value);
     }
     if (depositAmountKobo.present) {
       map['deposit_amount_kobo'] = Variable<int>(depositAmountKobo.value);
@@ -1712,13 +1712,13 @@ class $ManufacturersTable extends Manufacturers
     'emptyCrateStock',
   );
   @override
-  late final GeneratedColumn<int> emptyCrateStock = GeneratedColumn<int>(
+  late final GeneratedColumn<double> emptyCrateStock = GeneratedColumn<double>(
     'empty_crate_stock',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.double,
     requiredDuringInsert: false,
-    defaultValue: const Constant(0),
+    defaultValue: const Constant(0.0),
   );
   static const VerificationMeta _depositAmountKoboMeta = const VerificationMeta(
     'depositAmountKobo',
@@ -1897,7 +1897,7 @@ class $ManufacturersTable extends Manufacturers
         data['${effectivePrefix}name'],
       )!,
       emptyCrateStock: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
+        DriftSqlType.double,
         data['${effectivePrefix}empty_crate_stock'],
       )!,
       depositAmountKobo: attachedDatabase.typeMapping.read(
@@ -1934,7 +1934,7 @@ class ManufacturerData extends DataClass
   final String id;
   final String businessId;
   final String name;
-  final int emptyCrateStock;
+  final double emptyCrateStock;
 
   /// The single canonical per-crate deposit rate (ADR 0023 rule 2). Both ends
   /// of a crate deposit — what a customer leaves with us and what we leave with
@@ -1980,7 +1980,7 @@ class ManufacturerData extends DataClass
     map['id'] = Variable<String>(id);
     map['business_id'] = Variable<String>(businessId);
     map['name'] = Variable<String>(name);
-    map['empty_crate_stock'] = Variable<int>(emptyCrateStock);
+    map['empty_crate_stock'] = Variable<double>(emptyCrateStock);
     map['deposit_amount_kobo'] = Variable<int>(depositAmountKobo);
     map['crate_money_arrangement'] = Variable<String>(crateMoneyArrangement);
     map['is_deleted'] = Variable<bool>(isDeleted);
@@ -2012,7 +2012,7 @@ class ManufacturerData extends DataClass
       id: serializer.fromJson<String>(json['id']),
       businessId: serializer.fromJson<String>(json['businessId']),
       name: serializer.fromJson<String>(json['name']),
-      emptyCrateStock: serializer.fromJson<int>(json['emptyCrateStock']),
+      emptyCrateStock: serializer.fromJson<double>(json['emptyCrateStock']),
       depositAmountKobo: serializer.fromJson<int>(json['depositAmountKobo']),
       crateMoneyArrangement: serializer.fromJson<String>(
         json['crateMoneyArrangement'],
@@ -2029,7 +2029,7 @@ class ManufacturerData extends DataClass
       'id': serializer.toJson<String>(id),
       'businessId': serializer.toJson<String>(businessId),
       'name': serializer.toJson<String>(name),
-      'emptyCrateStock': serializer.toJson<int>(emptyCrateStock),
+      'emptyCrateStock': serializer.toJson<double>(emptyCrateStock),
       'depositAmountKobo': serializer.toJson<int>(depositAmountKobo),
       'crateMoneyArrangement': serializer.toJson<String>(crateMoneyArrangement),
       'isDeleted': serializer.toJson<bool>(isDeleted),
@@ -2042,7 +2042,7 @@ class ManufacturerData extends DataClass
     String? id,
     String? businessId,
     String? name,
-    int? emptyCrateStock,
+    double? emptyCrateStock,
     int? depositAmountKobo,
     String? crateMoneyArrangement,
     bool? isDeleted,
@@ -2130,7 +2130,7 @@ class ManufacturersCompanion extends UpdateCompanion<ManufacturerData> {
   final Value<String> id;
   final Value<String> businessId;
   final Value<String> name;
-  final Value<int> emptyCrateStock;
+  final Value<double> emptyCrateStock;
   final Value<int> depositAmountKobo;
   final Value<String> crateMoneyArrangement;
   final Value<bool> isDeleted;
@@ -2166,7 +2166,7 @@ class ManufacturersCompanion extends UpdateCompanion<ManufacturerData> {
     Expression<String>? id,
     Expression<String>? businessId,
     Expression<String>? name,
-    Expression<int>? emptyCrateStock,
+    Expression<double>? emptyCrateStock,
     Expression<int>? depositAmountKobo,
     Expression<String>? crateMoneyArrangement,
     Expression<bool>? isDeleted,
@@ -2193,7 +2193,7 @@ class ManufacturersCompanion extends UpdateCompanion<ManufacturerData> {
     Value<String>? id,
     Value<String>? businessId,
     Value<String>? name,
-    Value<int>? emptyCrateStock,
+    Value<double>? emptyCrateStock,
     Value<int>? depositAmountKobo,
     Value<String>? crateMoneyArrangement,
     Value<bool>? isDeleted,
@@ -2229,7 +2229,7 @@ class ManufacturersCompanion extends UpdateCompanion<ManufacturerData> {
       map['name'] = Variable<String>(name.value);
     }
     if (emptyCrateStock.present) {
-      map['empty_crate_stock'] = Variable<int>(emptyCrateStock.value);
+      map['empty_crate_stock'] = Variable<double>(emptyCrateStock.value);
     }
     if (depositAmountKobo.present) {
       map['deposit_amount_kobo'] = Variable<int>(depositAmountKobo.value);
@@ -7155,11 +7155,11 @@ class $SupplierCrateLedgerTable extends SupplierCrateLedger
     'quantityDelta',
   );
   @override
-  late final GeneratedColumn<int> quantityDelta = GeneratedColumn<int>(
+  late final GeneratedColumn<double> quantityDelta = GeneratedColumn<double>(
     'quantity_delta',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.double,
     requiredDuringInsert: true,
   );
   static const VerificationMeta _movementTypeMeta = const VerificationMeta(
@@ -7451,7 +7451,7 @@ class $SupplierCrateLedgerTable extends SupplierCrateLedger
         data['${effectivePrefix}store_id'],
       ),
       quantityDelta: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
+        DriftSqlType.double,
         data['${effectivePrefix}quantity_delta'],
       )!,
       movementType: attachedDatabase.typeMapping.read(
@@ -7506,7 +7506,7 @@ class SupplierCrateLedgerEntryData extends DataClass
   final String supplierId;
   final String manufacturerId;
   final String? storeId;
-  final int quantityDelta;
+  final double quantityDelta;
   final String movementType;
   final int depositPaidKobo;
   final String? note;
@@ -7543,7 +7543,7 @@ class SupplierCrateLedgerEntryData extends DataClass
     if (!nullToAbsent || storeId != null) {
       map['store_id'] = Variable<String>(storeId);
     }
-    map['quantity_delta'] = Variable<int>(quantityDelta);
+    map['quantity_delta'] = Variable<double>(quantityDelta);
     map['movement_type'] = Variable<String>(movementType);
     map['deposit_paid_kobo'] = Variable<int>(depositPaidKobo);
     if (!nullToAbsent || note != null) {
@@ -7607,7 +7607,7 @@ class SupplierCrateLedgerEntryData extends DataClass
       supplierId: serializer.fromJson<String>(json['supplierId']),
       manufacturerId: serializer.fromJson<String>(json['manufacturerId']),
       storeId: serializer.fromJson<String?>(json['storeId']),
-      quantityDelta: serializer.fromJson<int>(json['quantityDelta']),
+      quantityDelta: serializer.fromJson<double>(json['quantityDelta']),
       movementType: serializer.fromJson<String>(json['movementType']),
       depositPaidKobo: serializer.fromJson<int>(json['depositPaidKobo']),
       note: serializer.fromJson<String?>(json['note']),
@@ -7628,7 +7628,7 @@ class SupplierCrateLedgerEntryData extends DataClass
       'supplierId': serializer.toJson<String>(supplierId),
       'manufacturerId': serializer.toJson<String>(manufacturerId),
       'storeId': serializer.toJson<String?>(storeId),
-      'quantityDelta': serializer.toJson<int>(quantityDelta),
+      'quantityDelta': serializer.toJson<double>(quantityDelta),
       'movementType': serializer.toJson<String>(movementType),
       'depositPaidKobo': serializer.toJson<int>(depositPaidKobo),
       'note': serializer.toJson<String?>(note),
@@ -7647,7 +7647,7 @@ class SupplierCrateLedgerEntryData extends DataClass
     String? supplierId,
     String? manufacturerId,
     Value<String?> storeId = const Value.absent(),
-    int? quantityDelta,
+    double? quantityDelta,
     String? movementType,
     int? depositPaidKobo,
     Value<String?> note = const Value.absent(),
@@ -7782,7 +7782,7 @@ class SupplierCrateLedgerCompanion
   final Value<String> supplierId;
   final Value<String> manufacturerId;
   final Value<String?> storeId;
-  final Value<int> quantityDelta;
+  final Value<double> quantityDelta;
   final Value<String> movementType;
   final Value<int> depositPaidKobo;
   final Value<String?> note;
@@ -7817,7 +7817,7 @@ class SupplierCrateLedgerCompanion
     required String supplierId,
     required String manufacturerId,
     this.storeId = const Value.absent(),
-    required int quantityDelta,
+    required double quantityDelta,
     required String movementType,
     this.depositPaidKobo = const Value.absent(),
     this.note = const Value.absent(),
@@ -7839,7 +7839,7 @@ class SupplierCrateLedgerCompanion
     Expression<String>? supplierId,
     Expression<String>? manufacturerId,
     Expression<String>? storeId,
-    Expression<int>? quantityDelta,
+    Expression<double>? quantityDelta,
     Expression<String>? movementType,
     Expression<int>? depositPaidKobo,
     Expression<String>? note,
@@ -7877,7 +7877,7 @@ class SupplierCrateLedgerCompanion
     Value<String>? supplierId,
     Value<String>? manufacturerId,
     Value<String?>? storeId,
-    Value<int>? quantityDelta,
+    Value<double>? quantityDelta,
     Value<String>? movementType,
     Value<int>? depositPaidKobo,
     Value<String?>? note,
@@ -7928,7 +7928,7 @@ class SupplierCrateLedgerCompanion
       map['store_id'] = Variable<String>(storeId.value);
     }
     if (quantityDelta.present) {
-      map['quantity_delta'] = Variable<int>(quantityDelta.value);
+      map['quantity_delta'] = Variable<double>(quantityDelta.value);
     }
     if (movementType.present) {
       map['movement_type'] = Variable<String>(movementType.value);
@@ -8049,13 +8049,13 @@ class $SupplierCrateBalancesTable extends SupplierCrateBalances
     'balance',
   );
   @override
-  late final GeneratedColumn<int> balance = GeneratedColumn<int>(
+  late final GeneratedColumn<double> balance = GeneratedColumn<double>(
     'balance',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.double,
     requiredDuringInsert: false,
-    defaultValue: const Constant(0),
+    defaultValue: const Constant(0.0),
   );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
@@ -8184,7 +8184,7 @@ class $SupplierCrateBalancesTable extends SupplierCrateBalances
         data['${effectivePrefix}manufacturer_id'],
       )!,
       balance: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
+        DriftSqlType.double,
         data['${effectivePrefix}balance'],
       )!,
       createdAt: attachedDatabase.typeMapping.read(
@@ -8210,7 +8210,7 @@ class SupplierCrateBalanceData extends DataClass
   final String businessId;
   final String supplierId;
   final String manufacturerId;
-  final int balance;
+  final double balance;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
   const SupplierCrateBalanceData({
@@ -8229,7 +8229,7 @@ class SupplierCrateBalanceData extends DataClass
     map['business_id'] = Variable<String>(businessId);
     map['supplier_id'] = Variable<String>(supplierId);
     map['manufacturer_id'] = Variable<String>(manufacturerId);
-    map['balance'] = Variable<int>(balance);
+    map['balance'] = Variable<double>(balance);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
     return map;
@@ -8257,7 +8257,7 @@ class SupplierCrateBalanceData extends DataClass
       businessId: serializer.fromJson<String>(json['businessId']),
       supplierId: serializer.fromJson<String>(json['supplierId']),
       manufacturerId: serializer.fromJson<String>(json['manufacturerId']),
-      balance: serializer.fromJson<int>(json['balance']),
+      balance: serializer.fromJson<double>(json['balance']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
     );
@@ -8270,7 +8270,7 @@ class SupplierCrateBalanceData extends DataClass
       'businessId': serializer.toJson<String>(businessId),
       'supplierId': serializer.toJson<String>(supplierId),
       'manufacturerId': serializer.toJson<String>(manufacturerId),
-      'balance': serializer.toJson<int>(balance),
+      'balance': serializer.toJson<double>(balance),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
     };
@@ -8281,7 +8281,7 @@ class SupplierCrateBalanceData extends DataClass
     String? businessId,
     String? supplierId,
     String? manufacturerId,
-    int? balance,
+    double? balance,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
   }) => SupplierCrateBalanceData(
@@ -8358,7 +8358,7 @@ class SupplierCrateBalancesCompanion
   final Value<String> businessId;
   final Value<String> supplierId;
   final Value<String> manufacturerId;
-  final Value<int> balance;
+  final Value<double> balance;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
   final Value<int> rowid;
@@ -8389,7 +8389,7 @@ class SupplierCrateBalancesCompanion
     Expression<String>? businessId,
     Expression<String>? supplierId,
     Expression<String>? manufacturerId,
-    Expression<int>? balance,
+    Expression<double>? balance,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
     Expression<int>? rowid,
@@ -8411,7 +8411,7 @@ class SupplierCrateBalancesCompanion
     Value<String>? businessId,
     Value<String>? supplierId,
     Value<String>? manufacturerId,
-    Value<int>? balance,
+    Value<double>? balance,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
     Value<int>? rowid,
@@ -8444,7 +8444,7 @@ class SupplierCrateBalancesCompanion
       map['manufacturer_id'] = Variable<String>(manufacturerId.value);
     }
     if (balance.present) {
-      map['balance'] = Variable<int>(balance.value);
+      map['balance'] = Variable<double>(balance.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -19743,13 +19743,13 @@ class $CustomerCrateBalancesTable extends CustomerCrateBalances
     'balance',
   );
   @override
-  late final GeneratedColumn<int> balance = GeneratedColumn<int>(
+  late final GeneratedColumn<double> balance = GeneratedColumn<double>(
     'balance',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.double,
     requiredDuringInsert: false,
-    defaultValue: const Constant(0),
+    defaultValue: const Constant(0.0),
   );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
@@ -19875,7 +19875,7 @@ class $CustomerCrateBalancesTable extends CustomerCrateBalances
         data['${effectivePrefix}manufacturer_id'],
       )!,
       balance: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
+        DriftSqlType.double,
         data['${effectivePrefix}balance'],
       )!,
       createdAt: attachedDatabase.typeMapping.read(
@@ -19901,7 +19901,7 @@ class CustomerCrateBalance extends DataClass
   final String businessId;
   final String customerId;
   final String manufacturerId;
-  final int balance;
+  final double balance;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
   const CustomerCrateBalance({
@@ -19920,7 +19920,7 @@ class CustomerCrateBalance extends DataClass
     map['business_id'] = Variable<String>(businessId);
     map['customer_id'] = Variable<String>(customerId);
     map['manufacturer_id'] = Variable<String>(manufacturerId);
-    map['balance'] = Variable<int>(balance);
+    map['balance'] = Variable<double>(balance);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
     return map;
@@ -19948,7 +19948,7 @@ class CustomerCrateBalance extends DataClass
       businessId: serializer.fromJson<String>(json['businessId']),
       customerId: serializer.fromJson<String>(json['customerId']),
       manufacturerId: serializer.fromJson<String>(json['manufacturerId']),
-      balance: serializer.fromJson<int>(json['balance']),
+      balance: serializer.fromJson<double>(json['balance']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
     );
@@ -19961,7 +19961,7 @@ class CustomerCrateBalance extends DataClass
       'businessId': serializer.toJson<String>(businessId),
       'customerId': serializer.toJson<String>(customerId),
       'manufacturerId': serializer.toJson<String>(manufacturerId),
-      'balance': serializer.toJson<int>(balance),
+      'balance': serializer.toJson<double>(balance),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
     };
@@ -19972,7 +19972,7 @@ class CustomerCrateBalance extends DataClass
     String? businessId,
     String? customerId,
     String? manufacturerId,
-    int? balance,
+    double? balance,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
   }) => CustomerCrateBalance(
@@ -20047,7 +20047,7 @@ class CustomerCrateBalancesCompanion
   final Value<String> businessId;
   final Value<String> customerId;
   final Value<String> manufacturerId;
-  final Value<int> balance;
+  final Value<double> balance;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
   final Value<int> rowid;
@@ -20078,7 +20078,7 @@ class CustomerCrateBalancesCompanion
     Expression<String>? businessId,
     Expression<String>? customerId,
     Expression<String>? manufacturerId,
-    Expression<int>? balance,
+    Expression<double>? balance,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
     Expression<int>? rowid,
@@ -20100,7 +20100,7 @@ class CustomerCrateBalancesCompanion
     Value<String>? businessId,
     Value<String>? customerId,
     Value<String>? manufacturerId,
-    Value<int>? balance,
+    Value<double>? balance,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
     Value<int>? rowid,
@@ -20133,7 +20133,7 @@ class CustomerCrateBalancesCompanion
       map['manufacturer_id'] = Variable<String>(manufacturerId.value);
     }
     if (balance.present) {
-      map['balance'] = Variable<int>(balance.value);
+      map['balance'] = Variable<double>(balance.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -20211,13 +20211,13 @@ class $ManufacturerCrateBalancesTable extends ManufacturerCrateBalances
     'balance',
   );
   @override
-  late final GeneratedColumn<int> balance = GeneratedColumn<int>(
+  late final GeneratedColumn<double> balance = GeneratedColumn<double>(
     'balance',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.double,
     requiredDuringInsert: false,
-    defaultValue: const Constant(0),
+    defaultValue: const Constant(0.0),
   );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
@@ -20333,7 +20333,7 @@ class $ManufacturerCrateBalancesTable extends ManufacturerCrateBalances
         data['${effectivePrefix}manufacturer_id'],
       )!,
       balance: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
+        DriftSqlType.double,
         data['${effectivePrefix}balance'],
       )!,
       createdAt: attachedDatabase.typeMapping.read(
@@ -20358,7 +20358,7 @@ class ManufacturerCrateBalance extends DataClass
   final String id;
   final String businessId;
   final String manufacturerId;
-  final int balance;
+  final double balance;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
   const ManufacturerCrateBalance({
@@ -20375,7 +20375,7 @@ class ManufacturerCrateBalance extends DataClass
     map['id'] = Variable<String>(id);
     map['business_id'] = Variable<String>(businessId);
     map['manufacturer_id'] = Variable<String>(manufacturerId);
-    map['balance'] = Variable<int>(balance);
+    map['balance'] = Variable<double>(balance);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
     return map;
@@ -20401,7 +20401,7 @@ class ManufacturerCrateBalance extends DataClass
       id: serializer.fromJson<String>(json['id']),
       businessId: serializer.fromJson<String>(json['businessId']),
       manufacturerId: serializer.fromJson<String>(json['manufacturerId']),
-      balance: serializer.fromJson<int>(json['balance']),
+      balance: serializer.fromJson<double>(json['balance']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
     );
@@ -20413,7 +20413,7 @@ class ManufacturerCrateBalance extends DataClass
       'id': serializer.toJson<String>(id),
       'businessId': serializer.toJson<String>(businessId),
       'manufacturerId': serializer.toJson<String>(manufacturerId),
-      'balance': serializer.toJson<int>(balance),
+      'balance': serializer.toJson<double>(balance),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
     };
@@ -20423,7 +20423,7 @@ class ManufacturerCrateBalance extends DataClass
     String? id,
     String? businessId,
     String? manufacturerId,
-    int? balance,
+    double? balance,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
   }) => ManufacturerCrateBalance(
@@ -20492,7 +20492,7 @@ class ManufacturerCrateBalancesCompanion
   final Value<String> id;
   final Value<String> businessId;
   final Value<String> manufacturerId;
-  final Value<int> balance;
+  final Value<double> balance;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
   final Value<int> rowid;
@@ -20519,7 +20519,7 @@ class ManufacturerCrateBalancesCompanion
     Expression<String>? id,
     Expression<String>? businessId,
     Expression<String>? manufacturerId,
-    Expression<int>? balance,
+    Expression<double>? balance,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
     Expression<int>? rowid,
@@ -20539,7 +20539,7 @@ class ManufacturerCrateBalancesCompanion
     Value<String>? id,
     Value<String>? businessId,
     Value<String>? manufacturerId,
-    Value<int>? balance,
+    Value<double>? balance,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
     Value<int>? rowid,
@@ -20568,7 +20568,7 @@ class ManufacturerCrateBalancesCompanion
       map['manufacturer_id'] = Variable<String>(manufacturerId.value);
     }
     if (balance.present) {
-      map['balance'] = Variable<int>(balance.value);
+      map['balance'] = Variable<double>(balance.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -20659,13 +20659,13 @@ class $StoreCrateBalancesTable extends StoreCrateBalances
     'balance',
   );
   @override
-  late final GeneratedColumn<int> balance = GeneratedColumn<int>(
+  late final GeneratedColumn<double> balance = GeneratedColumn<double>(
     'balance',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.double,
     requiredDuringInsert: false,
-    defaultValue: const Constant(0),
+    defaultValue: const Constant(0.0),
   );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
@@ -20791,7 +20791,7 @@ class $StoreCrateBalancesTable extends StoreCrateBalances
         data['${effectivePrefix}manufacturer_id'],
       )!,
       balance: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
+        DriftSqlType.double,
         data['${effectivePrefix}balance'],
       )!,
       createdAt: attachedDatabase.typeMapping.read(
@@ -20817,7 +20817,7 @@ class StoreCrateBalanceData extends DataClass
   final String businessId;
   final String storeId;
   final String manufacturerId;
-  final int balance;
+  final double balance;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
   const StoreCrateBalanceData({
@@ -20836,7 +20836,7 @@ class StoreCrateBalanceData extends DataClass
     map['business_id'] = Variable<String>(businessId);
     map['store_id'] = Variable<String>(storeId);
     map['manufacturer_id'] = Variable<String>(manufacturerId);
-    map['balance'] = Variable<int>(balance);
+    map['balance'] = Variable<double>(balance);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
     return map;
@@ -20864,7 +20864,7 @@ class StoreCrateBalanceData extends DataClass
       businessId: serializer.fromJson<String>(json['businessId']),
       storeId: serializer.fromJson<String>(json['storeId']),
       manufacturerId: serializer.fromJson<String>(json['manufacturerId']),
-      balance: serializer.fromJson<int>(json['balance']),
+      balance: serializer.fromJson<double>(json['balance']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
     );
@@ -20877,7 +20877,7 @@ class StoreCrateBalanceData extends DataClass
       'businessId': serializer.toJson<String>(businessId),
       'storeId': serializer.toJson<String>(storeId),
       'manufacturerId': serializer.toJson<String>(manufacturerId),
-      'balance': serializer.toJson<int>(balance),
+      'balance': serializer.toJson<double>(balance),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
     };
@@ -20888,7 +20888,7 @@ class StoreCrateBalanceData extends DataClass
     String? businessId,
     String? storeId,
     String? manufacturerId,
-    int? balance,
+    double? balance,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
   }) => StoreCrateBalanceData(
@@ -20961,7 +20961,7 @@ class StoreCrateBalancesCompanion
   final Value<String> businessId;
   final Value<String> storeId;
   final Value<String> manufacturerId;
-  final Value<int> balance;
+  final Value<double> balance;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
   final Value<int> rowid;
@@ -20992,7 +20992,7 @@ class StoreCrateBalancesCompanion
     Expression<String>? businessId,
     Expression<String>? storeId,
     Expression<String>? manufacturerId,
-    Expression<int>? balance,
+    Expression<double>? balance,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
     Expression<int>? rowid,
@@ -21014,7 +21014,7 @@ class StoreCrateBalancesCompanion
     Value<String>? businessId,
     Value<String>? storeId,
     Value<String>? manufacturerId,
-    Value<int>? balance,
+    Value<double>? balance,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
     Value<int>? rowid,
@@ -21047,7 +21047,7 @@ class StoreCrateBalancesCompanion
       map['manufacturer_id'] = Variable<String>(manufacturerId.value);
     }
     if (balance.present) {
-      map['balance'] = Variable<int>(balance.value);
+      map['balance'] = Variable<double>(balance.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -21153,11 +21153,11 @@ class $PendingCrateReturnsTable extends PendingCrateReturns
     'quantity',
   );
   @override
-  late final GeneratedColumn<int> quantity = GeneratedColumn<int>(
+  late final GeneratedColumn<double> quantity = GeneratedColumn<double>(
     'quantity',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.double,
     requiredDuringInsert: true,
   );
   static const VerificationMeta _submittedByMeta = const VerificationMeta(
@@ -21422,7 +21422,7 @@ class $PendingCrateReturnsTable extends PendingCrateReturns
         data['${effectivePrefix}manufacturer_id'],
       )!,
       quantity: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
+        DriftSqlType.double,
         data['${effectivePrefix}quantity'],
       )!,
       submittedBy: attachedDatabase.typeMapping.read(
@@ -21473,7 +21473,7 @@ class PendingCrateReturnData extends DataClass
   final String? orderId;
   final String customerId;
   final String manufacturerId;
-  final int quantity;
+  final double quantity;
   final String submittedBy;
   final DateTime submittedAt;
   final String? approvedBy;
@@ -21508,7 +21508,7 @@ class PendingCrateReturnData extends DataClass
     }
     map['customer_id'] = Variable<String>(customerId);
     map['manufacturer_id'] = Variable<String>(manufacturerId);
-    map['quantity'] = Variable<int>(quantity);
+    map['quantity'] = Variable<double>(quantity);
     map['submitted_by'] = Variable<String>(submittedBy);
     map['submitted_at'] = Variable<DateTime>(submittedAt);
     if (!nullToAbsent || approvedBy != null) {
@@ -21564,7 +21564,7 @@ class PendingCrateReturnData extends DataClass
       orderId: serializer.fromJson<String?>(json['orderId']),
       customerId: serializer.fromJson<String>(json['customerId']),
       manufacturerId: serializer.fromJson<String>(json['manufacturerId']),
-      quantity: serializer.fromJson<int>(json['quantity']),
+      quantity: serializer.fromJson<double>(json['quantity']),
       submittedBy: serializer.fromJson<String>(json['submittedBy']),
       submittedAt: serializer.fromJson<DateTime>(json['submittedAt']),
       approvedBy: serializer.fromJson<String?>(json['approvedBy']),
@@ -21584,7 +21584,7 @@ class PendingCrateReturnData extends DataClass
       'orderId': serializer.toJson<String?>(orderId),
       'customerId': serializer.toJson<String>(customerId),
       'manufacturerId': serializer.toJson<String>(manufacturerId),
-      'quantity': serializer.toJson<int>(quantity),
+      'quantity': serializer.toJson<double>(quantity),
       'submittedBy': serializer.toJson<String>(submittedBy),
       'submittedAt': serializer.toJson<DateTime>(submittedAt),
       'approvedBy': serializer.toJson<String?>(approvedBy),
@@ -21602,7 +21602,7 @@ class PendingCrateReturnData extends DataClass
     Value<String?> orderId = const Value.absent(),
     String? customerId,
     String? manufacturerId,
-    int? quantity,
+    double? quantity,
     String? submittedBy,
     DateTime? submittedAt,
     Value<String?> approvedBy = const Value.absent(),
@@ -21731,7 +21731,7 @@ class PendingCrateReturnsCompanion
   final Value<String?> orderId;
   final Value<String> customerId;
   final Value<String> manufacturerId;
-  final Value<int> quantity;
+  final Value<double> quantity;
   final Value<String> submittedBy;
   final Value<DateTime> submittedAt;
   final Value<String?> approvedBy;
@@ -21764,7 +21764,7 @@ class PendingCrateReturnsCompanion
     this.orderId = const Value.absent(),
     required String customerId,
     required String manufacturerId,
-    required int quantity,
+    required double quantity,
     required String submittedBy,
     this.submittedAt = const Value.absent(),
     this.approvedBy = const Value.absent(),
@@ -21785,7 +21785,7 @@ class PendingCrateReturnsCompanion
     Expression<String>? orderId,
     Expression<String>? customerId,
     Expression<String>? manufacturerId,
-    Expression<int>? quantity,
+    Expression<double>? quantity,
     Expression<String>? submittedBy,
     Expression<DateTime>? submittedAt,
     Expression<String>? approvedBy,
@@ -21821,7 +21821,7 @@ class PendingCrateReturnsCompanion
     Value<String?>? orderId,
     Value<String>? customerId,
     Value<String>? manufacturerId,
-    Value<int>? quantity,
+    Value<double>? quantity,
     Value<String>? submittedBy,
     Value<DateTime>? submittedAt,
     Value<String?>? approvedBy,
@@ -21870,7 +21870,7 @@ class PendingCrateReturnsCompanion
       map['manufacturer_id'] = Variable<String>(manufacturerId.value);
     }
     if (quantity.present) {
-      map['quantity'] = Variable<int>(quantity.value);
+      map['quantity'] = Variable<double>(quantity.value);
     }
     if (submittedBy.present) {
       map['submitted_by'] = Variable<String>(submittedBy.value);
@@ -22001,11 +22001,11 @@ class $CrateLedgerTable extends CrateLedger
     'quantityDelta',
   );
   @override
-  late final GeneratedColumn<int> quantityDelta = GeneratedColumn<int>(
+  late final GeneratedColumn<double> quantityDelta = GeneratedColumn<double>(
     'quantity_delta',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.double,
     requiredDuringInsert: true,
   );
   static const VerificationMeta _movementTypeMeta = const VerificationMeta(
@@ -22362,7 +22362,7 @@ class $CrateLedgerTable extends CrateLedger
         data['${effectivePrefix}crate_size_group_id'],
       ),
       quantityDelta: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
+        DriftSqlType.double,
         data['${effectivePrefix}quantity_delta'],
       )!,
       movementType: attachedDatabase.typeMapping.read(
@@ -22428,7 +22428,7 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
   final String? customerId;
   final String? manufacturerId;
   final String? crateSizeGroupId;
-  final int quantityDelta;
+  final double quantityDelta;
   final String movementType;
   final String? referenceOrderId;
   final String? referenceReturnId;
@@ -22486,7 +22486,7 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
     if (!nullToAbsent || crateSizeGroupId != null) {
       map['crate_size_group_id'] = Variable<String>(crateSizeGroupId);
     }
-    map['quantity_delta'] = Variable<int>(quantityDelta);
+    map['quantity_delta'] = Variable<double>(quantityDelta);
     map['movement_type'] = Variable<String>(movementType);
     if (!nullToAbsent || referenceOrderId != null) {
       map['reference_order_id'] = Variable<String>(referenceOrderId);
@@ -22578,7 +22578,7 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
       customerId: serializer.fromJson<String?>(json['customerId']),
       manufacturerId: serializer.fromJson<String?>(json['manufacturerId']),
       crateSizeGroupId: serializer.fromJson<String?>(json['crateSizeGroupId']),
-      quantityDelta: serializer.fromJson<int>(json['quantityDelta']),
+      quantityDelta: serializer.fromJson<double>(json['quantityDelta']),
       movementType: serializer.fromJson<String>(json['movementType']),
       referenceOrderId: serializer.fromJson<String?>(json['referenceOrderId']),
       referenceReturnId: serializer.fromJson<String?>(
@@ -22604,7 +22604,7 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
       'customerId': serializer.toJson<String?>(customerId),
       'manufacturerId': serializer.toJson<String?>(manufacturerId),
       'crateSizeGroupId': serializer.toJson<String?>(crateSizeGroupId),
-      'quantityDelta': serializer.toJson<int>(quantityDelta),
+      'quantityDelta': serializer.toJson<double>(quantityDelta),
       'movementType': serializer.toJson<String>(movementType),
       'referenceOrderId': serializer.toJson<String?>(referenceOrderId),
       'referenceReturnId': serializer.toJson<String?>(referenceReturnId),
@@ -22626,7 +22626,7 @@ class CrateLedgerData extends DataClass implements Insertable<CrateLedgerData> {
     Value<String?> customerId = const Value.absent(),
     Value<String?> manufacturerId = const Value.absent(),
     Value<String?> crateSizeGroupId = const Value.absent(),
-    int? quantityDelta,
+    double? quantityDelta,
     String? movementType,
     Value<String?> referenceOrderId = const Value.absent(),
     Value<String?> referenceReturnId = const Value.absent(),
@@ -22792,7 +22792,7 @@ class CrateLedgerCompanion extends UpdateCompanion<CrateLedgerData> {
   final Value<String?> customerId;
   final Value<String?> manufacturerId;
   final Value<String?> crateSizeGroupId;
-  final Value<int> quantityDelta;
+  final Value<double> quantityDelta;
   final Value<String> movementType;
   final Value<String?> referenceOrderId;
   final Value<String?> referenceReturnId;
@@ -22833,7 +22833,7 @@ class CrateLedgerCompanion extends UpdateCompanion<CrateLedgerData> {
     this.customerId = const Value.absent(),
     this.manufacturerId = const Value.absent(),
     this.crateSizeGroupId = const Value.absent(),
-    required int quantityDelta,
+    required double quantityDelta,
     required String movementType,
     this.referenceOrderId = const Value.absent(),
     this.referenceReturnId = const Value.absent(),
@@ -22856,7 +22856,7 @@ class CrateLedgerCompanion extends UpdateCompanion<CrateLedgerData> {
     Expression<String>? customerId,
     Expression<String>? manufacturerId,
     Expression<String>? crateSizeGroupId,
-    Expression<int>? quantityDelta,
+    Expression<double>? quantityDelta,
     Expression<String>? movementType,
     Expression<String>? referenceOrderId,
     Expression<String>? referenceReturnId,
@@ -22900,7 +22900,7 @@ class CrateLedgerCompanion extends UpdateCompanion<CrateLedgerData> {
     Value<String?>? customerId,
     Value<String?>? manufacturerId,
     Value<String?>? crateSizeGroupId,
-    Value<int>? quantityDelta,
+    Value<double>? quantityDelta,
     Value<String>? movementType,
     Value<String?>? referenceOrderId,
     Value<String?>? referenceReturnId,
@@ -22957,7 +22957,7 @@ class CrateLedgerCompanion extends UpdateCompanion<CrateLedgerData> {
       map['crate_size_group_id'] = Variable<String>(crateSizeGroupId.value);
     }
     if (quantityDelta.present) {
-      map['quantity_delta'] = Variable<int>(quantityDelta.value);
+      map['quantity_delta'] = Variable<double>(quantityDelta.value);
     }
     if (movementType.present) {
       map['movement_type'] = Variable<String>(movementType.value);
@@ -23090,13 +23090,13 @@ class $InventoryTable extends Inventory
     'quantity',
   );
   @override
-  late final GeneratedColumn<int> quantity = GeneratedColumn<int>(
+  late final GeneratedColumn<double> quantity = GeneratedColumn<double>(
     'quantity',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.double,
     requiredDuringInsert: false,
-    defaultValue: const Constant(0),
+    defaultValue: const Constant(0.0),
   );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
@@ -23219,7 +23219,7 @@ class $InventoryTable extends Inventory
         data['${effectivePrefix}store_id'],
       )!,
       quantity: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
+        DriftSqlType.double,
         data['${effectivePrefix}quantity'],
       )!,
       createdAt: attachedDatabase.typeMapping.read(
@@ -23244,7 +23244,7 @@ class InventoryData extends DataClass implements Insertable<InventoryData> {
   final String businessId;
   final String productId;
   final String storeId;
-  final int quantity;
+  final double quantity;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
   const InventoryData({
@@ -23263,7 +23263,7 @@ class InventoryData extends DataClass implements Insertable<InventoryData> {
     map['business_id'] = Variable<String>(businessId);
     map['product_id'] = Variable<String>(productId);
     map['store_id'] = Variable<String>(storeId);
-    map['quantity'] = Variable<int>(quantity);
+    map['quantity'] = Variable<double>(quantity);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
     return map;
@@ -23291,7 +23291,7 @@ class InventoryData extends DataClass implements Insertable<InventoryData> {
       businessId: serializer.fromJson<String>(json['businessId']),
       productId: serializer.fromJson<String>(json['productId']),
       storeId: serializer.fromJson<String>(json['storeId']),
-      quantity: serializer.fromJson<int>(json['quantity']),
+      quantity: serializer.fromJson<double>(json['quantity']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
     );
@@ -23304,7 +23304,7 @@ class InventoryData extends DataClass implements Insertable<InventoryData> {
       'businessId': serializer.toJson<String>(businessId),
       'productId': serializer.toJson<String>(productId),
       'storeId': serializer.toJson<String>(storeId),
-      'quantity': serializer.toJson<int>(quantity),
+      'quantity': serializer.toJson<double>(quantity),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
     };
@@ -23315,7 +23315,7 @@ class InventoryData extends DataClass implements Insertable<InventoryData> {
     String? businessId,
     String? productId,
     String? storeId,
-    int? quantity,
+    double? quantity,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
   }) => InventoryData(
@@ -23385,7 +23385,7 @@ class InventoryCompanion extends UpdateCompanion<InventoryData> {
   final Value<String> businessId;
   final Value<String> productId;
   final Value<String> storeId;
-  final Value<int> quantity;
+  final Value<double> quantity;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
   final Value<int> rowid;
@@ -23416,7 +23416,7 @@ class InventoryCompanion extends UpdateCompanion<InventoryData> {
     Expression<String>? businessId,
     Expression<String>? productId,
     Expression<String>? storeId,
-    Expression<int>? quantity,
+    Expression<double>? quantity,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
     Expression<int>? rowid,
@@ -23438,7 +23438,7 @@ class InventoryCompanion extends UpdateCompanion<InventoryData> {
     Value<String>? businessId,
     Value<String>? productId,
     Value<String>? storeId,
-    Value<int>? quantity,
+    Value<double>? quantity,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
     Value<int>? rowid,
@@ -23471,7 +23471,7 @@ class InventoryCompanion extends UpdateCompanion<InventoryData> {
       map['store_id'] = Variable<String>(storeId.value);
     }
     if (quantity.present) {
-      map['quantity'] = Variable<int>(quantity.value);
+      map['quantity'] = Variable<double>(quantity.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -23563,22 +23563,22 @@ class $CostBatchesTable extends CostBatches
     'qtyRemaining',
   );
   @override
-  late final GeneratedColumn<int> qtyRemaining = GeneratedColumn<int>(
+  late final GeneratedColumn<double> qtyRemaining = GeneratedColumn<double>(
     'qty_remaining',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.double,
     requiredDuringInsert: true,
   );
   static const VerificationMeta _qtyOriginalMeta = const VerificationMeta(
     'qtyOriginal',
   );
   @override
-  late final GeneratedColumn<int> qtyOriginal = GeneratedColumn<int>(
+  late final GeneratedColumn<double> qtyOriginal = GeneratedColumn<double>(
     'qty_original',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.double,
     requiredDuringInsert: true,
   );
   static const VerificationMeta _costKoboMeta = const VerificationMeta(
@@ -23757,11 +23757,11 @@ class $CostBatchesTable extends CostBatches
         data['${effectivePrefix}store_id'],
       )!,
       qtyRemaining: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
+        DriftSqlType.double,
         data['${effectivePrefix}qty_remaining'],
       )!,
       qtyOriginal: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
+        DriftSqlType.double,
         data['${effectivePrefix}qty_original'],
       )!,
       costKobo: attachedDatabase.typeMapping.read(
@@ -23794,8 +23794,8 @@ class CostBatchData extends DataClass implements Insertable<CostBatchData> {
   final String businessId;
   final String productId;
   final String storeId;
-  final int qtyRemaining;
-  final int qtyOriginal;
+  final double qtyRemaining;
+  final double qtyOriginal;
   final int costKobo;
   final DateTime receivedAt;
   final DateTime createdAt;
@@ -23819,8 +23819,8 @@ class CostBatchData extends DataClass implements Insertable<CostBatchData> {
     map['business_id'] = Variable<String>(businessId);
     map['product_id'] = Variable<String>(productId);
     map['store_id'] = Variable<String>(storeId);
-    map['qty_remaining'] = Variable<int>(qtyRemaining);
-    map['qty_original'] = Variable<int>(qtyOriginal);
+    map['qty_remaining'] = Variable<double>(qtyRemaining);
+    map['qty_original'] = Variable<double>(qtyOriginal);
     map['cost_kobo'] = Variable<int>(costKobo);
     map['received_at'] = Variable<DateTime>(receivedAt);
     map['created_at'] = Variable<DateTime>(createdAt);
@@ -23853,8 +23853,8 @@ class CostBatchData extends DataClass implements Insertable<CostBatchData> {
       businessId: serializer.fromJson<String>(json['businessId']),
       productId: serializer.fromJson<String>(json['productId']),
       storeId: serializer.fromJson<String>(json['storeId']),
-      qtyRemaining: serializer.fromJson<int>(json['qtyRemaining']),
-      qtyOriginal: serializer.fromJson<int>(json['qtyOriginal']),
+      qtyRemaining: serializer.fromJson<double>(json['qtyRemaining']),
+      qtyOriginal: serializer.fromJson<double>(json['qtyOriginal']),
       costKobo: serializer.fromJson<int>(json['costKobo']),
       receivedAt: serializer.fromJson<DateTime>(json['receivedAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -23869,8 +23869,8 @@ class CostBatchData extends DataClass implements Insertable<CostBatchData> {
       'businessId': serializer.toJson<String>(businessId),
       'productId': serializer.toJson<String>(productId),
       'storeId': serializer.toJson<String>(storeId),
-      'qtyRemaining': serializer.toJson<int>(qtyRemaining),
-      'qtyOriginal': serializer.toJson<int>(qtyOriginal),
+      'qtyRemaining': serializer.toJson<double>(qtyRemaining),
+      'qtyOriginal': serializer.toJson<double>(qtyOriginal),
       'costKobo': serializer.toJson<int>(costKobo),
       'receivedAt': serializer.toJson<DateTime>(receivedAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -23883,8 +23883,8 @@ class CostBatchData extends DataClass implements Insertable<CostBatchData> {
     String? businessId,
     String? productId,
     String? storeId,
-    int? qtyRemaining,
-    int? qtyOriginal,
+    double? qtyRemaining,
+    double? qtyOriginal,
     int? costKobo,
     DateTime? receivedAt,
     DateTime? createdAt,
@@ -23977,8 +23977,8 @@ class CostBatchesCompanion extends UpdateCompanion<CostBatchData> {
   final Value<String> businessId;
   final Value<String> productId;
   final Value<String> storeId;
-  final Value<int> qtyRemaining;
-  final Value<int> qtyOriginal;
+  final Value<double> qtyRemaining;
+  final Value<double> qtyOriginal;
   final Value<int> costKobo;
   final Value<DateTime> receivedAt;
   final Value<DateTime> createdAt;
@@ -24002,8 +24002,8 @@ class CostBatchesCompanion extends UpdateCompanion<CostBatchData> {
     required String businessId,
     required String productId,
     required String storeId,
-    required int qtyRemaining,
-    required int qtyOriginal,
+    required double qtyRemaining,
+    required double qtyOriginal,
     this.costKobo = const Value.absent(),
     this.receivedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -24019,8 +24019,8 @@ class CostBatchesCompanion extends UpdateCompanion<CostBatchData> {
     Expression<String>? businessId,
     Expression<String>? productId,
     Expression<String>? storeId,
-    Expression<int>? qtyRemaining,
-    Expression<int>? qtyOriginal,
+    Expression<double>? qtyRemaining,
+    Expression<double>? qtyOriginal,
     Expression<int>? costKobo,
     Expression<DateTime>? receivedAt,
     Expression<DateTime>? createdAt,
@@ -24047,8 +24047,8 @@ class CostBatchesCompanion extends UpdateCompanion<CostBatchData> {
     Value<String>? businessId,
     Value<String>? productId,
     Value<String>? storeId,
-    Value<int>? qtyRemaining,
-    Value<int>? qtyOriginal,
+    Value<double>? qtyRemaining,
+    Value<double>? qtyOriginal,
     Value<int>? costKobo,
     Value<DateTime>? receivedAt,
     Value<DateTime>? createdAt,
@@ -24086,10 +24086,10 @@ class CostBatchesCompanion extends UpdateCompanion<CostBatchData> {
       map['store_id'] = Variable<String>(storeId.value);
     }
     if (qtyRemaining.present) {
-      map['qty_remaining'] = Variable<int>(qtyRemaining.value);
+      map['qty_remaining'] = Variable<double>(qtyRemaining.value);
     }
     if (qtyOriginal.present) {
-      map['qty_original'] = Variable<int>(qtyOriginal.value);
+      map['qty_original'] = Variable<double>(qtyOriginal.value);
     }
     if (costKobo.present) {
       map['cost_kobo'] = Variable<int>(costKobo.value);
@@ -24204,11 +24204,11 @@ class $StockTransfersTable extends StockTransfers
     'quantity',
   );
   @override
-  late final GeneratedColumn<int> quantity = GeneratedColumn<int>(
+  late final GeneratedColumn<double> quantity = GeneratedColumn<double>(
     'quantity',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.double,
     requiredDuringInsert: true,
   );
   static const VerificationMeta _statusMeta = const VerificationMeta('status');
@@ -24475,7 +24475,7 @@ class $StockTransfersTable extends StockTransfers
         data['${effectivePrefix}product_id'],
       )!,
       quantity: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
+        DriftSqlType.double,
         data['${effectivePrefix}quantity'],
       )!,
       status: attachedDatabase.typeMapping.read(
@@ -24526,7 +24526,7 @@ class StockTransferData extends DataClass
   final String fromLocationId;
   final String toLocationId;
   final String productId;
-  final int quantity;
+  final double quantity;
   final String status;
   final String initiatedBy;
   final String? receivedBy;
@@ -24559,7 +24559,7 @@ class StockTransferData extends DataClass
     map['from_location_id'] = Variable<String>(fromLocationId);
     map['to_location_id'] = Variable<String>(toLocationId);
     map['product_id'] = Variable<String>(productId);
-    map['quantity'] = Variable<int>(quantity);
+    map['quantity'] = Variable<double>(quantity);
     map['status'] = Variable<String>(status);
     map['initiated_by'] = Variable<String>(initiatedBy);
     if (!nullToAbsent || receivedBy != null) {
@@ -24613,7 +24613,7 @@ class StockTransferData extends DataClass
       fromLocationId: serializer.fromJson<String>(json['fromLocationId']),
       toLocationId: serializer.fromJson<String>(json['toLocationId']),
       productId: serializer.fromJson<String>(json['productId']),
-      quantity: serializer.fromJson<int>(json['quantity']),
+      quantity: serializer.fromJson<double>(json['quantity']),
       status: serializer.fromJson<String>(json['status']),
       initiatedBy: serializer.fromJson<String>(json['initiatedBy']),
       receivedBy: serializer.fromJson<String?>(json['receivedBy']),
@@ -24633,7 +24633,7 @@ class StockTransferData extends DataClass
       'fromLocationId': serializer.toJson<String>(fromLocationId),
       'toLocationId': serializer.toJson<String>(toLocationId),
       'productId': serializer.toJson<String>(productId),
-      'quantity': serializer.toJson<int>(quantity),
+      'quantity': serializer.toJson<double>(quantity),
       'status': serializer.toJson<String>(status),
       'initiatedBy': serializer.toJson<String>(initiatedBy),
       'receivedBy': serializer.toJson<String?>(receivedBy),
@@ -24651,7 +24651,7 @@ class StockTransferData extends DataClass
     String? fromLocationId,
     String? toLocationId,
     String? productId,
-    int? quantity,
+    double? quantity,
     String? status,
     String? initiatedBy,
     Value<String?> receivedBy = const Value.absent(),
@@ -24775,7 +24775,7 @@ class StockTransfersCompanion extends UpdateCompanion<StockTransferData> {
   final Value<String> fromLocationId;
   final Value<String> toLocationId;
   final Value<String> productId;
-  final Value<int> quantity;
+  final Value<double> quantity;
   final Value<String> status;
   final Value<String> initiatedBy;
   final Value<String?> receivedBy;
@@ -24808,7 +24808,7 @@ class StockTransfersCompanion extends UpdateCompanion<StockTransferData> {
     required String fromLocationId,
     required String toLocationId,
     required String productId,
-    required int quantity,
+    required double quantity,
     this.status = const Value.absent(),
     required String initiatedBy,
     this.receivedBy = const Value.absent(),
@@ -24830,7 +24830,7 @@ class StockTransfersCompanion extends UpdateCompanion<StockTransferData> {
     Expression<String>? fromLocationId,
     Expression<String>? toLocationId,
     Expression<String>? productId,
-    Expression<int>? quantity,
+    Expression<double>? quantity,
     Expression<String>? status,
     Expression<String>? initiatedBy,
     Expression<String>? receivedBy,
@@ -24866,7 +24866,7 @@ class StockTransfersCompanion extends UpdateCompanion<StockTransferData> {
     Value<String>? fromLocationId,
     Value<String>? toLocationId,
     Value<String>? productId,
-    Value<int>? quantity,
+    Value<double>? quantity,
     Value<String>? status,
     Value<String>? initiatedBy,
     Value<String?>? receivedBy,
@@ -24915,7 +24915,7 @@ class StockTransfersCompanion extends UpdateCompanion<StockTransferData> {
       map['product_id'] = Variable<String>(productId.value);
     }
     if (quantity.present) {
-      map['quantity'] = Variable<int>(quantity.value);
+      map['quantity'] = Variable<double>(quantity.value);
     }
     if (status.present) {
       map['status'] = Variable<String>(status.value);
@@ -25032,11 +25032,11 @@ class $StockAdjustmentsTable extends StockAdjustments
     'quantityDiff',
   );
   @override
-  late final GeneratedColumn<int> quantityDiff = GeneratedColumn<int>(
+  late final GeneratedColumn<double> quantityDiff = GeneratedColumn<double>(
     'quantity_diff',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.double,
     requiredDuringInsert: true,
   );
   static const VerificationMeta _reasonMeta = const VerificationMeta('reason');
@@ -25246,7 +25246,7 @@ class $StockAdjustmentsTable extends StockAdjustments
         data['${effectivePrefix}store_id'],
       )!,
       quantityDiff: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
+        DriftSqlType.double,
         data['${effectivePrefix}quantity_diff'],
       )!,
       reason: attachedDatabase.typeMapping.read(
@@ -25288,7 +25288,7 @@ class StockAdjustmentData extends DataClass
   final String businessId;
   final String productId;
   final String storeId;
-  final int quantityDiff;
+  final double quantityDiff;
   final String reason;
   final String? performedBy;
   final int? unitCostKobo;
@@ -25315,7 +25315,7 @@ class StockAdjustmentData extends DataClass
     map['business_id'] = Variable<String>(businessId);
     map['product_id'] = Variable<String>(productId);
     map['store_id'] = Variable<String>(storeId);
-    map['quantity_diff'] = Variable<int>(quantityDiff);
+    map['quantity_diff'] = Variable<double>(quantityDiff);
     map['reason'] = Variable<String>(reason);
     if (!nullToAbsent || performedBy != null) {
       map['performed_by'] = Variable<String>(performedBy);
@@ -25363,7 +25363,7 @@ class StockAdjustmentData extends DataClass
       businessId: serializer.fromJson<String>(json['businessId']),
       productId: serializer.fromJson<String>(json['productId']),
       storeId: serializer.fromJson<String>(json['storeId']),
-      quantityDiff: serializer.fromJson<int>(json['quantityDiff']),
+      quantityDiff: serializer.fromJson<double>(json['quantityDiff']),
       reason: serializer.fromJson<String>(json['reason']),
       performedBy: serializer.fromJson<String?>(json['performedBy']),
       unitCostKobo: serializer.fromJson<int?>(json['unitCostKobo']),
@@ -25380,7 +25380,7 @@ class StockAdjustmentData extends DataClass
       'businessId': serializer.toJson<String>(businessId),
       'productId': serializer.toJson<String>(productId),
       'storeId': serializer.toJson<String>(storeId),
-      'quantityDiff': serializer.toJson<int>(quantityDiff),
+      'quantityDiff': serializer.toJson<double>(quantityDiff),
       'reason': serializer.toJson<String>(reason),
       'performedBy': serializer.toJson<String?>(performedBy),
       'unitCostKobo': serializer.toJson<int?>(unitCostKobo),
@@ -25395,7 +25395,7 @@ class StockAdjustmentData extends DataClass
     String? businessId,
     String? productId,
     String? storeId,
-    int? quantityDiff,
+    double? quantityDiff,
     String? reason,
     Value<String?> performedBy = const Value.absent(),
     Value<int?> unitCostKobo = const Value.absent(),
@@ -25495,7 +25495,7 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
   final Value<String> businessId;
   final Value<String> productId;
   final Value<String> storeId;
-  final Value<int> quantityDiff;
+  final Value<double> quantityDiff;
   final Value<String> reason;
   final Value<String?> performedBy;
   final Value<int?> unitCostKobo;
@@ -25522,7 +25522,7 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
     required String businessId,
     required String productId,
     required String storeId,
-    required int quantityDiff,
+    required double quantityDiff,
     required String reason,
     this.performedBy = const Value.absent(),
     this.unitCostKobo = const Value.absent(),
@@ -25540,7 +25540,7 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
     Expression<String>? businessId,
     Expression<String>? productId,
     Expression<String>? storeId,
-    Expression<int>? quantityDiff,
+    Expression<double>? quantityDiff,
     Expression<String>? reason,
     Expression<String>? performedBy,
     Expression<int>? unitCostKobo,
@@ -25570,7 +25570,7 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
     Value<String>? businessId,
     Value<String>? productId,
     Value<String>? storeId,
-    Value<int>? quantityDiff,
+    Value<double>? quantityDiff,
     Value<String>? reason,
     Value<String?>? performedBy,
     Value<int?>? unitCostKobo,
@@ -25611,7 +25611,7 @@ class StockAdjustmentsCompanion extends UpdateCompanion<StockAdjustmentData> {
       map['store_id'] = Variable<String>(storeId.value);
     }
     if (quantityDiff.present) {
-      map['quantity_diff'] = Variable<int>(quantityDiff.value);
+      map['quantity_diff'] = Variable<double>(quantityDiff.value);
     }
     if (reason.present) {
       map['reason'] = Variable<String>(reason.value);
@@ -26196,11 +26196,11 @@ class $StockTransactionsTable extends StockTransactions
     'quantityDelta',
   );
   @override
-  late final GeneratedColumn<int> quantityDelta = GeneratedColumn<int>(
+  late final GeneratedColumn<double> quantityDelta = GeneratedColumn<double>(
     'quantity_delta',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.double,
     requiredDuringInsert: true,
   );
   static const VerificationMeta _movementTypeMeta = const VerificationMeta(
@@ -26520,7 +26520,7 @@ class $StockTransactionsTable extends StockTransactions
         data['${effectivePrefix}location_id'],
       )!,
       quantityDelta: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
+        DriftSqlType.double,
         data['${effectivePrefix}quantity_delta'],
       )!,
       movementType: attachedDatabase.typeMapping.read(
@@ -26582,7 +26582,7 @@ class StockTransactionData extends DataClass
   final String businessId;
   final String productId;
   final String locationId;
-  final int quantityDelta;
+  final double quantityDelta;
   final String movementType;
   final String? orderId;
   final String? transferId;
@@ -26619,7 +26619,7 @@ class StockTransactionData extends DataClass
     map['business_id'] = Variable<String>(businessId);
     map['product_id'] = Variable<String>(productId);
     map['location_id'] = Variable<String>(locationId);
-    map['quantity_delta'] = Variable<int>(quantityDelta);
+    map['quantity_delta'] = Variable<double>(quantityDelta);
     map['movement_type'] = Variable<String>(movementType);
     if (!nullToAbsent || orderId != null) {
       map['order_id'] = Variable<String>(orderId);
@@ -26697,7 +26697,7 @@ class StockTransactionData extends DataClass
       businessId: serializer.fromJson<String>(json['businessId']),
       productId: serializer.fromJson<String>(json['productId']),
       locationId: serializer.fromJson<String>(json['locationId']),
-      quantityDelta: serializer.fromJson<int>(json['quantityDelta']),
+      quantityDelta: serializer.fromJson<double>(json['quantityDelta']),
       movementType: serializer.fromJson<String>(json['movementType']),
       orderId: serializer.fromJson<String?>(json['orderId']),
       transferId: serializer.fromJson<String?>(json['transferId']),
@@ -26719,7 +26719,7 @@ class StockTransactionData extends DataClass
       'businessId': serializer.toJson<String>(businessId),
       'productId': serializer.toJson<String>(productId),
       'locationId': serializer.toJson<String>(locationId),
-      'quantityDelta': serializer.toJson<int>(quantityDelta),
+      'quantityDelta': serializer.toJson<double>(quantityDelta),
       'movementType': serializer.toJson<String>(movementType),
       'orderId': serializer.toJson<String?>(orderId),
       'transferId': serializer.toJson<String?>(transferId),
@@ -26739,7 +26739,7 @@ class StockTransactionData extends DataClass
     String? businessId,
     String? productId,
     String? locationId,
-    int? quantityDelta,
+    double? quantityDelta,
     String? movementType,
     Value<String?> orderId = const Value.absent(),
     Value<String?> transferId = const Value.absent(),
@@ -26879,7 +26879,7 @@ class StockTransactionsCompanion extends UpdateCompanion<StockTransactionData> {
   final Value<String> businessId;
   final Value<String> productId;
   final Value<String> locationId;
-  final Value<int> quantityDelta;
+  final Value<double> quantityDelta;
   final Value<String> movementType;
   final Value<String?> orderId;
   final Value<String?> transferId;
@@ -26916,7 +26916,7 @@ class StockTransactionsCompanion extends UpdateCompanion<StockTransactionData> {
     required String businessId,
     required String productId,
     required String locationId,
-    required int quantityDelta,
+    required double quantityDelta,
     required String movementType,
     this.orderId = const Value.absent(),
     this.transferId = const Value.absent(),
@@ -26939,7 +26939,7 @@ class StockTransactionsCompanion extends UpdateCompanion<StockTransactionData> {
     Expression<String>? businessId,
     Expression<String>? productId,
     Expression<String>? locationId,
-    Expression<int>? quantityDelta,
+    Expression<double>? quantityDelta,
     Expression<String>? movementType,
     Expression<String>? orderId,
     Expression<String>? transferId,
@@ -26979,7 +26979,7 @@ class StockTransactionsCompanion extends UpdateCompanion<StockTransactionData> {
     Value<String>? businessId,
     Value<String>? productId,
     Value<String>? locationId,
-    Value<int>? quantityDelta,
+    Value<double>? quantityDelta,
     Value<String>? movementType,
     Value<String?>? orderId,
     Value<String?>? transferId,
@@ -27030,7 +27030,7 @@ class StockTransactionsCompanion extends UpdateCompanion<StockTransactionData> {
       map['location_id'] = Variable<String>(locationId.value);
     }
     if (quantityDelta.present) {
-      map['quantity_delta'] = Variable<int>(quantityDelta.value);
+      map['quantity_delta'] = Variable<double>(quantityDelta.value);
     }
     if (movementType.present) {
       map['movement_type'] = Variable<String>(movementType.value);
@@ -27158,11 +27158,11 @@ class $StockAdjustmentRequestsTable extends StockAdjustmentRequests
     'quantityDiff',
   );
   @override
-  late final GeneratedColumn<int> quantityDiff = GeneratedColumn<int>(
+  late final GeneratedColumn<double> quantityDiff = GeneratedColumn<double>(
     'quantity_diff',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.double,
     requiredDuringInsert: true,
   );
   static const VerificationMeta _unitCostKoboMeta = const VerificationMeta(
@@ -27433,7 +27433,7 @@ class $StockAdjustmentRequestsTable extends StockAdjustmentRequests
         data['${effectivePrefix}store_id'],
       )!,
       quantityDiff: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
+        DriftSqlType.double,
         data['${effectivePrefix}quantity_diff'],
       )!,
       unitCostKobo: attachedDatabase.typeMapping.read(
@@ -27487,7 +27487,7 @@ class StockAdjustmentRequestData extends DataClass
   final String businessId;
   final String productId;
   final String storeId;
-  final int quantityDiff;
+  final double quantityDiff;
 
   /// What the goods cost, **per unit, in kobo** — captured on the request
   /// itself (#197, PRD #155 US 22) so the FIFO batch the approval mints carries
@@ -27535,7 +27535,7 @@ class StockAdjustmentRequestData extends DataClass
     map['business_id'] = Variable<String>(businessId);
     map['product_id'] = Variable<String>(productId);
     map['store_id'] = Variable<String>(storeId);
-    map['quantity_diff'] = Variable<int>(quantityDiff);
+    map['quantity_diff'] = Variable<double>(quantityDiff);
     if (!nullToAbsent || unitCostKobo != null) {
       map['unit_cost_kobo'] = Variable<int>(unitCostKobo);
     }
@@ -27593,7 +27593,7 @@ class StockAdjustmentRequestData extends DataClass
       businessId: serializer.fromJson<String>(json['businessId']),
       productId: serializer.fromJson<String>(json['productId']),
       storeId: serializer.fromJson<String>(json['storeId']),
-      quantityDiff: serializer.fromJson<int>(json['quantityDiff']),
+      quantityDiff: serializer.fromJson<double>(json['quantityDiff']),
       unitCostKobo: serializer.fromJson<int?>(json['unitCostKobo']),
       reason: serializer.fromJson<String>(json['reason']),
       summary: serializer.fromJson<String>(json['summary']),
@@ -27613,7 +27613,7 @@ class StockAdjustmentRequestData extends DataClass
       'businessId': serializer.toJson<String>(businessId),
       'productId': serializer.toJson<String>(productId),
       'storeId': serializer.toJson<String>(storeId),
-      'quantityDiff': serializer.toJson<int>(quantityDiff),
+      'quantityDiff': serializer.toJson<double>(quantityDiff),
       'unitCostKobo': serializer.toJson<int?>(unitCostKobo),
       'reason': serializer.toJson<String>(reason),
       'summary': serializer.toJson<String>(summary),
@@ -27631,7 +27631,7 @@ class StockAdjustmentRequestData extends DataClass
     String? businessId,
     String? productId,
     String? storeId,
-    int? quantityDiff,
+    double? quantityDiff,
     Value<int?> unitCostKobo = const Value.absent(),
     String? reason,
     String? summary,
@@ -27756,7 +27756,7 @@ class StockAdjustmentRequestsCompanion
   final Value<String> businessId;
   final Value<String> productId;
   final Value<String> storeId;
-  final Value<int> quantityDiff;
+  final Value<double> quantityDiff;
   final Value<int?> unitCostKobo;
   final Value<String> reason;
   final Value<String> summary;
@@ -27789,7 +27789,7 @@ class StockAdjustmentRequestsCompanion
     required String businessId,
     required String productId,
     required String storeId,
-    required int quantityDiff,
+    required double quantityDiff,
     this.unitCostKobo = const Value.absent(),
     required String reason,
     required String summary,
@@ -27811,7 +27811,7 @@ class StockAdjustmentRequestsCompanion
     Expression<String>? businessId,
     Expression<String>? productId,
     Expression<String>? storeId,
-    Expression<int>? quantityDiff,
+    Expression<double>? quantityDiff,
     Expression<int>? unitCostKobo,
     Expression<String>? reason,
     Expression<String>? summary,
@@ -27847,7 +27847,7 @@ class StockAdjustmentRequestsCompanion
     Value<String>? businessId,
     Value<String>? productId,
     Value<String>? storeId,
-    Value<int>? quantityDiff,
+    Value<double>? quantityDiff,
     Value<int?>? unitCostKobo,
     Value<String>? reason,
     Value<String>? summary,
@@ -27894,7 +27894,7 @@ class StockAdjustmentRequestsCompanion
       map['store_id'] = Variable<String>(storeId.value);
     }
     if (quantityDiff.present) {
-      map['quantity_diff'] = Variable<int>(quantityDiff.value);
+      map['quantity_diff'] = Variable<double>(quantityDiff.value);
     }
     if (unitCostKobo.present) {
       map['unit_cost_kobo'] = Variable<int>(unitCostKobo.value);
@@ -28808,11 +28808,11 @@ class $OrderItemsTable extends OrderItems
     'quantity',
   );
   @override
-  late final GeneratedColumn<int> quantity = GeneratedColumn<int>(
+  late final GeneratedColumn<double> quantity = GeneratedColumn<double>(
     'quantity',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.double,
     requiredDuringInsert: true,
   );
   static const VerificationMeta _unitPriceKoboMeta = const VerificationMeta(
@@ -29055,7 +29055,7 @@ class $OrderItemsTable extends OrderItems
         data['${effectivePrefix}store_id'],
       )!,
       quantity: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
+        DriftSqlType.double,
         data['${effectivePrefix}quantity'],
       )!,
       unitPriceKobo: attachedDatabase.typeMapping.read(
@@ -29101,7 +29101,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
   final String orderId;
   final String? productId;
   final String storeId;
-  final int quantity;
+  final double quantity;
   final int unitPriceKobo;
   final int buyingPriceKobo;
   final int totalKobo;
@@ -29134,7 +29134,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
       map['product_id'] = Variable<String>(productId);
     }
     map['store_id'] = Variable<String>(storeId);
-    map['quantity'] = Variable<int>(quantity);
+    map['quantity'] = Variable<double>(quantity);
     map['unit_price_kobo'] = Variable<int>(unitPriceKobo);
     map['buying_price_kobo'] = Variable<int>(buyingPriceKobo);
     map['total_kobo'] = Variable<int>(totalKobo);
@@ -29184,7 +29184,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
       orderId: serializer.fromJson<String>(json['orderId']),
       productId: serializer.fromJson<String?>(json['productId']),
       storeId: serializer.fromJson<String>(json['storeId']),
-      quantity: serializer.fromJson<int>(json['quantity']),
+      quantity: serializer.fromJson<double>(json['quantity']),
       unitPriceKobo: serializer.fromJson<int>(json['unitPriceKobo']),
       buyingPriceKobo: serializer.fromJson<int>(json['buyingPriceKobo']),
       totalKobo: serializer.fromJson<int>(json['totalKobo']),
@@ -29203,7 +29203,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
       'orderId': serializer.toJson<String>(orderId),
       'productId': serializer.toJson<String?>(productId),
       'storeId': serializer.toJson<String>(storeId),
-      'quantity': serializer.toJson<int>(quantity),
+      'quantity': serializer.toJson<double>(quantity),
       'unitPriceKobo': serializer.toJson<int>(unitPriceKobo),
       'buyingPriceKobo': serializer.toJson<int>(buyingPriceKobo),
       'totalKobo': serializer.toJson<int>(totalKobo),
@@ -29220,7 +29220,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
     String? orderId,
     Value<String?> productId = const Value.absent(),
     String? storeId,
-    int? quantity,
+    double? quantity,
     int? unitPriceKobo,
     int? buyingPriceKobo,
     int? totalKobo,
@@ -29338,7 +29338,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
   final Value<String> orderId;
   final Value<String?> productId;
   final Value<String> storeId;
-  final Value<int> quantity;
+  final Value<double> quantity;
   final Value<int> unitPriceKobo;
   final Value<int> buyingPriceKobo;
   final Value<int> totalKobo;
@@ -29369,7 +29369,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
     required String orderId,
     this.productId = const Value.absent(),
     required String storeId,
-    required int quantity,
+    required double quantity,
     required int unitPriceKobo,
     this.buyingPriceKobo = const Value.absent(),
     required int totalKobo,
@@ -29390,7 +29390,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
     Expression<String>? orderId,
     Expression<String>? productId,
     Expression<String>? storeId,
-    Expression<int>? quantity,
+    Expression<double>? quantity,
     Expression<int>? unitPriceKobo,
     Expression<int>? buyingPriceKobo,
     Expression<int>? totalKobo,
@@ -29425,7 +29425,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
     Value<String>? orderId,
     Value<String?>? productId,
     Value<String>? storeId,
-    Value<int>? quantity,
+    Value<double>? quantity,
     Value<int>? unitPriceKobo,
     Value<int>? buyingPriceKobo,
     Value<int>? totalKobo,
@@ -29472,7 +29472,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
       map['store_id'] = Variable<String>(storeId.value);
     }
     if (quantity.present) {
-      map['quantity'] = Variable<int>(quantity.value);
+      map['quantity'] = Variable<double>(quantity.value);
     }
     if (unitPriceKobo.present) {
       map['unit_price_kobo'] = Variable<int>(unitPriceKobo.value);
@@ -29585,11 +29585,11 @@ class $OrderCrateLinesTable extends OrderCrateLines
     'cratesTaken',
   );
   @override
-  late final GeneratedColumn<int> cratesTaken = GeneratedColumn<int>(
+  late final GeneratedColumn<double> cratesTaken = GeneratedColumn<double>(
     'crates_taken',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.double,
     requiredDuringInsert: true,
   );
   static const VerificationMeta _depositRateKoboMeta = const VerificationMeta(
@@ -29804,7 +29804,7 @@ class $OrderCrateLinesTable extends OrderCrateLines
         data['${effectivePrefix}manufacturer_id'],
       )!,
       cratesTaken: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
+        DriftSqlType.double,
         data['${effectivePrefix}crates_taken'],
       )!,
       depositRateKobo: attachedDatabase.typeMapping.read(
@@ -29846,7 +29846,7 @@ class OrderCrateLineData extends DataClass
   final String businessId;
   final String orderId;
   final String manufacturerId;
-  final int cratesTaken;
+  final double cratesTaken;
   final int depositRateKobo;
   final int depositPaidKobo;
   final DateTime createdAt;
@@ -29891,7 +29891,7 @@ class OrderCrateLineData extends DataClass
     map['business_id'] = Variable<String>(businessId);
     map['order_id'] = Variable<String>(orderId);
     map['manufacturer_id'] = Variable<String>(manufacturerId);
-    map['crates_taken'] = Variable<int>(cratesTaken);
+    map['crates_taken'] = Variable<double>(cratesTaken);
     map['deposit_rate_kobo'] = Variable<int>(depositRateKobo);
     map['deposit_paid_kobo'] = Variable<int>(depositPaidKobo);
     map['created_at'] = Variable<DateTime>(createdAt);
@@ -29935,7 +29935,7 @@ class OrderCrateLineData extends DataClass
       businessId: serializer.fromJson<String>(json['businessId']),
       orderId: serializer.fromJson<String>(json['orderId']),
       manufacturerId: serializer.fromJson<String>(json['manufacturerId']),
-      cratesTaken: serializer.fromJson<int>(json['cratesTaken']),
+      cratesTaken: serializer.fromJson<double>(json['cratesTaken']),
       depositRateKobo: serializer.fromJson<int>(json['depositRateKobo']),
       depositPaidKobo: serializer.fromJson<int>(json['depositPaidKobo']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -29952,7 +29952,7 @@ class OrderCrateLineData extends DataClass
       'businessId': serializer.toJson<String>(businessId),
       'orderId': serializer.toJson<String>(orderId),
       'manufacturerId': serializer.toJson<String>(manufacturerId),
-      'cratesTaken': serializer.toJson<int>(cratesTaken),
+      'cratesTaken': serializer.toJson<double>(cratesTaken),
       'depositRateKobo': serializer.toJson<int>(depositRateKobo),
       'depositPaidKobo': serializer.toJson<int>(depositPaidKobo),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -29967,7 +29967,7 @@ class OrderCrateLineData extends DataClass
     String? businessId,
     String? orderId,
     String? manufacturerId,
-    int? cratesTaken,
+    double? cratesTaken,
     int? depositRateKobo,
     int? depositPaidKobo,
     DateTime? createdAt,
@@ -30069,7 +30069,7 @@ class OrderCrateLinesCompanion extends UpdateCompanion<OrderCrateLineData> {
   final Value<String> businessId;
   final Value<String> orderId;
   final Value<String> manufacturerId;
-  final Value<int> cratesTaken;
+  final Value<double> cratesTaken;
   final Value<int> depositRateKobo;
   final Value<int> depositPaidKobo;
   final Value<DateTime> createdAt;
@@ -30096,7 +30096,7 @@ class OrderCrateLinesCompanion extends UpdateCompanion<OrderCrateLineData> {
     required String businessId,
     required String orderId,
     required String manufacturerId,
-    required int cratesTaken,
+    required double cratesTaken,
     this.depositRateKobo = const Value.absent(),
     this.depositPaidKobo = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -30113,7 +30113,7 @@ class OrderCrateLinesCompanion extends UpdateCompanion<OrderCrateLineData> {
     Expression<String>? businessId,
     Expression<String>? orderId,
     Expression<String>? manufacturerId,
-    Expression<int>? cratesTaken,
+    Expression<double>? cratesTaken,
     Expression<int>? depositRateKobo,
     Expression<int>? depositPaidKobo,
     Expression<DateTime>? createdAt,
@@ -30143,7 +30143,7 @@ class OrderCrateLinesCompanion extends UpdateCompanion<OrderCrateLineData> {
     Value<String>? businessId,
     Value<String>? orderId,
     Value<String>? manufacturerId,
-    Value<int>? cratesTaken,
+    Value<double>? cratesTaken,
     Value<int>? depositRateKobo,
     Value<int>? depositPaidKobo,
     Value<DateTime>? createdAt,
@@ -30184,7 +30184,7 @@ class OrderCrateLinesCompanion extends UpdateCompanion<OrderCrateLineData> {
       map['manufacturer_id'] = Variable<String>(manufacturerId.value);
     }
     if (cratesTaken.present) {
-      map['crates_taken'] = Variable<int>(cratesTaken.value);
+      map['crates_taken'] = Variable<double>(cratesTaken.value);
     }
     if (depositRateKobo.present) {
       map['deposit_rate_kobo'] = Variable<int>(depositRateKobo.value);
@@ -32332,11 +32332,11 @@ class $PurchaseItemsTable extends PurchaseItems
     'quantity',
   );
   @override
-  late final GeneratedColumn<int> quantity = GeneratedColumn<int>(
+  late final GeneratedColumn<double> quantity = GeneratedColumn<double>(
     'quantity',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.double,
     requiredDuringInsert: true,
   );
   static const VerificationMeta _unitPriceKoboMeta = const VerificationMeta(
@@ -32505,7 +32505,7 @@ class $PurchaseItemsTable extends PurchaseItems
         data['${effectivePrefix}product_id'],
       )!,
       quantity: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
+        DriftSqlType.double,
         data['${effectivePrefix}quantity'],
       )!,
       unitPriceKobo: attachedDatabase.typeMapping.read(
@@ -32539,7 +32539,7 @@ class PurchaseItemData extends DataClass
   final String businessId;
   final String purchaseId;
   final String productId;
-  final int quantity;
+  final double quantity;
   final int unitPriceKobo;
   final int totalKobo;
   final DateTime createdAt;
@@ -32562,7 +32562,7 @@ class PurchaseItemData extends DataClass
     map['business_id'] = Variable<String>(businessId);
     map['purchase_id'] = Variable<String>(purchaseId);
     map['product_id'] = Variable<String>(productId);
-    map['quantity'] = Variable<int>(quantity);
+    map['quantity'] = Variable<double>(quantity);
     map['unit_price_kobo'] = Variable<int>(unitPriceKobo);
     map['total_kobo'] = Variable<int>(totalKobo);
     map['created_at'] = Variable<DateTime>(createdAt);
@@ -32594,7 +32594,7 @@ class PurchaseItemData extends DataClass
       businessId: serializer.fromJson<String>(json['businessId']),
       purchaseId: serializer.fromJson<String>(json['purchaseId']),
       productId: serializer.fromJson<String>(json['productId']),
-      quantity: serializer.fromJson<int>(json['quantity']),
+      quantity: serializer.fromJson<double>(json['quantity']),
       unitPriceKobo: serializer.fromJson<int>(json['unitPriceKobo']),
       totalKobo: serializer.fromJson<int>(json['totalKobo']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -32609,7 +32609,7 @@ class PurchaseItemData extends DataClass
       'businessId': serializer.toJson<String>(businessId),
       'purchaseId': serializer.toJson<String>(purchaseId),
       'productId': serializer.toJson<String>(productId),
-      'quantity': serializer.toJson<int>(quantity),
+      'quantity': serializer.toJson<double>(quantity),
       'unitPriceKobo': serializer.toJson<int>(unitPriceKobo),
       'totalKobo': serializer.toJson<int>(totalKobo),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -32622,7 +32622,7 @@ class PurchaseItemData extends DataClass
     String? businessId,
     String? purchaseId,
     String? productId,
-    int? quantity,
+    double? quantity,
     int? unitPriceKobo,
     int? totalKobo,
     DateTime? createdAt,
@@ -32708,7 +32708,7 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItemData> {
   final Value<String> businessId;
   final Value<String> purchaseId;
   final Value<String> productId;
-  final Value<int> quantity;
+  final Value<double> quantity;
   final Value<int> unitPriceKobo;
   final Value<int> totalKobo;
   final Value<DateTime> createdAt;
@@ -32731,7 +32731,7 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItemData> {
     required String businessId,
     required String purchaseId,
     required String productId,
-    required int quantity,
+    required double quantity,
     required int unitPriceKobo,
     required int totalKobo,
     this.createdAt = const Value.absent(),
@@ -32748,7 +32748,7 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItemData> {
     Expression<String>? businessId,
     Expression<String>? purchaseId,
     Expression<String>? productId,
-    Expression<int>? quantity,
+    Expression<double>? quantity,
     Expression<int>? unitPriceKobo,
     Expression<int>? totalKobo,
     Expression<DateTime>? createdAt,
@@ -32774,7 +32774,7 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItemData> {
     Value<String>? businessId,
     Value<String>? purchaseId,
     Value<String>? productId,
-    Value<int>? quantity,
+    Value<double>? quantity,
     Value<int>? unitPriceKobo,
     Value<int>? totalKobo,
     Value<DateTime>? createdAt,
@@ -32811,7 +32811,7 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItemData> {
       map['product_id'] = Variable<String>(productId.value);
     }
     if (quantity.present) {
-      map['quantity'] = Variable<int>(quantity.value);
+      map['quantity'] = Variable<double>(quantity.value);
     }
     if (unitPriceKobo.present) {
       map['unit_price_kobo'] = Variable<int>(unitPriceKobo.value);
@@ -37694,22 +37694,22 @@ class $StockCountsTable extends StockCounts
     'shortageUnits',
   );
   @override
-  late final GeneratedColumn<int> shortageUnits = GeneratedColumn<int>(
+  late final GeneratedColumn<double> shortageUnits = GeneratedColumn<double>(
     'shortage_units',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.double,
     requiredDuringInsert: true,
   );
   static const VerificationMeta _surplusUnitsMeta = const VerificationMeta(
     'surplusUnits',
   );
   @override
-  late final GeneratedColumn<int> surplusUnits = GeneratedColumn<int>(
+  late final GeneratedColumn<double> surplusUnits = GeneratedColumn<double>(
     'surplus_units',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.double,
     requiredDuringInsert: true,
   );
   static const VerificationMeta _linesJsonMeta = const VerificationMeta(
@@ -37940,11 +37940,11 @@ class $StockCountsTable extends StockCounts
         data['${effectivePrefix}surplus_count'],
       )!,
       shortageUnits: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
+        DriftSqlType.double,
         data['${effectivePrefix}shortage_units'],
       )!,
       surplusUnits: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
+        DriftSqlType.double,
         data['${effectivePrefix}surplus_units'],
       )!,
       linesJson: attachedDatabase.typeMapping.read(
@@ -37980,8 +37980,8 @@ class StockCountData extends DataClass implements Insertable<StockCountData> {
   final int productsCounted;
   final int shortageCount;
   final int surplusCount;
-  final int shortageUnits;
-  final int surplusUnits;
+  final double shortageUnits;
+  final double surplusUnits;
   final String linesJson;
   final String? countedBy;
   final DateTime createdAt;
@@ -38013,8 +38013,8 @@ class StockCountData extends DataClass implements Insertable<StockCountData> {
     map['products_counted'] = Variable<int>(productsCounted);
     map['shortage_count'] = Variable<int>(shortageCount);
     map['surplus_count'] = Variable<int>(surplusCount);
-    map['shortage_units'] = Variable<int>(shortageUnits);
-    map['surplus_units'] = Variable<int>(surplusUnits);
+    map['shortage_units'] = Variable<double>(shortageUnits);
+    map['surplus_units'] = Variable<double>(surplusUnits);
     map['lines_json'] = Variable<String>(linesJson);
     if (!nullToAbsent || countedBy != null) {
       map['counted_by'] = Variable<String>(countedBy);
@@ -38059,8 +38059,8 @@ class StockCountData extends DataClass implements Insertable<StockCountData> {
       productsCounted: serializer.fromJson<int>(json['productsCounted']),
       shortageCount: serializer.fromJson<int>(json['shortageCount']),
       surplusCount: serializer.fromJson<int>(json['surplusCount']),
-      shortageUnits: serializer.fromJson<int>(json['shortageUnits']),
-      surplusUnits: serializer.fromJson<int>(json['surplusUnits']),
+      shortageUnits: serializer.fromJson<double>(json['shortageUnits']),
+      surplusUnits: serializer.fromJson<double>(json['surplusUnits']),
       linesJson: serializer.fromJson<String>(json['linesJson']),
       countedBy: serializer.fromJson<String?>(json['countedBy']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -38078,8 +38078,8 @@ class StockCountData extends DataClass implements Insertable<StockCountData> {
       'productsCounted': serializer.toJson<int>(productsCounted),
       'shortageCount': serializer.toJson<int>(shortageCount),
       'surplusCount': serializer.toJson<int>(surplusCount),
-      'shortageUnits': serializer.toJson<int>(shortageUnits),
-      'surplusUnits': serializer.toJson<int>(surplusUnits),
+      'shortageUnits': serializer.toJson<double>(shortageUnits),
+      'surplusUnits': serializer.toJson<double>(surplusUnits),
       'linesJson': serializer.toJson<String>(linesJson),
       'countedBy': serializer.toJson<String?>(countedBy),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -38095,8 +38095,8 @@ class StockCountData extends DataClass implements Insertable<StockCountData> {
     int? productsCounted,
     int? shortageCount,
     int? surplusCount,
-    int? shortageUnits,
-    int? surplusUnits,
+    double? shortageUnits,
+    double? surplusUnits,
     String? linesJson,
     Value<String?> countedBy = const Value.absent(),
     DateTime? createdAt,
@@ -38213,8 +38213,8 @@ class StockCountsCompanion extends UpdateCompanion<StockCountData> {
   final Value<int> productsCounted;
   final Value<int> shortageCount;
   final Value<int> surplusCount;
-  final Value<int> shortageUnits;
-  final Value<int> surplusUnits;
+  final Value<double> shortageUnits;
+  final Value<double> surplusUnits;
   final Value<String> linesJson;
   final Value<String?> countedBy;
   final Value<DateTime> createdAt;
@@ -38244,8 +38244,8 @@ class StockCountsCompanion extends UpdateCompanion<StockCountData> {
     required int productsCounted,
     required int shortageCount,
     required int surplusCount,
-    required int shortageUnits,
-    required int surplusUnits,
+    required double shortageUnits,
+    required double surplusUnits,
     required String linesJson,
     this.countedBy = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -38267,8 +38267,8 @@ class StockCountsCompanion extends UpdateCompanion<StockCountData> {
     Expression<int>? productsCounted,
     Expression<int>? shortageCount,
     Expression<int>? surplusCount,
-    Expression<int>? shortageUnits,
-    Expression<int>? surplusUnits,
+    Expression<double>? shortageUnits,
+    Expression<double>? surplusUnits,
     Expression<String>? linesJson,
     Expression<String>? countedBy,
     Expression<DateTime>? createdAt,
@@ -38301,8 +38301,8 @@ class StockCountsCompanion extends UpdateCompanion<StockCountData> {
     Value<int>? productsCounted,
     Value<int>? shortageCount,
     Value<int>? surplusCount,
-    Value<int>? shortageUnits,
-    Value<int>? surplusUnits,
+    Value<double>? shortageUnits,
+    Value<double>? surplusUnits,
     Value<String>? linesJson,
     Value<String?>? countedBy,
     Value<DateTime>? createdAt,
@@ -38352,10 +38352,10 @@ class StockCountsCompanion extends UpdateCompanion<StockCountData> {
       map['surplus_count'] = Variable<int>(surplusCount.value);
     }
     if (shortageUnits.present) {
-      map['shortage_units'] = Variable<int>(shortageUnits.value);
+      map['shortage_units'] = Variable<double>(shortageUnits.value);
     }
     if (surplusUnits.present) {
-      map['surplus_units'] = Variable<int>(surplusUnits.value);
+      map['surplus_units'] = Variable<double>(surplusUnits.value);
     }
     if (linesJson.present) {
       map['lines_json'] = Variable<String>(linesJson.value);
@@ -38635,13 +38635,13 @@ class $DailyClosingsTable extends DailyClosings
     'shortageUnits',
   );
   @override
-  late final GeneratedColumn<int> shortageUnits = GeneratedColumn<int>(
+  late final GeneratedColumn<double> shortageUnits = GeneratedColumn<double>(
     'shortage_units',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.double,
     requiredDuringInsert: false,
-    defaultValue: const Constant(0),
+    defaultValue: const Constant(0.0),
   );
   static const VerificationMeta _reviewedByMeta = const VerificationMeta(
     'reviewedBy',
@@ -39015,7 +39015,7 @@ class $DailyClosingsTable extends DailyClosings
         data['${effectivePrefix}items_sold'],
       )!,
       shortageUnits: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
+        DriftSqlType.double,
         data['${effectivePrefix}shortage_units'],
       )!,
       reviewedBy: attachedDatabase.typeMapping.read(
@@ -39064,7 +39064,7 @@ class DailyClosingData extends DataClass
   final int stockCogsKobo;
   final int stockExpectedClosingKobo;
   final int itemsSold;
-  final int shortageUnits;
+  final double shortageUnits;
   final String? reviewedBy;
   final DateTime reviewedAt;
   final DateTime createdAt;
@@ -39121,7 +39121,7 @@ class DailyClosingData extends DataClass
       stockExpectedClosingKobo,
     );
     map['items_sold'] = Variable<int>(itemsSold);
-    map['shortage_units'] = Variable<int>(shortageUnits);
+    map['shortage_units'] = Variable<double>(shortageUnits);
     if (!nullToAbsent || reviewedBy != null) {
       map['reviewed_by'] = Variable<String>(reviewedBy);
     }
@@ -39193,7 +39193,7 @@ class DailyClosingData extends DataClass
         json['stockExpectedClosingKobo'],
       ),
       itemsSold: serializer.fromJson<int>(json['itemsSold']),
-      shortageUnits: serializer.fromJson<int>(json['shortageUnits']),
+      shortageUnits: serializer.fromJson<double>(json['shortageUnits']),
       reviewedBy: serializer.fromJson<String?>(json['reviewedBy']),
       reviewedAt: serializer.fromJson<DateTime>(json['reviewedAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -39225,7 +39225,7 @@ class DailyClosingData extends DataClass
         stockExpectedClosingKobo,
       ),
       'itemsSold': serializer.toJson<int>(itemsSold),
-      'shortageUnits': serializer.toJson<int>(shortageUnits),
+      'shortageUnits': serializer.toJson<double>(shortageUnits),
       'reviewedBy': serializer.toJson<String?>(reviewedBy),
       'reviewedAt': serializer.toJson<DateTime>(reviewedAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -39253,7 +39253,7 @@ class DailyClosingData extends DataClass
     int? stockCogsKobo,
     int? stockExpectedClosingKobo,
     int? itemsSold,
-    int? shortageUnits,
+    double? shortageUnits,
     Value<String?> reviewedBy = const Value.absent(),
     DateTime? reviewedAt,
     DateTime? createdAt,
@@ -39462,7 +39462,7 @@ class DailyClosingsCompanion extends UpdateCompanion<DailyClosingData> {
   final Value<int> stockCogsKobo;
   final Value<int> stockExpectedClosingKobo;
   final Value<int> itemsSold;
-  final Value<int> shortageUnits;
+  final Value<double> shortageUnits;
   final Value<String?> reviewedBy;
   final Value<DateTime> reviewedAt;
   final Value<DateTime> createdAt;
@@ -39543,7 +39543,7 @@ class DailyClosingsCompanion extends UpdateCompanion<DailyClosingData> {
     Expression<int>? stockCogsKobo,
     Expression<int>? stockExpectedClosingKobo,
     Expression<int>? itemsSold,
-    Expression<int>? shortageUnits,
+    Expression<double>? shortageUnits,
     Expression<String>? reviewedBy,
     Expression<DateTime>? reviewedAt,
     Expression<DateTime>? createdAt,
@@ -39601,7 +39601,7 @@ class DailyClosingsCompanion extends UpdateCompanion<DailyClosingData> {
     Value<int>? stockCogsKobo,
     Value<int>? stockExpectedClosingKobo,
     Value<int>? itemsSold,
-    Value<int>? shortageUnits,
+    Value<double>? shortageUnits,
     Value<String?>? reviewedBy,
     Value<DateTime>? reviewedAt,
     Value<DateTime>? createdAt,
@@ -39701,7 +39701,7 @@ class DailyClosingsCompanion extends UpdateCompanion<DailyClosingData> {
       map['items_sold'] = Variable<int>(itemsSold.value);
     }
     if (shortageUnits.present) {
-      map['shortage_units'] = Variable<int>(shortageUnits.value);
+      map['shortage_units'] = Variable<double>(shortageUnits.value);
     }
     if (reviewedBy.present) {
       map['reviewed_by'] = Variable<String>(reviewedBy.value);
@@ -59717,7 +59717,7 @@ typedef $$CrateSizeGroupsTableCreateCompanionBuilder =
       required String businessId,
       required String name,
       Value<String> crateSizeLabel,
-      Value<int> emptyCrateStock,
+      Value<double> emptyCrateStock,
       Value<int> depositAmountKobo,
       Value<bool> isDeleted,
       Value<DateTime> createdAt,
@@ -59730,7 +59730,7 @@ typedef $$CrateSizeGroupsTableUpdateCompanionBuilder =
       Value<String> businessId,
       Value<String> name,
       Value<String> crateSizeLabel,
-      Value<int> emptyCrateStock,
+      Value<double> emptyCrateStock,
       Value<int> depositAmountKobo,
       Value<bool> isDeleted,
       Value<DateTime> createdAt,
@@ -59856,7 +59856,7 @@ class $$CrateSizeGroupsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get emptyCrateStock => $composableBuilder(
+  ColumnFilters<double> get emptyCrateStock => $composableBuilder(
     column: $table.emptyCrateStock,
     builder: (column) => ColumnFilters(column),
   );
@@ -60004,7 +60004,7 @@ class $$CrateSizeGroupsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get emptyCrateStock => $composableBuilder(
+  ColumnOrderings<double> get emptyCrateStock => $composableBuilder(
     column: $table.emptyCrateStock,
     builder: (column) => ColumnOrderings(column),
   );
@@ -60073,7 +60073,7 @@ class $$CrateSizeGroupsTableAnnotationComposer
     builder: (column) => column,
   );
 
-  GeneratedColumn<int> get emptyCrateStock => $composableBuilder(
+  GeneratedColumn<double> get emptyCrateStock => $composableBuilder(
     column: $table.emptyCrateStock,
     builder: (column) => column,
   );
@@ -60232,7 +60232,7 @@ class $$CrateSizeGroupsTableTableManager
                 Value<String> businessId = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<String> crateSizeLabel = const Value.absent(),
-                Value<int> emptyCrateStock = const Value.absent(),
+                Value<double> emptyCrateStock = const Value.absent(),
                 Value<int> depositAmountKobo = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -60256,7 +60256,7 @@ class $$CrateSizeGroupsTableTableManager
                 required String businessId,
                 required String name,
                 Value<String> crateSizeLabel = const Value.absent(),
-                Value<int> emptyCrateStock = const Value.absent(),
+                Value<double> emptyCrateStock = const Value.absent(),
                 Value<int> depositAmountKobo = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -60427,7 +60427,7 @@ typedef $$ManufacturersTableCreateCompanionBuilder =
       Value<String> id,
       required String businessId,
       required String name,
-      Value<int> emptyCrateStock,
+      Value<double> emptyCrateStock,
       Value<int> depositAmountKobo,
       Value<String> crateMoneyArrangement,
       Value<bool> isDeleted,
@@ -60440,7 +60440,7 @@ typedef $$ManufacturersTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> businessId,
       Value<String> name,
-      Value<int> emptyCrateStock,
+      Value<double> emptyCrateStock,
       Value<int> depositAmountKobo,
       Value<String> crateMoneyArrangement,
       Value<bool> isDeleted,
@@ -60811,7 +60811,7 @@ class $$ManufacturersTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get emptyCrateStock => $composableBuilder(
+  ColumnFilters<double> get emptyCrateStock => $composableBuilder(
     column: $table.emptyCrateStock,
     builder: (column) => ColumnFilters(column),
   );
@@ -61194,7 +61194,7 @@ class $$ManufacturersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get emptyCrateStock => $composableBuilder(
+  ColumnOrderings<double> get emptyCrateStock => $composableBuilder(
     column: $table.emptyCrateStock,
     builder: (column) => ColumnOrderings(column),
   );
@@ -61263,7 +61263,7 @@ class $$ManufacturersTableAnnotationComposer
   GeneratedColumn<String> get name =>
       $composableBuilder(column: $table.name, builder: (column) => column);
 
-  GeneratedColumn<int> get emptyCrateStock => $composableBuilder(
+  GeneratedColumn<double> get emptyCrateStock => $composableBuilder(
     column: $table.emptyCrateStock,
     builder: (column) => column,
   );
@@ -61672,7 +61672,7 @@ class $$ManufacturersTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> businessId = const Value.absent(),
                 Value<String> name = const Value.absent(),
-                Value<int> emptyCrateStock = const Value.absent(),
+                Value<double> emptyCrateStock = const Value.absent(),
                 Value<int> depositAmountKobo = const Value.absent(),
                 Value<String> crateMoneyArrangement = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
@@ -61696,7 +61696,7 @@ class $$ManufacturersTableTableManager
                 Value<String> id = const Value.absent(),
                 required String businessId,
                 required String name,
-                Value<int> emptyCrateStock = const Value.absent(),
+                Value<double> emptyCrateStock = const Value.absent(),
                 Value<int> depositAmountKobo = const Value.absent(),
                 Value<String> crateMoneyArrangement = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
@@ -70618,7 +70618,7 @@ typedef $$SupplierCrateLedgerTableCreateCompanionBuilder =
       required String supplierId,
       required String manufacturerId,
       Value<String?> storeId,
-      required int quantityDelta,
+      required double quantityDelta,
       required String movementType,
       Value<int> depositPaidKobo,
       Value<String?> note,
@@ -70637,7 +70637,7 @@ typedef $$SupplierCrateLedgerTableUpdateCompanionBuilder =
       Value<String> supplierId,
       Value<String> manufacturerId,
       Value<String?> storeId,
-      Value<int> quantityDelta,
+      Value<double> quantityDelta,
       Value<String> movementType,
       Value<int> depositPaidKobo,
       Value<String?> note,
@@ -70863,7 +70863,7 @@ class $$SupplierCrateLedgerTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get quantityDelta => $composableBuilder(
+  ColumnFilters<double> get quantityDelta => $composableBuilder(
     column: $table.quantityDelta,
     builder: (column) => ColumnFilters(column),
   );
@@ -71111,7 +71111,7 @@ class $$SupplierCrateLedgerTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get quantityDelta => $composableBuilder(
+  ColumnOrderings<double> get quantityDelta => $composableBuilder(
     column: $table.quantityDelta,
     builder: (column) => ColumnOrderings(column),
   );
@@ -71302,7 +71302,7 @@ class $$SupplierCrateLedgerTableAnnotationComposer
   GeneratedColumn<String> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
 
-  GeneratedColumn<int> get quantityDelta => $composableBuilder(
+  GeneratedColumn<double> get quantityDelta => $composableBuilder(
     column: $table.quantityDelta,
     builder: (column) => column,
   );
@@ -71580,7 +71580,7 @@ class $$SupplierCrateLedgerTableTableManager
                 Value<String> supplierId = const Value.absent(),
                 Value<String> manufacturerId = const Value.absent(),
                 Value<String?> storeId = const Value.absent(),
-                Value<int> quantityDelta = const Value.absent(),
+                Value<double> quantityDelta = const Value.absent(),
                 Value<String> movementType = const Value.absent(),
                 Value<int> depositPaidKobo = const Value.absent(),
                 Value<String?> note = const Value.absent(),
@@ -71616,7 +71616,7 @@ class $$SupplierCrateLedgerTableTableManager
                 required String supplierId,
                 required String manufacturerId,
                 Value<String?> storeId = const Value.absent(),
-                required int quantityDelta,
+                required double quantityDelta,
                 required String movementType,
                 Value<int> depositPaidKobo = const Value.absent(),
                 Value<String?> note = const Value.absent(),
@@ -71861,7 +71861,7 @@ typedef $$SupplierCrateBalancesTableCreateCompanionBuilder =
       required String businessId,
       required String supplierId,
       required String manufacturerId,
-      Value<int> balance,
+      Value<double> balance,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
       Value<int> rowid,
@@ -71872,7 +71872,7 @@ typedef $$SupplierCrateBalancesTableUpdateCompanionBuilder =
       Value<String> businessId,
       Value<String> supplierId,
       Value<String> manufacturerId,
-      Value<int> balance,
+      Value<double> balance,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
       Value<int> rowid,
@@ -71972,7 +71972,7 @@ class $$SupplierCrateBalancesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get balance => $composableBuilder(
+  ColumnFilters<double> get balance => $composableBuilder(
     column: $table.balance,
     builder: (column) => ColumnFilters(column),
   );
@@ -72071,7 +72071,7 @@ class $$SupplierCrateBalancesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get balance => $composableBuilder(
+  ColumnOrderings<double> get balance => $composableBuilder(
     column: $table.balance,
     builder: (column) => ColumnOrderings(column),
   );
@@ -72168,7 +72168,7 @@ class $$SupplierCrateBalancesTableAnnotationComposer
   GeneratedColumn<String> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
 
-  GeneratedColumn<int> get balance =>
+  GeneratedColumn<double> get balance =>
       $composableBuilder(column: $table.balance, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
@@ -72296,7 +72296,7 @@ class $$SupplierCrateBalancesTableTableManager
                 Value<String> businessId = const Value.absent(),
                 Value<String> supplierId = const Value.absent(),
                 Value<String> manufacturerId = const Value.absent(),
-                Value<int> balance = const Value.absent(),
+                Value<double> balance = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -72316,7 +72316,7 @@ class $$SupplierCrateBalancesTableTableManager
                 required String businessId,
                 required String supplierId,
                 required String manufacturerId,
-                Value<int> balance = const Value.absent(),
+                Value<double> balance = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -86000,7 +86000,7 @@ typedef $$CustomerCrateBalancesTableCreateCompanionBuilder =
       required String businessId,
       required String customerId,
       required String manufacturerId,
-      Value<int> balance,
+      Value<double> balance,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
       Value<int> rowid,
@@ -86011,7 +86011,7 @@ typedef $$CustomerCrateBalancesTableUpdateCompanionBuilder =
       Value<String> businessId,
       Value<String> customerId,
       Value<String> manufacturerId,
-      Value<int> balance,
+      Value<double> balance,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
       Value<int> rowid,
@@ -86111,7 +86111,7 @@ class $$CustomerCrateBalancesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get balance => $composableBuilder(
+  ColumnFilters<double> get balance => $composableBuilder(
     column: $table.balance,
     builder: (column) => ColumnFilters(column),
   );
@@ -86210,7 +86210,7 @@ class $$CustomerCrateBalancesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get balance => $composableBuilder(
+  ColumnOrderings<double> get balance => $composableBuilder(
     column: $table.balance,
     builder: (column) => ColumnOrderings(column),
   );
@@ -86307,7 +86307,7 @@ class $$CustomerCrateBalancesTableAnnotationComposer
   GeneratedColumn<String> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
 
-  GeneratedColumn<int> get balance =>
+  GeneratedColumn<double> get balance =>
       $composableBuilder(column: $table.balance, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
@@ -86435,7 +86435,7 @@ class $$CustomerCrateBalancesTableTableManager
                 Value<String> businessId = const Value.absent(),
                 Value<String> customerId = const Value.absent(),
                 Value<String> manufacturerId = const Value.absent(),
-                Value<int> balance = const Value.absent(),
+                Value<double> balance = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -86455,7 +86455,7 @@ class $$CustomerCrateBalancesTableTableManager
                 required String businessId,
                 required String customerId,
                 required String manufacturerId,
-                Value<int> balance = const Value.absent(),
+                Value<double> balance = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -86582,7 +86582,7 @@ typedef $$ManufacturerCrateBalancesTableCreateCompanionBuilder =
       Value<String> id,
       required String businessId,
       required String manufacturerId,
-      Value<int> balance,
+      Value<double> balance,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
       Value<int> rowid,
@@ -86592,7 +86592,7 @@ typedef $$ManufacturerCrateBalancesTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> businessId,
       Value<String> manufacturerId,
-      Value<int> balance,
+      Value<double> balance,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
       Value<int> rowid,
@@ -86670,7 +86670,7 @@ class $$ManufacturerCrateBalancesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get balance => $composableBuilder(
+  ColumnFilters<double> get balance => $composableBuilder(
     column: $table.balance,
     builder: (column) => ColumnFilters(column),
   );
@@ -86746,7 +86746,7 @@ class $$ManufacturerCrateBalancesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get balance => $composableBuilder(
+  ColumnOrderings<double> get balance => $composableBuilder(
     column: $table.balance,
     builder: (column) => ColumnOrderings(column),
   );
@@ -86820,7 +86820,7 @@ class $$ManufacturerCrateBalancesTableAnnotationComposer
   GeneratedColumn<String> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
 
-  GeneratedColumn<int> get balance =>
+  GeneratedColumn<double> get balance =>
       $composableBuilder(column: $table.balance, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
@@ -86923,7 +86923,7 @@ class $$ManufacturerCrateBalancesTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> businessId = const Value.absent(),
                 Value<String> manufacturerId = const Value.absent(),
-                Value<int> balance = const Value.absent(),
+                Value<double> balance = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -86941,7 +86941,7 @@ class $$ManufacturerCrateBalancesTableTableManager
                 Value<String> id = const Value.absent(),
                 required String businessId,
                 required String manufacturerId,
-                Value<int> balance = const Value.absent(),
+                Value<double> balance = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -87044,7 +87044,7 @@ typedef $$StoreCrateBalancesTableCreateCompanionBuilder =
       required String businessId,
       required String storeId,
       required String manufacturerId,
-      Value<int> balance,
+      Value<double> balance,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
       Value<int> rowid,
@@ -87055,7 +87055,7 @@ typedef $$StoreCrateBalancesTableUpdateCompanionBuilder =
       Value<String> businessId,
       Value<String> storeId,
       Value<String> manufacturerId,
-      Value<int> balance,
+      Value<double> balance,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
       Value<int> rowid,
@@ -87151,7 +87151,7 @@ class $$StoreCrateBalancesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get balance => $composableBuilder(
+  ColumnFilters<double> get balance => $composableBuilder(
     column: $table.balance,
     builder: (column) => ColumnFilters(column),
   );
@@ -87250,7 +87250,7 @@ class $$StoreCrateBalancesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get balance => $composableBuilder(
+  ColumnOrderings<double> get balance => $composableBuilder(
     column: $table.balance,
     builder: (column) => ColumnOrderings(column),
   );
@@ -87347,7 +87347,7 @@ class $$StoreCrateBalancesTableAnnotationComposer
   GeneratedColumn<String> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
 
-  GeneratedColumn<int> get balance =>
+  GeneratedColumn<double> get balance =>
       $composableBuilder(column: $table.balance, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
@@ -87469,7 +87469,7 @@ class $$StoreCrateBalancesTableTableManager
                 Value<String> businessId = const Value.absent(),
                 Value<String> storeId = const Value.absent(),
                 Value<String> manufacturerId = const Value.absent(),
-                Value<int> balance = const Value.absent(),
+                Value<double> balance = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -87489,7 +87489,7 @@ class $$StoreCrateBalancesTableTableManager
                 required String businessId,
                 required String storeId,
                 required String manufacturerId,
-                Value<int> balance = const Value.absent(),
+                Value<double> balance = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -87614,7 +87614,7 @@ typedef $$PendingCrateReturnsTableCreateCompanionBuilder =
       Value<String?> orderId,
       required String customerId,
       required String manufacturerId,
-      required int quantity,
+      required double quantity,
       required String submittedBy,
       Value<DateTime> submittedAt,
       Value<String?> approvedBy,
@@ -87632,7 +87632,7 @@ typedef $$PendingCrateReturnsTableUpdateCompanionBuilder =
       Value<String?> orderId,
       Value<String> customerId,
       Value<String> manufacturerId,
-      Value<int> quantity,
+      Value<double> quantity,
       Value<String> submittedBy,
       Value<DateTime> submittedAt,
       Value<String?> approvedBy,
@@ -87814,7 +87814,7 @@ class $$PendingCrateReturnsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get quantity => $composableBuilder(
+  ColumnFilters<double> get quantity => $composableBuilder(
     column: $table.quantity,
     builder: (column) => ColumnFilters(column),
   );
@@ -88027,7 +88027,7 @@ class $$PendingCrateReturnsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get quantity => $composableBuilder(
+  ColumnOrderings<double> get quantity => $composableBuilder(
     column: $table.quantity,
     builder: (column) => ColumnOrderings(column),
   );
@@ -88213,7 +88213,7 @@ class $$PendingCrateReturnsTableAnnotationComposer
   GeneratedColumn<String> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
 
-  GeneratedColumn<int> get quantity =>
+  GeneratedColumn<double> get quantity =>
       $composableBuilder(column: $table.quantity, builder: (column) => column);
 
   GeneratedColumn<DateTime> get submittedAt => $composableBuilder(
@@ -88455,7 +88455,7 @@ class $$PendingCrateReturnsTableTableManager
                 Value<String?> orderId = const Value.absent(),
                 Value<String> customerId = const Value.absent(),
                 Value<String> manufacturerId = const Value.absent(),
-                Value<int> quantity = const Value.absent(),
+                Value<double> quantity = const Value.absent(),
                 Value<String> submittedBy = const Value.absent(),
                 Value<DateTime> submittedAt = const Value.absent(),
                 Value<String?> approvedBy = const Value.absent(),
@@ -88489,7 +88489,7 @@ class $$PendingCrateReturnsTableTableManager
                 Value<String?> orderId = const Value.absent(),
                 required String customerId,
                 required String manufacturerId,
-                required int quantity,
+                required double quantity,
                 required String submittedBy,
                 Value<DateTime> submittedAt = const Value.absent(),
                 Value<String?> approvedBy = const Value.absent(),
@@ -88708,7 +88708,7 @@ typedef $$CrateLedgerTableCreateCompanionBuilder =
       Value<String?> customerId,
       Value<String?> manufacturerId,
       Value<String?> crateSizeGroupId,
-      required int quantityDelta,
+      required double quantityDelta,
       required String movementType,
       Value<String?> referenceOrderId,
       Value<String?> referenceReturnId,
@@ -88730,7 +88730,7 @@ typedef $$CrateLedgerTableUpdateCompanionBuilder =
       Value<String?> customerId,
       Value<String?> manufacturerId,
       Value<String?> crateSizeGroupId,
-      Value<int> quantityDelta,
+      Value<double> quantityDelta,
       Value<String> movementType,
       Value<String?> referenceOrderId,
       Value<String?> referenceReturnId,
@@ -88943,7 +88943,7 @@ class $$CrateLedgerTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get quantityDelta => $composableBuilder(
+  ColumnFilters<double> get quantityDelta => $composableBuilder(
     column: $table.quantityDelta,
     builder: (column) => ColumnFilters(column),
   );
@@ -89205,7 +89205,7 @@ class $$CrateLedgerTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get quantityDelta => $composableBuilder(
+  ColumnOrderings<double> get quantityDelta => $composableBuilder(
     column: $table.quantityDelta,
     builder: (column) => ColumnOrderings(column),
   );
@@ -89466,7 +89466,7 @@ class $$CrateLedgerTableAnnotationComposer
   GeneratedColumn<String> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
 
-  GeneratedColumn<int> get quantityDelta => $composableBuilder(
+  GeneratedColumn<double> get quantityDelta => $composableBuilder(
     column: $table.quantityDelta,
     builder: (column) => column,
   );
@@ -89752,7 +89752,7 @@ class $$CrateLedgerTableTableManager
                 Value<String?> customerId = const Value.absent(),
                 Value<String?> manufacturerId = const Value.absent(),
                 Value<String?> crateSizeGroupId = const Value.absent(),
-                Value<int> quantityDelta = const Value.absent(),
+                Value<double> quantityDelta = const Value.absent(),
                 Value<String> movementType = const Value.absent(),
                 Value<String?> referenceOrderId = const Value.absent(),
                 Value<String?> referenceReturnId = const Value.absent(),
@@ -89794,7 +89794,7 @@ class $$CrateLedgerTableTableManager
                 Value<String?> customerId = const Value.absent(),
                 Value<String?> manufacturerId = const Value.absent(),
                 Value<String?> crateSizeGroupId = const Value.absent(),
-                required int quantityDelta,
+                required double quantityDelta,
                 required String movementType,
                 Value<String?> referenceOrderId = const Value.absent(),
                 Value<String?> referenceReturnId = const Value.absent(),
@@ -90045,7 +90045,7 @@ typedef $$InventoryTableCreateCompanionBuilder =
       required String businessId,
       required String productId,
       required String storeId,
-      Value<int> quantity,
+      Value<double> quantity,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
       Value<int> rowid,
@@ -90056,7 +90056,7 @@ typedef $$InventoryTableUpdateCompanionBuilder =
       Value<String> businessId,
       Value<String> productId,
       Value<String> storeId,
-      Value<int> quantity,
+      Value<double> quantity,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
       Value<int> rowid,
@@ -90137,7 +90137,7 @@ class $$InventoryTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get quantity => $composableBuilder(
+  ColumnFilters<double> get quantity => $composableBuilder(
     column: $table.quantity,
     builder: (column) => ColumnFilters(column),
   );
@@ -90236,7 +90236,7 @@ class $$InventoryTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get quantity => $composableBuilder(
+  ColumnOrderings<double> get quantity => $composableBuilder(
     column: $table.quantity,
     builder: (column) => ColumnOrderings(column),
   );
@@ -90333,7 +90333,7 @@ class $$InventoryTableAnnotationComposer
   GeneratedColumn<String> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
 
-  GeneratedColumn<int> get quantity =>
+  GeneratedColumn<double> get quantity =>
       $composableBuilder(column: $table.quantity, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
@@ -90450,7 +90450,7 @@ class $$InventoryTableTableManager
                 Value<String> businessId = const Value.absent(),
                 Value<String> productId = const Value.absent(),
                 Value<String> storeId = const Value.absent(),
-                Value<int> quantity = const Value.absent(),
+                Value<double> quantity = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -90470,7 +90470,7 @@ class $$InventoryTableTableManager
                 required String businessId,
                 required String productId,
                 required String storeId,
-                Value<int> quantity = const Value.absent(),
+                Value<double> quantity = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -90584,8 +90584,8 @@ typedef $$CostBatchesTableCreateCompanionBuilder =
       required String businessId,
       required String productId,
       required String storeId,
-      required int qtyRemaining,
-      required int qtyOriginal,
+      required double qtyRemaining,
+      required double qtyOriginal,
       Value<int> costKobo,
       Value<DateTime> receivedAt,
       Value<DateTime> createdAt,
@@ -90598,8 +90598,8 @@ typedef $$CostBatchesTableUpdateCompanionBuilder =
       Value<String> businessId,
       Value<String> productId,
       Value<String> storeId,
-      Value<int> qtyRemaining,
-      Value<int> qtyOriginal,
+      Value<double> qtyRemaining,
+      Value<double> qtyOriginal,
       Value<int> costKobo,
       Value<DateTime> receivedAt,
       Value<DateTime> createdAt,
@@ -90682,12 +90682,12 @@ class $$CostBatchesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get qtyRemaining => $composableBuilder(
+  ColumnFilters<double> get qtyRemaining => $composableBuilder(
     column: $table.qtyRemaining,
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get qtyOriginal => $composableBuilder(
+  ColumnFilters<double> get qtyOriginal => $composableBuilder(
     column: $table.qtyOriginal,
     builder: (column) => ColumnFilters(column),
   );
@@ -90796,12 +90796,12 @@ class $$CostBatchesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get qtyRemaining => $composableBuilder(
+  ColumnOrderings<double> get qtyRemaining => $composableBuilder(
     column: $table.qtyRemaining,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get qtyOriginal => $composableBuilder(
+  ColumnOrderings<double> get qtyOriginal => $composableBuilder(
     column: $table.qtyOriginal,
     builder: (column) => ColumnOrderings(column),
   );
@@ -90908,12 +90908,12 @@ class $$CostBatchesTableAnnotationComposer
   GeneratedColumn<String> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
 
-  GeneratedColumn<int> get qtyRemaining => $composableBuilder(
+  GeneratedColumn<double> get qtyRemaining => $composableBuilder(
     column: $table.qtyRemaining,
     builder: (column) => column,
   );
 
-  GeneratedColumn<int> get qtyOriginal => $composableBuilder(
+  GeneratedColumn<double> get qtyOriginal => $composableBuilder(
     column: $table.qtyOriginal,
     builder: (column) => column,
   );
@@ -91040,8 +91040,8 @@ class $$CostBatchesTableTableManager
                 Value<String> businessId = const Value.absent(),
                 Value<String> productId = const Value.absent(),
                 Value<String> storeId = const Value.absent(),
-                Value<int> qtyRemaining = const Value.absent(),
-                Value<int> qtyOriginal = const Value.absent(),
+                Value<double> qtyRemaining = const Value.absent(),
+                Value<double> qtyOriginal = const Value.absent(),
                 Value<int> costKobo = const Value.absent(),
                 Value<DateTime> receivedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -91066,8 +91066,8 @@ class $$CostBatchesTableTableManager
                 required String businessId,
                 required String productId,
                 required String storeId,
-                required int qtyRemaining,
-                required int qtyOriginal,
+                required double qtyRemaining,
+                required double qtyOriginal,
                 Value<int> costKobo = const Value.absent(),
                 Value<DateTime> receivedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -91193,7 +91193,7 @@ typedef $$StockTransfersTableCreateCompanionBuilder =
       required String fromLocationId,
       required String toLocationId,
       required String productId,
-      required int quantity,
+      required double quantity,
       Value<String> status,
       required String initiatedBy,
       Value<String?> receivedBy,
@@ -91211,7 +91211,7 @@ typedef $$StockTransfersTableUpdateCompanionBuilder =
       Value<String> fromLocationId,
       Value<String> toLocationId,
       Value<String> productId,
-      Value<int> quantity,
+      Value<double> quantity,
       Value<String> status,
       Value<String> initiatedBy,
       Value<String?> receivedBy,
@@ -91387,7 +91387,7 @@ class $$StockTransfersTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get quantity => $composableBuilder(
+  ColumnFilters<double> get quantity => $composableBuilder(
     column: $table.quantity,
     builder: (column) => ColumnFilters(column),
   );
@@ -91600,7 +91600,7 @@ class $$StockTransfersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get quantity => $composableBuilder(
+  ColumnOrderings<double> get quantity => $composableBuilder(
     column: $table.quantity,
     builder: (column) => ColumnOrderings(column),
   );
@@ -91786,7 +91786,7 @@ class $$StockTransfersTableAnnotationComposer
   GeneratedColumn<String> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
 
-  GeneratedColumn<int> get quantity =>
+  GeneratedColumn<double> get quantity =>
       $composableBuilder(column: $table.quantity, builder: (column) => column);
 
   GeneratedColumn<String> get status =>
@@ -92021,7 +92021,7 @@ class $$StockTransfersTableTableManager
                 Value<String> fromLocationId = const Value.absent(),
                 Value<String> toLocationId = const Value.absent(),
                 Value<String> productId = const Value.absent(),
-                Value<int> quantity = const Value.absent(),
+                Value<double> quantity = const Value.absent(),
                 Value<String> status = const Value.absent(),
                 Value<String> initiatedBy = const Value.absent(),
                 Value<String?> receivedBy = const Value.absent(),
@@ -92055,7 +92055,7 @@ class $$StockTransfersTableTableManager
                 required String fromLocationId,
                 required String toLocationId,
                 required String productId,
-                required int quantity,
+                required double quantity,
                 Value<String> status = const Value.absent(),
                 required String initiatedBy,
                 Value<String?> receivedBy = const Value.absent(),
@@ -92273,7 +92273,7 @@ typedef $$StockAdjustmentsTableCreateCompanionBuilder =
       required String businessId,
       required String productId,
       required String storeId,
-      required int quantityDiff,
+      required double quantityDiff,
       required String reason,
       Value<String?> performedBy,
       Value<int?> unitCostKobo,
@@ -92288,7 +92288,7 @@ typedef $$StockAdjustmentsTableUpdateCompanionBuilder =
       Value<String> businessId,
       Value<String> productId,
       Value<String> storeId,
-      Value<int> quantityDiff,
+      Value<double> quantityDiff,
       Value<String> reason,
       Value<String?> performedBy,
       Value<int?> unitCostKobo,
@@ -92428,7 +92428,7 @@ class $$StockAdjustmentsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get quantityDiff => $composableBuilder(
+  ColumnFilters<double> get quantityDiff => $composableBuilder(
     column: $table.quantityDiff,
     builder: (column) => ColumnFilters(column),
   );
@@ -92590,7 +92590,7 @@ class $$StockAdjustmentsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get quantityDiff => $composableBuilder(
+  ColumnOrderings<double> get quantityDiff => $composableBuilder(
     column: $table.quantityDiff,
     builder: (column) => ColumnOrderings(column),
   );
@@ -92725,7 +92725,7 @@ class $$StockAdjustmentsTableAnnotationComposer
   GeneratedColumn<String> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
 
-  GeneratedColumn<int> get quantityDiff => $composableBuilder(
+  GeneratedColumn<double> get quantityDiff => $composableBuilder(
     column: $table.quantityDiff,
     builder: (column) => column,
   );
@@ -92908,7 +92908,7 @@ class $$StockAdjustmentsTableTableManager
                 Value<String> businessId = const Value.absent(),
                 Value<String> productId = const Value.absent(),
                 Value<String> storeId = const Value.absent(),
-                Value<int> quantityDiff = const Value.absent(),
+                Value<double> quantityDiff = const Value.absent(),
                 Value<String> reason = const Value.absent(),
                 Value<String?> performedBy = const Value.absent(),
                 Value<int?> unitCostKobo = const Value.absent(),
@@ -92936,7 +92936,7 @@ class $$StockAdjustmentsTableTableManager
                 required String businessId,
                 required String productId,
                 required String storeId,
-                required int quantityDiff,
+                required double quantityDiff,
                 required String reason,
                 Value<String?> performedBy = const Value.absent(),
                 Value<int?> unitCostKobo = const Value.absent(),
@@ -93878,7 +93878,7 @@ typedef $$StockTransactionsTableCreateCompanionBuilder =
       required String businessId,
       required String productId,
       required String locationId,
-      required int quantityDelta,
+      required double quantityDelta,
       required String movementType,
       Value<String?> orderId,
       Value<String?> transferId,
@@ -93898,7 +93898,7 @@ typedef $$StockTransactionsTableUpdateCompanionBuilder =
       Value<String> businessId,
       Value<String> productId,
       Value<String> locationId,
-      Value<int> quantityDelta,
+      Value<double> quantityDelta,
       Value<String> movementType,
       Value<String?> orderId,
       Value<String?> transferId,
@@ -94116,7 +94116,7 @@ class $$StockTransactionsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get quantityDelta => $composableBuilder(
+  ColumnFilters<double> get quantityDelta => $composableBuilder(
     column: $table.quantityDelta,
     builder: (column) => ColumnFilters(column),
   );
@@ -94368,7 +94368,7 @@ class $$StockTransactionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get quantityDelta => $composableBuilder(
+  ColumnOrderings<double> get quantityDelta => $composableBuilder(
     column: $table.quantityDelta,
     builder: (column) => ColumnOrderings(column),
   );
@@ -94618,7 +94618,7 @@ class $$StockTransactionsTableAnnotationComposer
   GeneratedColumn<String> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
 
-  GeneratedColumn<int> get quantityDelta => $composableBuilder(
+  GeneratedColumn<double> get quantityDelta => $composableBuilder(
     column: $table.quantityDelta,
     builder: (column) => column,
   );
@@ -94899,7 +94899,7 @@ class $$StockTransactionsTableTableManager
                 Value<String> businessId = const Value.absent(),
                 Value<String> productId = const Value.absent(),
                 Value<String> locationId = const Value.absent(),
-                Value<int> quantityDelta = const Value.absent(),
+                Value<double> quantityDelta = const Value.absent(),
                 Value<String> movementType = const Value.absent(),
                 Value<String?> orderId = const Value.absent(),
                 Value<String?> transferId = const Value.absent(),
@@ -94937,7 +94937,7 @@ class $$StockTransactionsTableTableManager
                 required String businessId,
                 required String productId,
                 required String locationId,
-                required int quantityDelta,
+                required double quantityDelta,
                 required String movementType,
                 Value<String?> orderId = const Value.absent(),
                 Value<String?> transferId = const Value.absent(),
@@ -95185,7 +95185,7 @@ typedef $$StockAdjustmentRequestsTableCreateCompanionBuilder =
       required String businessId,
       required String productId,
       required String storeId,
-      required int quantityDiff,
+      required double quantityDiff,
       Value<int?> unitCostKobo,
       required String reason,
       required String summary,
@@ -95203,7 +95203,7 @@ typedef $$StockAdjustmentRequestsTableUpdateCompanionBuilder =
       Value<String> businessId,
       Value<String> productId,
       Value<String> storeId,
-      Value<int> quantityDiff,
+      Value<double> quantityDiff,
       Value<int?> unitCostKobo,
       Value<String> reason,
       Value<String> summary,
@@ -95346,7 +95346,7 @@ class $$StockAdjustmentRequestsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get quantityDiff => $composableBuilder(
+  ColumnFilters<double> get quantityDiff => $composableBuilder(
     column: $table.quantityDiff,
     builder: (column) => ColumnFilters(column),
   );
@@ -95516,7 +95516,7 @@ class $$StockAdjustmentRequestsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get quantityDiff => $composableBuilder(
+  ColumnOrderings<double> get quantityDiff => $composableBuilder(
     column: $table.quantityDiff,
     builder: (column) => ColumnOrderings(column),
   );
@@ -95684,7 +95684,7 @@ class $$StockAdjustmentRequestsTableAnnotationComposer
   GeneratedColumn<String> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
 
-  GeneratedColumn<int> get quantityDiff => $composableBuilder(
+  GeneratedColumn<double> get quantityDiff => $composableBuilder(
     column: $table.quantityDiff,
     builder: (column) => column,
   );
@@ -95884,7 +95884,7 @@ class $$StockAdjustmentRequestsTableTableManager
                 Value<String> businessId = const Value.absent(),
                 Value<String> productId = const Value.absent(),
                 Value<String> storeId = const Value.absent(),
-                Value<int> quantityDiff = const Value.absent(),
+                Value<double> quantityDiff = const Value.absent(),
                 Value<int?> unitCostKobo = const Value.absent(),
                 Value<String> reason = const Value.absent(),
                 Value<String> summary = const Value.absent(),
@@ -95918,7 +95918,7 @@ class $$StockAdjustmentRequestsTableTableManager
                 required String businessId,
                 required String productId,
                 required String storeId,
-                required int quantityDiff,
+                required double quantityDiff,
                 Value<int?> unitCostKobo = const Value.absent(),
                 required String reason,
                 required String summary,
@@ -96872,7 +96872,7 @@ typedef $$OrderItemsTableCreateCompanionBuilder =
       required String orderId,
       Value<String?> productId,
       required String storeId,
-      required int quantity,
+      required double quantity,
       required int unitPriceKobo,
       Value<int> buyingPriceKobo,
       required int totalKobo,
@@ -96889,7 +96889,7 @@ typedef $$OrderItemsTableUpdateCompanionBuilder =
       Value<String> orderId,
       Value<String?> productId,
       Value<String> storeId,
-      Value<int> quantity,
+      Value<double> quantity,
       Value<int> unitPriceKobo,
       Value<int> buyingPriceKobo,
       Value<int> totalKobo,
@@ -96993,7 +96993,7 @@ class $$OrderItemsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get quantity => $composableBuilder(
+  ColumnFilters<double> get quantity => $composableBuilder(
     column: $table.quantity,
     builder: (column) => ColumnFilters(column),
   );
@@ -97140,7 +97140,7 @@ class $$OrderItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get quantity => $composableBuilder(
+  ColumnOrderings<double> get quantity => $composableBuilder(
     column: $table.quantity,
     builder: (column) => ColumnOrderings(column),
   );
@@ -97285,7 +97285,7 @@ class $$OrderItemsTableAnnotationComposer
   GeneratedColumn<String> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
 
-  GeneratedColumn<int> get quantity =>
+  GeneratedColumn<double> get quantity =>
       $composableBuilder(column: $table.quantity, builder: (column) => column);
 
   GeneratedColumn<int> get unitPriceKobo => $composableBuilder(
@@ -97450,7 +97450,7 @@ class $$OrderItemsTableTableManager
                 Value<String> orderId = const Value.absent(),
                 Value<String?> productId = const Value.absent(),
                 Value<String> storeId = const Value.absent(),
-                Value<int> quantity = const Value.absent(),
+                Value<double> quantity = const Value.absent(),
                 Value<int> unitPriceKobo = const Value.absent(),
                 Value<int> buyingPriceKobo = const Value.absent(),
                 Value<int> totalKobo = const Value.absent(),
@@ -97482,7 +97482,7 @@ class $$OrderItemsTableTableManager
                 required String orderId,
                 Value<String?> productId = const Value.absent(),
                 required String storeId,
-                required int quantity,
+                required double quantity,
                 required int unitPriceKobo,
                 Value<int> buyingPriceKobo = const Value.absent(),
                 required int totalKobo,
@@ -97634,7 +97634,7 @@ typedef $$OrderCrateLinesTableCreateCompanionBuilder =
       required String businessId,
       required String orderId,
       required String manufacturerId,
-      required int cratesTaken,
+      required double cratesTaken,
       Value<int> depositRateKobo,
       Value<int> depositPaidKobo,
       Value<DateTime> createdAt,
@@ -97649,7 +97649,7 @@ typedef $$OrderCrateLinesTableUpdateCompanionBuilder =
       Value<String> businessId,
       Value<String> orderId,
       Value<String> manufacturerId,
-      Value<int> cratesTaken,
+      Value<double> cratesTaken,
       Value<int> depositRateKobo,
       Value<int> depositPaidKobo,
       Value<DateTime> createdAt,
@@ -97764,7 +97764,7 @@ class $$OrderCrateLinesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get cratesTaken => $composableBuilder(
+  ColumnFilters<double> get cratesTaken => $composableBuilder(
     column: $table.cratesTaken,
     builder: (column) => ColumnFilters(column),
   );
@@ -97901,7 +97901,7 @@ class $$OrderCrateLinesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get cratesTaken => $composableBuilder(
+  ColumnOrderings<double> get cratesTaken => $composableBuilder(
     column: $table.cratesTaken,
     builder: (column) => ColumnOrderings(column),
   );
@@ -98036,7 +98036,7 @@ class $$OrderCrateLinesTableAnnotationComposer
   GeneratedColumn<String> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
 
-  GeneratedColumn<int> get cratesTaken => $composableBuilder(
+  GeneratedColumn<double> get cratesTaken => $composableBuilder(
     column: $table.cratesTaken,
     builder: (column) => column,
   );
@@ -98194,7 +98194,7 @@ class $$OrderCrateLinesTableTableManager
                 Value<String> businessId = const Value.absent(),
                 Value<String> orderId = const Value.absent(),
                 Value<String> manufacturerId = const Value.absent(),
-                Value<int> cratesTaken = const Value.absent(),
+                Value<double> cratesTaken = const Value.absent(),
                 Value<int> depositRateKobo = const Value.absent(),
                 Value<int> depositPaidKobo = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -98222,7 +98222,7 @@ class $$OrderCrateLinesTableTableManager
                 required String businessId,
                 required String orderId,
                 required String manufacturerId,
-                required int cratesTaken,
+                required double cratesTaken,
                 Value<int> depositRateKobo = const Value.absent(),
                 Value<int> depositPaidKobo = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -99932,7 +99932,7 @@ typedef $$PurchaseItemsTableCreateCompanionBuilder =
       required String businessId,
       required String purchaseId,
       required String productId,
-      required int quantity,
+      required double quantity,
       required int unitPriceKobo,
       required int totalKobo,
       Value<DateTime> createdAt,
@@ -99945,7 +99945,7 @@ typedef $$PurchaseItemsTableUpdateCompanionBuilder =
       Value<String> businessId,
       Value<String> purchaseId,
       Value<String> productId,
-      Value<int> quantity,
+      Value<double> quantity,
       Value<int> unitPriceKobo,
       Value<int> totalKobo,
       Value<DateTime> createdAt,
@@ -100034,7 +100034,7 @@ class $$PurchaseItemsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get quantity => $composableBuilder(
+  ColumnFilters<double> get quantity => $composableBuilder(
     column: $table.quantity,
     builder: (column) => ColumnFilters(column),
   );
@@ -100143,7 +100143,7 @@ class $$PurchaseItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get quantity => $composableBuilder(
+  ColumnOrderings<double> get quantity => $composableBuilder(
     column: $table.quantity,
     builder: (column) => ColumnOrderings(column),
   );
@@ -100250,7 +100250,7 @@ class $$PurchaseItemsTableAnnotationComposer
   GeneratedColumn<String> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
 
-  GeneratedColumn<int> get quantity =>
+  GeneratedColumn<double> get quantity =>
       $composableBuilder(column: $table.quantity, builder: (column) => column);
 
   GeneratedColumn<int> get unitPriceKobo => $composableBuilder(
@@ -100375,7 +100375,7 @@ class $$PurchaseItemsTableTableManager
                 Value<String> businessId = const Value.absent(),
                 Value<String> purchaseId = const Value.absent(),
                 Value<String> productId = const Value.absent(),
-                Value<int> quantity = const Value.absent(),
+                Value<double> quantity = const Value.absent(),
                 Value<int> unitPriceKobo = const Value.absent(),
                 Value<int> totalKobo = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -100399,7 +100399,7 @@ class $$PurchaseItemsTableTableManager
                 required String businessId,
                 required String purchaseId,
                 required String productId,
-                required int quantity,
+                required double quantity,
                 required int unitPriceKobo,
                 required int totalKobo,
                 Value<DateTime> createdAt = const Value.absent(),
@@ -105816,8 +105816,8 @@ typedef $$StockCountsTableCreateCompanionBuilder =
       required int productsCounted,
       required int shortageCount,
       required int surplusCount,
-      required int shortageUnits,
-      required int surplusUnits,
+      required double shortageUnits,
+      required double surplusUnits,
       required String linesJson,
       Value<String?> countedBy,
       Value<DateTime> createdAt,
@@ -105833,8 +105833,8 @@ typedef $$StockCountsTableUpdateCompanionBuilder =
       Value<int> productsCounted,
       Value<int> shortageCount,
       Value<int> surplusCount,
-      Value<int> shortageUnits,
-      Value<int> surplusUnits,
+      Value<double> shortageUnits,
+      Value<double> surplusUnits,
       Value<String> linesJson,
       Value<String?> countedBy,
       Value<DateTime> createdAt,
@@ -105936,12 +105936,12 @@ class $$StockCountsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get shortageUnits => $composableBuilder(
+  ColumnFilters<double> get shortageUnits => $composableBuilder(
     column: $table.shortageUnits,
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get surplusUnits => $composableBuilder(
+  ColumnFilters<double> get surplusUnits => $composableBuilder(
     column: $table.surplusUnits,
     builder: (column) => ColumnFilters(column),
   );
@@ -106065,12 +106065,12 @@ class $$StockCountsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get shortageUnits => $composableBuilder(
+  ColumnOrderings<double> get shortageUnits => $composableBuilder(
     column: $table.shortageUnits,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get surplusUnits => $composableBuilder(
+  ColumnOrderings<double> get surplusUnits => $composableBuilder(
     column: $table.surplusUnits,
     builder: (column) => ColumnOrderings(column),
   );
@@ -106192,12 +106192,12 @@ class $$StockCountsTableAnnotationComposer
     builder: (column) => column,
   );
 
-  GeneratedColumn<int> get shortageUnits => $composableBuilder(
+  GeneratedColumn<double> get shortageUnits => $composableBuilder(
     column: $table.shortageUnits,
     builder: (column) => column,
   );
 
-  GeneratedColumn<int> get surplusUnits => $composableBuilder(
+  GeneratedColumn<double> get surplusUnits => $composableBuilder(
     column: $table.surplusUnits,
     builder: (column) => column,
   );
@@ -106322,8 +106322,8 @@ class $$StockCountsTableTableManager
                 Value<int> productsCounted = const Value.absent(),
                 Value<int> shortageCount = const Value.absent(),
                 Value<int> surplusCount = const Value.absent(),
-                Value<int> shortageUnits = const Value.absent(),
-                Value<int> surplusUnits = const Value.absent(),
+                Value<double> shortageUnits = const Value.absent(),
+                Value<double> surplusUnits = const Value.absent(),
                 Value<String> linesJson = const Value.absent(),
                 Value<String?> countedBy = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -106354,8 +106354,8 @@ class $$StockCountsTableTableManager
                 required int productsCounted,
                 required int shortageCount,
                 required int surplusCount,
-                required int shortageUnits,
-                required int surplusUnits,
+                required double shortageUnits,
+                required double surplusUnits,
                 required String linesJson,
                 Value<String?> countedBy = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -106498,7 +106498,7 @@ typedef $$DailyClosingsTableCreateCompanionBuilder =
       Value<int> stockCogsKobo,
       Value<int> stockExpectedClosingKobo,
       Value<int> itemsSold,
-      Value<int> shortageUnits,
+      Value<double> shortageUnits,
       Value<String?> reviewedBy,
       Value<DateTime> reviewedAt,
       Value<DateTime> createdAt,
@@ -106526,7 +106526,7 @@ typedef $$DailyClosingsTableUpdateCompanionBuilder =
       Value<int> stockCogsKobo,
       Value<int> stockExpectedClosingKobo,
       Value<int> itemsSold,
-      Value<int> shortageUnits,
+      Value<double> shortageUnits,
       Value<String?> reviewedBy,
       Value<DateTime> reviewedAt,
       Value<DateTime> createdAt,
@@ -106694,7 +106694,7 @@ class $$DailyClosingsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get shortageUnits => $composableBuilder(
+  ColumnFilters<double> get shortageUnits => $composableBuilder(
     column: $table.shortageUnits,
     builder: (column) => ColumnFilters(column),
   );
@@ -106878,7 +106878,7 @@ class $$DailyClosingsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get shortageUnits => $composableBuilder(
+  ColumnOrderings<double> get shortageUnits => $composableBuilder(
     column: $table.shortageUnits,
     builder: (column) => ColumnOrderings(column),
   );
@@ -107056,7 +107056,7 @@ class $$DailyClosingsTableAnnotationComposer
   GeneratedColumn<int> get itemsSold =>
       $composableBuilder(column: $table.itemsSold, builder: (column) => column);
 
-  GeneratedColumn<int> get shortageUnits => $composableBuilder(
+  GeneratedColumn<double> get shortageUnits => $composableBuilder(
     column: $table.shortageUnits,
     builder: (column) => column,
   );
@@ -107195,7 +107195,7 @@ class $$DailyClosingsTableTableManager
                 Value<int> stockCogsKobo = const Value.absent(),
                 Value<int> stockExpectedClosingKobo = const Value.absent(),
                 Value<int> itemsSold = const Value.absent(),
-                Value<int> shortageUnits = const Value.absent(),
+                Value<double> shortageUnits = const Value.absent(),
                 Value<String?> reviewedBy = const Value.absent(),
                 Value<DateTime> reviewedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -107249,7 +107249,7 @@ class $$DailyClosingsTableTableManager
                 Value<int> stockCogsKobo = const Value.absent(),
                 Value<int> stockExpectedClosingKobo = const Value.absent(),
                 Value<int> itemsSold = const Value.absent(),
-                Value<int> shortageUnits = const Value.absent(),
+                Value<double> shortageUnits = const Value.absent(),
                 Value<String?> reviewedBy = const Value.absent(),
                 Value<DateTime> reviewedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),

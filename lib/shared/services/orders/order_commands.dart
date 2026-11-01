@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/permissions/gate.dart';
@@ -290,7 +291,7 @@ class OrderCommands {
         if (line.manufacturerId.isEmpty) continue;
         await _db.inventoryDao.addEmptyCrates(
           line.manufacturerId,
-          line.returnedCrates,
+          line.returnedCrates.toDouble(),
           storeId: storeId,
           orderId: orderId,
         );
@@ -322,7 +323,7 @@ class OrderCommands {
       if (line.returnedCrates > 0) {
         await _db.inventoryDao.addEmptyCrates(
           line.manufacturerId,
-          line.returnedCrates,
+          line.returnedCrates.toDouble(),
           storeId: storeId,
           orderId: orderId,
         );
@@ -352,7 +353,7 @@ class OrderCommands {
         await _db.cratePoolDao.recordCrateReturnByCustomer(
           customerId: customerId,
           manufacturerId: line.manufacturerId,
-          quantity: line.returnedCrates,
+          quantity: line.returnedCrates.toDouble(),
           performedBy: staffId,
           orderId: orderId,
           ledgerId: OrdersDao.settlementLegId(
@@ -531,7 +532,7 @@ class OrderCommands {
           ? customer!.name.trim()
           : 'Customer';
       final summary = owing
-          .map((b) => '${b.balance} ${b.manufacturerName}')
+          .map((b) => '${formatQty(b.balance)} ${b.manufacturerName}')
           .join(', ');
       final message = '$who now owes crates after $orderNumber: $summary';
 
@@ -614,7 +615,7 @@ class OrderCommands {
     List<OrderItemsCompanion> items,
     String staffId,
   ) async {
-    final lines = <({String productId, String storeId, int quantity})>[
+    final lines = <({String productId, String storeId, double quantity})>[
       for (final item in items)
         // Quick-sale line (§26.4): no product → nothing was deducted.
         if (item.productId.value != null)
@@ -639,7 +640,7 @@ class OrderCommands {
   /// tap twice, and safe if the orphan has already been cleaned up.
   Future<void> cancelRejectedSale(String orderId, String staffId) async {
     final payloadJson = await _db.syncDao.rejectedSalePayload(orderId);
-    final lines = <({String productId, String storeId, int quantity})>[];
+    final lines = <({String productId, String storeId, double quantity})>[];
     if (payloadJson != null) {
       final payload = jsonDecode(payloadJson) as Map<String, dynamic>;
       final storeId = payload['p_store_id'];
@@ -649,8 +650,12 @@ class OrderCommands {
           if (it is! Map) continue;
           final pid = it['product_id'];
           final qty = it['quantity'];
-          if (pid is String && qty is int) {
-            lines.add((productId: pid, storeId: storeId, quantity: qty));
+          if (pid is String && qty is num) {
+            lines.add((
+              productId: pid,
+              storeId: storeId,
+              quantity: qty.toDouble(),
+            ));
           }
         }
       }
@@ -767,7 +772,7 @@ class OrderCommands {
             orderId: orderId,
             productId: Value(productId),
             storeId: storeId,
-            quantity: qty,
+            quantity: qty.toDouble(), // fractions arrive in S3 (#620)
             unitPriceKobo: unitPriceKobo,
             buyingPriceKobo: Value(buyingPriceKobo),
             totalKobo: totalKobo,

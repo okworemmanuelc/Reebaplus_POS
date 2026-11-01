@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:intl/intl.dart';
 
@@ -637,14 +638,16 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
             .watch(supplierCrateBalancesProvider(widget.supplierId))
             .valueOrNull ??
         const <SupplierCrateBalanceWithManufacturer>[];
-    final totalOwed = balances.fold<int>(0, (sum, b) => sum + b.balance);
+    final totalOwed = balances.fold<double>(0, (sum, b) => sum + b.balance);
     // Refundable deposit value = the per-manufacturer deposit rate applied to the
     // crates we still owe (positive balances). Always consistent with the crate
     // balance — returning crates lowers it automatically (§3.13 / the deposit the
     // store pays the supplier for empty crates).
     final depositValueKobo = balances.fold<int>(
       0,
-      (sum, b) => sum + (b.balance > 0 ? b.balance * b.depositRateKobo : 0),
+      (sum, b) =>
+          sum +
+          (b.balance > 0 ? lineTotalKobo(b.depositRateKobo, b.balance) : 0),
     );
     final active = balances.where((b) => b.balance != 0).toList();
     final totals =
@@ -1145,7 +1148,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
   // Headline summary: net crates owed + refundable deposit held by the supplier.
   Widget _buildCrateSummaryCard(
     ThemeData theme,
-    int totalOwed,
+    double totalOwed,
     int depositHeldKobo,
   ) {
     final f = theme.extension<AppFixedColors>() ?? AppFixedColors.light;
@@ -1157,9 +1160,9 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
         ? f.green
         : _subtext;
     final headline = isOwe
-        ? 'You owe ${totalOwed.abs()} crate${totalOwed.abs() == 1 ? '' : 's'}'
+        ? 'You owe ${formatQty(totalOwed.abs())} crate${totalOwed.abs() == 1 ? '' : 's'}'
         : isCredit
-        ? '${totalOwed.abs()} crate${totalOwed.abs() == 1 ? '' : 's'} credit'
+        ? '${formatQty(totalOwed.abs())} crate${totalOwed.abs() == 1 ? '' : 's'} credit'
         : 'All crates settled';
     return Container(
       padding: EdgeInsets.all(context.getRSize(16)),
@@ -1211,14 +1214,18 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
 
   // Cumulative crates received from / sent back to this supplier (running
   // totals, not the net balance). "Returned" is the count sent back to date.
-  Widget _buildCrateMovementStats(ThemeData theme, int received, int returned) {
+  Widget _buildCrateMovementStats(
+    ThemeData theme,
+    double received,
+    double returned,
+  ) {
     return Row(
       children: [
         Expanded(
           child: InventoryFigureCard(
             icon: AppIcons.receiving,
             tone: IconTileTone.info,
-            value: '$received',
+            value: formatQty(received),
             label: 'Crates received',
           ),
         ),
@@ -1227,7 +1234,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
           child: InventoryFigureCard(
             icon: AppIcons.refresh,
             tone: IconTileTone.green,
-            value: '$returned',
+            value: formatQty(returned),
             label: 'Crates returned',
           ),
         ),
@@ -1242,7 +1249,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
   ) {
     final bal = entry.balance;
     final isOwe = bal > 0;
-    final label = isOwe ? '${bal.abs()} owed' : '${bal.abs()} credit';
+    final label = isOwe ? '${formatQty(bal.abs())} owed' : '${formatQty(bal.abs())} credit';
     return Padding(
       padding: EdgeInsets.only(bottom: context.getRSize(10)),
       child: Container(
@@ -1609,7 +1616,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
           supplierName: supplier.name,
           manufacturerId: mfrId,
           manufacturerName: mfrName,
-          quantity: qty,
+          quantity: qty.toDouble(),
           staffId: staffId,
           storeId: storeId,
           depositRefundedKobo: depositKobo,
@@ -1620,7 +1627,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
           supplierName: supplier.name,
           manufacturerId: mfrId,
           manufacturerName: mfrName,
-          quantity: qty,
+          quantity: qty.toDouble(),
           staffId: staffId,
           storeId: storeId,
           depositPaidKobo: depositKobo,

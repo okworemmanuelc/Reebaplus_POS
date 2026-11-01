@@ -140,7 +140,7 @@ OrderWithItems _sale({
           orderId: id,
           productId: product.id,
           storeId: storeId,
-          quantity: qty,
+          quantity: qty.toDouble(),
           unitPriceKobo: _price,
           buyingPriceKobo: buyingPriceKobo,
           totalKobo: qty * _price,
@@ -222,12 +222,12 @@ Future<({ReconData viewer, ReconData wide})> computeWith(
           (ref, storeId) => Stream.value([
             ProductDataWithStock(
               product: _product(),
-              totalStock: switch (storeId) {
+              totalStock: (switch (storeId) {
                 _warehouse => _warehouseStock,
                 _branch => _branchStock,
                 // null = All Stores / business-wide.
                 _ => _warehouseStock + _branchStock,
-              },
+              }).toDouble(),
             ),
           ]),
         ),

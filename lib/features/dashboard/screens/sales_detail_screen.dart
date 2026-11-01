@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:intl/intl.dart';
 import 'package:reebaplus_pos/core/database/daos.dart';
@@ -73,9 +74,10 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
     for (final o in widget.orders) {
       for (final i in o.items) {
         if (!widget.inScope(i.item.storeId)) continue;
-        final revenue = i.item.quantity * i.item.unitPriceKobo / 100.0;
+        final revenue =
+            lineTotalKobo(i.item.unitPriceKobo, i.item.quantity) / 100.0;
         final cogs = i.item.buyingPriceKobo > 0
-            ? i.item.quantity * i.item.buyingPriceKobo / 100.0
+            ? lineTotalKobo(i.item.buyingPriceKobo, i.item.quantity) / 100.0
             : null;
         final profit = cogs != null ? revenue - cogs : null;
         rows.add(
@@ -103,7 +105,7 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
         [
           DateFormat('yyyy-MM-dd HH:mm').format(r.date),
           r.productName,
-          '${r.qty}',
+          formatQty(r.qty),
           r.revenue.toStringAsFixed(2),
           if (isProfit) (r.profit != null ? r.profit!.toStringAsFixed(2) : ''),
         ],
@@ -126,7 +128,7 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
     csvRows.add([
       '',
       'TOTAL',
-      '${rows.fold<int>(0, (s, r) => s + r.qty)}',
+      formatQty(rows.fold<double>(0, (s, r) => s + r.qty)),
       (grossRevenue - discounts).toStringAsFixed(2),
       if (isProfit)
         hasProfit
@@ -395,7 +397,7 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
             SizedBox(
               width: context.getRSize(50),
               child: Text(
-                '×${row.qty}',
+                '×${formatQty(row.qty)}',
                 textAlign: TextAlign.center,
                 style: context
                     .boldStyle(13)
@@ -443,7 +445,7 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
 class _SaleRow {
   final DateTime date;
   final String productName;
-  final int qty;
+  final double qty;
   final double revenue;
   final double? profit;
 

@@ -149,6 +149,25 @@ cloud table. See `docs/data/nigerian-areas.md`; migration 0189 is verified on th
 
 ## Storage Model
 
+**Quantities are quarter-step doubles (#620 / #627, Drift v98, cloud 0239).**
+Stock, sale-line, cost-layer and crate quantities (22 columns: `inventory.quantity`,
+`order_items.quantity`, `stock_transactions.quantity_delta`, `cost_batches.qty_*`,
+the crate ledgers/balances, `order_crate_lines.crates_taken`, stock-count and
+adjustment columns, `purchase_items.quantity`, `daily_closings.shortage_units`,
+...) are `double precision` in Postgres and `RealColumn` in Drift, always a
+multiple of 0.25 (cloud CHECK via `public.qty_is_quarter`; quarters are exact
+binary fractions, so sums stay exact). Van and online-order tables stay integer.
+Whole values must reach older clients as JSON integers: Postgres prints
+`5::float8` as `5`, and the app writes whole doubles as `5` (never `5.0`) through
+`CloudValueSerializer` / `encodeSyncPayload` (`core/database/sync_helpers.dart`).
+Pulls accept `5`, `5.0` and `0.5`. The ONE shared helper is
+`lib/shared/utils/quantity.dart`: `Qty` (parse/validate), `formatQty` (display, no
+trailing zeros, never a vulgar-fraction character) and `lineTotalKobo(unitKobo,
+qty)` = unit price x quantity rounded half up to whole kobo; the SQL twin is
+`public.line_total_kobo`. Money is never computed as `qty * price` inline. The
+v98 Drift step rebuilds nothing: SQLite's INTEGER affinity already keeps 0.5 as a
+REAL. Screens still enter whole numbers until S3-S5 of #620.
+
 **Online category reference (#472).** Public, service-written
 `marketplace_categories` is bundled as `core/data/marketplace_categories.dart`,
 with exact SQL-seed parity tests. It is not a tenant table or an outbox target.

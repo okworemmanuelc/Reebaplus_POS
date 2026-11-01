@@ -70,7 +70,7 @@ void main() {
             businessId: businessId,
             productId: id,
             storeId: storeId,
-            quantity: Value(stock),
+            quantity: Value(stock.toDouble()),
           ),
         );
     return id;
@@ -256,8 +256,8 @@ void main() {
       productsCounted: productsCounted,
       shortageCount: shortageCount,
       surplusCount: surplusCount,
-      shortageUnits: shortageUnits,
-      surplusUnits: surplusUnits,
+      shortageUnits: shortageUnits.toDouble(),
+      surplusUnits: surplusUnits.toDouble(),
       linesJson: jsonEncode([
         for (final l in lines)
           {
@@ -286,7 +286,7 @@ void main() {
   }) async {
     final before = {for (final a in await allAdjustments()) a.id};
     await db.inventoryDao
-        .adjustStock(productId, storeId, -units, countReason, staffId);
+        .adjustStock(productId, storeId, (-units).toDouble(), countReason, staffId);
     final row =
         (await allAdjustments()).firstWhere((a) => !before.contains(a.id));
     await (db.update(db.stockAdjustments)..where((t) => t.id.equals(row.id)))

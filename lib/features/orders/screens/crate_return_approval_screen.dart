@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:intl/intl.dart';
 
@@ -285,7 +286,7 @@ class _SubmissionBatchTile extends StatelessWidget {
                               .copyWith(color: text),
                         ),
                         Text(
-                          'Quantity: ${item.returnRow.quantity}',
+                          'Quantity: ${formatQty(item.returnRow.quantity)}',
                           style: context
                               .regularStyle(13)
                               .copyWith(color: muted),

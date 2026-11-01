@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
@@ -104,13 +105,13 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   bool _showSearch = false;
   String _searchQuery = '';
   final _searchCtrl = TextEditingController();
-  int _totalCrateAssetsSum = 0;
+  double _totalCrateAssetsSum = 0;
 
   bool _isFirstLoad = true;
   StreamSubscription<List<ProductDataWithStock>>? _productsSub;
   StreamSubscription<List<ManufacturerData>>? _manufacturersSub;
   StreamSubscription<List<CategoryData>>? _categoriesSub;
-  StreamSubscription<int>? _emptyCratesSumSub;
+  StreamSubscription<double>? _emptyCratesSumSub;
   Color get _bg => Theme.of(context).scaffoldBackgroundColor;
 
   Color get _text => Theme.of(context).colorScheme.onSurface;
@@ -918,15 +919,15 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   /// Build the per-manufacturer crate stats (keyed by manufacturer id) from the
   /// active-store full/empty maps resolved in [_cratesTabSlivers].
   List<ManufacturerCrateStats> _computeCrateStats(
-    Map<String, int> fullByMfr,
-    Map<String, int> emptyByMfr,
+    Map<String, double> fullByMfr,
+    Map<String, double> emptyByMfr,
   ) {
     final allMfrs = {...fullByMfr.keys, ...emptyByMfr.keys};
     return allMfrs.map((mfr) {
       return ManufacturerCrateStats(
         manufacturer: mfr,
-        totalBottles: fullByMfr[mfr] ?? 0,
-        emptyCrates: emptyByMfr[mfr] ?? 0,
+        totalBottles: (fullByMfr[mfr] ?? 0).round(),
+        emptyCrates: (emptyByMfr[mfr] ?? 0).round(),
         totalValueKobo: 0,
       );
     }).toList()..sort((a, b) => a.manufacturer.compareTo(b.manufacturer));
@@ -1185,7 +1186,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       subtitle: product.subtitle,
       categoryName: categoryName,
       photoPath: product.imagePath,
-      stockLabel: currentStock.toString(),
+      stockLabel: formatQty(currentStock),
       unit: unitLabel(product.unit, crates: crates),
       state: isOut
           ? InventoryStockState.out
@@ -1217,16 +1218,16 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     final lockedStoreId = ref.watch(lockedStoreProvider).value;
     final fullByMfr =
         ref.watch(fullCratesByManufacturerProvider).valueOrNull ??
-        const <String, int>{};
-    final Map<String, int> emptyByMfr;
+        const <String, double>{};
+    final Map<String, double> emptyByMfr;
     if (lockedStoreId == null) {
       emptyByMfr =
           ref.watch(emptyCratesByManufacturerProvider).valueOrNull ??
-          const <String, int>{};
+          const <String, double>{};
     } else {
       emptyByMfr =
           ref.watch(storeCrateBalancesProvider).valueOrNull ??
-          const <String, int>{};
+          const <String, double>{};
     }
 
     final shortagesByMfr =
@@ -1234,7 +1235,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         const <String, int>{};
 
     final stats = _computeCrateStats(fullByMfr, emptyByMfr);
-    int emptyForMfr(ManufacturerData mfr) => emptyByMfr[mfr.id] ?? 0;
+    // Whole until the empties UI learns parts (S4, #620).
+    int emptyForMfr(ManufacturerData mfr) => (emptyByMfr[mfr.id] ?? 0).round();
 
     final trackedMfrIds =
         ref.watch(crateTrackedManufacturerIdsProvider).valueOrNull ??
@@ -1249,7 +1251,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           mfr,
     ];
 
-    final totalEmpty = emptyByMfr.values.fold<int>(0, (s, v) => s + v);
+    final totalEmpty = emptyByMfr.values.fold<double>(0, (s, v) => s + v).round();
     final totalFull = stats.fold<int>(0, (s, e) => s + e.fullCratesEquiv);
     final gap = context.getRSize(12);
 
