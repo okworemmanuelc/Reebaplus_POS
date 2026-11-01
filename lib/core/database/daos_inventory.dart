@@ -1633,7 +1633,7 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
     await db.activityLogDao.log(
       action: 'stock_transfer_received',
       description:
-          'Received ${formatQty(quantity)} unit(s) of $productId '
+          'Received ${formatQty(quantity ?? 0)} unit(s) of $productId '
           'at $toStoreId from $fromStoreId',
       staffId: receivedBy,
       storeId: toStoreId,
@@ -1648,7 +1648,7 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
     if (transfer != null) {
       await db.notificationsDao.fireNotification(
         type: 'stock_transfer.received',
-        message: 'Your transfer of ${formatQty(quantity)} unit(s) was confirmed received.',
+        message: 'Your transfer of ${formatQty(quantity ?? 0)} unit(s) was confirmed received.',
         severity: 'info',
         linkedRecordId: transferId,
         recipientUserId: transfer.initiatedBy,
