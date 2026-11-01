@@ -190,7 +190,7 @@ class _StockRequestReviewSheetState
               children: [
                 Text(
                   '${items.length} ${items.length == 1 ? 'product' : 'products'}'
-                  ' · $units ${units == 1 ? 'unit' : 'units'}',
+                  ' · ${formatQty(units)} ${units == 1 ? 'unit' : 'units'}',
                   style: context.semiBoldStyle(14).copyWith(color: muted),
                 ),
                 SizedBox(height: context.getRSize(12)),

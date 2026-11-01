@@ -34,7 +34,7 @@ void main() {
   late ProviderContainer container;
   late StockRequestListNotifier list;
   List<StockRequestItem> items() => container.read(stockRequestListProvider);
-  Map<String, int> quantities() => {
+  Map<String, double> quantities() => {
     for (final i in items()) i.product.id: i.quantity,
   };
 
