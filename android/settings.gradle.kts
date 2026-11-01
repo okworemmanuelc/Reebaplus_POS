@@ -25,4 +25,4 @@ plugins {
 }
 
 include(":app")
-rootProject.name = "drink_pos_app"
+rootProject.name = "reebaplus_pos"
