@@ -732,7 +732,7 @@ class Planner {
         'is_available': sqlBool(product.flag('isActive')),
         'low_stock_threshold': sqlInt(mainThreshold[product.id] ?? 5),
         'track_empties': sqlBool(isReturnable && manufacturerId != null),
-        // Every product can sell in parts (#620 decision 4).
+        // PRD #620 decision 4: every product can be sold in parts.
         'allow_fractional_sales': sqlBool(true),
         'created_at': sqlTime(product.time('createdAt')),
       });

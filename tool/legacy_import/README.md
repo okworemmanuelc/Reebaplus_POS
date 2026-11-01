@@ -150,8 +150,8 @@ from it, on the phone and in the replay alike.
   fold into one row with the same total. `inventory` is unaffected: it copies the
   old stock figure.
 - **A transfer with no dispatcher** names the owner: the column is required.
-- **`allow_fractional_sales`** is on for every product (#620 decision 4), so the
-  shop can keep selling in parts. The owner turns it off per product.
+- **`allow_fractional_sales`** is on for every product (PRD #620 decision 4). The
+  shop can turn it off per product.
 - **CEOs get `user_stores` rows for every branch.**
 
 ## Before the first dry run
