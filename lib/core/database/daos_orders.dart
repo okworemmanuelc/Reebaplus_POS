@@ -69,6 +69,38 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
+  /// The crates [items] take, per manufacturer: crate-tracked bottle quantities
+  /// grouped by brand (`unit == bottle && trackEmpties`, manufacturer set). A
+  /// bottle with no manufacturer has no crate line and cannot be counted (#649
+  /// decision 8). Re-reads each product from the DB. Business-scoped. The
+  /// business gate stays with the caller.
+  Future<Map<String, double>> cratesTakenByManufacturer(
+    List<OrderItemsCompanion> items,
+  ) async {
+    final cratesByManufacturer = <String, double>{};
+    for (final item in items) {
+      final productId = item.productId.value;
+      if (productId == null) continue; // quick-sale line: no product
+      final product =
+          await (select(products)
+                ..where((p) => p.id.equals(productId) & whereBusiness(p))
+                ..limit(1))
+              .getSingleOrNull();
+      if (product == null) continue;
+      final mfrId = product.manufacturerId;
+      if (mfrId == null) continue;
+      if (product.unit?.toLowerCase() != 'bottle' || !product.trackEmpties) {
+        continue;
+      }
+      cratesByManufacturer.update(
+        mfrId,
+        (v) => v + item.quantity.value,
+        ifAbsent: () => item.quantity.value,
+      );
+    }
+    return cratesByManufacturer;
+  }
+
   Stream<List<OrderData>> watchPendingOrders() {
     return (select(orders)
           ..where((o) => whereBusiness(o) & o.status.equals('pending'))
@@ -679,6 +711,9 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     // = no per-brand deposit captured yet (every crate brand is "no deposit" →
     // crate-track). Ring 3 checkout UI populates this.
     Map<String, int> crateDepositPaidByManufacturer = const {},
+    // #649 Empties Exchange — crates handed over at Checkout, per brand. Blank
+    // means none, and an invalid map throws [CrateExchangeError] before commit.
+    Map<String, double> cratesReturnedByManufacturer = const {},
     // #431 Send to till — the accepted Online Order this Cart was tagged with.
     // In this same transaction it becomes `fulfilled`, linked to the new order.
     String? onlineOrderId,
@@ -855,61 +890,81 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
                 ..where((b) => b.id.equals(requireBusinessId()))
                 ..limit(1))
               .getSingleOrNull();
-      if (customerId != null &&
+      final tracksCrates =
           isCrateBusiness(crateBiz?.type) &&
-          (crateBiz?.tracksEmptyCrates ?? true)) {
-        final cratesByManufacturer = <String, double>{};
-        for (final item in items) {
-          final productId = item.productId.value;
-          if (productId == null) continue; // quick-sale line: no product
-          final product =
-              await (select(products)
-                    ..where((p) => p.id.equals(productId) & whereBusiness(p))
-                    ..limit(1))
-                  .getSingleOrNull();
-          if (product == null) continue;
-          final mfrId = product.manufacturerId;
-          if (mfrId == null) continue;
-          if (product.unit?.toLowerCase() != 'bottle' ||
-              !product.trackEmpties) {
-            continue;
-          }
-          cratesByManufacturer.update(
-            mfrId,
-            (v) => v + item.quantity.value,
-            ifAbsent: () => item.quantity.value,
+          (crateBiz?.tracksEmptyCrates ?? true);
+      if (cratesReturnedByManufacturer.isNotEmpty ||
+          (tracksCrates && customerId != null)) {
+        final cratesTaken = tracksCrates
+            ? await cratesTakenByManufacturer(items)
+            : const <String, double>{};
+        final refused = crateExchangeProblem(
+          taken: cratesTaken,
+          returned: cratesReturnedByManufacturer,
+        );
+        if (refused != null) throw refused;
+
+        // #649 Empties Exchange (ADR 0033): netted here, not Checkout then
+        // Confirm. Returned crates credit the pool (walk-ins too) and only the
+        // outstanding ones reach the crate line and the `issued` row, so Confirm,
+        // deposit settlement and crate debt need no change. A fully covered
+        // brand gets neither row. The credit lands before the v2 hold diff
+        // closes, so it is held and discarded with a rejected sale.
+        for (final entry in cratesReturnedByManufacturer.entries) {
+          await db.cratePoolDao.addExchangeEmpties(
+            manufacturerId: entry.key,
+            quantity: entry.value,
+            storeId: resolvedSaleStoreId!,
+            orderId: orderId,
+            performedBy: staffId,
           );
         }
-        for (final entry in cratesByManufacturer.entries) {
-          final mfrId = entry.key;
-          final crates = entry.value;
-          final mfr =
-              await (select(manufacturers)
-                    ..where((m) => m.id.equals(mfrId) & whereBusiness(m))
-                    ..limit(1))
-                  .getSingleOrNull();
-          final rateKobo = mfr?.depositAmountKobo ?? 0;
-          final depositPaid = crateDepositPaidByManufacturer[mfrId] ?? 0;
-
-          await db.orderCrateLinesDao.insertLine(
-            OrderCrateLinesCompanion.insert(
-              businessId: requireBusinessId(),
-              orderId: orderId,
-              manufacturerId: mfrId,
-              cratesTaken: crates,
-              depositRateKobo: Value(rateKobo),
-              depositPaidKobo: Value(depositPaid),
-            ),
-          );
-
-          if (depositPaid == 0) {
-            await db.cratePoolDao.recordCrateIssueByCustomer(
-              customerId: customerId,
-              manufacturerId: mfrId,
-              quantity: crates,
-              performedBy: staffId,
-              orderId: orderId,
+        final outstanding = outstandingCrates(
+          cratesTaken,
+          cratesReturnedByManufacturer,
+        );
+        for (final mfrId in cratesTaken.keys) {
+          if (!outstanding.containsKey(mfrId) &&
+              (crateDepositPaidByManufacturer[mfrId] ?? 0) > 0) {
+            throw ArgumentError(
+              'A crate deposit was passed for $mfrId, which has no crates '
+              'outstanding.',
             );
+          }
+        }
+
+        if (customerId != null) {
+          for (final entry in outstanding.entries) {
+            final mfrId = entry.key;
+            final crates = entry.value;
+            final mfr =
+                await (select(manufacturers)
+                      ..where((m) => m.id.equals(mfrId) & whereBusiness(m))
+                      ..limit(1))
+                    .getSingleOrNull();
+            final rateKobo = mfr?.depositAmountKobo ?? 0;
+            final depositPaid = crateDepositPaidByManufacturer[mfrId] ?? 0;
+
+            await db.orderCrateLinesDao.insertLine(
+              OrderCrateLinesCompanion.insert(
+                businessId: requireBusinessId(),
+                orderId: orderId,
+                manufacturerId: mfrId,
+                cratesTaken: crates,
+                depositRateKobo: Value(rateKobo),
+                depositPaidKobo: Value(depositPaid),
+              ),
+            );
+
+            if (depositPaid == 0) {
+              await db.cratePoolDao.recordCrateIssueByCustomer(
+                customerId: customerId,
+                manufacturerId: mfrId,
+                quantity: crates,
+                performedBy: staffId,
+                orderId: orderId,
+              );
+            }
           }
         }
       }
@@ -1820,7 +1875,8 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         // migration 0170 (#201).
         //
         // ONE HOLD REMAINS BEYOND #121 AND 0170's DEPLOY: the CRATE leg. This
-        // early return skips `reverseIssuedByCustomer` below, and 0170's
+        // early return skips `reverseIssuedByCustomer` and
+        // `reverseExchangeEmpties` below, and 0170's
         // `pos_cancel_order` writes no crate rows either — so cancelling a
         // crate-track sale on this path leaves the customer's DERIVED crate debt
         // standing for crates they never kept (the phantom-debt cluster in PRD
@@ -2063,6 +2119,14 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       await db.cratePoolDao.reverseIssuedByCustomer(
         orderId: orderId,
         staffId: staffId,
+      );
+      // #649 — and the empties handed over at Checkout. They come off the pool
+      // because the cashier hands them back with the refund. Any customer or
+      // brand, deposit or not: an exchange writes a pool row for all of them.
+      await db.cratePoolDao.reverseExchangeEmpties(
+        orderId: orderId,
+        staffId: staffId,
+        enqueue: true,
       );
 
       // #551 — a Return's damaged units: written off at the line's recorded
@@ -2548,6 +2612,14 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       await db.cratePoolDao.reverseIssuedByCustomerLocal(
         orderId: orderId,
         staffId: staffId,
+      );
+
+      // 5. #649 — undo the Empties Exchange, walk-ins included. LOCAL-ONLY for
+      // the same reason: its pool row was held and discarded with the sale.
+      await db.cratePoolDao.reverseExchangeEmpties(
+        orderId: orderId,
+        staffId: staffId,
+        enqueue: false,
       );
     });
   }

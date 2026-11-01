@@ -6,6 +6,7 @@ import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/crates/crate_bearing_sale.dart';
+import 'package:reebaplus_pos/core/crates/crate_exchange.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
@@ -199,7 +200,19 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
         accum[mfId]!.totalQty += ri.item.quantity;
       }
 
-      final brands = accum.values.toList();
+      // #649 — this path has no record of an Empties Exchange (walk-ins write no
+      // crate lines), so take it off here. A brand already cleared is not asked
+      // about at all.
+      final outstanding = outstandingCrates(
+        {for (final a in accum.values) a.id: a.totalQty},
+        await db.cratePoolDao.exchangeEmptiesForOrder(
+          widget.orderWithItems.order.id,
+        ),
+      );
+      final brands = [
+        for (final a in accum.values)
+          if (outstanding.containsKey(a.id)) a..totalQty = outstanding[a.id]!,
+      ];
       // Allocate the order's recorded deposit across brands. Weight by full
       // value (rate × crates) so a single full-deposit brand gets it all; fall
       // back to crate count when rates are unset. allocateLegacyDeposit sums the

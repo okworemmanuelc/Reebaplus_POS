@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
+import 'package:reebaplus_pos/core/crates/crate_exchange.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/permissions/gate.dart';
@@ -65,7 +66,9 @@ class OrderCommands {
 
   /// **Checkout** — build an order from a UI cart and persist it atomically,
   /// recognising revenue. The Order is born `pending` only if it is a
-  /// crate-bearing sale (PRD #337), otherwise `completed`.
+  /// crate-bearing sale (PRD #337) with crates still to come back after any
+  /// Empties Exchange ([cratesReturnedByManufacturer], #649), otherwise
+  /// `completed`.
   ///
   /// Returns the human-readable order number (e.g. `ORD-000042`) — the
   /// checkout/receipt code displays this to the user.
@@ -85,6 +88,8 @@ class OrderCommands {
     // the checkout per-brand capture is wired; createOrder then treats every
     // crate brand as "no deposit" (crate-track).
     Map<String, int> crateDepositPaidByManufacturer = const {},
+    // #649 Empties Exchange — crates handed over at Checkout, per brand.
+    Map<String, double> cratesReturnedByManufacturer = const {},
     // #431 — the accepted Online Order the Cart was sent to the till from.
     String? onlineOrderId,
   }) async {
@@ -128,6 +133,12 @@ class OrderCommands {
     final crateBearing = await _ordersDao.isCrateBearingCart(
       cart.map((i) => i['id'] as String?),
     );
+    final waitsForEmpties =
+        crateBearing &&
+        !crateExchangeClearsSale(
+          taken: await _ordersDao.cratesTakenByManufacturer(items),
+          returned: cratesReturnedByManufacturer,
+        );
     final checkoutAt = DateTime.now().toUtc();
 
     final orderCompanion = OrdersCompanion.insert(
@@ -150,20 +161,22 @@ class OrderCommands {
       netAmountKobo: totalAmountKobo,
       amountPaidKobo: Value(amountPaidKobo),
       paymentType: dbPaymentType,
-      // §19.5 lifecycle (PRD #337): Pending holds ONLY crate-bearing sales —
-      // waiting for the empties to be counted back (business tracks empties AND
-      // at least one line is a crate-tracked bottle; see [isCrateBearingSale]).
-      // Every other sale is born `completed` with completedAt = the checkout
-      // instant and no confirmer (nobody confirmed it). Decided on-device from
-      // the DB rows, so it works offline. Either way the sale is already
-      // settled (received, or charged through the wallet, §14.3), revenue is
-      // recognized here at checkout, and the seller (staffId) is credited. For
-      // a pending order, Confirm (OrdersDao.markCompleted) later flips it to
-      // 'completed' after the Empty-Crates modal. The v2 RPC forwards this
-      // status via p_status and the v1 header push carries status +
-      // completed_at, so both sync paths agree.
-      status: crateBearing ? 'pending' : 'completed',
-      completedAt: crateBearing ? const Value.absent() : Value(checkoutAt),
+      // §19.5 lifecycle (PRD #337): Pending holds ONLY crate-bearing sales
+      // still waiting for empties to be counted back (business tracks empties
+      // AND at least one line is a crate-tracked bottle; see
+      // [isCrateBearingSale]) whose crates an Empties Exchange did not cover
+      // (#649; see [crateExchangeClearsSale]). Every other sale, a fully
+      // exchanged one included, is born `completed` with completedAt = the
+      // checkout instant and no confirmer (nobody confirmed it). Decided
+      // on-device from the DB rows, so it works offline. Either way the sale is
+      // already settled (received, or charged through the wallet, §14.3),
+      // revenue is recognized here at checkout, and the seller (staffId) is
+      // credited. For a pending order, Confirm (OrdersDao.markCompleted) later
+      // flips it to 'completed' after the Empty-Crates modal. The v2 RPC
+      // forwards this status via p_status and the v1 header push carries
+      // status + completed_at, so both sync paths agree.
+      status: waitsForEmpties ? 'pending' : 'completed',
+      completedAt: waitsForEmpties ? const Value.absent() : Value(checkoutAt),
       staffId: Value(staffId),
       storeId: Value(storeId),
       crateDepositPaidKobo: Value(crateDepositPaidKobo),
@@ -179,6 +192,7 @@ class OrderCommands {
       storeId: storeId,
       paymentMethod: _resolvePaymentMethod(paymentSubType),
       crateDepositPaidByManufacturer: crateDepositPaidByManufacturer,
+      cratesReturnedByManufacturer: cratesReturnedByManufacturer,
       onlineOrderId: onlineOrderId,
     );
 
