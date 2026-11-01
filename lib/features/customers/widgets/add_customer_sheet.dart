@@ -173,14 +173,11 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
                     ),
                     SizedBox(height: context.getRSize(16)),
                     AppInput(
-                      labelText: 'Phone Number',
+                      labelText: 'Phone Number (optional)',
                       controller: _phoneCtrl,
                       hintText: 'e.g. 08012345678',
                       keyboardType: TextInputType.phone,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      validator: (v) => (v == null || v.trim().isEmpty)
-                          ? 'This field is required'
-                          : null,
                     ),
                   ],
                   footer: Padding(

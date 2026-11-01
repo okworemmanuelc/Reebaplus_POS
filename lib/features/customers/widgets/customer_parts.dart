@@ -22,6 +22,7 @@ abstract final class CustomersKeys {
   static const Key topBar = ValueKey<String>('customers-top-bar');
   static const Key list = ValueKey<String>('customers-list');
   static const Key empty = ValueKey<String>('customers-empty');
+  static const Key search = ValueKey<String>('customers-search');
   static const Key addSheet = ValueKey<String>('add-customer-sheet');
   static const Key editSheet = ValueKey<String>('edit-customer-sheet');
   static const Key editBack = ValueKey<String>('edit-customer-back');

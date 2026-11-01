@@ -314,6 +314,65 @@ void main() {
       await disposeScreen(tester);
     });
 
+    testWidgets('debtors come first, biggest debt first', (tester) async {
+      final a = await _seed(env, name: 'Ada Credit', balanceKobo: 500000);
+      final b = await _seed(env, name: 'Bola Owes', balanceKobo: -100000);
+      final c = await _seed(env, name: 'Chidi Owes More', balanceKobo: -900000);
+      await _pumpList(tester, env);
+      double top(String id) =>
+          tester.getTopLeft(find.byKey(CustomersKeys.row(id))).dy;
+      expect(top(c), lessThan(top(b)));
+      expect(top(b), lessThan(top(a)));
+      await disposeScreen(tester);
+    });
+
+    testWidgets('typing filters; the field keeps its text and focus', (
+      tester,
+    ) async {
+      final ada = await _seed(env, name: 'Adaeze Okafor', phone: '0803 111 22');
+      final bola = await _seed(env, name: 'Bola Adewale');
+      await _pumpList(tester, env);
+      expect(find.byKey(CustomersKeys.search), findsOneWidget);
+      final field = find.descendant(
+        of: find.byKey(CustomersKeys.search),
+        matching: find.byType(EditableText),
+      );
+      await tester.tap(field);
+      await tester.enterText(field, 'bola');
+      await tester.pump();
+      expect(find.byKey(CustomersKeys.row(bola)), findsOneWidget);
+      expect(find.byKey(CustomersKeys.row(ada)), findsNothing);
+      await tester.enterText(field, '080311');
+      await tester.pump();
+      expect(find.byKey(CustomersKeys.row(ada)), findsOneWidget);
+      expect(find.byKey(CustomersKeys.row(bola)), findsNothing);
+      expect(tester.widget<EditableText>(field).focusNode.hasFocus, isTrue);
+      expect(tester.widget<EditableText>(field).controller.text, '080311');
+      await disposeScreen(tester);
+    });
+
+    testWidgets('no match keeps the field and says so', (tester) async {
+      await _seed(env, name: 'Adaeze Okafor');
+      await _pumpList(tester, env);
+      final field = find.descendant(
+        of: find.byKey(CustomersKeys.search),
+        matching: find.byType(EditableText),
+      );
+      await tester.enterText(field, 'zzz');
+      await tester.pump();
+      expect(find.byKey(CustomersKeys.search), findsOneWidget);
+      expect(find.text('No customers match'), findsOneWidget);
+      expect(find.text('Adaeze Okafor'), findsNothing);
+      expect(tester.takeException(), isNull);
+      await disposeScreen(tester);
+    });
+
+    testWidgets('no customers: no search field', (tester) async {
+      await _pumpList(tester, env);
+      expect(find.byKey(CustomersKeys.search), findsNothing);
+      await disposeScreen(tester);
+    });
+
     testWidgets('empty list message', (tester) async {
       await _pumpList(tester, env);
       expect(find.byKey(CustomersKeys.empty), findsOneWidget);
@@ -431,14 +490,14 @@ void main() {
         'Price Tier',
         'Assign to Store',
         'Address (optional)',
-        'Phone Number',
+        'Phone Number (optional)',
         'Save Customer',
       ]) {
         expect(find.text(label), findsOneWidget, reason: label);
       }
 
       await tester.enterText(_field('Customer Name'), 'Ngozi Ike');
-      await tester.enterText(_field('Phone Number'), '08070001111');
+      await tester.enterText(_field('Phone Number (optional)'), '08070001111');
       await tester.tap(find.text('Select store'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Abuja HQ').last);
@@ -460,11 +519,34 @@ void main() {
       await disposeScreen(tester);
     });
 
+    testWidgets('saves a customer with a blank phone', (tester) async {
+      await _openSheet(tester, env, (c) => AddCustomerSheet.show(c));
+      await tester.enterText(_field('Customer Name'), 'Ngozi Ike');
+      await tester.tap(find.text('Select store'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Abuja HQ').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Save Customer'));
+      await tester.pump();
+      await _deliver(tester);
+      expect(find.text('This field is required'), findsNothing);
+      final rows = (await tester.runAsync(
+        () => (env.db.select(
+          env.db.customers,
+        )..where((t) => t.name.equals('Ngozi Ike'))).get(),
+      ))!;
+      expect(rows, hasLength(1));
+      expect(rows.single.phone, isNull);
+      await _deliver(tester, 12);
+      await tester.pump(const Duration(seconds: 5));
+      await disposeScreen(tester);
+    });
+
     testWidgets('required fields still validate', (tester) async {
       await _openSheet(tester, env, (c) => AddCustomerSheet.show(c));
       await tester.tap(find.text('Save Customer'));
       await tester.pumpAndSettle();
-      expect(find.text('This field is required'), findsNWidgets(2));
+      expect(find.text('This field is required'), findsOneWidget);
       expect(find.text('Please select a store'), findsOneWidget);
       await disposeScreen(tester);
     });
@@ -521,6 +603,25 @@ void main() {
       await disposeScreen(tester);
     });
 
+    testWidgets('Save Details works with the phone cleared', (tester) async {
+      final id = await _seed(env, name: 'Adaeze Okafor', phone: '08031112222');
+      await _openSheet(tester, env, (c) => _openEdit(c, id, env.storeId));
+      await tester.enterText(_field('Phone Number (optional)'), '');
+      await tester.tap(find.text('Save Details'));
+      await tester.pump();
+      await _deliver(tester);
+      expect(find.text('This field is required'), findsNothing);
+      final row = (await tester.runAsync(
+        () => (env.db.select(
+          env.db.customers,
+        )..where((t) => t.id.equals(id))).getSingle(),
+      ))!;
+      expect(row.phone, isNull);
+      await _deliver(tester, 12);
+      await tester.pump(const Duration(seconds: 5));
+      await disposeScreen(tester);
+    });
+
     testWidgets('back closes it; the barrier does not', (tester) async {
       final id = await _seed(env, name: 'Adaeze Okafor');
       await _openSheet(tester, env, (c) => _openEdit(c, id, env.storeId));
@@ -556,7 +657,7 @@ void main() {
   });
 
   group('Customer sheets with the keyboard up', () {
-    const fields = ['Customer Name', 'Address (optional)', 'Phone Number'];
+    const fields = ['Customer Name', 'Address (optional)', 'Phone Number (optional)'];
     for (final (name, size, insets, scale) in [
       (
         '360x800 @1.3',
