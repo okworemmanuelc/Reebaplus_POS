@@ -44,7 +44,8 @@
 -- (new app on Play -> minimum version raised -> cloud). Part C also rewrites
 -- functions that originate in the reebaplus-web migrations (console_*,
 -- pos_stock_transfer, pos_cancel_transfer, pos_receive_transfer, add_product,
--- receive_stock); their bodies are the production definitions of 2026-11-01
+-- receive_stock, console_revenue, console_platform_revenue,
+-- console_orders_summary); their bodies are the production definitions of 2026-11-01
 -- with only the quantity types changed.
 
 BEGIN;
@@ -3991,6 +3992,421 @@ BEGIN
     'replayed',         false
   );
 END;
+$function$;
+
+
+-- ---- console revenue RPCs: line totals via line_total_kobo ----------------
+-- `oi.quantity * oi.unit_price_kobo` is now double precision; summing raw
+-- products and casting once would round differently from the app. Each line is
+-- rounded to whole kobo (half up) exactly like Dart `lineTotalKobo`, then summed.
+
+CREATE OR REPLACE FUNCTION public.console_revenue(p_business_id uuid, p_store_id uuid DEFAULT NULL::uuid, p_start_date timestamp with time zone DEFAULT NULL::timestamp with time zone, p_end_date timestamp with time zone DEFAULT NULL::timestamp with time zone)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_tz text;
+  v_res jsonb;
+begin
+  if not public.is_console_admin() then
+    raise exception 'not authorized';
+  end if;
+
+  select coalesce(
+    (select value from public.settings where business_id = p_business_id and key = 'timezone' limit 1),
+    'UTC'
+  ) into v_tz;
+
+  with order_aggregates as (
+    select
+      o.id as order_id,
+      (o.created_at at time zone v_tz)::date as local_date,
+      case
+        when p_store_id is null or o.store_id = p_store_id then o.discount_kobo
+        else 0
+      end as discount_kobo,
+      coalesce(sum(
+        case
+          when p_store_id is null or oi.store_id = p_store_id then public.line_total_kobo(oi.unit_price_kobo, oi.quantity)
+          else 0
+        end
+      ), 0) as items_gross_kobo
+    from public.orders o
+    left join public.order_items oi on oi.order_id = o.id
+    where o.business_id = p_business_id
+      and o.status in ('pending', 'completed')
+      and (p_store_id is null or o.store_id = p_store_id or oi.store_id = p_store_id)
+      and (p_start_date is null or o.created_at >= p_start_date)
+      and (p_end_date is null or o.created_at <= p_end_date)
+    group by o.id, o.store_id, o.discount_kobo, o.created_at
+  ),
+  daily as (
+    select
+      local_date,
+      count(*)::bigint as order_count,
+      sum(items_gross_kobo)::bigint as items_gross_kobo,
+      sum(discount_kobo)::bigint as discount_kobo,
+      sum(items_gross_kobo - discount_kobo)::bigint as total_sales_kobo
+    from order_aggregates
+    group by local_date
+    order by local_date
+  )
+  select jsonb_build_object(
+    'total_sales_kobo', coalesce((select sum(total_sales_kobo) from daily), 0)::bigint,
+    'order_count', coalesce((select sum(order_count) from daily), 0)::bigint,
+    'items_gross_kobo', coalesce((select sum(items_gross_kobo) from daily), 0)::bigint,
+    'discount_kobo', coalesce((select sum(discount_kobo) from daily), 0)::bigint,
+    'timezone', v_tz,
+    'by_day', coalesce((
+      select jsonb_agg(
+        jsonb_build_object(
+          'date', local_date,
+          'order_count', order_count,
+          'items_gross_kobo', items_gross_kobo,
+          'discount_kobo', discount_kobo,
+          'total_sales_kobo', total_sales_kobo
+        )
+      ) from daily
+    ), '[]'::jsonb)
+  ) into v_res;
+
+  return v_res;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.console_platform_revenue(p_include_test boolean DEFAULT false, p_start_date timestamp with time zone DEFAULT NULL::timestamp with time zone, p_end_date timestamp with time zone DEFAULT NULL::timestamp with time zone)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_res jsonb;
+begin
+  if not public.is_console_admin() then
+    raise exception 'not authorized';
+  end if;
+
+  with biz as (
+    select
+      b.id as business_id,
+      upper(coalesce(nullif(btrim(
+        (select s.value from public.settings s
+          where s.business_id = b.id and s.key = 'default_currency' limit 1)
+      ), ''), 'NGN')) as currency,
+      coalesce(nullif(btrim(
+        (select s.value from public.settings s
+          where s.business_id = b.id and s.key = 'timezone' limit 1)
+      ), ''), 'UTC') as tz
+    from public.businesses b
+    where p_include_test
+       or not exists (
+         select 1 from public.console_test_businesses t where t.business_id = b.id
+       )
+  ),
+  order_totals as (
+    select
+      biz.business_id,
+      biz.currency,
+      (o.created_at at time zone biz.tz)::date as local_date,
+      o.id as order_id,
+      coalesce(sum(public.line_total_kobo(oi.unit_price_kobo, oi.quantity)), 0) - o.discount_kobo as sales_kobo
+    from biz
+    join public.orders o on o.business_id = biz.business_id
+    left join public.order_items oi on oi.order_id = o.id
+    where o.status in ('pending', 'completed')
+      and (p_start_date is null or o.created_at >= p_start_date)
+      and (p_end_date is null or o.created_at <= p_end_date)
+    group by biz.business_id, biz.currency, biz.tz, o.id, o.created_at, o.discount_kobo
+  ),
+  by_day as (
+    select currency, local_date,
+           sum(sales_kobo)::bigint as total_sales_kobo,
+           count(*)::bigint as order_count
+    from order_totals
+    group by currency, local_date
+  ),
+  by_currency as (
+    select currency,
+           sum(sales_kobo)::bigint as total_sales_kobo,
+           count(*)::bigint as order_count,
+           count(distinct business_id)::bigint as business_count
+    from order_totals
+    group by currency
+  )
+  select jsonb_build_object(
+    'currencies', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'currency', currency,
+        'total_sales_kobo', total_sales_kobo,
+        'order_count', order_count,
+        'business_count', business_count
+      ) order by currency) from by_currency
+    ), '[]'::jsonb),
+    'by_day', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'currency', currency,
+        'date', local_date,
+        'total_sales_kobo', total_sales_kobo,
+        'order_count', order_count
+      ) order by currency, local_date) from by_day
+    ), '[]'::jsonb)
+  ) into v_res;
+
+  return v_res;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.console_orders_summary(p_business_id uuid, p_store_id uuid DEFAULT NULL::uuid, p_status text DEFAULT NULL::text, p_channel text DEFAULT NULL::text, p_start_date timestamp with time zone DEFAULT NULL::timestamp with time zone, p_end_date timestamp with time zone DEFAULT NULL::timestamp with time zone)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_tz text;
+  v_res jsonb;
+  v_status text;
+  v_channel text;
+begin
+  if not public.is_console_admin() then
+    raise exception 'not authorized';
+  end if;
+
+  select coalesce(
+    (select value from public.settings where business_id = p_business_id and key = 'timezone' limit 1),
+    'UTC'
+  ) into v_tz;
+
+  v_status := nullif(lower(btrim(p_status)), 'all');
+  if v_status = '' then v_status := null; end if;
+
+  v_channel := nullif(lower(btrim(p_channel)), 'all');
+  if v_channel = '' then v_channel := null; end if;
+
+  if p_business_id is null then
+    return jsonb_build_object(
+      'order_count', 0,
+      'total_sales_kobo', 0,
+      'items_gross_kobo', 0,
+      'discount_kobo', 0,
+      'avg_ticket_kobo', 0,
+      'refunds_kobo', 0,
+      'refund_count', 0,
+      'crate_deposits_kobo', 0,
+      'net_sales_kobo', 0,
+      'payment_methods', '{}'::jsonb,
+      'timezone', v_tz,
+      'by_day', '[]'::jsonb
+    );
+  end if;
+
+  with filtered_orders as (
+    select
+      o.id,
+      o.store_id,
+      lower(o.status) as status,
+      lower(coalesce(o.payment_type, '')) as payment_type,
+      coalesce(o.discount_kobo, 0) as discount_kobo,
+      o.created_at,
+      (o.created_at at time zone v_tz)::date as local_date
+    from public.orders o
+    where o.business_id = p_business_id
+      and (p_store_id is null or o.store_id = p_store_id)
+      and (v_status is null or lower(o.status) = v_status)
+      and (v_channel is null or lower(coalesce(o.payment_type, '')) = v_channel)
+      and (p_start_date is null or o.created_at >= p_start_date)
+      and (p_end_date is null or o.created_at <= p_end_date)
+  ),
+  order_aggregates as (
+    select
+      fo.id as order_id,
+      fo.local_date,
+      fo.status,
+      case
+        when (v_status is not null and fo.status = v_status)
+             or (v_status is null and fo.status in ('pending', 'completed'))
+        then fo.discount_kobo
+        else 0
+      end as discount_kobo,
+      coalesce(sum(
+        case
+          when (v_status is not null and fo.status = v_status)
+               or (v_status is null and fo.status in ('pending', 'completed'))
+          then
+            case
+              when p_store_id is null or oi.store_id = p_store_id or (oi.store_id is null and fo.store_id = p_store_id)
+              then public.line_total_kobo(oi.unit_price_kobo, oi.quantity)
+              else 0
+            end
+          else 0
+        end
+      ), 0) as items_gross_kobo
+    from filtered_orders fo
+    left join public.order_items oi on oi.order_id = fo.id
+    group by fo.id, fo.local_date, fo.status, fo.discount_kobo
+  ),
+  order_totals as (
+    select
+      coalesce(count(*), 0)::bigint as total_order_count,
+      coalesce(sum(items_gross_kobo), 0)::bigint as total_items_gross_kobo,
+      coalesce(sum(discount_kobo), 0)::bigint as total_discount_kobo,
+      coalesce(sum(items_gross_kobo - discount_kobo), 0)::bigint as total_sales_kobo
+    from order_aggregates
+  ),
+  daily_orders as (
+    select
+      local_date,
+      count(*)::bigint as order_count,
+      coalesce(sum(items_gross_kobo), 0)::bigint as items_gross_kobo,
+      coalesce(sum(discount_kobo), 0)::bigint as discount_kobo,
+      coalesce(sum(items_gross_kobo - discount_kobo), 0)::bigint as total_sales_kobo
+    from order_aggregates
+    group by local_date
+  ),
+  filtered_payments as (
+    select
+      pt.id,
+      pt.order_id,
+      pt.store_id,
+      lower(pt.method) as method,
+      pt.type,
+      pt.amount_kobo,
+      pt.created_at,
+      (pt.created_at at time zone v_tz)::date as local_date
+    from public.payment_transactions pt
+    where pt.business_id = p_business_id
+      and pt.voided_at is null
+      and (p_store_id is null or pt.store_id = p_store_id)
+      and (v_channel is null or lower(pt.method) = v_channel)
+      and (p_start_date is null or pt.created_at >= p_start_date)
+      and (p_end_date is null or pt.created_at <= p_end_date)
+  ),
+  refund_totals as (
+    select
+      coalesce(count(*), 0)::bigint as refund_count,
+      coalesce(sum(amount_kobo), 0)::bigint as refunds_kobo
+    from filtered_payments pt
+    where type = 'refund'
+      and (
+        v_status is null
+        or pt.order_id is null
+        or exists (select 1 from public.orders ro where ro.id = pt.order_id and lower(ro.status) = v_status)
+      )
+  ),
+  daily_refunds as (
+    select
+      local_date,
+      coalesce(sum(amount_kobo), 0)::bigint as refunds_kobo,
+      count(*)::bigint as refund_count
+    from filtered_payments pt
+    where type = 'refund'
+      and (
+        v_status is null
+        or pt.order_id is null
+        or exists (select 1 from public.orders ro where ro.id = pt.order_id and lower(ro.status) = v_status)
+      )
+    group by local_date
+  ),
+  deposit_totals as (
+    select
+      coalesce(sum(amount_kobo), 0)::bigint as crate_deposits_kobo
+    from filtered_payments pt
+    where type = 'crate_deposit'
+      and (
+        v_status is null
+        or pt.order_id is null
+        or exists (select 1 from public.orders co where co.id = pt.order_id and lower(co.status) = v_status)
+      )
+  ),
+  daily_deposits as (
+    select
+      local_date,
+      coalesce(sum(amount_kobo), 0)::bigint as crate_deposits_kobo
+    from filtered_payments pt
+    where type = 'crate_deposit'
+      and (
+        v_status is null
+        or pt.order_id is null
+        or exists (select 1 from public.orders co where co.id = pt.order_id and lower(co.status) = v_status)
+      )
+    group by local_date
+  ),
+  payment_splits as (
+    select
+      method,
+      coalesce(sum(amount_kobo), 0)::bigint as method_kobo
+    from filtered_payments pt
+    where type = 'sale'
+      and (
+        v_status is null
+        or pt.order_id is null
+        or exists (select 1 from public.orders so where so.id = pt.order_id and lower(so.status) = v_status)
+      )
+    group by method
+  ),
+  all_dates as (
+    select local_date from daily_orders
+    union
+    select local_date from daily_refunds
+    union
+    select local_date from daily_deposits
+  ),
+  daily_combined as (
+    select
+      ad.local_date,
+      coalesce(d_ord.order_count, 0)::bigint as order_count,
+      coalesce(d_ord.items_gross_kobo, 0)::bigint as items_gross_kobo,
+      coalesce(d_ord.discount_kobo, 0)::bigint as discount_kobo,
+      coalesce(d_ord.total_sales_kobo, 0)::bigint as total_sales_kobo,
+      coalesce(d_ref.refunds_kobo, 0)::bigint as refunds_kobo,
+      coalesce(d_ref.refund_count, 0)::bigint as refund_count,
+      coalesce(d_dep.crate_deposits_kobo, 0)::bigint as crate_deposits_kobo
+    from all_dates ad
+    left join daily_orders d_ord on d_ord.local_date = ad.local_date
+    left join daily_refunds d_ref on d_ref.local_date = ad.local_date
+    left join daily_deposits d_dep on d_dep.local_date = ad.local_date
+    order by ad.local_date
+  )
+  select jsonb_build_object(
+    'order_count', coalesce(ot.total_order_count, 0),
+    'total_sales_kobo', coalesce(ot.total_sales_kobo, 0),
+    'items_gross_kobo', coalesce(ot.total_items_gross_kobo, 0),
+    'discount_kobo', coalesce(ot.total_discount_kobo, 0),
+    'avg_ticket_kobo', case when coalesce(ot.total_order_count, 0) > 0 then (ot.total_sales_kobo / ot.total_order_count)::bigint else 0::bigint end,
+    'refunds_kobo', coalesce(rt.refunds_kobo, 0),
+    'refund_count', coalesce(rt.refund_count, 0),
+    'crate_deposits_kobo', coalesce(dt.crate_deposits_kobo, 0),
+    'net_sales_kobo', coalesce(ot.total_sales_kobo, 0) - coalesce(rt.refunds_kobo, 0),
+    'payment_methods', coalesce((
+      select jsonb_object_agg(method, method_kobo)
+      from payment_splits
+    ), '{}'::jsonb),
+    'timezone', v_tz,
+    'by_day', coalesce((
+      select jsonb_agg(
+        jsonb_build_object(
+          'date', local_date,
+          'order_count', order_count,
+          'items_gross_kobo', items_gross_kobo,
+          'discount_kobo', discount_kobo,
+          'total_sales_kobo', total_sales_kobo,
+          'refunds_kobo', refunds_kobo,
+          'refund_count', refund_count,
+          'crate_deposits_kobo', crate_deposits_kobo
+        )
+      ) from daily_combined
+    ), '[]'::jsonb)
+  )
+  from order_totals ot
+  cross join refund_totals rt
+  cross join deposit_totals dt
+  into v_res;
+
+  return v_res;
+end;
 $function$;
 
 -- ===========================================================================
