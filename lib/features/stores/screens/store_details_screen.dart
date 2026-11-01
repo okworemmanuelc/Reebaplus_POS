@@ -102,10 +102,14 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
     final canRequest = Gates.requestStoreTransfer.allows(ref);
 
     final totalStock = _inventory.fold<double>(0, (sum, p) => sum + p.totalStock);
-    final totalValue = _inventory.fold<double>(
-      0.0,
-      (sum, p) => sum + (p.totalStock * (p.product.retailerPriceKobo / 100.0)),
-    );
+    // Stock value in whole kobo, rounded per product (#630).
+    final totalValue =
+        _inventory.fold<int>(
+          0,
+          (sum, p) =>
+              sum + lineTotalKobo(p.product.retailerPriceKobo, p.totalStock),
+        ) /
+        100.0;
     final activeProducts = _inventory.where((p) => p.totalStock > 0).length;
     final lowStock = _inventory
         .where(

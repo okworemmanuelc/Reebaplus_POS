@@ -11,6 +11,7 @@ import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
@@ -303,7 +304,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
   Future<bool?> _showConfirmationDialog({
     required String? supplierName,
     required int productCount,
-    required int totalUnits,
+    required double totalUnits,
     required int invoiceTotalKobo,
     required String storeName,
     required int uncostedItemCount,
@@ -327,7 +328,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
             _dialogRow('Supplier', supplierName ?? 'None (cash purchase)'),
             _dialogRow(
               'Items',
-              '$productCount product(s), $totalUnits unit(s)',
+              '$productCount product(s), ${formatQty(totalUnits)} unit(s)',
             ),
             _dialogRow('Stocking', storeName),
             _dialogRow('Invoice Total', formatCurrency(invoiceTotalKobo / 100)),
@@ -430,7 +431,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
         const <ManufacturerData>[];
     final mfrNames = {for (final m in manufacturers) m.id: m.name};
     final crateGroups =
-        <({String manufacturerId, String name, int unitsDelivered})>[];
+        <({String manufacturerId, String name, double unitsDelivered})>[];
     final seenManufacturers = <String>{};
     for (final l in cart) {
       final mfrId = l.manufacturerId;
@@ -438,7 +439,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
       if (!seenManufacturers.add(mfrId)) continue;
       final unitsDelivered = cart
           .where((x) => x.movesCrates && x.manufacturerId == mfrId)
-          .fold<int>(0, (sum, x) => sum + x.qty);
+          .fold<double>(0, (sum, x) => sum + x.qty);
       crateGroups.add((
         manufacturerId: mfrId,
         name: mfrNames[mfrId] ?? 'Manufacturer',
@@ -516,7 +517,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
     required String totalValueStr,
     required bool supplierRequired,
     required int uncostedLineCount,
-    required List<({String manufacturerId, String name, int unitsDelivered})>
+    required List<({String manufacturerId, String name, double unitsDelivered})>
     crateGroups,
     required Color? subtext,
   }) {
@@ -528,7 +529,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
         tone: IconTileTone.info,
         title: 'Invoice Total',
         value: totalValueStr,
-        subtitle: '${notifier.totalUnits} units • ${cart.length} products',
+        subtitle: '${formatQty(notifier.totalUnits)} units • ${cart.length} products',
       ),
       SizedBox(height: context.getRSize(12)),
 
@@ -744,7 +745,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
                 ),
                 SizedBox(height: context.getRSize(2)),
                 Text(
-                  '${line.qty} × ${formatCurrency(line.buyingPriceKobo / 100)}',
+                  '${formatQty(line.qty)} × ${formatCurrency(line.buyingPriceKobo / 100)}',
                   style: context.regularStyle(13).copyWith(color: subtext),
                 ),
               ],
@@ -752,7 +753,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
           ),
           SizedBox(width: context.getRSize(8)),
           Text(
-            formatCurrency(line.buyingPriceKobo * line.qty / 100),
+            formatCurrency(line.totalKobo / 100),
             style: context.boldStyle(15).copyWith(color: t.colorScheme.primary),
           ),
         ],
@@ -764,7 +765,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
   /// back. Both are typed — `unitsDelivered` is shown only as context and is a
   /// bottle count, never a crate count.
   Widget _crateRow(
-    ({String manufacturerId, String name, int unitsDelivered}) group,
+    ({String manufacturerId, String name, double unitsDelivered}) group,
     Color? subtext,
   ) {
     final t = Theme.of(context);
@@ -795,7 +796,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
                           .copyWith(color: t.colorScheme.onSurface),
                     ),
                     Text(
-                      '${group.unitsDelivered} '
+                      '${formatQty(group.unitsDelivered)} '
                       '${group.unitsDelivered == 1 ? 'drink' : 'drinks'} on '
                       'this delivery',
                       style: context.regularStyle(12).copyWith(color: subtext),

@@ -2,6 +2,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
 import 'package:reebaplus_pos/shared/services/supplier_account_service.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 
 /// Atomic "Receive Stock" commit (Receive Stock spec, Section 9). One run =
 /// one supplier, or none (see "No supplier" below). On confirm, ALL of the following happen inside a single Drift
@@ -89,6 +90,17 @@ class ReceiveStockService {
     if (lines.isEmpty) {
       throw ArgumentError('Cannot receive stock with an empty cart');
     }
+    // Quarter steps only, and whole numbers for a product whose parts switch is
+    // off (#630). The screen filters this already; the commit is the authority.
+    for (final l in lines) {
+      if (Qty.validate(l.qty, allowZero: false) == null ||
+          (!l.allowParts && !Qty.isWhole(l.qty))) {
+        throw ArgumentError(
+          '${l.productName}: ${formatQty(l.qty)} is not a quantity this '
+          'product can be received in',
+        );
+      }
+    }
     if (supplierId == null) {
       if (lines.any((l) => l.movesCrates)) {
         throw ArgumentError('A receipt with crate products needs a supplier');
@@ -98,11 +110,8 @@ class ReceiveStockService {
       }
     }
 
-    final invoiceTotalKobo = lines.fold<int>(
-      0,
-      (sum, l) => sum + l.buyingPriceKobo * l.qty,
-    );
-    final totalUnits = lines.fold<int>(0, (sum, l) => sum + l.qty);
+    final invoiceTotalKobo = lines.fold<int>(0, (sum, l) => sum + l.totalKobo);
+    final totalUnits = lines.fold<double>(0, (sum, l) => sum + l.qty);
 
     await _db.transaction(() async {
       // 1. Supplier invoice (skip a zero-value invoice — stock/crates still post).
@@ -139,7 +148,7 @@ class ReceiveStockService {
         await _db.inventoryDao.adjustStock(
           line.productId,
           storeId,
-          line.qty.toDouble(),
+          line.qty,
           'Stock received',
           staffId,
           trackCost: false,
@@ -160,7 +169,7 @@ class ReceiveStockService {
         await _db.costBatchesDao.recordInflowBatch(
           productId: line.productId,
           storeId: storeId,
-          quantity: line.qty.toDouble(),
+          quantity: line.qty,
           costKobo: line.buyingPriceKobo,
           receivedAt: dateReceived,
         );
@@ -240,7 +249,7 @@ class ReceiveStockService {
       await _db.activityLogDao.logActivity(
         action: 'stock.received',
         description:
-            'Received ${lines.length} product(s), $totalUnits unit(s) '
+            'Received ${lines.length} product(s), ${formatQty(totalUnits)} unit(s) '
             '${supplierId == null ? '(no supplier) — cost' : 'from $supplierName — invoice'} '
             '${formatCurrency(invoiceTotalKobo / 100)}'
             '${amountPaidKobo != null && amountPaidKobo > 0 ? ' (Paid: ${formatCurrency(amountPaidKobo / 100)})' : ''}'

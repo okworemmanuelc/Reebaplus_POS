@@ -11,7 +11,10 @@ import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
+import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
+import 'package:reebaplus_pos/shared/utils/quantity_input.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/icon_tile.dart';
@@ -48,7 +51,7 @@ class _EditReceiveItemModalState extends ConsumerState<EditReceiveItemModal> {
   @override
   void initState() {
     super.initState();
-    _qtyCtrl = TextEditingController(text: widget.item.qty.toString());
+    _qtyCtrl = TextEditingController(text: formatQty(widget.item.qty));
     _buyingCtrl = TextEditingController(
       text: _trimNum(widget.item.buyingPriceKobo / 100),
     );
@@ -92,11 +95,15 @@ class _EditReceiveItemModalState extends ConsumerState<EditReceiveItemModal> {
     super.dispose();
   }
 
+  bool get _allowParts => widget.item.allowParts;
+
   void _updateQty(int delta) {
-    final v = int.tryParse(_qtyCtrl.text) ?? 1;
-    final newValue = (v + delta).clamp(1, 10000);
+    final v = parseStockQty(_qtyCtrl.text, allowParts: _allowParts) ?? 1;
+    // Never below the smallest step the product takes (a quarter, or 1).
+    final floor = _allowParts ? kQtyStep : 1.0;
+    final newValue = (v + delta).clamp(floor, 10000.0);
     setState(() {
-      _qtyCtrl.text = newValue.toString();
+      _qtyCtrl.text = formatQty(newValue);
     });
     _qtyCtrl.selection = TextSelection(
       baseOffset: 0,
@@ -117,11 +124,12 @@ class _EditReceiveItemModalState extends ConsumerState<EditReceiveItemModal> {
     final editBuyingPermission = Gates.editBuyingPrice.allows(ref);
     final editPricePermission = Gates.editProductPrice.allows(ref);
 
-    final rawQty = int.tryParse(_qtyCtrl.text) ?? 1;
+    final rawQty =
+        parseStockQty(_qtyCtrl.text, allowParts: _allowParts) ?? 1.0;
     final buyingVal =
         double.tryParse(_buyingCtrl.text.replaceAll(',', '')) ?? 0.0;
     final buyingKobo = (buyingVal * 100).round();
-    final lineTotalKobo = buyingKobo * rawQty;
+    final lineTotal = lineTotalKobo(buyingKobo, rawQty);
 
     Widget currencyPrefix(bool enabled) => Padding(
       padding: EdgeInsets.all(context.getRSize(14)),
@@ -222,12 +230,10 @@ class _EditReceiveItemModalState extends ConsumerState<EditReceiveItemModal> {
                     child: AppInput(
                       controller: _qtyCtrl,
                       autofocus: true,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: false,
+                      keyboardType: stockQtyKeyboard(allowParts: _allowParts),
+                      inputFormatters: stockQtyFormatters(
+                        allowParts: _allowParts,
                       ),
-                      inputFormatters: [
-                        CurrencyInputFormatter(grouping: false),
-                      ],
                       textAlign: TextAlign.center,
                       style: context
                           .extraBoldStyle(28)
@@ -326,7 +332,7 @@ class _EditReceiveItemModalState extends ConsumerState<EditReceiveItemModal> {
               ),
             ],
 
-            if (lineTotalKobo > 0) ...[
+            if (lineTotal > 0) ...[
               SizedBox(height: context.getRSize(20)),
               Container(
                 padding: EdgeInsets.all(context.getRSize(16)),
@@ -345,7 +351,7 @@ class _EditReceiveItemModalState extends ConsumerState<EditReceiveItemModal> {
                       ),
                     ),
                     Text(
-                      formatCurrency(lineTotalKobo / 100.0),
+                      formatCurrency(lineTotal / 100.0),
                       style: context.boldStyle(18).copyWith(color: primary),
                     ),
                   ],
@@ -381,7 +387,18 @@ class _EditReceiveItemModalState extends ConsumerState<EditReceiveItemModal> {
                     onPressed: () {
                       final notifier = ref.read(receiveCartProvider.notifier);
 
-                      final qty = int.tryParse(_qtyCtrl.text) ?? 1;
+                      final qty = parseStockQty(
+                        _qtyCtrl.text,
+                        allowParts: _allowParts,
+                        allowZero: false,
+                      );
+                      if (qty == null) {
+                        AppNotification.showError(
+                          context,
+                          stockQtyError(_qtyCtrl.text, allowParts: _allowParts),
+                        );
+                        return;
+                      }
                       notifier.setQty(widget.item.productId, qty);
 
                       if (editBuyingPermission) {

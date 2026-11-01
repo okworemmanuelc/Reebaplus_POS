@@ -9,10 +9,11 @@ class StockRequestItem {
 
   final ProductData product;
 
-  /// Always at least 1: a line that would drop to 0 is removed instead.
-  final int quantity;
+  /// Positive, in quarter steps (#630): a line that would drop to 0 is
+  /// removed instead.
+  final double quantity;
 
-  StockRequestItem withQuantity(int quantity) =>
+  StockRequestItem withQuantity(double quantity) =>
       StockRequestItem(product: product, quantity: quantity);
 }
 
@@ -20,8 +21,9 @@ class StockRequestItem {
 /// in the order they were added. Lives only while the screen is open
 /// (auto-dispose): leaving the screen drops an unsent list.
 ///
-/// Rules: a product appears once; every quantity is at least 1 (stepping
-/// down from 1 removes the line, setting 0 or less removes it).
+/// Rules: a product appears once; every quantity is positive (stepping
+/// down from 1 or less removes the line, setting 0 or less removes it). The +
+/// and − steps are whole units; a part (0.25 ...) is typed (#630).
 class StockRequestListNotifier
     extends AutoDisposeNotifier<List<StockRequestItem>> {
   @override
@@ -31,7 +33,7 @@ class StockRequestListNotifier
   void add(ProductData product) {
     final i = _indexOf(product.id);
     if (i < 0) {
-      state = [...state, StockRequestItem(product: product, quantity: 1)];
+      state = [...state, StockRequestItem(product: product, quantity: 1.0)];
     } else {
       _replace(i, state[i].quantity + 1);
     }
@@ -39,7 +41,7 @@ class StockRequestListNotifier
 
   /// Sets [product]'s quantity (tap and hold), adding the line if needed.
   /// Zero or less removes it.
-  void setQuantity(ProductData product, int quantity) {
+  void setQuantity(ProductData product, double quantity) {
     if (quantity <= 0) {
       remove(product.id);
       return;
@@ -84,7 +86,7 @@ class StockRequestListNotifier
   int _indexOf(String productId) =>
       state.indexWhere((item) => item.product.id == productId);
 
-  void _replace(int index, int quantity) {
+  void _replace(int index, double quantity) {
     state = [
       for (var i = 0; i < state.length; i++)
         i == index ? state[i].withQuantity(quantity) : state[i],
@@ -100,13 +102,13 @@ final stockRequestListProvider =
     >(StockRequestListNotifier.new);
 
 /// How many units of [productId] are on [items] (0 when absent).
-int quantityOnRequest(List<StockRequestItem> items, String productId) {
+double quantityOnRequest(List<StockRequestItem> items, String productId) {
   for (final item in items) {
     if (item.product.id == productId) return item.quantity;
   }
-  return 0;
+  return 0.0;
 }
 
 /// Total units across [items].
-int totalRequestedUnits(List<StockRequestItem> items) =>
-    items.fold(0, (sum, item) => sum + item.quantity);
+double totalRequestedUnits(List<StockRequestItem> items) =>
+    items.fold(0.0, (sum, item) => sum + item.quantity);

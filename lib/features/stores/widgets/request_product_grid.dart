@@ -43,7 +43,7 @@ class RequestProductGrid extends StatelessWidget {
   final Map<String, String> categoryNames;
 
   /// How many of a product are on the request (0 = none).
-  final int Function(String productId) quantityOf;
+  final double Function(String productId) quantityOf;
   final ValueChanged<ProductDataWithStock> onAdd;
   final ValueChanged<ProductDataWithStock> onChooseQuantity;
 
@@ -92,7 +92,7 @@ class _RequestProductTile extends ConsumerStatefulWidget {
 
   final ProductDataWithStock item;
   final String? categoryName;
-  final int quantity;
+  final double quantity;
   final VoidCallback onAdd;
   final VoidCallback onChooseQuantity;
 
@@ -138,7 +138,8 @@ class _RequestProductTileState extends ConsumerState<_RequestProductTile> {
           : StockLevel.ok,
       categoryName: widget.categoryName,
       photoPath: product.imagePath,
-      inCartQty: widget.quantity,
+      inCartQty: widget.quantity.ceil(),
+      inCartLabel: widget.quantity > 0 ? formatQty(widget.quantity) : null,
       onTap: _add,
       onLongPress: widget.onChooseQuantity,
     );

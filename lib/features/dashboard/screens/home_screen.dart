@@ -135,12 +135,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       if (mounted) {
         setState(() {
           _inventoryItems = items;
-          _totalStockValue = items.fold<double>(
-            0,
-            (sum, item) =>
-                sum +
-                (item.totalStock * item.product.retailerPriceKobo / 100.0),
-          );
+          // Stock value in whole kobo, rounded per product (#630).
+          _totalStockValue =
+              items.fold<int>(
+                0,
+                (sum, item) =>
+                    sum +
+                    lineTotalKobo(
+                      item.product.retailerPriceKobo,
+                      item.totalStock,
+                    ),
+              ) /
+              100.0;
           _inventoryLoading = false;
         });
       }

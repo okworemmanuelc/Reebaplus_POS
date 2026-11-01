@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
+import 'package:reebaplus_pos/shared/utils/quantity_input.dart';
 
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
@@ -15,7 +16,8 @@ abstract final class StockRequestQuantitySheetKeys {
 }
 
 /// Request Stock's tap-and-hold sheet (#380): type how many of one product to
-/// request. Returns the quantity (≥ 1), or null when dismissed.
+/// request. Returns the quantity (> 0, quarter steps; whole numbers when the
+/// product's parts switch is off, #630), or null when dismissed.
 ///
 /// Opened on the screen's own navigator, so inside the app frame it already
 /// sits above the keyboard (the frame resizes for it); the bottom padding is
@@ -26,6 +28,7 @@ class StockRequestQuantitySheet extends StatefulWidget {
     required this.productName,
     required this.sourceStoreName,
     required this.available,
+    required this.allowParts,
     required this.initialQuantity,
   });
 
@@ -34,25 +37,30 @@ class StockRequestQuantitySheet extends StatefulWidget {
 
   /// What the source store has, shown for reference (a request may ask for
   /// more; the holder can lower it when dispatching).
-  final int available;
+  final double available;
+
+  /// The product's parts switch: off means whole numbers only.
+  final bool allowParts;
 
   /// Pre-filled: the quantity already on the request, else 1.
-  final int initialQuantity;
+  final double initialQuantity;
 
-  static Future<int?> show(
+  static Future<double?> show(
     BuildContext context, {
     required String productName,
     required String sourceStoreName,
-    required int available,
-    required int initialQuantity,
+    required double available,
+    required bool allowParts,
+    required double initialQuantity,
   }) {
-    return showModalBottomSheet<int>(
+    return showModalBottomSheet<double>(
       context: context,
       isScrollControlled: true,
       builder: (_) => StockRequestQuantitySheet(
         productName: productName,
         sourceStoreName: sourceStoreName,
         available: available,
+        allowParts: allowParts,
         initialQuantity: initialQuantity,
       ),
     );
@@ -65,7 +73,7 @@ class StockRequestQuantitySheet extends StatefulWidget {
 
 class _StockRequestQuantitySheetState extends State<StockRequestQuantitySheet> {
   late final TextEditingController _ctrl = TextEditingController(
-    text: '${widget.initialQuantity}',
+    text: formatQty(widget.initialQuantity),
   );
   String? _error;
 
@@ -76,9 +84,17 @@ class _StockRequestQuantitySheetState extends State<StockRequestQuantitySheet> {
   }
 
   void _save() {
-    final qty = int.tryParse(_ctrl.text.trim()) ?? 0;
-    if (qty <= 0) {
-      setState(() => _error = 'Enter a quantity greater than 0.');
+    final qty = parseStockQty(
+      _ctrl.text,
+      allowParts: widget.allowParts,
+      allowZero: false,
+    );
+    if (qty == null) {
+      setState(
+        () => _error = _ctrl.text.trim().isEmpty || Qty.parse(_ctrl.text) == 0
+            ? 'Enter a quantity greater than 0.'
+            : stockQtyError(_ctrl.text, allowParts: widget.allowParts),
+      );
       return;
     }
     Navigator.of(context).pop(qty);
@@ -120,7 +136,7 @@ class _StockRequestQuantitySheetState extends State<StockRequestQuantitySheet> {
           ),
           SizedBox(height: context.getRSize(4)),
           Text(
-            '${widget.sourceStoreName} has ${widget.available}',
+            '${widget.sourceStoreName} has ${formatQty(widget.available)}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: context.regularStyle(13).copyWith(color: muted),
@@ -131,9 +147,9 @@ class _StockRequestQuantitySheetState extends State<StockRequestQuantitySheet> {
             controller: _ctrl,
             labelText: 'Quantity to request',
             autofocus: true,
-            keyboardType: TextInputType.number,
+            keyboardType: stockQtyKeyboard(allowParts: widget.allowParts),
             textInputAction: TextInputAction.done,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            inputFormatters: stockQtyFormatters(allowParts: widget.allowParts),
             onChanged: (_) {
               if (_error != null) setState(() => _error = null);
             },
