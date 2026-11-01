@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "drink_pos_app" "\0"
+            VALUE "FileDescription", "Reebaplus POS" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "drink_pos_app" "\0"
+            VALUE "InternalName", "reebaplus_pos" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "drink_pos_app.exe" "\0"
-            VALUE "ProductName", "drink_pos_app" "\0"
+            VALUE "OriginalFilename", "reebaplus_pos.exe" "\0"
+            VALUE "ProductName", "Reebaplus POS" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
