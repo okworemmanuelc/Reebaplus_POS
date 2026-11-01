@@ -104,7 +104,7 @@ void main() {
 
     tearDown(() => db.close());
 
-    Future<Map<String, int>> derived(String supplierId) async {
+    Future<Map<String, double>> derived(String supplierId) async {
       final rows =
           await db.cratePoolDao.watchSupplierCrateDebt(supplierId).first;
       return {for (final r in rows) r.manufacturerId: r.balance};
@@ -221,7 +221,7 @@ void main() {
       return row.read<int>('s');
     }
 
-    Future<int> supplierDebt(String supplierId, String manufacturerId) async {
+    Future<double> supplierDebt(String supplierId, String manufacturerId) async {
       final rows =
           await db.cratePoolDao.watchSupplierCrateDebt(supplierId).first;
       final match =
@@ -339,7 +339,7 @@ void main() {
 
     tearDown(() => db.close());
 
-    Future<int> supplierDebt(String supplierId, String manufacturerId) async {
+    Future<double> supplierDebt(String supplierId, String manufacturerId) async {
       final rows =
           await db.cratePoolDao.watchSupplierCrateDebt(supplierId).first;
       final match =
@@ -372,8 +372,8 @@ void main() {
     );
 
     Future<void> receive({
-      Map<String, int> fullCratesIn = const {},
-      Map<String, int> emptiesBack = const {},
+      Map<String, double> fullCratesIn = const {},
+      Map<String, double> emptiesBack = const {},
       List<ReceiveCartLine> lines = const [bottleLine],
     }) =>
         service.confirmReceipt(
@@ -544,7 +544,7 @@ void main() {
       expect(receipt.description, isNot(contains('crates:')));
     });
 
-    test('the crate figure is typed, never derived from the drinks delivered',
+    test('the crate figure is typed, never derived from the bottles delivered',
         () async {
       // 240 bottles arrive but only 10 crates are typed. Nothing in the commit
       // may substitute the bottle count for the crate count — crate size is a

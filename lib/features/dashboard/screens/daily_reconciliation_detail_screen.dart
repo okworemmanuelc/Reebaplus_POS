@@ -19,6 +19,7 @@ import 'package:reebaplus_pos/features/dashboard/widgets/changed_since_review_ba
 import 'package:reebaplus_pos/shared/widgets/crate_shortage_write_off_sheet.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 
 /// One reconciliation bucket's detail (§25.9) — a Day / Week / Month / Year span
 /// in the active store scope. Rolls up sales, stock audit, valued shrinkage,
@@ -487,7 +488,7 @@ class _DailyReconciliationDetailScreenState
       AppIcons.analytics,
       context.primaryColor,
       [
-        _line(context, theme, 'Items sold', fmtNumber(d.itemsSold)),
+        _line(context, theme, 'Items sold', formatQtyGrouped(d.itemsSold)),
         _line(context, theme, 'Products (SKUs) sold', fmtNumber(d.skus)),
         _line(
           context,
@@ -540,7 +541,9 @@ class _DailyReconciliationDetailScreenState
           'Top items',
           d.topItems.isEmpty
               ? '—'
-              : d.topItems.map((e) => '${e.name} (×${e.qty})').join('\n'),
+              : d.topItems
+                    .map((e) => '${e.name} (×${formatQty(e.qty)})')
+                    .join('\n'),
         ),
       ],
       badges: badges,
@@ -681,7 +684,7 @@ class _DailyReconciliationDetailScreenState
       if (d.uncostedItems > 0) ...[
         const SizedBox(height: 6),
         Text(
-          'Includes ${fmtNumber(d.uncostedItems)} item(s) sold with no recorded '
+          'Includes ${formatQtyGrouped(d.uncostedItems)} item(s) sold with no recorded '
           'buying price (e.g. quick sales) as takings — counted in full above '
           'because no cost was recorded to deduct, so they carry no COGS or '
           'gross margin.',
@@ -954,14 +957,14 @@ class _DailyReconciliationDetailScreenState
         context,
         theme,
         'Short',
-        '${fmtNumber(d.shortageCount)} products · ${fmtNumber(d.shortageUnits)} units',
+        '${fmtNumber(d.shortageCount)} products · ${formatQty(d.shortageUnits)} units',
         danger: hasShortage,
       ),
       _line(
         context,
         theme,
         'Surplus',
-        '${fmtNumber(d.surplusCount)} products · ${fmtNumber(d.surplusUnits)} units',
+        '${fmtNumber(d.surplusCount)} products · ${formatQty(d.surplusUnits)} units',
       ),
       if (d.shortages.isNotEmpty) ...[
         const SizedBox(height: 6),
@@ -994,14 +997,14 @@ class _DailyReconciliationDetailScreenState
             context,
             theme,
             'Stock shortages',
-            '${fmtNumber(d.shortageUnits)} unit(s) · ${formatCurrency(d.shortageRetailKobo / 100.0)}',
+            '${formatQty(d.shortageUnits)} unit(s) · ${formatCurrency(d.shortageRetailKobo / 100.0)}',
             danger: hasShortage,
           ),
           _line(
             context,
             theme,
             'Damages recorded',
-            '${fmtNumber(d.damageUnits)} unit(s) · ${formatCurrency(d.damageRetailKobo / 100.0)}',
+            '${formatQtyGrouped(d.damageUnits)} unit(s) · ${formatCurrency(d.damageRetailKobo / 100.0)}',
           ),
           _divider(theme),
           _line(
@@ -1300,7 +1303,7 @@ class _DailyReconciliationDetailScreenState
         if (d.uncostedInventoryItems > 0) ...[
           const SizedBox(height: 6),
           Text(
-            'Excludes ${fmtNumber(d.uncostedInventoryItems)} inventory item(s) with no recorded buying price.',
+            'Excludes ${formatQtyGrouped(d.uncostedInventoryItems)} inventory item(s) with no recorded buying price.',
             style: context.bodySmall.copyWith(color: theme.hintColor),
           ),
         ],
@@ -1379,7 +1382,7 @@ class _DailyReconciliationDetailScreenState
               context,
               theme,
               m.manufacturerName,
-              '${fmtNumber(m.count)} crate(s) · ${formatCurrency(m.valueKobo / 100.0)}',
+              '${formatQtyGrouped(m.count)} crate(s) · ${formatCurrency(m.valueKobo / 100.0)}',
             ),
           _divider(theme),
           _line(
@@ -1521,7 +1524,7 @@ class _DailyReconciliationDetailScreenState
             context,
             theme,
             '${s.manufacturerName} — '
-            '${s.openCrates} crate'
+            '${formatQty(s.openCrates)} crate'
             '${s.openCrates == 1 ? '' : 's'} missing',
             formatCurrency(s.openValueKobo / 100.0),
             danger: true,
@@ -1687,7 +1690,7 @@ class _DailyReconciliationDetailScreenState
                         ),
                         SizedBox(height: context.getRSize(4)),
                         Text(
-                          '${fmtNumber(b.itemsSold)} items sold',
+                          '${formatQtyGrouped(b.itemsSold)} items sold',
                           style: context
                               .regularStyle(13)
                               .copyWith(color: muted),
@@ -1786,7 +1789,7 @@ class _DailyReconciliationDetailScreenState
         ChangedSinceReviewBadge(
           label:
               '${f.label} ${f.delta!.delta > 0 ? '+' : '−'} '
-              '${f.isUnits ? fmtNumber(f.delta!.delta.abs()) : formatCurrency(f.delta!.delta.abs() / 100.0)}',
+              '${f.isUnits ? formatQtyGrouped(f.delta!.delta.abs()) : formatCurrency(f.delta!.delta.abs() / 100.0)}',
         ),
   ];
 
@@ -1939,7 +1942,7 @@ class _DailyReconciliationDetailScreenState
   ) async {
     String money(int kobo) => (kobo / 100.0).toStringAsFixed(2);
     final rows = <List<String>>[
-      ['Items sold', '${d.itemsSold}'],
+      ['Items sold', formatQty(d.itemsSold)],
       ['Products (SKUs) sold', '${d.skus}'],
       ['Total sales', money(d.totalSalesKobo)],
       if (d.salesOnCreditKobo != 0) ...[
@@ -2127,9 +2130,9 @@ class _DailyReconciliationDetailScreenState
         ['Stock variance (counted − expected)', money(d.stockVarianceKobo)],
         // Integrity check — mirrors _integrityCard.
         ['Count-reconciled profit', money(d.integrityAdjustedProfitKobo)],
-        ['Stock shortages (units)', '${d.shortageUnits}'],
+        ['Stock shortages (units)', formatQty(d.shortageUnits)],
       ] else ...[
-        ['Stock shortages (units)', '${d.shortageUnits}'],
+        ['Stock shortages (units)', formatQty(d.shortageUnits)],
         [
           'Sellable value unaccounted',
           money(d.shortageRetailKobo + d.damageRetailKobo),
@@ -2142,7 +2145,7 @@ class _DailyReconciliationDetailScreenState
           'Pay on delivery not yet collected',
           money(d.payOnDeliveryUncollectedKobo),
         ],
-      if (d.showCrates) ['Empty crates held (units)', '${d.crateUnits}'],
+      if (d.showCrates) ['Empty crates held (units)', formatQty(d.crateUnits)],
     ];
     final name = isCeo ? 'business_statement' : 'store_reconciliation';
     try {

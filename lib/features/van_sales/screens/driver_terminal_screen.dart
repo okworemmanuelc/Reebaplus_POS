@@ -167,11 +167,11 @@ class _DriverTerminalScreenState extends ConsumerState<DriverTerminalScreen> {
                           final id = row.product.id;
                           return _StockLine(
                             name: row.product.name,
-                            onVan: row.totalStock,
+                            onVan: row.totalStock.floor(), // van stays whole
                             loadPriceKobo: prices[id] ?? 0,
                             units: _units[id] ?? 0,
-                            onAdd: () => _bump(id, 1, row.totalStock),
-                            onRemove: () => _bump(id, -1, row.totalStock),
+                            onAdd: () => _bump(id, 1, row.totalStock.floor()),
+                            onRemove: () => _bump(id, -1, row.totalStock.floor()),
                           );
                         },
                       ),

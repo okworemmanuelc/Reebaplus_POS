@@ -5,6 +5,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/online_orders/online_order_till.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 
 class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
   final AuthService _auth;
@@ -130,7 +131,10 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
           : p.retailerPriceKobo;
       final agreed = t.line.unitPriceKobo;
       items.add(
-        _newLine(p, qty: qty.toDouble(), maxStock: t.stock, tier: tier)
+        _newLine(p, qty: qty.toDouble(), maxStock: t.stock.toDouble(), tier: tier)
+          // Online orders stay whole numbers (#620 decision 11), whatever the
+          // product's own switch says.
+          ..['allowFractionalSales'] = false
           ..['catalogPriceKobo'] = catalogKobo
           ..['unitPriceKobo'] = agreed
           ..['price'] = agreed / 100.0
@@ -153,15 +157,20 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
   ///
   /// Pass [maxStock] as a very large number (or omit) for legacy Map products
   /// (Quick Sale), which have no inventory tracking.
+  ///
+  /// [maxStock] is the real on-hand figure, parts included. A product whose
+  /// switch is off can only take the whole units of it, and only whole
+  /// quantities (#628).
   bool addItem(
     dynamic product, {
     double qty = 1.0,
-    int? maxStock,
+    double? maxStock,
     PriceTier tier = PriceTier.retailer,
   }) {
     // Handling both legacy Map (Quick Sale) and new ProductData class
     final String name = product is ProductData ? product.name : product['name'];
     final String? id = product is ProductData ? product.id : null;
+    final bool allowParts = _allowsParts(product);
 
     final current = List<Map<String, dynamic>>.from(_userCarts[_cartKey] ?? []);
     final index = current.indexWhere(
@@ -172,8 +181,11 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
     final double existingQty = index != -1
         ? (current[index]['qty'] as num).toDouble()
         : 0.0;
-    final int cap = maxStock ?? 1 << 30; // effectively no cap
-    final double allowed = (cap - existingQty).clamp(0.0, qty);
+    final double cap = _capOf(maxStock, allowParts: allowParts);
+    final double allowed = Qty.snapDown(
+      (cap - existingQty).clamp(0.0, qty),
+      allowParts: allowParts,
+    );
     final bool fullyAccepted = allowed >= qty;
 
     if (allowed <= 0) {
@@ -196,12 +208,35 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
     return fullyAccepted;
   }
 
+  /// Whether [product] (a [ProductData] or a Quick-Sale Map) sells in parts.
+  static bool _allowsParts(dynamic product) => product is ProductData
+      ? product.allowFractionalSales
+      : (product['allowFractionalSales'] == true);
+
+  /// The most of a line that can be sold: its stock, in whole units when the
+  /// line takes whole numbers only. Null stock = no cap.
+  static double _capOf(double? stock, {required bool allowParts}) =>
+      Qty.sellable(stock ?? noCap, allowParts: allowParts);
+
+  /// "Effectively no cap", for lines with no inventory (Quick Sale).
+  static const double noCap = 1073741824;
+
+  /// A cart line's gross total in kobo: `unit price x quantity` through the
+  /// shared money rule, the SAME figure the sale records and the server
+  /// recomputes. Reads the `unitPriceKobo` snapshot, falling back to the legacy
+  /// naira `price` for carts seeded before it.
+  static int lineGrossKobo(Map<String, dynamic> item) => lineTotalKobo(
+    (item['unitPriceKobo'] as int?) ??
+        ((item['price'] as num).toDouble() * 100).round(),
+    Qty.fromJson(item['qty']),
+  );
+
   /// A fresh cart line for [product] (a [ProductData], or a legacy Quick-Sale
   /// Map) priced at [tier]. Shared by [addItem] and [loadOnlineOrder].
   static Map<String, dynamic> _newLine(
     dynamic product, {
     required double qty,
-    int? maxStock,
+    double? maxStock,
     PriceTier tier = PriceTier.retailer,
   }) {
     final String name = product is ProductData ? product.name : product['name'];
@@ -265,22 +300,22 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
       'trackEmpties': product is ProductData
           ? product.trackEmpties
           : (product['trackEmpties'] ?? false),
-      'allowFractionalSales': product is ProductData
-          ? product.allowFractionalSales
-          : (product['allowFractionalSales'] ?? false),
+      'allowFractionalSales': _allowsParts(product),
       // Per-line discount (§13.2). discountKind: 'percent' | 'naira' | null;
       // discountValue: the entered number (for the badge); discountKobo:
       // the resolved amount off this line's gross total (source of truth).
       'discountKind': null,
       'discountValue': 0.0,
       'discountKobo': 0,
-      'maxStock': maxStock ?? (1 << 30),
+      'maxStock': maxStock ?? noCap,
     };
   }
 
   /// Updates the quantity of a cart line. The new qty is clamped to the
-  /// item's stored `maxStock`. Returns true if the requested [newQty] was
-  /// applied as-is, false if it was clamped (or the item wasn't found).
+  /// item's stored `maxStock` and snapped down onto the line's step (quarters,
+  /// or whole numbers when the product's switch is off). Returns true if the
+  /// requested [newQty] was applied as-is, false if it was changed (or the item
+  /// wasn't found).
   bool updateQty(String productName, double newQty) {
     final current = List<Map<String, dynamic>>.from(_userCarts[_cartKey] ?? []);
     final index = current.indexWhere((item) => item['name'] == productName);
@@ -293,28 +328,30 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
       return true;
     }
 
-    final int cap = (current[index]['maxStock'] as int?) ?? (1 << 30);
-    final double clamped = newQty > cap ? cap.toDouble() : newQty;
+    final allowParts = current[index]['allowFractionalSales'] == true;
+    final double cap = _capOf(
+      (current[index]['maxStock'] as num?)?.toDouble(),
+      allowParts: allowParts,
+    );
+    final double wanted = newQty > cap ? cap : newQty;
+    final double step = Qty.stepFor(allowParts: allowParts);
+    final double snapped = Qty.snapDown(wanted, allowParts: allowParts);
+    // A line in the cart holds at least one step; only <= 0 removes it.
+    final double clamped = snapped > 0 ? snapped : step;
     current[index]['qty'] = clamped;
     // Re-clamp any existing per-line discount to the new line total so a
     // smaller qty can never produce a negative net (§13.2).
     final existingDiscount = (current[index]['discountKobo'] as int?) ?? 0;
     if (existingDiscount > 0) {
-      final lineTotalKobo = _lineTotalKobo(current[index]);
-      if (existingDiscount > lineTotalKobo) {
-        current[index]['discountKobo'] = lineTotalKobo;
+      final lineTotal = lineGrossKobo(current[index]);
+      if (existingDiscount > lineTotal) {
+        current[index]['discountKobo'] = lineTotal;
       }
     }
     _userCarts[_cartKey] = current;
     value = List.from(current);
-    return clamped >= newQty;
+    return clamped == newQty;
   }
-
-  /// Gross total (kobo) for a cart line: unit price × quantity.
-  int _lineTotalKobo(Map<String, dynamic> item) =>
-      ((item['unitPriceKobo'] as num).toDouble() *
-              (item['qty'] as num).toDouble())
-          .round();
 
   /// Applies a per-line discount (§13.2). [kind] is 'percent' or 'naira';
   /// [value] is the entered number (kept for the badge); [discountKobo] is the
@@ -334,8 +371,8 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
     final index = current.indexWhere((item) => item['name'] == productName);
     if (index == -1) return;
 
-    final lineTotalKobo = _lineTotalKobo(current[index]);
-    int capKobo = lineTotalKobo;
+    final lineTotal = lineGrossKobo(current[index]);
+    int capKobo = lineTotal;
 
     if (maxPercent != null) {
       final catalogKobo =
@@ -343,11 +380,11 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
           (current[index]['unitPriceKobo'] as num).toInt();
       final floorKobo = (catalogKobo * (100 - maxPercent) / 100.0).round();
       final unitPriceKobo = current[index]['unitPriceKobo'] as int;
-      final maxLineDiscountKobo =
-          ((unitPriceKobo - floorKobo) *
-                  (current[index]['qty'] as num).toDouble())
-              .round();
-      capKobo = maxLineDiscountKobo.clamp(0, lineTotalKobo);
+      final maxLineDiscountKobo = lineTotalKobo(
+        unitPriceKobo - floorKobo,
+        (current[index]['qty'] as num).toDouble(),
+      );
+      capKobo = maxLineDiscountKobo.clamp(0, lineTotal);
     }
 
     final clamped = discountKobo.clamp(0, capKobo);
@@ -402,10 +439,10 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
       final qty = (current[index]['qty'] as num).toDouble();
       final unitPriceKobo = current[index]['unitPriceKobo'] as int;
       final floorKobo = (catalogKobo * (100 - maxPercent) / 100.0).round();
-      final maxLineDiscountKobo = ((unitPriceKobo - floorKobo) * qty).round();
-      final lineTotalKobo = _lineTotalKobo(current[index]);
+      final maxLineDiscountKobo = lineTotalKobo(unitPriceKobo - floorKobo, qty);
+      final lineTotal = lineGrossKobo(current[index]);
 
-      final capKobo = maxLineDiscountKobo.clamp(0, lineTotalKobo);
+      final capKobo = maxLineDiscountKobo.clamp(0, lineTotal);
       if (existingDiscount > capKobo) {
         current[index]['discountKobo'] = capKobo;
       }
@@ -608,10 +645,6 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
   int get discountTotalKobo =>
       value.fold(0, (sum, item) => sum + ((item['discountKobo'] as int?) ?? 0));
 
-  double get subtotal => value.fold(
-    0,
-    (sum, item) =>
-        sum +
-        ((item['price'] as num).toDouble() * (item['qty'] as num).toDouble()),
-  );
+  double get subtotal =>
+      value.fold<int>(0, (sum, item) => sum + lineGrossKobo(item)) / 100.0;
 }

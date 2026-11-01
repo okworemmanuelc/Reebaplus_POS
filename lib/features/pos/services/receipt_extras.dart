@@ -1,3 +1,4 @@
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/settings/vat_settings.dart';
 import 'package:reebaplus_pos/core/utils/name_case.dart';
@@ -49,7 +50,7 @@ ReceiptExtras composeReceiptExtras({
   int depositKobo = 0,
   int? fullDepositKobo,
   List<CrateBalanceEntry>? crateBalances,
-  Map<String, int> depositCrates = const {},
+  Map<String, double> depositCrates = const {},
 }) {
   final vatOn = vat.enabled && vat.rateBps > 0;
   final goodsKobo = totalKobo - depositKobo;
@@ -81,7 +82,7 @@ ReceiptExtras composeReceiptExtras({
 /// customer, so they are not counted.
 Map<String, double> _cratesOwed(
   List<CrateBalanceEntry> balances,
-  Map<String, int> depositCrates,
+  Map<String, double> depositCrates,
 ) {
   final owed = <String, double>{
     for (final b in balances)
@@ -111,7 +112,7 @@ Future<ReceiptExtras> loadReceiptExtras(
   String? customerId,
   String? orderId,
   int? fullDepositKobo,
-  Map<String, int>? depositCrates,
+  Map<String, double>? depositCrates,
 }) async {
   var cashier = cashierName;
   if (cashier == null && staffId != null) {
@@ -122,7 +123,10 @@ Future<ReceiptExtras> loadReceiptExtras(
   if ((full == null || covered == null) && orderId != null) {
     final lines = await db.orderCrateLinesDao.getForOrder(orderId);
     if (full == null && lines.isNotEmpty) {
-      full = lines.fold<int>(0, (s, l) => s + l.cratesTaken * l.depositRateKobo);
+      full = lines.fold<int>(
+        0,
+        (s, l) => s + lineTotalKobo(l.depositRateKobo, l.cratesTaken),
+      );
     }
     covered ??= {
       for (final l in lines)

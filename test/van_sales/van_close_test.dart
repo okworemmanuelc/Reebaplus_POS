@@ -113,7 +113,7 @@ void main() {
     await db.inventoryDao.adjustStock(
       productId,
       store,
-      qty,
+      qty.toDouble(),
       'opening',
       managerId,
       trackCost: false,
@@ -121,7 +121,7 @@ void main() {
     await db.costBatchesDao.recordInflowBatch(
       productId: productId,
       storeId: store,
-      quantity: qty,
+      quantity: qty.toDouble(),
       costKobo: unitCostKobo,
       receivedAt: receivedAt,
     );
@@ -182,7 +182,7 @@ void main() {
           orderId: id,
           productId: Value(productId),
           storeId: storeId,
-          quantity: qty,
+          quantity: qty.toDouble(),
           unitPriceKobo: unitPriceKobo,
           totalKobo: total,
         ),

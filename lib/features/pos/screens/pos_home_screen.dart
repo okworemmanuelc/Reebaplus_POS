@@ -81,9 +81,6 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
   final TextEditingController _searchController = TextEditingController();
   bool _hasAutoShownPicker = false;
   bool _isListView = false;
-  // #384: 2 columns on an upright phone by default (the mockup); a saved
-  // view-selector choice still wins.
-  int _gridColumns = 2;
   bool _showPosHint = false;
 
   @override
@@ -127,21 +124,14 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     if (mounted) {
       setState(() {
         _isListView = prefs.getBool('pos_is_list_view') ?? false;
-        _gridColumns = prefs.getInt('pos_grid_columns') ?? 2;
       });
     }
   }
 
-  Future<void> _updateViewPreferences({bool? isList, int? columns}) async {
+  Future<void> _setListView(bool isList) async {
     final prefs = await SharedPreferences.getInstance();
-    if (isList != null) {
-      await prefs.setBool('pos_is_list_view', isList);
-      if (mounted) setState(() => _isListView = isList);
-    }
-    if (columns != null) {
-      await prefs.setInt('pos_grid_columns', columns);
-      if (mounted) setState(() => _gridColumns = columns);
-    }
+    await prefs.setBool('pos_is_list_view', isList);
+    if (mounted) setState(() => _isListView = isList);
   }
 
   void _showViewSelectorModal() {
@@ -151,9 +141,8 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
       backgroundColor: Colors.transparent,
       builder: (context) => ViewSelectorSheet(
         currentIsList: _isListView,
-        currentColumns: _gridColumns,
-        onSelect: (isList, columns) async {
-          _updateViewPreferences(isList: isList, columns: columns);
+        onSelect: (isList) {
+          _setListView(isList);
           Navigator.pop(context);
         },
       ),
@@ -569,7 +558,6 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
             onProductTap: (item) => _addToCart(context, item),
             controller: _controller!,
             isListView: _isListView,
-            gridColumns: _gridColumns,
           );
 
     // §12.5: subtle fade-in for content, no spinner. SliverOpacity rather than

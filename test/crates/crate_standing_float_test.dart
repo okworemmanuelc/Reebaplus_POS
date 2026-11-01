@@ -156,8 +156,8 @@ void main() {
     dateReceived: DateTime(2026, 7, 30),
     staffId: stockKeeperId,
     lines: [lineFor(manufacturerId)],
-    fullCratesReceivedByManufacturer: {manufacturerId: crates},
-    emptiesReturnedByManufacturer: {manufacturerId: empties},
+    fullCratesReceivedByManufacturer: {manufacturerId: crates.toDouble()},
+    emptiesReturnedByManufacturer: {manufacturerId: empties.toDouble()},
   );
 
   Future<List<PaymentTransactionData>> payments() =>
@@ -182,7 +182,7 @@ void main() {
     return match.isEmpty ? 0 : match.single.position.placedDepositKobo;
   }
 
-  Future<int> supplierDebt(String manufacturerId) async {
+  Future<double> supplierDebt(String manufacturerId) async {
     final rows = await db.cratePoolDao.watchSupplierCrateDebt(supplierA).first;
     final match = rows.where((r) => r.manufacturerId == manufacturerId).toList();
     return match.isEmpty ? 0 : match.single.balance;

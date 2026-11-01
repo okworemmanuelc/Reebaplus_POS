@@ -118,7 +118,7 @@ void main() {
               businessId: env.businessId,
               storeId: lekkiId,
               productId: id,
-              quantity: Value(stock),
+              quantity: Value(stock.toDouble()),
             ),
           );
       lekkiProducts.add(id);

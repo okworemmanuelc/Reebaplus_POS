@@ -1,5 +1,6 @@
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 
 /// What one POS barcode scan means (#317, PRD #316).
 ///
@@ -33,7 +34,7 @@ final class ScanAddSheet extends ScanMatchOutcome {
 
   @override
   final ProductData product;
-  final int stock;
+  final double stock;
   final double inCart;
   final PriceTier tier;
 }
@@ -53,7 +54,7 @@ final class ScanAllInCart extends ScanMatchOutcome {
 
   @override
   final ProductData product;
-  final int stock;
+  final double stock;
 }
 
 /// Found, but switched off for sale (`isAvailable == false`). The grid hides
@@ -90,7 +91,7 @@ final class ScanChoice {
 
   final ProductData product;
   final int unitPriceKobo;
-  final int stock;
+  final double stock;
   final ScanMatchOutcome outcome;
 
   bool get isSellable => outcome is ScanAddSheet;
@@ -139,7 +140,10 @@ ScanOutcome resolveBarcodeScan({
           unitPriceKobo: tier == PriceTier.wholesaler
               ? match.wholesalerPriceKobo
               : match.retailerPriceKobo,
-          stock: _storeStockOf(match.id, storeProducts),
+          stock: Qty.sellable(
+            _storeStockOf(match.id, storeProducts),
+            allowParts: match.allowFractionalSales,
+          ),
           outcome: resolveProduct(
             product: match,
             storeProducts: storeProducts,
@@ -168,7 +172,10 @@ ScanMatchOutcome resolveProduct({
 }) {
   if (!product.isAvailable) return ScanSwitchedOff(product: product);
 
-  final stock = _storeStockOf(product.id, storeProducts);
+  final stock = Qty.sellable(
+    _storeStockOf(product.id, storeProducts),
+    allowParts: product.allowFractionalSales,
+  );
   if (stock <= 0) return ScanOutOfStockHere(product: product);
   if (cartQty >= stock) return ScanAllInCart(product: product, stock: stock);
 
@@ -182,7 +189,10 @@ ScanMatchOutcome resolveProduct({
 
 /// The active store's stock of [productId], or 0 when the store doesn't carry
 /// it.
-int _storeStockOf(String productId, List<ProductDataWithStock> storeProducts) {
+double _storeStockOf(
+  String productId,
+  List<ProductDataWithStock> storeProducts,
+) {
   for (final entry in storeProducts) {
     if (entry.product.id == productId) return entry.totalStock;
   }

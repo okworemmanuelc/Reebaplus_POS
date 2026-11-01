@@ -3,7 +3,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 class ReorderAlert {
   final String productId;
   final String productName;
-  final int currentStock;
+  final double currentStock;
   final double rop;
 
   ReorderAlert({

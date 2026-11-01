@@ -82,7 +82,7 @@ void main() {
     );
     final notifier = container.read(receiveCartProvider.notifier);
     for (final MapEntry(key: i, value: qty) in lines.entries) {
-      notifier.addOrIncrement(fx.products[i], amount: qty);
+      notifier.addOrIncrement(fx.products[i], amount: qty.toDouble());
       if (i == zeroCostLine) notifier.setBuyingPrice(fx.productIds[i], 0);
     }
     await settle(tester);
@@ -91,13 +91,13 @@ void main() {
     return container;
   }
 
-  int qtyOf(ProviderContainer c, int i) =>
+  double qtyOf(ProviderContainer c, int i) =>
       c
           .read(receiveCartProvider)
           .where((l) => l.productId == fx.productIds[i])
           .firstOrNull
           ?.qty ??
-      0;
+      0.0;
 
   group('receive cart', () {
     testWidgets('renders lines, totals and actions with today\'s wording', (
@@ -343,7 +343,7 @@ void main() {
       await tester.ensureVisible(find.text('CRATES WITH THIS DELIVERY'));
       await tester.pump();
       expect(find.text('Nigerian Breweries'), findsOneWidget);
-      expect(find.text('12 drinks on this delivery'), findsOneWidget);
+      expect(find.text('12 bottles on this delivery'), findsOneWidget);
       expect(find.text('Full crates in'), findsOneWidget);
       expect(find.text('Empty crates back'), findsOneWidget);
       await disposeScreen(tester);

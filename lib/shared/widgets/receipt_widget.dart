@@ -6,7 +6,6 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/name_case.dart';
 import 'package:reebaplus_pos/core/utils/product_name.dart';
-import 'package:reebaplus_pos/core/utils/stock_calculator.dart';
 import 'package:reebaplus_pos/shared/widgets/receipt_format.dart';
 
 class ReceiptWidget extends StatelessWidget {
@@ -270,7 +269,7 @@ class ReceiptWidget extends StatelessWidget {
           ...cart.map((item) {
             final qty = _num(item['qty']);
             final price = _num(item['price']);
-            final lineTotal = stockValue(price, qty).round();
+            final lineTotal = ReceiptFormat.lineAmount(price, qty);
             final label = productDisplayName(item['name'] as String);
             return Container(
               padding: EdgeInsets.symmetric(vertical: context.getRSize(8)),

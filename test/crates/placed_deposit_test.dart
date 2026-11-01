@@ -180,11 +180,11 @@ void main() {
     dateReceived: DateTime(2026, 7, 30),
     staffId: stockKeeperId,
     lines: [lineFor(manufacturerId)],
-    fullCratesReceivedByManufacturer: {manufacturerId: crates},
+    fullCratesReceivedByManufacturer: {manufacturerId: crates.toDouble()},
     emptiesReturnedByManufacturer: const {},
   );
 
-  Future<int> supplierDebt(String supplierId, String manufacturerId) async {
+  Future<double> supplierDebt(String supplierId, String manufacturerId) async {
     final rows = await db.cratePoolDao.watchSupplierCrateDebt(supplierId).first;
     final match = rows
         .where((r) => r.manufacturerId == manufacturerId)

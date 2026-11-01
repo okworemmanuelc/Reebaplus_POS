@@ -4,6 +4,8 @@ import 'dart:math';
 import 'package:drift/drift.dart' show innerJoin;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
+import 'package:reebaplus_pos/shared/utils/quantity_input.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
@@ -911,8 +913,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                             // #432 — a Pay on delivery order says so.
                             paymentMethod:
                                 receiptRef
-                                    .watch(payOnDeliveryByOrderProvider)[
-                                        order.id]
+                                    .watch(
+                                      payOnDeliveryByOrderProvider,
+                                    )[order.id]
                                     ?.label ??
                                 paymentMethodLabel(order.paymentType),
                             customerName: _name,
@@ -930,7 +933,8 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                             saleDate: extras.saleDate,
                             vatRateBps: extras.vatRateBps,
                             vatIncluded: extras.vatIncluded,
-                            cratesOwedByManufacturer: extras.cratesOwedByManufacturer,
+                            cratesOwedByManufacturer:
+                                extras.cratesOwedByManufacturer,
                             crateDepositFull: extras.crateDepositFull,
                             // Watched, so the label follows the business row
                             // even when nothing else keeps it loaded (#487).
@@ -1695,8 +1699,8 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
     final label = isClear
         ? 'Clear'
         : isOwe
-        ? '${bal.abs()} crates owed'
-        : '${bal.abs()} crates credit';
+        ? '${formatQty(bal.abs())} crates owed'
+        : '${formatQty(bal.abs())} crates credit';
     return Padding(
       padding: EdgeInsets.only(bottom: context.getRSize(10)),
       child: CustomerDetailRow(
@@ -1768,11 +1772,14 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                     key: CustomersKeys.crateQty,
                     controller: qtyCtrl,
                     labelText: 'Crates returned',
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    // Quarter steps (#629): half a crate is 0.5.
+                    keyboardType: stockQtyKeyboard(allowParts: true),
+                    inputFormatters: stockQtyFormatters(allowParts: true),
                     validator: (v) {
-                      final n = int.tryParse((v ?? '').trim()) ?? 0;
-                      if (n <= 0) return 'Enter how many crates came back';
+                      final n = Qty.parse(v, allowZero: false);
+                      if (n == null) {
+                        return 'Enter how many crates came back (0.5 for half)';
+                      }
                       return null;
                     },
                   ),
@@ -1784,7 +1791,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                     onPressed: () async {
                       if (!formKey.currentState!.validate()) return;
                       final mfrId = selectedId!;
-                      final qty = int.parse(qtyCtrl.text.trim());
+                      final qty = Qty.parse(qtyCtrl.text, allowZero: false)!;
                       final mfrName = manufacturers
                           .firstWhere((m) => m.id == mfrId)
                           .name;
@@ -1825,7 +1832,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                         await db.activityLogDao.logActivity(
                           action: 'crate_return',
                           description:
-                              '$qty crate${qty == 1 ? '' : 's'} returned for '
+                              '${formatQty(qty)} crate${qty == 1 ? '' : 's'} returned for '
                               '$mfrName',
                           staffId: staffId,
                           storeId: ref.read(lockedStoreProvider).value,
@@ -1835,7 +1842,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                         messenger.showSnackBar(
                           SnackBar(
                             content: Text(
-                              '$qty crate${qty == 1 ? '' : 's'} returned for '
+                              '${formatQty(qty)} crate${qty == 1 ? '' : 's'} returned for '
                               '$mfrName',
                             ),
                             backgroundColor: _fixed.green,

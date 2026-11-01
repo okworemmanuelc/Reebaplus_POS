@@ -83,14 +83,14 @@ void main() {
 
     tearDown(() => db.close());
 
-    Future<Map<String, int>> business() =>
+    Future<Map<String, double>> business() =>
         db.cratePoolDao.watchEmptiesPoolByManufacturer().first;
-    Future<Map<String, int>> store(String storeId) =>
+    Future<Map<String, double>> store(String storeId) =>
         db.cratePoolDao.watchEmptiesPoolByManufacturer(storeId: storeId).first;
 
     /// The store-stamped, customer-less ledger SUM, computed independently of
     /// the DAO query — the "truth" the derived read must reproduce.
-    Future<int> ledgerSumFor(String mfr, {String? storeId}) async {
+    Future<double> ledgerSumFor(String mfr, {String? storeId}) async {
       final rows = await db.select(db.crateLedger).get();
       return rows
           .where((r) =>
@@ -98,7 +98,7 @@ void main() {
               r.customerId == null &&
               r.storeId != null &&
               (storeId == null || r.storeId == storeId))
-          .fold<int>(0, (s, r) => s + r.quantityDelta);
+          .fold<double>(0, (s, r) => s + r.quantityDelta);
     }
 
     /// After any operation the business total for a manufacturer must equal the

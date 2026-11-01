@@ -255,7 +255,7 @@ void main() {
                     businessId: businessId,
                     manufacturerId: moneyBrand,
                     storeId: storeId,
-                    crateCount: writtenOffKobo ~/ rate,
+                    crateCount: (writtenOffKobo ~/ rate).toDouble(),
                     source: kCrateWriteOffSourceManual,
                     ratePerCrateKobo: rate,
                     note: null,

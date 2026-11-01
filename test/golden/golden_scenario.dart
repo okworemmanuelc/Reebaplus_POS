@@ -55,13 +55,13 @@ class FxManufacturer {
 
 class FxInventory {
   final String productKey;
-  final int quantity;
+  final double quantity;
   FxInventory(this.productKey, this.quantity);
 }
 
 class FxBatch {
   final String productKey;
-  final int qty;
+  final double qty;
   final int costKobo;
 
   /// Date-only string, e.g. "2026-01-01" — unique per product within a fixture,
@@ -77,7 +77,7 @@ class FxBatch {
 
 class FxCheckoutLine {
   final String productKey;
-  final int quantity;
+  final double quantity;
 
   /// #206 (#176/#183): the price actually CHARGED for this line when the
   /// cashier overrode the tier list price — a custom-price concession. The
@@ -138,7 +138,7 @@ class ExpectedOrder {
 /// any order, so [expectGolden] compares the multiset of these.
 class ExpectedItem {
   final String productKey;
-  final int quantity;
+  final double quantity;
   final int unitPriceKobo;
   final int totalKobo;
   final int buyingPriceKobo;
@@ -150,7 +150,7 @@ class ExpectedItem {
   final int? cataloguePriceKobo;
   ExpectedItem(Map<String, dynamic> j)
       : productKey = j['product'] as String,
-        quantity = j['quantity'] as int,
+        quantity = (j['quantity'] as num).toDouble(),
         unitPriceKobo = j['unit_price_kobo'] as int,
         totalKobo = j['total_kobo'] as int,
         buyingPriceKobo = j['buying_price_kobo'] as int,
@@ -208,11 +208,11 @@ class ExpectedWalletLeg {
 /// took for a manufacturer, the deposit RATE snapshot (from the manufacturer),
 /// and the deposit PAID (0 on the web crate-track path). Keyed by manufacturer.
 class ExpectedCrateLine {
-  final int cratesTaken;
+  final double cratesTaken; // quarter steps (#629)
   final int depositRateKobo;
   final int depositPaidKobo;
   ExpectedCrateLine(Map<String, dynamic> j)
-      : cratesTaken = j['crates_taken'] as int,
+      : cratesTaken = (j['crates_taken'] as num).toDouble(),
         depositRateKobo = j['deposit_rate_kobo'] as int,
         depositPaidKobo = j['deposit_paid_kobo'] as int;
 
@@ -225,11 +225,11 @@ class ExpectedCrateLine {
 /// seeded by the fixture.
 class ExpectedRestoredLayer {
   final String productKey;
-  final int qty;
+  final double qty;
   final int costKobo;
   ExpectedRestoredLayer(Map<String, dynamic> j)
       : productKey = j['product'] as String,
-        qty = j['qty'] as int,
+        qty = (j['qty'] as num).toDouble(),
         costKobo = j['cost_kobo'] as int;
 
   String get signature => '$productKey|$qty|$costKobo';
@@ -255,12 +255,12 @@ class FxCancel {
   final int? customerBalanceAfterKobo;
 
   /// productKey → on-hand after the cancel (the sale's units are back).
-  final Map<String, int> inventoryAfter;
+  final Map<String, double> inventoryAfter;
 
   /// key "productKey|receivedAt" → the SEEDED batch's qty_remaining after the
   /// cancel. The restore APPENDS a layer, so a drawn-down seeded batch stays
   /// drawn down — topping it back up would double-restore (#187).
-  final Map<String, int> batchRemaining;
+  final Map<String, double> batchRemaining;
   final List<ExpectedRestoredLayer> restoredCostLayers;
 
   FxCancel._({
@@ -278,16 +278,16 @@ class FxCancel {
   factory FxCancel._fromJson(Map<String, dynamic> j) {
     final exp = j['expected'] as Map<String, dynamic>;
     final order = exp['order'] as Map<String, dynamic>;
-    final batchRemaining = <String, int>{};
+    final batchRemaining = <String, double>{};
     for (final b in ((exp['batches_remaining'] as List?) ?? const [])) {
       final m = b as Map<String, dynamic>;
       batchRemaining['${m['product']}|${m['received_at']}'] =
-          m['qty_remaining'] as int;
+          (m['qty_remaining'] as num).toDouble();
     }
-    final inv = <String, int>{};
+    final inv = <String, double>{};
     for (final r in ((exp['inventory_after'] as List?) ?? const [])) {
       final m = r as Map<String, dynamic>;
-      inv[m['product'] as String] = m['quantity'] as int;
+      inv[m['product'] as String] = (m['quantity'] as num).toDouble();
     }
     return FxCancel._(
       reason: j['reason'] as String,
@@ -357,10 +357,10 @@ class GoldenScenario {
   final List<ExpectedItem> expectedItems;
 
   /// key "productKey|receivedAt" → expected qty_remaining.
-  final Map<String, int> expectedBatchRemaining;
+  final Map<String, double> expectedBatchRemaining;
 
   /// productKey → expected on-hand after the sale.
-  final Map<String, int> expectedInventory;
+  final Map<String, double> expectedInventory;
 
   /// productKey → expected recomputed scalar buying_price_kobo cache.
   final Map<String, int> expectedScalarCost;
@@ -388,10 +388,10 @@ class GoldenScenario {
   final Map<String, ExpectedCrateLine> expectedCrateLines;
 
   /// manufacturerKey → expected summed 'issued' crate_ledger quantity_delta.
-  final Map<String, int> expectedCrateLedgerIssued;
+  final Map<String, double> expectedCrateLedgerIssued;
 
   /// manufacturerKey → expected customer_crate_balances.balance after the sale.
-  final Map<String, int> expectedCrateBalances;
+  final Map<String, double> expectedCrateBalances;
 
   /// #206: when set, the runner CANCELS the order after the checkout assertions
   /// pass and asserts this second block via [expectGoldenCancel]. Null ⇒ a
@@ -441,16 +441,16 @@ class GoldenScenario {
     // A rejection scenario carries no `expected` block; tolerate its absence.
     final exp = (j['expected'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
 
-    final batchRemaining = <String, int>{};
+    final batchRemaining = <String, double>{};
     for (final b in ((exp['batches_remaining'] as List?) ?? const [])) {
       final m = b as Map<String, dynamic>;
       batchRemaining['${m['product']}|${m['received_at']}'] =
-          m['qty_remaining'] as int;
+          (m['qty_remaining'] as num).toDouble();
     }
-    final inv = <String, int>{};
+    final inv = <String, double>{};
     for (final r in ((exp['inventory_after'] as List?) ?? const [])) {
       final m = r as Map<String, dynamic>;
-      inv[m['product'] as String] = m['quantity'] as int;
+      inv[m['product'] as String] = (m['quantity'] as num).toDouble();
     }
     final scalar = <String, int>{};
     for (final r in ((exp['product_scalar_cost'] as List?) ?? const [])) {
@@ -466,15 +466,17 @@ class GoldenScenario {
       final m = r as Map<String, dynamic>;
       crateLines[m['manufacturer'] as String] = ExpectedCrateLine(m);
     }
-    final crateLedger = <String, int>{};
+    final crateLedger = <String, double>{};
     for (final r in ((exp['crate_ledger'] as List?) ?? const [])) {
       final m = r as Map<String, dynamic>;
-      crateLedger[m['manufacturer'] as String] = m['quantity_delta'] as int;
+      crateLedger[m['manufacturer'] as String] =
+          (m['quantity_delta'] as num).toDouble();
     }
-    final crateBalances = <String, int>{};
+    final crateBalances = <String, double>{};
     for (final r in ((exp['crate_balances'] as List?) ?? const [])) {
       final m = r as Map<String, dynamic>;
-      crateBalances[m['manufacturer'] as String] = m['balance'] as int;
+      crateBalances[m['manufacturer'] as String] =
+          (m['balance'] as num).toDouble();
     }
 
     return GoldenScenario._(
@@ -496,10 +498,12 @@ class GoldenScenario {
           .toList(),
       inventory: (j['inventory'] as List)
           .map((r) =>
-              FxInventory(r['product'] as String, r['quantity'] as int))
+              FxInventory(
+                  r['product'] as String, (r['quantity'] as num).toDouble()))
           .toList(),
       batches: (j['batches'] as List)
-          .map((b) => FxBatch(b['product'] as String, b['qty'] as int,
+          .map((b) => FxBatch(
+              b['product'] as String, (b['qty'] as num).toDouble(),
               b['cost_kobo'] as int, b['received_at'] as String))
           .toList(),
       checkout: FxCheckout(
@@ -509,7 +513,7 @@ class GoldenScenario {
         (j['checkout']['items'] as List)
             .map((i) => FxCheckoutLine(
                   i['product'] as String,
-                  i['quantity'] as int,
+                  (i['quantity'] as num).toDouble(),
                   chargedUnitPriceKobo: i['charged_unit_price_kobo'] as int?,
                 ))
             .toList(),
@@ -601,7 +605,7 @@ class ActualOrder {
 
 class ActualItem {
   final String productKey;
-  final int quantity;
+  final double quantity;
   final int unitPriceKobo;
   final int totalKobo;
   final int buyingPriceKobo;
@@ -656,7 +660,7 @@ class ActualWalletLeg {
 
 /// One posted order_crate_lines row, in fixture terms (Slice 4).
 class ActualCrateLine {
-  final int cratesTaken;
+  final double cratesTaken;
   final int depositRateKobo;
   final int depositPaidKobo;
   ActualCrateLine({
@@ -671,7 +675,7 @@ class ActualCrateLine {
 /// [signature].
 class ActualRestoredLayer {
   final String productKey;
-  final int qty;
+  final double qty;
   final int costKobo;
   ActualRestoredLayer({
     required this.productKey,
@@ -704,10 +708,10 @@ class CancelOutcome {
   /// EVERY wallet leg on the order after the cancel — originals included.
   final List<ActualWalletLeg> walletLegs;
   final int? customerBalanceAfter;
-  final Map<String, int> inventoryAfter;
+  final Map<String, double> inventoryAfter;
 
   /// key "productKey|receivedAt" → the SEEDED batch's qty_remaining.
-  final Map<String, int> batchRemaining;
+  final Map<String, double> batchRemaining;
 
   /// The cost batches that were NOT seeded by the fixture — i.e. the layers the
   /// cancel restored.
@@ -734,10 +738,10 @@ class CheckoutOutcome {
   final List<ActualItem> items;
 
   /// key "productKey|receivedAt" → qty_remaining.
-  final Map<String, int> batchRemaining;
+  final Map<String, double> batchRemaining;
 
   /// productKey → on-hand after the sale.
-  final Map<String, int> inventoryAfter;
+  final Map<String, double> inventoryAfter;
 
   /// productKey → scalar buying_price_kobo cache.
   final Map<String, int> productScalarCost;
@@ -761,10 +765,10 @@ class CheckoutOutcome {
   final Map<String, ActualCrateLine> crateLines;
 
   /// manufacturerKey → summed 'issued' crate_ledger quantity_delta for this order.
-  final Map<String, int> crateLedgerIssued;
+  final Map<String, double> crateLedgerIssued;
 
   /// manufacturerKey → customer_crate_balances.balance after the sale.
-  final Map<String, int> crateBalances;
+  final Map<String, double> crateBalances;
 
   CheckoutOutcome({
     required this.orderNumber,

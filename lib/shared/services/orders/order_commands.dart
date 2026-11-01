@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/permissions/gate.dart';
@@ -391,7 +392,7 @@ class OrderCommands {
     required String staffId,
     required GateContext gateContext,
     String damageReasonKey = 'other',
-    Map<String, int> damagedQtyByLine = const {},
+    Map<String, double> damagedQtyByLine = const {},
   }) async {
     const gate = Gates.refundOrder;
     if (!gate.evaluate(gateContext)) {
@@ -425,7 +426,7 @@ class OrderCommands {
       final amount = formatCurrency(outcome.refundKobo / 100);
       final msg =
           'Sale ${outcome.orderNumber} returned: $amount refunded, '
-          '${outcome.damagedUnits} unit(s) written off. Reason: $reason';
+          '${formatQty(outcome.damagedUnits)} unit(s) written off. Reason: $reason';
       await _db.activityLogDao.log(
         action: 'sale_returned',
         description: msg,
@@ -531,7 +532,7 @@ class OrderCommands {
           ? customer!.name.trim()
           : 'Customer';
       final summary = owing
-          .map((b) => '${b.balance} ${b.manufacturerName}')
+          .map((b) => '${formatQty(b.balance)} ${b.manufacturerName}')
           .join(', ');
       final message = '$who now owes crates after $orderNumber: $summary';
 
@@ -568,7 +569,7 @@ class OrderCommands {
       final summary = quickLines
           .map((c) {
             final name = (c['name'] as String?)?.trim();
-            final qty = (c['qty'] as num?)?.toString() ?? '1';
+            final qty = formatQty(Qty.fromJson(c['qty'], fallback: 1));
             return '$qty× ${name == null || name.isEmpty ? 'Quick Sale' : name}';
           })
           .join(', ');
@@ -614,7 +615,7 @@ class OrderCommands {
     List<OrderItemsCompanion> items,
     String staffId,
   ) async {
-    final lines = <({String productId, String storeId, int quantity})>[
+    final lines = <({String productId, String storeId, double quantity})>[
       for (final item in items)
         // Quick-sale line (§26.4): no product → nothing was deducted.
         if (item.productId.value != null)
@@ -639,7 +640,7 @@ class OrderCommands {
   /// tap twice, and safe if the orphan has already been cleaned up.
   Future<void> cancelRejectedSale(String orderId, String staffId) async {
     final payloadJson = await _db.syncDao.rejectedSalePayload(orderId);
-    final lines = <({String productId, String storeId, int quantity})>[];
+    final lines = <({String productId, String storeId, double quantity})>[];
     if (payloadJson != null) {
       final payload = jsonDecode(payloadJson) as Map<String, dynamic>;
       final storeId = payload['p_store_id'];
@@ -649,8 +650,12 @@ class OrderCommands {
           if (it is! Map) continue;
           final pid = it['product_id'];
           final qty = it['quantity'];
-          if (pid is String && qty is int) {
-            lines.add((productId: pid, storeId: storeId, quantity: qty));
+          if (pid is String && qty is num) {
+            lines.add((
+              productId: pid,
+              storeId: storeId,
+              quantity: qty.toDouble(),
+            ));
           }
         }
       }
@@ -735,14 +740,19 @@ class OrderCommands {
           final rawId = item['id'] as String?;
           final productId = (rawId == null || rawId.isEmpty) ? null : rawId;
 
-          final qty = (item['qty'] as num).toInt();
+          // Quarter quantities (#628). A value off the grid would pass here and
+          // then jam the outbox on the cloud's CHECK, so it stops at the till.
+          final qty = Qty.fromJson(item['qty']);
+          if (!Qty.isQuarterStep(qty)) {
+            throw ArgumentError.value(qty, 'qty', 'not a quarter step');
+          }
           // Prefer the integer kobo snapshot; fall back to the legacy double
           // 'price' (Naira) for carts seeded before line-version tracking.
           final unitPriceKobo =
               (item['unitPriceKobo'] as int?) ??
               ((item['price'] as num).toDouble() * 100).round();
           final buyingPriceKobo = (item['buyingPriceKobo'] as int?) ?? 0;
-          final totalKobo = unitPriceKobo * qty;
+          final totalKobo = lineTotalKobo(unitPriceKobo, qty);
           final version = item['version'] as int?;
           // #176 — capture the catalogue (tier list) price so a custom-price
           // concession is derivable in margin review. The cart keeps

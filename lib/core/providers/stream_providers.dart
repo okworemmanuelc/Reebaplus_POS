@@ -818,20 +818,20 @@ final storeNamesProvider = businessScopedStream<Map<String, String>>(
 /// and stuck empty. The factory hands the closure the resolved non-null
 /// businessId to bind into the custom SQL directly.
 final storeInventoryCountsProvider =
-    businessScopedStream<Map<String, ({int skuCount, int totalQuantity})>>(
+    businessScopedStream<Map<String, ({int skuCount, double totalQuantity})>>(
   (ref, db, businessId) {
     return db.customSelect(
       'SELECT store_id, SUM(quantity) as qty, COUNT(DISTINCT product_id) as sku_count FROM inventory WHERE business_id = ? GROUP BY store_id',
       variables: [Variable(businessId)],
       readsFrom: {db.inventory},
     ).watch().map((rows) {
-      final map = <String, ({int skuCount, int totalQuantity})>{};
+      final map = <String, ({int skuCount, double totalQuantity})>{};
       for (final row in rows) {
         final storeId = row.readNullable<String>('store_id');
         if (storeId != null) {
           map[storeId] = (
             skuCount: row.readNullable<num>('sku_count')?.toInt() ?? 0,
-            totalQuantity: row.readNullable<num>('qty')?.toInt() ?? 0,
+            totalQuantity: row.readNullable<num>('qty')?.toDouble() ?? 0,
           );
         }
       }
@@ -1179,7 +1179,7 @@ final productsWithStockProvider =
 /// One product's quantity per store, keyed by store id — Product Details'
 /// Stock by Store card and hero total (#487). Business-scoped.
 final productStockByStoreProvider =
-    businessScopedStreamFamily<Map<String, int>, String>(
+    businessScopedStreamFamily<Map<String, double>, String>(
   (ref, db, businessId, productId) =>
       db.inventoryDao.watchStockByStoreForProduct(productId),
   whenAbsent: const {},
@@ -2191,7 +2191,7 @@ final businessTimezoneProvider = FutureProvider<String>((ref) async {
 /// Current empty-crate holdings per manufacturer (`manufacturerId → count`).
 /// Crate businesses only (§13/§18.3); used by the Daily Reconciliation Report's
 /// empty-crates section. Point-in-time pool balance, not a day-scoped movement.
-final emptyCratesByManufacturerProvider = businessScopedStream<Map<String, int>>(
+final emptyCratesByManufacturerProvider = businessScopedStream<Map<String, double>>(
   (ref, db, businessId) => db.inventoryDao.watchEmptyCratesByManufacturer(),
   whenAbsent: const {},
 );
@@ -2210,7 +2210,7 @@ final allCrateDamagesProvider = businessScopedStream<List<CrateLedgerData>>(
 /// locked. #159: DERIVED from the append-only `crate_ledger` via the Crate Pool
 /// seam (not the demoted `store_crate_balances` cache), so a locked store's view
 /// and the business-wide view agree. Crate businesses only.
-final storeCrateBalancesProvider = businessScopedStream<Map<String, int>>(
+final storeCrateBalancesProvider = businessScopedStream<Map<String, double>>(
   (ref, db, businessId) {
     final storeId = ref.watch(lockedStoreProvider).value;
     if (storeId == null) return Stream.value(const {});
@@ -2223,7 +2223,7 @@ final storeCrateBalancesProvider = businessScopedStream<Map<String, int>>(
 /// manufacturerId -> balance. Scoped to [storeId] (§16.8.1). #159: DERIVED from
 /// the ledger via the Crate Pool seam.
 final storeEmptiesByManufacturerProvider =
-    businessScopedStreamFamily<Map<String, int>, String>(
+    businessScopedStreamFamily<Map<String, double>, String>(
   (ref, db, businessId, storeId) =>
       db.cratePoolDao.watchEmptiesPoolByManufacturer(storeId: storeId),
   whenAbsent: const {},
@@ -2233,7 +2233,7 @@ final storeEmptiesByManufacturerProvider =
 /// Phase 2). When a store is locked it counts only that store's inventory; in
 /// "All Stores" it sums every store. Keyed by manufacturer id. Drives the
 /// "Full" figures on the inventory Empty Crates tab.
-final fullCratesByManufacturerProvider = businessScopedStream<Map<String, int>>(
+final fullCratesByManufacturerProvider = businessScopedStream<Map<String, double>>(
   (ref, db, businessId) {
     final storeId = ref.watch(lockedStoreProvider).value;
     return db.inventoryDao.watchFullCratesByManufacturer(storeId: storeId);
@@ -2253,7 +2253,7 @@ final crateTrackedManufacturerIdsProvider = businessScopedStream<Set<String>>(
 /// Open crate shortage per manufacturer (`manufacturerId → shortageCount`).
 /// When a store is locked, scopes to that store; otherwise sums shortages across
 /// all stores per manufacturer (#293, PRD #284 §7).
-final crateShortagesByManufacturerProvider = businessScopedStream<Map<String, int>>(
+final crateShortagesByManufacturerProvider = businessScopedStream<Map<String, double>>(
   (ref, db, businessId) {
     final storeId = ref.watch(lockedStoreProvider).value;
     return db.cratePoolDao.watchAllCrateShortages(storeId: storeId);

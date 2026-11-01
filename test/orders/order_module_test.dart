@@ -250,7 +250,7 @@ void main() {
             orderId: 'placeholder',
             productId: Value(productId),
             storeId: storeId,
-            quantity: crates,
+            quantity: crates.toDouble(),
             unitPriceKobo: 100000,
             totalKobo: goodsKobo,
           ),
@@ -273,8 +273,8 @@ void main() {
         crateReturns: [
           CrateReturnLine(
             manufacturerId: mfrId,
-            takenCrates: crates,
-            returnedCrates: crates,
+            takenCrates: crates.toDouble(),
+            returnedCrates: crates.toDouble(),
             rateKobo: rateKobo,
             paidKobo: depositKobo,
           ),

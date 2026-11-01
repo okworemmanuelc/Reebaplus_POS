@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:intl/intl.dart';
 
@@ -261,9 +262,9 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
           icon: AppIcons.warehouse,
           tone: IconTileTone.green,
           title: 'Total crates',
-          value: '${pos.totalCrates} crates',
+          value: '${formatQty(pos.totalCrates)} crates',
           subtitle: '${formatCurrency(totalCrateValueNaira)} total value',
-          pillLabel: hasShort ? '${pos.short.count} short' : null,
+          pillLabel: hasShort ? '${formatQty(pos.short.count)} short' : null,
           pillTone: TagPillTone.warning,
         ),
       ],
@@ -348,7 +349,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
           theme: theme,
           keySuffix: 'in_warehouse',
           title: 'In warehouse',
-          countText: '${pos.inWarehouse.count} crates',
+          countText: '${formatQty(pos.inWarehouse.count)} crates',
           moneyText: formatCurrency(pos.inWarehouse.moneyKobo / 100),
           icon: AppIcons.warehouse,
           tone: IconTileTone.info,
@@ -360,7 +361,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
           theme: theme,
           keySuffix: 'full_in_stock',
           title: 'Full crates in stock',
-          countText: '${pos.fullCratesInStock.count} crates',
+          countText: '${formatQty(pos.fullCratesInStock.count)} crates',
           moneyText: formatCurrency(pos.fullCratesInStock.moneyKobo / 100),
           icon: AppIcons.inventory,
           tone: IconTileTone.green,
@@ -372,7 +373,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
           theme: theme,
           keySuffix: 'with_customers_deposit',
           title: 'With customers on deposit',
-          countText: '${pos.withCustomersOnDeposit.count} crates',
+          countText: '${formatQty(pos.withCustomersOnDeposit.count)} crates',
           moneyText: canSeeCustomerDepositMoney
               ? formatCurrency(pos.withCustomersOnDeposit.moneyKobo / 100)
               : null,
@@ -386,7 +387,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
           theme: theme,
           keySuffix: 'with_customers_no_deposit',
           title: 'With customers no deposit',
-          countText: '${pos.withCustomersNoDeposit.count} crates',
+          countText: '${formatQty(pos.withCustomersNoDeposit.count)} crates',
           moneyText: formatCurrency(pos.withCustomersNoDeposit.moneyKobo / 100),
           icon: AppIcons.customers,
           tone: IconTileTone.neutral,
@@ -398,7 +399,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
           theme: theme,
           keySuffix: 'short',
           title: 'Short',
-          countText: '${pos.short.count} crates',
+          countText: '${formatQty(pos.short.count)} crates',
           moneyText: pos.short.count > 0
               ? formatCurrency(pos.short.moneyKobo / 100)
               : null,
@@ -439,7 +440,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
           theme: theme,
           keySuffix: 'damaged',
           title: 'Damaged',
-          countText: '${pos.damaged.count} crates',
+          countText: '${formatQty(pos.damaged.count)} crates',
           moneyText: formatCurrency(pos.damaged.moneyKobo / 100),
           icon: AppIcons.damaged,
           tone: IconTileTone.danger,
@@ -584,7 +585,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
           final entry = movements[index];
           final delta = entry.quantityDelta;
           final isPositive = delta > 0;
-          final deltaText = isPositive ? '+$delta crates' : '$delta crates';
+          final deltaText = isPositive ? '+${formatQty(delta)} crates' : '${formatQty(delta)} crates';
           final deltaColor = isPositive ? f.green : f.danger;
 
           final details = [

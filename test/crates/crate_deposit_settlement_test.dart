@@ -159,8 +159,8 @@ void main() {
     dateReceived: DateTime(2026, 7, 30),
     staffId: stockKeeperId,
     lines: [lineFor(manufacturerId)],
-    fullCratesReceivedByManufacturer: {manufacturerId: crates},
-    emptiesReturnedByManufacturer: {manufacturerId: empties},
+    fullCratesReceivedByManufacturer: {manufacturerId: crates.toDouble()},
+    emptiesReturnedByManufacturer: {manufacturerId: empties.toDouble()},
   );
 
   /// Confirm every still-pending money leg, at the amount asked for unless
@@ -196,7 +196,7 @@ void main() {
     return match.isEmpty ? 0 : match.single.position.placedDepositKobo;
   }
 
-  Future<int> supplierDebt(String supplierId, String manufacturerId) async {
+  Future<double> supplierDebt(String supplierId, String manufacturerId) async {
     final rows = await db.cratePoolDao.watchSupplierCrateDebt(supplierId).first;
     final match = rows.where((r) => r.manufacturerId == manufacturerId).toList();
     return match.isEmpty ? 0 : match.single.balance;
@@ -857,7 +857,7 @@ void main() {
           supplierId: supplierA,
           manufacturerId: moneyBrand,
           storeId: storeId,
-          crateCount: crates,
+          crateCount: crates.toDouble(),
           performedBy: stockKeeperId,
         );
         final p = await (d.select(

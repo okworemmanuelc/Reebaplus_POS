@@ -133,7 +133,7 @@ Future<SupplierManufacturerSample> seedSupplierManufacturerSample(
           businessId: b,
           manufacturerId: Value(mfrId),
           storeId: Value(env.storeId),
-          quantityDelta: delta,
+          quantityDelta: delta.toDouble(),
           movementType: type,
           performedBy: const Value(staffId),
           createdAt: Value(DateTime(2025, 3, 12, 9, 30)),

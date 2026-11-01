@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:reebaplus_pos/shared/utils/quantity_input.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -11,6 +11,7 @@ import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
@@ -80,9 +81,9 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
   // Crate size is a CATEGORY here (Big/Medium/Small), never a bottle count, so
   // neither figure can be worked out from the quantity delivered — both are
   // typed by whoever took the delivery (ADR 0023).
-  final Map<String, int> _fullCratesReceivedByManufacturer = {};
+  final Map<String, double> _fullCratesReceivedByManufacturer = {};
   final Map<String, TextEditingController> _fullCratesControllers = {};
-  final Map<String, int> _emptiesReturnedByManufacturer = {};
+  final Map<String, double> _emptiesReturnedByManufacturer = {};
   final Map<String, TextEditingController> _emptiesControllers = {};
 
   @override
@@ -134,7 +135,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
         final fullCratesCtrl = TextEditingController(text: '0');
         fullCratesCtrl.addListener(() {
           _fullCratesReceivedByManufacturer[mfrId] =
-              int.tryParse(fullCratesCtrl.text) ?? 0;
+              Qty.parse(fullCratesCtrl.text) ?? 0; // quarters (#629)
         });
         _fullCratesControllers[mfrId] = fullCratesCtrl;
         _fullCratesReceivedByManufacturer[mfrId] = 0;
@@ -142,7 +143,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
         final emptiesCtrl = TextEditingController(text: '0');
         emptiesCtrl.addListener(() {
           _emptiesReturnedByManufacturer[mfrId] =
-              int.tryParse(emptiesCtrl.text) ?? 0;
+              Qty.parse(emptiesCtrl.text) ?? 0; // quarters (#629)
         });
         _emptiesControllers[mfrId] = emptiesCtrl;
         _emptiesReturnedByManufacturer[mfrId] = 0;
@@ -229,8 +230,9 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
       for (final line in cart)
         if (line.movesCrates) line.manufacturerId!,
     };
-    int crateTotal(Map<String, int> byManufacturer) => eligibleManufacturerIds
-        .fold(0, (sum, id) => sum + (byManufacturer[id] ?? 0));
+    double crateTotal(Map<String, double> byManufacturer) =>
+        eligibleManufacturerIds
+            .fold(0.0, (sum, id) => sum + (byManufacturer[id] ?? 0));
 
     final confirmed = await _showConfirmationDialog(
       supplierName: supplier?.name,
@@ -267,10 +269,10 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
             dateReceived: _dateReceived,
             staffId: staffId,
             lines: cart,
-            fullCratesReceivedByManufacturer: Map<String, int>.from(
+            fullCratesReceivedByManufacturer: Map<String, double>.from(
               _fullCratesReceivedByManufacturer,
             ),
-            emptiesReturnedByManufacturer: Map<String, int>.from(
+            emptiesReturnedByManufacturer: Map<String, double>.from(
               _emptiesReturnedByManufacturer,
             ),
             note: note.isEmpty ? null : note,
@@ -303,18 +305,18 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
   Future<bool?> _showConfirmationDialog({
     required String? supplierName,
     required int productCount,
-    required int totalUnits,
+    required double totalUnits,
     required int invoiceTotalKobo,
     required String storeName,
     required int uncostedItemCount,
-    required int fullCratesReceived,
-    required int emptiesReturned,
+    required double fullCratesReceived,
+    required double emptiesReturned,
   }) {
     final theme = Theme.of(context);
     final f = theme.extension<AppFixedColors>() ?? AppFixedColors.light;
     final crateParts = <String>[
-      if (fullCratesReceived > 0) '$fullCratesReceived full in',
-      if (emptiesReturned > 0) '$emptiesReturned empty back',
+      if (fullCratesReceived > 0) '${formatQty(fullCratesReceived)} full in',
+      if (emptiesReturned > 0) '${formatQty(emptiesReturned)} empty back',
     ];
     return showDialog<bool>(
       context: context,
@@ -327,7 +329,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
             _dialogRow('Supplier', supplierName ?? 'None (cash purchase)'),
             _dialogRow(
               'Items',
-              '$productCount product(s), $totalUnits unit(s)',
+              '$productCount product(s), ${formatQty(totalUnits)} unit(s)',
             ),
             _dialogRow('Stocking', storeName),
             _dialogRow('Invoice Total', formatCurrency(invoiceTotalKobo / 100)),
@@ -430,7 +432,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
         const <ManufacturerData>[];
     final mfrNames = {for (final m in manufacturers) m.id: m.name};
     final crateGroups =
-        <({String manufacturerId, String name, int unitsDelivered})>[];
+        <({String manufacturerId, String name, double unitsDelivered})>[];
     final seenManufacturers = <String>{};
     for (final l in cart) {
       final mfrId = l.manufacturerId;
@@ -438,7 +440,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
       if (!seenManufacturers.add(mfrId)) continue;
       final unitsDelivered = cart
           .where((x) => x.movesCrates && x.manufacturerId == mfrId)
-          .fold<int>(0, (sum, x) => sum + x.qty);
+          .fold<double>(0, (sum, x) => sum + x.qty);
       crateGroups.add((
         manufacturerId: mfrId,
         name: mfrNames[mfrId] ?? 'Manufacturer',
@@ -516,7 +518,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
     required String totalValueStr,
     required bool supplierRequired,
     required int uncostedLineCount,
-    required List<({String manufacturerId, String name, int unitsDelivered})>
+    required List<({String manufacturerId, String name, double unitsDelivered})>
     crateGroups,
     required Color? subtext,
   }) {
@@ -528,7 +530,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
         tone: IconTileTone.info,
         title: 'Invoice Total',
         value: totalValueStr,
-        subtitle: '${notifier.totalUnits} units • ${cart.length} products',
+        subtitle: '${formatQty(notifier.totalUnits)} units • ${cart.length} products',
       ),
       SizedBox(height: context.getRSize(12)),
 
@@ -591,7 +593,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
         SizedBox(height: context.getRSize(6)),
         Text(
           supplierRequired
-              ? 'Needed for drinks with crates, so the crates are '
+              ? 'Needed for products with crates, so the crates are '
                     'recorded against someone.'
               : 'No supplier? It is saved as a cash purchase: '
                     'stock goes up, nothing is recorded as owed.',
@@ -696,7 +698,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
         _fieldLabel('CRATES WITH THIS DELIVERY'),
         Text(
           'Count the crates and type them in. Crate sizes differ, so '
-          'the number cannot be worked out from the drinks '
+          'the number cannot be worked out from the bottles '
           'delivered. Leave a box at 0 if nothing moved.',
           style: context.regularStyle(12).copyWith(color: subtext),
         ),
@@ -744,7 +746,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
                 ),
                 SizedBox(height: context.getRSize(2)),
                 Text(
-                  '${line.qty} × ${formatCurrency(line.buyingPriceKobo / 100)}',
+                  '${formatQty(line.qty)} × ${formatCurrency(line.buyingPriceKobo / 100)}',
                   style: context.regularStyle(13).copyWith(color: subtext),
                 ),
               ],
@@ -752,7 +754,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
           ),
           SizedBox(width: context.getRSize(8)),
           Text(
-            formatCurrency(line.buyingPriceKobo * line.qty / 100),
+            formatCurrency(line.totalKobo / 100),
             style: context.boldStyle(15).copyWith(color: t.colorScheme.primary),
           ),
         ],
@@ -764,7 +766,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
   /// back. Both are typed — `unitsDelivered` is shown only as context and is a
   /// bottle count, never a crate count.
   Widget _crateRow(
-    ({String manufacturerId, String name, int unitsDelivered}) group,
+    ({String manufacturerId, String name, double unitsDelivered}) group,
     Color? subtext,
   ) {
     final t = Theme.of(context);
@@ -795,8 +797,8 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
                           .copyWith(color: t.colorScheme.onSurface),
                     ),
                     Text(
-                      '${group.unitsDelivered} '
-                      '${group.unitsDelivered == 1 ? 'drink' : 'drinks'} on '
+                      '${formatQty(group.unitsDelivered)} '
+                      '${group.unitsDelivered == 1 ? 'bottle' : 'bottles'} on '
                       'this delivery',
                       style: context.regularStyle(12).copyWith(color: subtext),
                     ),
@@ -812,8 +814,8 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
                 child: AppInput(
                   controller: _fullCratesControllers[group.manufacturerId],
                   labelText: 'Full crates in',
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  keyboardType: stockQtyKeyboard(allowParts: true),
+                  inputFormatters: stockQtyFormatters(allowParts: true),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -822,8 +824,8 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
                 child: AppInput(
                   controller: _emptiesControllers[group.manufacturerId],
                   labelText: 'Empty crates back',
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  keyboardType: stockQtyKeyboard(allowParts: true),
+                  inputFormatters: stockQtyFormatters(allowParts: true),
                   textAlign: TextAlign.center,
                 ),
               ),

@@ -100,7 +100,7 @@ void main() {
     await db.inventoryDao.adjustStock(
       productId,
       store,
-      qty,
+      qty.toDouble(),
       'opening',
       managerId,
       trackCost: false,
@@ -108,7 +108,7 @@ void main() {
     await db.costBatchesDao.recordInflowBatch(
       productId: productId,
       storeId: store,
-      quantity: qty,
+      quantity: qty.toDouble(),
       costKobo: unitCostKobo,
     );
   }
@@ -166,7 +166,7 @@ void main() {
           orderId: id,
           productId: Value(productId),
           storeId: storeId,
-          quantity: qty,
+          quantity: qty.toDouble(),
           unitPriceKobo: unitPriceKobo,
           totalKobo: total,
         ),
@@ -288,7 +288,7 @@ void main() {
 
       final coverageAfterLoad = (await db.costBatchesDao
               .queueFor(productId, warehouseId))
-          .fold<int>(0, (sum, b) => sum + b.qtyRemaining);
+          .fold<double>(0, (sum, b) => sum + b.qtyRemaining);
       // 200 loaded in, 100 dispatched out.
       expect(coverageAfterLoad, 100);
 
@@ -296,7 +296,7 @@ void main() {
 
       final coverageAfterSale = (await db.costBatchesDao
               .queueFor(productId, warehouseId))
-          .fold<int>(0, (sum, b) => sum + b.qtyRemaining);
+          .fold<double>(0, (sum, b) => sum + b.qtyRemaining);
       expect(coverageAfterSale, coverageAfterLoad);
     });
 
@@ -315,7 +315,7 @@ void main() {
   test('van stock decrements normally — only the COSTING is skipped', () async {
     await loadTheVan();
 
-    Future<int> onVan() async {
+    Future<double> onVan() async {
       final row = await (db.select(db.inventory)..where(
             (t) =>
                 t.productId.equals(productId) &

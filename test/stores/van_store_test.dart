@@ -61,7 +61,7 @@ void main() {
             businessId: businessId,
             productId: productId,
             storeId: storeId,
-            quantity: Value(qty),
+            quantity: Value(qty.toDouble()),
             lastUpdatedAt: Value(DateTime.now()),
           ),
         );
@@ -156,7 +156,7 @@ void main() {
           await db.inventoryDao.watchProductsWithStock(storeId: null).first;
       final allValueKobo = allStores.fold<int>(
         0,
-        (sum, p) => sum + p.totalStock * p.product.buyingPriceKobo,
+        (sum, p) => sum + (p.totalStock * p.product.buyingPriceKobo).round(),
       );
       expect(allValueKobo, 300 * 10000,
           reason: 'excluding van stock would drop business worth by the value '
@@ -167,7 +167,7 @@ void main() {
           await db.inventoryDao.watchProductsWithStock(storeId: storeId).first;
       final lockedValueKobo = locked.fold<int>(
         0,
-        (sum, p) => sum + p.totalStock * p.product.buyingPriceKobo,
+        (sum, p) => sum + (p.totalStock * p.product.buyingPriceKobo).round(),
       );
       expect(lockedValueKobo, 200 * 10000);
     });

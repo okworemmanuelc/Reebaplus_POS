@@ -162,7 +162,9 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         orders.staffId.equals(staffId) &
         orders.status.isIn(orderRevenueStatuses.toList());
 
-    final grossCol = (orderItems.quantity * orderItems.unitPriceKobo).sum();
+    // Σ line totals: each `total_kobo` is the rounded unit price x quantity
+    // (#627), so a fractional quantity needs no per-row maths here.
+    final grossCol = orderItems.totalKobo.sum();
     final grossRow =
         await (selectOnly(orderItems).join([
                 innerJoin(orders, orders.id.equalsExp(orderItems.orderId)),
@@ -856,7 +858,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       if (customerId != null &&
           isCrateBusiness(crateBiz?.type) &&
           (crateBiz?.tracksEmptyCrates ?? true)) {
-        final cratesByManufacturer = <String, int>{};
+        final cratesByManufacturer = <String, double>{};
         for (final item in items) {
           final productId = item.productId.value;
           if (productId == null) continue; // quick-sale line: no product
@@ -1007,7 +1009,11 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         final grossKobo = thinItems.fold<int>(
           0,
           (sum, it) =>
-              sum + (it['quantity'] as int) * (it['unit_price_kobo'] as int),
+              sum +
+              lineTotalKobo(
+                it['unit_price_kobo'] as int,
+                Qty.fromJson(it['quantity']),
+              ),
         );
         final goodsPayableKobo =
             (orderJson['total_amount_kobo'] as int) -
@@ -1061,7 +1067,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         )).difference(queueBeforeChildren).toList();
         await db.syncDao.enqueue(
           'domain:pos_record_sale_v2',
-          jsonEncode(payload),
+          encodeSyncPayload(payload),
         );
         await db.syncDao.holdRowsByOrder(childQueueIds, orderId);
         return orderId;
@@ -1421,7 +1427,8 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   /// §13.4 Ring 5 — settle a MONEY-TRACK brand's deposit when its crates come
   /// back at Confirm. The brand's held deposit (`paidKobo`, posted as one
   /// `crate_deposit` credit at the sale) is fully resolved here:
-  ///   • forfeit = deposit value of the crates KEPT ((taken − returned) × rate),
+  ///   • forfeit = deposit value of the crates KEPT ((taken − returned) × rate,
+  ///     whole kobo via [lineTotalKobo] — quarter crates, #629),
   ///     capped at what was paid → a `crate_deposit_forfeited` debit. That debit
   ///     is the ONLY record of the kept deposit; reports sum it as income
   ///     (forfeit = reports-only, user decision 2026-06-05). No new income row.
@@ -1444,8 +1451,8 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     required String customerId,
     required String manufacturerId,
     required String orderId,
-    required int takenCrates,
-    required int returnedCrates,
+    required double takenCrates,
+    required double returnedCrates,
     required int rateKobo,
     required int paidKobo,
     required bool refundAsCash,
@@ -1453,11 +1460,13 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   }) async {
     if (paidKobo <= 0) return; // not money-track — nothing to settle
     final kept = takenCrates - returnedCrates < 0
-        ? 0
+        ? 0.0
         : (takenCrates - returnedCrates > takenCrates
               ? takenCrates
               : takenCrates - returnedCrates);
-    final forfeitValue = kept * rateKobo;
+    // Proportional (#629): half a crate kept forfeits half the rate, rounded
+    // half up to the whole kobo.
+    final forfeitValue = lineTotalKobo(rateKobo, kept);
     final forfeitRecorded = forfeitValue < paidKobo ? forfeitValue : paidKobo;
     final refundAmount = paidKobo - forfeitRecorded;
     final extraDebt = forfeitValue > paidKobo ? forfeitValue - paidKobo : 0;
@@ -1759,7 +1768,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     String reason,
     String staffId, {
     bool forceLocalReversal = false,
-    Map<String, int> damagedQtyByLine = const {},
+    Map<String, double> damagedQtyByLine = const {},
     String damageReasonKey = 'other',
   }) async {
     // DO NOT ENABLE UNTIL #121 (the oversell-orphan go-live gate), and not
@@ -1826,7 +1835,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         };
         await db.syncDao.enqueue(
           'domain:pos_cancel_order',
-          jsonEncode(payload),
+          encodeSyncPayload(payload),
         );
         return;
       }
@@ -2069,7 +2078,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           -damaged,
           'damage:$damageReasonKey',
           staffId,
-          outflowValueKobo: damaged * line.buyingPriceKobo,
+          outflowValueKobo: lineTotalKobo(line.buyingPriceKobo, damaged),
         );
       }
 
@@ -2144,7 +2153,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     required String reason,
     required String staffId,
     String damageReasonKey = 'other',
-    Map<String, int> damagedQtyByLine = const {},
+    Map<String, double> damagedQtyByLine = const {},
   }) {
     return db.transaction(() async {
       final order = await findById(orderId);
@@ -2159,10 +2168,11 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
             ..where((i) => i.orderId.equals(orderId) & whereBusiness(i)))
           .get();
       final byId = {for (final l in lines) l.id: l};
-      var damagedUnits = 0;
+      var damagedUnits = 0.0;
       for (final e in damagedQtyByLine.entries) {
         final line = byId[e.key];
         if (e.value < 0 ||
+            !Qty.isQuarterStep(e.value) ||
             line == null ||
             e.value > line.quantity ||
             (e.value > 0 && line.productId == null)) {
@@ -2307,7 +2317,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
             'UPDATE inventory SET quantity = quantity - ? '
             'WHERE business_id = ? AND product_id = ? AND store_id = ?',
             variables: [
-              Variable<int>(r.quantityDelta),
+              Variable<double>(r.quantityDelta),
               Variable<String>(businessId),
               Variable<String>(r.productId),
               Variable<String>(r.locationId),
@@ -2445,7 +2455,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   /// cancelled or absent.
   Future<void> reverseRejectedSaleLocal({
     required String orderId,
-    required List<({String productId, String storeId, int quantity})> items,
+    required List<({String productId, String storeId, double quantity})> items,
     required String staffId,
   }) async {
     await db.transaction(() async {
@@ -2481,7 +2491,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           'UPDATE inventory SET quantity = quantity + ?, last_updated_at = ? '
           'WHERE business_id = ? AND product_id = ? AND store_id = ?',
           variables: [
-            Variable<int>(line.quantity),
+            Variable<double>(line.quantity),
             Variable<DateTime>(now),
             Variable<String>(requireBusinessId()),
             Variable<String>(line.productId),
@@ -2640,9 +2650,8 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
 
     final rows = await query.get();
 
-    int todayUnits = 0, todayRevKobo = 0;
-    int weekUnits = 0, weekRevKobo = 0;
-    int monthUnits = 0, monthRevKobo = 0;
+    double todayUnits = 0, weekUnits = 0, monthUnits = 0;
+    int todayRevKobo = 0, weekRevKobo = 0, monthRevKobo = 0;
 
     for (final row in rows) {
       final item = row.readTable(orderItems);
@@ -2738,7 +2747,8 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       acc.units += item.quantity;
       acc.revenue += item.totalKobo;
       if (item.buyingPriceKobo > 0) {
-        acc.profit += item.totalKobo - item.buyingPriceKobo * item.quantity;
+        acc.profit +=
+            item.totalKobo - lineTotalKobo(item.buyingPriceKobo, item.quantity);
       } else {
         acc.uncosted = true;
       }
@@ -2880,14 +2890,15 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
 }
 
 class _DayAcc {
-  int units = 0, revenue = 0, profit = 0;
+  double units = 0;
+  int revenue = 0, profit = 0;
   bool uncosted = false;
 }
 
 /// One local day of a product's sales (see [OrdersDao.getProductSalesByDay]).
 class ProductDaySales {
   final DateTime date; // local calendar day, y/m/d only
-  final int units;
+  final double units;
   final int revenueKobo;
   final int profitKobo;
   final bool hasUncosted;
@@ -2901,11 +2912,11 @@ class ProductDaySales {
 }
 
 class ProductSalesSummary {
-  final int todayUnits;
+  final double todayUnits;
   final int todayRevenueKobo;
-  final int weekUnits;
+  final double weekUnits;
   final int weekRevenueKobo;
-  final int monthUnits;
+  final double monthUnits;
   final int monthRevenueKobo;
 
   const ProductSalesSummary({
@@ -2994,14 +3005,14 @@ class OrderItemDataWithProductData {
 
 class InsufficientStockException implements Exception {
   final String productId;
-  final int requested;
+  final double requested;
   const InsufficientStockException({
     required this.productId,
     required this.requested,
   });
   @override
   String toString() =>
-      'InsufficientStockException: product $productId, requested $requested';
+      'InsufficientStockException: product $productId, requested ${formatQty(requested)}';
 }
 
 class CartStaleItem {
@@ -3042,7 +3053,7 @@ class CrateBalanceEntry {
   // v28/v29: crate balances are keyed by manufacturer (§13.4), not crate size.
   final String manufacturerId;
   final String manufacturerName;
-  final int balance;
+  final double balance;
   CrateBalanceEntry({
     required this.manufacturerId,
     required this.manufacturerName,
@@ -3563,5 +3574,5 @@ class ReturnOutcome {
   final String orderNumber;
   final String? storeId;
   final int refundKobo;
-  final int damagedUnits;
+  final double damagedUnits;
 }

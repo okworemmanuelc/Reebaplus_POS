@@ -167,7 +167,7 @@ void main() {
     // ₦180,000 of ours for 60 crates of Star, and the cash that left the drawer
     // to place it there.
     const placedWithDepot = 18000000;
-    const placedCrates = 60;
+    const placedCrates = 60.0;
     // #216 — a shortfall the owner deliberately accepted: 4 crates of Star at
     // ₦3,500. The ONE figure in PRD #203 that reaches profit.
     const writtenOffCrates = 4;
@@ -242,7 +242,7 @@ void main() {
           mfr(star, 'Star Lager', starDeposit, arrangement: arrangement),
           mfr(gulder, 'Gulder', gulderDeposit, arrangement: arrangement),
         ],
-        emptyCrateCounts: const {star: starEmpties, gulder: gulderEmpties},
+        emptyCrateCounts: {star: starEmpties.toDouble(), gulder: gulderEmpties.toDouble()},
         showCrates: true,
         heldCrateDepositsKobo: heldForCustomers,
         supplierCrateDebtKobo: owedToSuppliers,
@@ -280,7 +280,7 @@ void main() {
             businessId: businessId,
             manufacturerId: star,
             storeId: 'store-1',
-            crateCount: writtenOffCrates,
+            crateCount: writtenOffCrates.toDouble(),
             source: kCrateWriteOffSourceManual,
             ratePerCrateKobo: starDeposit,
             note: null,
@@ -302,7 +302,7 @@ void main() {
               businessId: businessId,
               manufacturerId: star,
               storeId: 'store-1',
-              crateCount: forfeitCrates,
+              crateCount: forfeitCrates.toDouble(),
               source: kCrateWriteOffSourceCustomerForfeit,
               ratePerCrateKobo: starDeposit,
               note: null,
@@ -321,7 +321,7 @@ void main() {
 
     /// Every figure a crate-money change could conceivably disturb — now
     /// including the two #215 added, so a leak into either is caught here too.
-    Map<String, int> figures(ReconData d) => {
+    Map<String, num> figures(ReconData d) => {
       'crateUnits': d.crateUnits,
       'crateDepositKobo': d.crateDepositKobo,
       'heldCrateDepositsKobo': d.heldCrateDepositsKobo,
@@ -593,7 +593,7 @@ void main() {
             mfr(star, 'Star Lager', starDeposit,
                 arrangement: kCrateMoneyArrangementPerDelivery),
           ],
-          emptyCrateCounts: const {star: starEmpties},
+          emptyCrateCounts: {star: starEmpties.toDouble()},
           showCrates: false,
           heldCrateDepositsKobo: heldForCustomers,
           supplierCrateDebtKobo: owedToSuppliers,

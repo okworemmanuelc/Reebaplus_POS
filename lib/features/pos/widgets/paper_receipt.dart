@@ -6,7 +6,6 @@ import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/utils/name_case.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/product_name.dart';
-import 'package:reebaplus_pos/core/utils/stock_calculator.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
 import 'package:reebaplus_pos/shared/widgets/receipt_format.dart';
 
@@ -308,7 +307,7 @@ class PaperReceipt extends StatelessWidget {
   Widget _itemRow(Map<String, dynamic> item) {
     final qty = ReceiptFormat.num(item['qty']);
     final price = ReceiptFormat.num(item['price']);
-    final line = stockValue(price, qty).round();
+    final line = ReceiptFormat.lineAmount(price, qty);
     final label = productDisplayName(item['name'].toString());
     final q = ReceiptFormat.qty(qty);
     return Column(

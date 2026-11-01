@@ -70,7 +70,7 @@ void main() {
                   businessId: env.businessId,
                   storeId: id,
                   productId: p.id,
-                  quantity: Value(qty),
+                  quantity: Value(qty.toDouble()),
                 ),
               );
         }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -42,7 +43,7 @@ class RequestProductGrid extends StatelessWidget {
   final Map<String, String> categoryNames;
 
   /// How many of a product are on the request (0 = none).
-  final int Function(String productId) quantityOf;
+  final double Function(String productId) quantityOf;
   final ValueChanged<ProductDataWithStock> onAdd;
   final ValueChanged<ProductDataWithStock> onChooseQuantity;
 
@@ -91,7 +92,7 @@ class _RequestProductTile extends ConsumerStatefulWidget {
 
   final ProductDataWithStock item;
   final String? categoryName;
-  final int quantity;
+  final double quantity;
   final VoidCallback onAdd;
   final VoidCallback onChooseQuantity;
 
@@ -131,13 +132,14 @@ class _RequestProductTileState extends ConsumerState<_RequestProductTile> {
     return ProductTile(
       name: product.name,
       subtitle: subtitle.isEmpty ? null : subtitle,
-      stockLabel: '$stock in stock',
+      stockLabel: '${formatQty(stock)} in stock',
       stockLevel: stock <= product.lowStockThreshold
           ? StockLevel.low
           : StockLevel.ok,
       categoryName: widget.categoryName,
       photoPath: product.imagePath,
-      inCartQty: widget.quantity,
+      inCartQty: widget.quantity.ceil(),
+      inCartLabel: widget.quantity > 0 ? formatQty(widget.quantity) : null,
       onTap: _add,
       onLongPress: widget.onChooseQuantity,
     );

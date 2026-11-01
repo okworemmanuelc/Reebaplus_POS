@@ -5,6 +5,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/utils/order_number.dart';
 
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import '../helpers/dispatch_test_utils.dart';
 import 'golden_scenario.dart';
 
@@ -184,7 +185,7 @@ void main() {
         // line records the catalogue price only when the two differ — the same
         // rule OrderCommands._buildOrderItems applies on the real checkout.
         final charged = scenario.chargedKobo(line);
-        final total = charged * line.quantity;
+        final total = lineTotalKobo(charged, line.quantity);
         gross += total;
         items.add(OrderItemsCompanion.insert(
           businessId: businessId,
@@ -360,8 +361,8 @@ void main() {
       }
 
       /// productKey → on-hand in this store.
-      Future<Map<String, int>> readInventory() async {
-        final out = <String, int>{};
+      Future<Map<String, double>> readInventory() async {
+        final out = <String, double>{};
         for (final entry in productIdByKey.entries) {
           final invRow = await (db.select(db.inventory)
                 ..where((i) =>
@@ -374,8 +375,8 @@ void main() {
 
       /// key "productKey|receivedAt" → the SEEDED batch's qty_remaining. Batches
       /// the run appended (a cancel's restore) are deliberately not in here.
-      Future<Map<String, int>> readSeededBatchRemaining() async {
-        final out = <String, int>{};
+      Future<Map<String, double>> readSeededBatchRemaining() async {
+        final out = <String, double>{};
         for (final (id, productKey, receivedAt) in seededBatches) {
           final row = await (db.select(db.costBatches)
                 ..where((b) => b.id.equals(id)))
@@ -394,8 +395,8 @@ void main() {
         for (final e in manufacturerIdByKey.entries) e.value: e.key
       };
       final crateLines = <String, ActualCrateLine>{};
-      final crateLedgerIssued = <String, int>{};
-      final crateBalances = <String, int>{};
+      final crateLedgerIssued = <String, double>{};
+      final crateBalances = <String, double>{};
       if (customerId != null && manufacturerIdByKey.isNotEmpty) {
         final lineRows = await (db.select(db.orderCrateLines)
               ..where((l) => l.orderId.equals(orderId)))

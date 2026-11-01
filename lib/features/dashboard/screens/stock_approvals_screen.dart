@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/crates/crate_deposit_ledger_types.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -459,7 +460,7 @@ class _ApprovalCardState extends ConsumerState<_ApprovalCard> {
   String? get _totalCostLabel {
     final kobo = widget.request.unitCostKobo;
     if (kobo == null) return null;
-    return formatCurrency(kobo * widget.request.quantityDiff / 100.0);
+    return formatCurrency(lineTotalKobo(kobo, widget.request.quantityDiff) / 100.0);
   }
 
   // Surface the common "not enough stock to remove" case in plain English.
@@ -475,7 +476,8 @@ class _ApprovalCardState extends ConsumerState<_ApprovalCard> {
   Widget build(BuildContext context) {
     final r = widget.request;
     final isRemove = r.quantityDiff < 0;
-    final qtyLabel = '${isRemove ? '−' : '+'}${r.quantityDiff.abs()}';
+    final qtyLabel =
+        '${isRemove ? '−' : '+'}${formatQty(r.quantityDiff.abs())}';
     final totalCostLabel = _totalCostLabel;
 
     return _ApprovalShell(
@@ -772,7 +774,7 @@ class _CrateDepositApprovalCardState
       children: [
         _DetailRow('Recorded by', widget.requesterName),
         _DetailRow('Store', widget.storeName),
-        _DetailRow('Crates', '${r.crateCount}'),
+        _DetailRow('Crates', formatQty(r.crateCount)),
         _DetailRow('Rate per crate', formatCurrency(r.ratePerCrateKobo / 100)),
         _DetailRow('When', _fullStamp(r.createdAt)),
         SizedBox(height: context.getRSize(8)),

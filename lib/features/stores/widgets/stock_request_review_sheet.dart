@@ -1,3 +1,4 @@
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -164,7 +165,7 @@ class _StockRequestReviewSheetState
                   productId: id,
                   name: item.product.name,
                   categoryName: categoryNames[item.product.categoryId],
-                  detail: '$sourceStoreName has ${available[id] ?? 0}',
+                  detail: '$sourceStoreName has ${formatQty(available[id] ?? 0)}',
                   quantity: item.quantity,
                   onIncrement: () => notifier.increment(id),
                   onDecrement: () => notifier.decrement(id),
@@ -189,7 +190,7 @@ class _StockRequestReviewSheetState
               children: [
                 Text(
                   '${items.length} ${items.length == 1 ? 'product' : 'products'}'
-                  ' · $units ${units == 1 ? 'unit' : 'units'}',
+                  ' · ${formatQty(units)} ${units == 1 ? 'unit' : 'units'}',
                   style: context.semiBoldStyle(14).copyWith(color: muted),
                 ),
                 SizedBox(height: context.getRSize(12)),
@@ -228,7 +229,7 @@ class _ReviewLine extends StatelessWidget {
   final String name;
   final String? categoryName;
   final String detail;
-  final int quantity;
+  final double quantity;
   final VoidCallback onIncrement;
   final VoidCallback onDecrement;
   final VoidCallback onRemove;
@@ -295,7 +296,7 @@ class _ReviewLine extends StatelessWidget {
             Align(
               alignment: AlignmentDirectional.centerEnd,
               child: QuantityStepper(
-                quantityLabel: '$quantity',
+                quantityLabel: formatQty(quantity),
                 isLastUnit: quantity <= 1,
                 onIncrement: onIncrement,
                 onDecrement: onDecrement,

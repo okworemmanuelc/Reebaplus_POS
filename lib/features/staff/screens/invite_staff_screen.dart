@@ -162,7 +162,7 @@ class _InviteStaffScreenState extends ConsumerState<InviteStaffScreen> {
     );
     if (blocked != null) {
       if (!mounted) return;
-      await showPlanLimitDialog(context, blocked, plan: plan);
+      showPlanLimitNotice(context, blocked, plan: plan);
       return;
     }
 
@@ -222,7 +222,7 @@ class _InviteStaffScreenState extends ConsumerState<InviteStaffScreen> {
       setState(() => _generating = false);
       final limit = planLimitKindOf(e);
       if (limit != null) {
-        await showPlanLimitDialog(context, limit, plan: plan);
+        showPlanLimitNotice(context, limit, plan: plan);
         return;
       }
       AppNotification.showError(context, 'Could not generate code: $e');

@@ -16,7 +16,7 @@ import 'package:reebaplus_pos/core/crates/manufacturer_crate_position.dart';
 /// One re-priced line of a [CrateValueChangeImpact].
 class CrateValueMove {
   final String label;
-  final int count;
+  final double count;
   final int beforeKobo;
   final int afterKobo;
 
@@ -68,7 +68,7 @@ class CrateValueChangeImpact {
 CrateValueChangeImpact computeCrateValueChangeImpact({
   required ManufacturerCratePosition position,
   required int newKobo,
-  int supplierDebtCrates = 0,
+  double supplierDebtCrates = 0,
 }) {
   final oldKobo = position.crateValueKobo;
   final newRate = newKobo > 0 ? newKobo : 0;
@@ -78,7 +78,7 @@ CrateValueChangeImpact computeCrateValueChangeImpact({
     position.fullCratesInStock,
     position.withCustomersNoDeposit,
     position.short,
-    if (position.damaged.moneyKobo == position.damaged.count * oldKobo)
+    if (position.damaged.moneyKobo == (position.damaged.count * oldKobo).round())
       position.damaged,
   ];
 
@@ -88,8 +88,8 @@ CrateValueChangeImpact computeCrateValueChangeImpact({
         CrateValueMove(
           label: s.label,
           count: s.count,
-          beforeKobo: s.count * oldKobo,
-          afterKobo: s.count * newRate,
+          beforeKobo: (s.count * oldKobo).round(),
+          afterKobo: (s.count * newRate).round(),
         ),
   ];
 
@@ -102,8 +102,8 @@ CrateValueChangeImpact computeCrateValueChangeImpact({
         : CrateValueMove(
             label: 'Crates owed to suppliers',
             count: supplierDebtCrates,
-            beforeKobo: supplierDebtCrates * oldKobo,
-            afterKobo: supplierDebtCrates * newRate,
+            beforeKobo: (supplierDebtCrates * oldKobo).round(),
+            afterKobo: (supplierDebtCrates * newRate).round(),
           ),
   );
 }

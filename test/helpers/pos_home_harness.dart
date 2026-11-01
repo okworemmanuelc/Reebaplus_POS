@@ -48,7 +48,6 @@ Future<PosTestEnvironment> setupTestPosEnvironment({
     productCount: productCount,
     businessName: 'POS Test Biz',
     sharedPreferences: const {
-      'pos_grid_columns': 2,
       'pos_is_list_view': false,
       'hint_pos_gestures': 2,
     },
@@ -67,7 +66,6 @@ Future<PosHomeHarnessContext> pumpPosHome(
   TextScaler? textScaler,
   ThemeData? theme,
   bool showCoachHint = false,
-  int posGridColumns = 2,
 }) async {
   final context = await pumpScreen(
     tester,
@@ -80,7 +78,6 @@ Future<PosHomeHarnessContext> pumpPosHome(
     textScaler: textScaler,
     theme: theme,
     sharedPreferences: {
-      'pos_grid_columns': posGridColumns,
       'pos_is_list_view': false,
       'hint_pos_gestures': showCoachHint ? 0 : 2,
     },

@@ -17,6 +17,7 @@
 library;
 
 import 'package:reebaplus_pos/core/crates/crate_money_arrangement.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 
 // ── Where a write-off came from (#217) ───────────────────────────────────────
 
@@ -109,8 +110,9 @@ class CrateShortfallWriteOff {
   /// answers one store's count; older sources are business-wide.
   final String? storeId;
 
-  /// + = crates accepted as lost; − = a compensating reversal.
-  final int crateCount;
+  /// + = crates accepted as lost; − = a compensating reversal. Quarter steps
+  /// (#629).
+  final double crateCount;
 
   /// The rate the loss was valued at, snapshotted when the decision was taken.
   final int ratePerCrateKobo;
@@ -136,8 +138,9 @@ class CrateShortfallWriteOff {
     this.source = CrateWriteOffSource.manual,
   });
 
-  /// The money this decision books, at the snapshotted rate.
-  int get valueKobo => crateCount * ratePerCrateKobo;
+  /// The money this decision books, at the snapshotted rate, whole kobo (half
+  /// a crate is half the rate, rounded half up — [lineTotalKobo]).
+  int get valueKobo => lineTotalKobo(ratePerCrateKobo, crateCount);
 }
 
 // ── The booked loss ──────────────────────────────────────────────────────────
@@ -225,9 +228,9 @@ int crateShortfallWriteOffKobo({
 /// path rather than here on purpose. A reader that re-decided from today's
 /// arrangement would rewrite last March's profit the moment a brand was
 /// switched on, which ADR 0021 forbids outright.
-int crateForfeitShortfallCrates({
+double crateForfeitShortfallCrates({
   required CrateMoneyArrangement arrangement,
-  required int keptCrates,
+  required double keptCrates,
 }) {
   if (!arrangement.movesMoney) return 0;
   return keptCrates > 0 ? keptCrates : 0;

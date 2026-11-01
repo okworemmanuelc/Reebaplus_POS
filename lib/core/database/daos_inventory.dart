@@ -89,7 +89,7 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     required String manufacturerId,
     required String storeId,
     required String performedBy,
-    required int countedEmpties,
+    required double countedEmpties,
   }) async {
     await db.cratePoolDao.recordManualCountCorrection(
       manufacturerId: manufacturerId,
@@ -133,7 +133,7 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
   /// One product's stock in every store that holds a row for it, keyed by
   /// store id (#487, Product Details' Stock by Store card). Business-scoped and
   /// live: an Adjust Stock, a sale or a sync landing re-emits.
-  Stream<Map<String, int>> watchStockByStoreForProduct(String productId) {
+  Stream<Map<String, double>> watchStockByStoreForProduct(String productId) {
     return (select(inventory)
           ..where((i) => whereBusiness(i) & i.productId.equals(productId)))
         .watch()
@@ -153,14 +153,14 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
       invQuery.where((t) => t.storeId.equals(storeId));
     }
     final invs = await invQuery.get();
-    final totals = <String, int>{};
+    final totals = <String, double>{};
     for (final i in invs) {
-      totals[i.productId] = (totals[i.productId] ?? 0) + i.quantity;
+      totals[i.productId] = (totals[i.productId] ?? 0.0) + i.quantity;
     }
     return ps
         .map(
           (p) =>
-              ProductDataWithStock(product: p, totalStock: totals[p.id] ?? 0),
+              ProductDataWithStock(product: p, totalStock: totals[p.id] ?? 0.0),
         )
         .toList();
   }
@@ -185,14 +185,14 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
       List<InventoryData>,
       List<ProductDataWithStock>
     >(productsQuery.watch(), invQuery.watch(), (ps, invs) {
-      final totals = <String, int>{};
+      final totals = <String, double>{};
       for (final i in invs) {
-        totals[i.productId] = (totals[i.productId] ?? 0) + i.quantity;
+        totals[i.productId] = (totals[i.productId] ?? 0.0) + i.quantity;
       }
       final out = ps
           .map(
             (p) =>
-                ProductDataWithStock(product: p, totalStock: totals[p.id] ?? 0),
+                ProductDataWithStock(product: p, totalStock: totals[p.id] ?? 0.0),
           )
           .toList();
       if (lowStockOnly) {
@@ -278,7 +278,7 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
   Future<void> adjustStock(
     String productId,
     String storeId,
-    int delta,
+    double delta,
     String note,
     String? staffId, {
     String movementType = 'adjustment',
@@ -289,6 +289,12 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     bool trackCost = true,
   }) async {
     if (delta == 0) return;
+    // The cloud CHECK is a multiple of 0.25; fail here with words, not 23514.
+    if (!Qty.isQuarterStep(delta)) {
+      throw ArgumentError(
+        'Stock can only change in quarter steps (got ${formatQty(delta)}).',
+      );
+    }
     await transaction(() async {
       // v2 path: emit a single `domain:pos_inventory_delta_v2` envelope.
       // The server mints stock_adjustments + stock_transactions rows
@@ -368,7 +374,7 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
         };
         await db.syncDao.enqueue(
           'domain:pos_inventory_delta_v2',
-          jsonEncode(bundle),
+          encodeSyncPayload(bundle),
         );
         return;
       }
@@ -542,7 +548,7 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
                       whereBusiness(t),
                 ))
                 .getSingleOrNull();
-        final qty = invRow?.quantity ?? 0;
+        final qty = invRow?.quantity ?? 0.0;
         if (qty <= 0) continue;
 
         await adjustStock(
@@ -613,7 +619,7 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
   /// credit (manual return, delivery) omits it.
   Future<void> addEmptyCrates(
     String manufacturerId,
-    int quantity, {
+    double quantity, {
     String? storeId,
     String? orderId,
   }) async {
@@ -633,7 +639,7 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
   /// reason in `computeReconData`). Delegates to the Crate Pool seam (#157).
   Future<void> recordEmptyCrateDamage(
     String manufacturerId,
-    int quantity, {
+    double quantity, {
     String? storeId,
     String? performedBy,
     int? ratePerCrateKobo,
@@ -654,7 +660,7 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
   Future<void> recordFullCrateDamage({
     required String manufacturerId,
     required String storeId,
-    required int crates,
+    required double crates,
     String? performedBy,
     int? ratePerCrateKobo,
     String? reason,
@@ -676,7 +682,7 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
   /// (§16.8.1 Phase 2 — the Empty Crates tab shows per-store figures when a
   /// store is active). When null it sums every store (business-wide / "All
   /// Stores").
-  Stream<Map<String, int>> watchFullCratesByManufacturer({String? storeId}) {
+  Stream<Map<String, double>> watchFullCratesByManufacturer({String? storeId}) {
     // Only returnable-BOTTLE stock counts as full crates — the same basis
     // createOrder uses to issue crate rows (unit == 'bottle' && trackEmpties).
     // Without this filter a manufacturer's PET / Can / etc. inventory (e.g. a
@@ -697,12 +703,12 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
           innerJoin(products, products.id.equalsExp(inventory.productId)),
         ])..where(predicate);
     return query.watch().map((rows) {
-      final out = <String, int>{};
+      final out = <String, double>{};
       for (final row in rows) {
         final mfrId = row.readTable(products).manufacturerId;
         if (mfrId == null) continue;
         final qty = row.readTable(inventory).quantity;
-        out[mfrId] = (out[mfrId] ?? 0) + qty;
+        out[mfrId] = (out[mfrId] ?? 0.0) + qty;
       }
       return out;
     });
@@ -736,17 +742,50 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
   /// less rows) via the Crate Pool seam, not the demoted
   /// `manufacturers.empty_crate_stock` scalar — so the business figure and a
   /// locked store's figure agree (both derive from the same ledger).
-  Stream<Map<String, int>> watchEmptyCratesByManufacturer() {
+  Stream<Map<String, double>> watchEmptyCratesByManufacturer() {
     return db.cratePoolDao.watchEmptiesPoolByManufacturer();
   }
 
   /// Stream the total empty-crate assets across all manufacturers — used by
   /// the inventory dashboard summary card. #159: the sum of the ledger-derived
   /// per-manufacturer pool (business total == Σ store totals by construction).
-  Stream<int> watchTotalCrateAssets() {
+  Stream<double> watchTotalCrateAssets() {
     return db.cratePoolDao
         .watchEmptiesPoolByManufacturer()
-        .map((m) => m.values.fold<int>(0, (sum, v) => sum + v));
+        .map((m) => m.values.fold<double>(0, (sum, v) => sum + v));
+  }
+
+  /// Throws [ArgumentError] unless [quantity] is a stock quantity [productId]
+  /// can take (#630): positive, on a quarter step, and a whole number when the
+  /// product's parts switch (`allow_fractional_sales`) is off. This is the write
+  /// boundary for every typed stock quantity (adjust requests, transfers); the
+  /// screens filter the same rule first. Pass [allowZero] for a count, where 0
+  /// is a real answer. Not for a count's *difference* (that may be a part on a
+  /// whole-only product whose stock was already in parts), only for what a
+  /// person typed.
+  Future<void> assertQuantityAllowed(
+    String productId,
+    double quantity, {
+    bool allowZero = false,
+  }) async {
+    if (Qty.validate(quantity, allowZero: allowZero) == null) {
+      throw ArgumentError(
+        allowZero
+            ? 'Quantity must be 0 or more, in quarter steps.'
+            : 'Quantity must be positive, in quarter steps.',
+      );
+    }
+    if (Qty.isWhole(quantity)) return;
+    final product =
+        await (select(products)
+              ..where((t) => t.id.equals(productId) & whereBusiness(t)))
+            .getSingleOrNull();
+    if (product != null && !product.allowFractionalSales) {
+      throw ArgumentError(
+        '${product.name} is sold in whole numbers only '
+        '(${formatQty(quantity)} is not allowed).',
+      );
+    }
   }
 
   Future<List<ProductStockWithStore>> getProductsStockPerStore({
@@ -790,11 +829,11 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
 
 /// One product line of a multi-product stock request (#380): what
 /// [StockTransferDao.requestTransfers] writes as one `pending` row.
-typedef StockRequestLine = ({String productId, int quantity});
+typedef StockRequestLine = ({String productId, double quantity});
 
 class ProductDataWithStock {
   final ProductData product;
-  final int totalStock;
+  final double totalStock;
   ProductDataWithStock({required this.product, required this.totalStock});
 }
 
@@ -802,7 +841,7 @@ class ProductStockWithStore {
   final String storeId;
   final String storeName;
   final ProductData product;
-  final int totalStock;
+  final double totalStock;
   const ProductStockWithStore({
     required this.storeId,
     required this.storeName,
@@ -813,8 +852,8 @@ class ProductStockWithStore {
 
 class ManufacturerCrateStats {
   final String manufacturer;
-  final int totalBottles;
-  final int emptyCrates;
+  final double totalBottles;
+  final double emptyCrates;
   final int totalValueKobo;
 
   ManufacturerCrateStats({
@@ -824,8 +863,8 @@ class ManufacturerCrateStats {
     required this.totalValueKobo,
   });
 
-  int get fullCratesEquiv => totalBottles;
-  int get totalCrateAssets => totalBottles + emptyCrates;
+  double get fullCratesEquiv => totalBottles;
+  double get totalCrateAssets => totalBottles + emptyCrates;
 }
 
 @DriftAccessor(tables: [StockTransactions, Products, Users, Stores, Inventory])
@@ -833,7 +872,7 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
     with _$StockLedgerDaoMixin, BusinessScopedDao<AppDatabase> {
   StockLedgerDao(super.db);
 
-  Future<int> getCurrentStock(String productId, String locationId) async {
+  Future<double> getCurrentStock(String productId, String locationId) async {
     final row =
         await (select(inventory)
               ..where(
@@ -844,10 +883,10 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
               )
               ..limit(1))
             .getSingleOrNull();
-    return row?.quantity ?? 0;
+    return row?.quantity ?? 0.0;
   }
 
-  Stream<int> watchCurrentStock(String productId, String locationId) {
+  Stream<double> watchCurrentStock(String productId, String locationId) {
     return (select(inventory)
           ..where(
             (i) =>
@@ -857,7 +896,7 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
           )
           ..limit(1))
         .watchSingleOrNull()
-        .map((row) => row?.quantity ?? 0);
+        .map((row) => row?.quantity ?? 0.0);
   }
 
   Future<void> insertTransaction(StockTransactionsCompanion companion) async {
@@ -1086,10 +1125,10 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
       query.where(stockTransactions.movementType.equals(movementType));
     }
 
-    const totalInCol = CustomExpression<int>(
+    const totalInCol = CustomExpression<double>(
       'SUM(CASE WHEN stock_transactions.quantity_delta > 0 THEN stock_transactions.quantity_delta ELSE 0 END)',
     );
-    const totalOutCol = CustomExpression<int>(
+    const totalOutCol = CustomExpression<double>(
       'SUM(CASE WHEN stock_transactions.quantity_delta < 0 THEN -stock_transactions.quantity_delta ELSE 0 END)',
     );
     final countCol = stockTransactions.id.count();
@@ -1098,8 +1137,8 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
 
     return query.watchSingle().map((row) {
       return StockHistoryStats(
-        totalIn: row.read(totalInCol) ?? 0,
-        totalOut: row.read(totalOutCol) ?? 0,
+        totalIn: row.read(totalInCol) ?? 0.0,
+        totalOut: row.read(totalOutCol) ?? 0.0,
         count: row.read(countCol) ?? 0,
       );
     });
@@ -1115,7 +1154,8 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
       startDate: startDate,
       endDate: endDate,
     );
-    int totalIn = 0, totalOut = 0, adjustments = 0, flagged = 0;
+    double totalIn = 0, totalOut = 0;
+    int adjustments = 0, flagged = 0;
     for (final t in txns) {
       if (t.quantityDelta > 0) {
         totalIn += t.quantityDelta;
@@ -1149,7 +1189,7 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
       query.where((s) => s.locationId.equals(storeId));
     }
     final txns = await query.get();
-    int balance = 0;
+    double balance = 0;
     final result = <StockTransactionWithBalance>[];
     for (final txn in txns) {
       final prev = balance;
@@ -1183,9 +1223,9 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
               ..orderBy([(s) => OrderingTerm.asc(s.createdAt)]))
             .get();
 
-    int openingStock = 0;
-    int stockIn = 0;
-    int stockOut = 0;
+    double openingStock = 0;
+    double stockIn = 0;
+    double stockOut = 0;
 
     for (final txn in allTxns) {
       if (txn.createdAt.isBefore(startDate)) {
@@ -1205,7 +1245,7 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
     final invRows = await (select(
       inventory,
     )..where((i) => whereBusiness(i) & i.storeId.equals(storeId))).get();
-    final actualClosing = invRows.fold<int>(0, (s, r) => s + r.quantity);
+    final actualClosing = invRows.fold<double>(0, (s, r) => s + r.quantity);
 
     return PeriodReconciliation(
       openingStock: openingStock,
@@ -1224,9 +1264,9 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
     final invs = await (select(
       inventory,
     )..where((i) => whereBusiness(i) & i.storeId.equals(locationId))).get();
-    final stockMap = <String, int>{};
+    final stockMap = <String, double>{};
     for (final i in invs) {
-      stockMap[i.productId] = (stockMap[i.productId] ?? 0) + i.quantity;
+      stockMap[i.productId] = (stockMap[i.productId] ?? 0.0) + i.quantity;
     }
     // Sales speed is derived on read (#469): products.avgDailySales is never
     // written, and a stored derived number on a synced row would fight sync.
@@ -1253,14 +1293,14 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
             ),
       )
       ..groupBy([items.productId]);
-    final unitsSold = <String, int>{};
+    final unitsSold = <String, double>{};
     for (final row in await salesQuery.get()) {
       final pid = row.read(items.productId);
-      if (pid != null) unitsSold[pid] = row.read(soldQty) ?? 0;
+      if (pid != null) unitsSold[pid] = row.read(soldQty) ?? 0.0;
     }
     final result = <ProductBelowROP>[];
     for (final p in ps) {
-      final stock = stockMap[p.id] ?? 0;
+      final stock = stockMap[p.id] ?? 0.0;
       final avgDailySales = (unitsSold[p.id] ?? 0) / kReorderSalesWindowDays;
       // ROP = avgDailySales * leadTimeDays + safetyStockQty
       final rop = avgDailySales * p.leadTimeDays + p.safetyStockQty;
@@ -1286,7 +1326,7 @@ const int kReorderSalesWindowDays = 28;
 class ProductBelowROP {
   final String productId;
   final String productName;
-  final int currentStock;
+  final double currentStock;
   final double rop;
 
   ProductBelowROP({
@@ -1302,7 +1342,7 @@ class StockTransactionWithDetails {
   final String productId;
   final String productName;
   final String movementType;
-  final int quantityDelta;
+  final double quantityDelta;
   final String performedByName;
   final String locationId;
   final String? storeName;
@@ -1328,7 +1368,7 @@ class StockTransactionWithDetails {
     this.adjustmentReason,
   });
 
-  int get valueKobo => quantityDelta.abs() * unitPriceKobo;
+  int get valueKobo => lineTotalKobo(unitPriceKobo, quantityDelta.abs());
   bool get isInflow => quantityDelta > 0;
   bool get isOutflow => quantityDelta < 0;
   bool get isAdjustment => movementType == 'adjustment';
@@ -1359,8 +1399,8 @@ class StockTransactionWithDetails {
 
 class StockTransactionWithBalance {
   final StockTransactionData transaction;
-  final int previousBalance;
-  final int newBalance;
+  final double previousBalance;
+  final double newBalance;
   final bool isFlagged;
 
   StockTransactionWithBalance({
@@ -1372,8 +1412,8 @@ class StockTransactionWithBalance {
 }
 
 class PeriodStockSummary {
-  final int totalIn;
-  final int totalOut;
+  final double totalIn;
+  final double totalOut;
   final int adjustmentCount;
   final int flaggedCount;
   final int transactionCount;
@@ -1388,8 +1428,8 @@ class PeriodStockSummary {
 }
 
 class StockHistoryStats {
-  final int totalIn;
-  final int totalOut;
+  final double totalIn;
+  final double totalOut;
   final int count;
 
   const StockHistoryStats({
@@ -1406,12 +1446,12 @@ class StockHistoryStats {
 }
 
 class PeriodReconciliation {
-  final int openingStock;
-  final int stockIn;
-  final int stockOut;
-  final int expectedClosing;
-  final int actualClosing;
-  final int variance;
+  final double openingStock;
+  final double stockIn;
+  final double stockOut;
+  final double expectedClosing;
+  final double actualClosing;
+  final double variance;
 
   PeriodReconciliation({
     required this.openingStock,
@@ -1438,7 +1478,8 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
   ///
   /// Contract:
   /// - Both stores must belong to this business and differ.
-  /// - [quantity] must be a positive integer.
+  /// - [quantity] must be positive, in quarter steps (whole numbers when the
+  ///   product's parts switch is off, #630).
   /// - The source inventory is decremented immediately at dispatch. If the
   ///   source has insufficient stock the server rejects the `transfer_out`
   ///   movement and this method throws [InsufficientStockException].
@@ -1451,15 +1492,13 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
     required String fromStoreId,
     required String toStoreId,
     required String productId,
-    required int quantity,
+    required double quantity,
     required String initiatedBy,
   }) async {
     if (fromStoreId == toStoreId) {
       throw ArgumentError('Source and destination stores must differ.');
     }
-    if (quantity <= 0) {
-      throw ArgumentError('Quantity must be positive.');
-    }
+    await db.inventoryDao.assertQuantityAllowed(productId, quantity);
 
     final transferId = UuidV7.generate();
     final now = DateTime.now();
@@ -1517,7 +1556,7 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
     await db.activityLogDao.log(
       action: 'stock_transfer_dispatched',
       description:
-          'Dispatched $quantity unit(s) of $productId '
+          'Dispatched ${formatQty(quantity)} unit(s) of $productId '
           'from $fromStoreId → $toStoreId',
       staffId: initiatedBy,
       storeId: fromStoreId,
@@ -1535,7 +1574,7 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
     }..remove(initiatedBy)) {
       await db.notificationsDao.fireNotification(
         type: 'stock_transfer.dispatched',
-        message: 'Incoming transfer: $quantity unit(s) arriving at your store.',
+        message: 'Incoming transfer: ${formatQty(quantity)} unit(s) arriving at your store.',
         severity: 'info',
         linkedRecordId: transferId,
         recipientUserId: uid,
@@ -1558,7 +1597,7 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
     String? fromStoreId;
     String? toStoreId;
     String? productId;
-    int? quantity;
+    double? quantity;
 
     await transaction(() async {
       final transfer =
@@ -1632,7 +1671,7 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
     await db.activityLogDao.log(
       action: 'stock_transfer_received',
       description:
-          'Received $quantity unit(s) of $productId '
+          'Received ${formatQty(quantity ?? 0)} unit(s) of $productId '
           'at $toStoreId from $fromStoreId',
       staffId: receivedBy,
       storeId: toStoreId,
@@ -1647,7 +1686,7 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
     if (transfer != null) {
       await db.notificationsDao.fireNotification(
         type: 'stock_transfer.received',
-        message: 'Your transfer of $quantity unit(s) was confirmed received.',
+        message: 'Your transfer of ${formatQty(quantity ?? 0)} unit(s) was confirmed received.',
         severity: 'info',
         linkedRecordId: transferId,
         recipientUserId: transfer.initiatedBy,
@@ -1761,7 +1800,7 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
     required String fromStoreId,
     required String toStoreId,
     required String manufacturerId,
-    required int quantity,
+    required double quantity,
     required String performedBy,
   }) async {
     await transaction(() async {
@@ -1789,15 +1828,13 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
     required String fromStoreId,
     required String toStoreId,
     required String productId,
-    required int quantity,
+    required double quantity,
     required String requestedBy,
   }) async {
     if (fromStoreId == toStoreId) {
       throw ArgumentError('Source and destination stores must differ.');
     }
-    if (quantity <= 0) {
-      throw ArgumentError('Quantity must be positive.');
-    }
+    await db.inventoryDao.assertQuantityAllowed(productId, quantity);
 
     final now = DateTime.now();
     late final String transferId;
@@ -1823,7 +1860,7 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
       fromStoreId: fromStoreId,
       requestedBy: requestedBy,
       linkedTransferId: transferId,
-      message: 'Stock request: $quantity unit(s) requested from your store.',
+      message: 'Stock request: ${formatQty(quantity)} unit(s) requested from your store.',
     );
 
     return transferId;
@@ -1860,9 +1897,10 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
     }
     final seen = <String>{};
     for (final line in lines) {
-      if (line.quantity <= 0) {
-        throw ArgumentError('Quantity must be positive.');
-      }
+      await db.inventoryDao.assertQuantityAllowed(
+        line.productId,
+        line.quantity,
+      );
       if (!seen.add(line.productId)) {
         throw ArgumentError('Product ${line.productId} is listed twice.');
       }
@@ -1894,7 +1932,9 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
         requestedBy: requestedBy,
       );
     }
-    final units = lines.fold<int>(0, (sum, l) => sum + l.quantity);
+    final units = formatQty(
+      lines.fold<double>(0, (sum, l) => sum + l.quantity),
+    );
     await _notifyHolderOfRequest(
       fromStoreId: fromStoreId,
       requestedBy: requestedBy,
@@ -1914,7 +1954,7 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
     required String fromStoreId,
     required String toStoreId,
     required String productId,
-    required int quantity,
+    required double quantity,
     required String requestedBy,
     required DateTime now,
   }) async {
@@ -1941,13 +1981,13 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
     required String fromStoreId,
     required String toStoreId,
     required String productId,
-    required int quantity,
+    required double quantity,
     required String requestedBy,
   }) {
     return db.activityLogDao.log(
       action: 'stock_transfer_requested',
       description:
-          'Requested $quantity unit(s) of $productId '
+          'Requested ${formatQty(quantity)} unit(s) of $productId '
           'from $fromStoreId → $toStoreId',
       staffId: requestedBy,
       storeId: toStoreId,
@@ -1990,8 +2030,8 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
   Future<void> dispatchTransfer({
     required String transferId,
     required String dispatchedBy,
-    int? quantity,
-    int emptyCratesToSend = 0,
+    double? quantity,
+    double emptyCratesToSend = 0,
   }) async {
     if (quantity != null && quantity <= 0) {
       throw ArgumentError('Quantity must be positive.');
@@ -2003,7 +2043,7 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
     String? fromStoreId;
     String? toStoreId;
     String? productId;
-    int? dispatchedQty;
+    double? dispatchedQty;
 
     await transaction(() async {
       final transfer =
@@ -2023,6 +2063,15 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
       toStoreId = transfer.toLocationId;
       productId = transfer.productId;
       dispatchedQty = quantity ?? transfer.quantity;
+      // A holder may dispatch a different amount than was asked for (#630: in
+      // quarter steps, whole when the product's parts switch is off). An
+      // unchanged request quantity was checked when it was raised.
+      if (quantity != null) {
+        await db.inventoryDao.assertQuantityAllowed(
+          transfer.productId,
+          quantity,
+        );
+      }
       final now = DateTime.now();
 
       // 1. Decrement source inventory (transfer_out). Guards negative stock.
@@ -2094,9 +2143,9 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
     await db.activityLogDao.log(
       action: 'stock_transfer_dispatched',
       description:
-          'Dispatched $dispatchedQty unit(s) of $productId '
+          'Dispatched ${formatQty(dispatchedQty!)} unit(s) of $productId '
           'from $fromStoreId → $toStoreId'
-          '${emptyCratesToSend > 0 ? " + $emptyCratesToSend empty crate(s)" : ""}',
+          '${emptyCratesToSend > 0 ? " + ${formatQty(emptyCratesToSend)} empty crate(s)" : ""}',
       staffId: dispatchedBy,
       storeId: fromStoreId,
       productId: productId,
@@ -2111,7 +2160,7 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
       await db.notificationsDao.fireNotification(
         type: 'stock_transfer.dispatched',
         message:
-            'Your request was dispatched: $dispatchedQty unit(s) on the way.',
+            'Your request was dispatched: ${formatQty(dispatchedQty!)} unit(s) on the way.',
         severity: 'info',
         linkedRecordId: transferId,
         recipientUserId: transfer.initiatedBy,
@@ -2400,12 +2449,13 @@ class StockAdjustmentRequestsDao extends DatabaseAccessor<AppDatabase>
   Future<void> requestStockAdjustment({
     required String productId,
     required String storeId,
-    required int quantityDiff,
+    required double quantityDiff,
     required String reason,
     required String summary,
     required String? requestedBy,
     int? unitCostKobo,
   }) async {
+    await db.inventoryDao.assertQuantityAllowed(productId, quantityDiff.abs());
     final row = StockAdjustmentRequestsCompanion.insert(
       id: Value(UuidV7.generate()),
       businessId: requireBusinessId(),
@@ -2475,6 +2525,14 @@ class StockAdjustmentRequestsDao extends DatabaseAccessor<AppDatabase>
                 ..where((t) => t.id.equals(requestId) & whereBusiness(t)))
               .getSingleOrNull();
       if (req == null || req.status != 'pending') return;
+
+      // The product's parts switch may have been turned off since the request
+      // was raised (#630): then the approval fails and the request stays
+      // pending, rather than putting a part into a whole-only product.
+      await db.inventoryDao.assertQuantityAllowed(
+        req.productId,
+        req.quantityDiff.abs(),
+      );
 
       // Apply the actual stock movement (atomic via pos_inventory_delta_v2).
       // #197: the cost the request captured is what the increase's FIFO batch is
@@ -2630,10 +2688,10 @@ class StockCountsDao extends DatabaseAccessor<AppDatabase>
   }) async {
     var shortageCount = 0;
     var surplusCount = 0;
-    var shortageUnits = 0;
-    var surplusUnits = 0;
+    var shortageUnits = 0.0;
+    var surplusUnits = 0.0;
     for (final line in changedLines) {
-      final d = (line['d'] as num).toInt();
+      final d = (line['d'] as num).toDouble();
       if (d < 0) {
         shortageCount++;
         shortageUnits += -d;
@@ -2653,7 +2711,7 @@ class StockCountsDao extends DatabaseAccessor<AppDatabase>
       surplusCount: surplusCount,
       shortageUnits: shortageUnits,
       surplusUnits: surplusUnits,
-      linesJson: jsonEncode(changedLines),
+      linesJson: encodeSyncPayload(changedLines),
       countedBy: Value(countedBy),
       createdAt: Value(now),
       lastUpdatedAt: Value(now),

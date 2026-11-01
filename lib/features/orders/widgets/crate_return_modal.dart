@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
+import 'package:reebaplus_pos/shared/utils/quantity_input.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -47,14 +48,21 @@ List<int> allocateLegacyDeposit(int totalDeposit, List<int> weights) {
 /// A2 (#171) — parse a returned-crate count field. A blank / non-numeric field
 /// means **0 returned** (NEVER "all crates came back"): an untouched blank must
 /// not silently trigger a full deposit refund plus a pool credit for crates that
-/// never arrived. Visible for testing.
-int parseReturnedCrateCount(String raw) => int.tryParse(raw.trim()) ?? 0;
+/// never arrived. Quarter steps are accepted (#629): `0.5`, `1.25`, `1,5`.
+/// Visible for testing.
+double parseReturnedCrateCount(String raw) => Qty.parse(raw) ?? 0;
 
 /// A2 (#171) — whether every crate-count field has been filled. Confirm is
 /// blocked until this is true, so a blank field can only ever be a deliberate 0
 /// the cashier typed, never an accidental "all returned". Visible for testing.
 bool allCrateCountsFilled(Iterable<String> rawCounts) =>
     rawCounts.every((t) => t.trim().isNotEmpty);
+
+/// #629 — whether every filled crate-count field is a valid quarter-step count
+/// (`0`, `0.5`, `1.25` …). A typed `0.3` would otherwise read as 0 returned.
+/// Blank fields are [allCrateCountsFilled]'s business. Visible for testing.
+bool allCrateCountsValid(Iterable<String> rawCounts) =>
+    rawCounts.every((t) => t.trim().isEmpty || Qty.parse(t) != null);
 
 class CrateReturnModal extends ConsumerStatefulWidget {
   final OrderWithItems orderWithItems;
@@ -144,7 +152,7 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
     final List<_ManufacturerRow> rows;
     if (lines.isNotEmpty) {
       rows = lines.map((l) {
-        final fullKobo = l.depositRateKobo * l.cratesTaken;
+        final fullKobo = lineTotalKobo(l.depositRateKobo, l.cratesTaken);
         // Pre-fill: full or no deposit → the expected count (we expect them all
         // back); part deposit → blank (the cashier counts what actually came in).
         final isPart = l.depositPaidKobo > 0 && l.depositPaidKobo < fullKobo;
@@ -156,7 +164,7 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
           rateKobo: l.depositRateKobo,
           paidKobo: l.depositPaidKobo,
           controller: TextEditingController(
-            text: isPart ? '' : l.cratesTaken.toString(),
+            text: isPart ? '' : formatQty(l.cratesTaken),
           ),
         );
       }).toList();
@@ -198,11 +206,12 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
       // shares EXACTLY to the recorded total — the held deposit then resolves to
       // 0 with nothing left over.
       final totalDeposit = widget.orderWithItems.order.crateDepositPaidKobo;
+      // Weights stay whole numbers: value in kobo, or crates in quarters (×4).
       var weights = brands
-          .map((b) => (mfrRates[b.id] ?? 0) * b.totalQty)
+          .map((b) => lineTotalKobo(mfrRates[b.id] ?? 0, b.totalQty))
           .toList();
       if (weights.every((w) => w == 0)) {
-        weights = brands.map((b) => b.totalQty).toList();
+        weights = brands.map((b) => (b.totalQty * 4).round()).toList();
       }
       final shares = allocateLegacyDeposit(totalDeposit, weights);
       final paidByBrand = <String, int>{
@@ -212,7 +221,7 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
       rows = brands.map((a) {
         final rate = mfrRates[a.id] ?? 0;
         final paid = paidByBrand[a.id] ?? 0;
-        final fullKobo = rate * a.totalQty;
+        final fullKobo = lineTotalKobo(rate, a.totalQty);
         // Same pre-fill rule as the lines path: full/none → expected count,
         // part deposit → blank (cashier counts what actually came back).
         final isPart = paid > 0 && paid < fullKobo;
@@ -223,7 +232,7 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
           rateKobo: rate,
           paidKobo: paid,
           controller: TextEditingController(
-            text: isPart ? '' : a.totalQty.toString(),
+            text: isPart ? '' : formatQty(a.totalQty),
           ),
         );
       }).toList();
@@ -264,6 +273,13 @@ class _CrateReturnModalState extends ConsumerState<CrateReturnModal> {
       AppNotification.showError(
         context,
         'Enter the returned crate count for every manufacturer (0 is allowed).',
+      );
+      return;
+    }
+    if (!allCrateCountsValid(counts)) {
+      AppNotification.showError(
+        context,
+        'Crate counts go in quarters: 0, 0.25, 0.5, 0.75, 1 …',
       );
       return;
     }
@@ -578,7 +594,7 @@ class _ManufacturerReturnTile extends StatelessWidget {
                 ),
                 SizedBox(height: context.getRSize(2)),
                 Text(
-                  'Took ${row.expectedQty} crate${row.expectedQty == 1 ? '' : 's'} · ${row.trackTag}'
+                  'Took ${formatQty(row.expectedQty)} crate${row.expectedQty == 1 ? '' : 's'} · ${row.trackTag}'
                   '${row.isMoneyTrack ? ' ${formatCurrency(row.paidKobo / 100.0)}' : ''}',
                   style: context.regularStyle(12).copyWith(color: muted),
                 ),
@@ -591,8 +607,8 @@ class _ManufacturerReturnTile extends StatelessWidget {
             child: AppInput(
               key: Key('crate-return-count-${row.manufacturerId}'),
               controller: row.controller,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              keyboardType: stockQtyKeyboard(allowParts: true),
+              inputFormatters: stockQtyFormatters(allowParts: true),
               textAlign: TextAlign.center,
             ),
           ),
@@ -607,7 +623,7 @@ class _ManufacturerReturnTile extends StatelessWidget {
 class _ManufacturerRow {
   final String manufacturerId;
   final String name;
-  final int expectedQty; // crates taken at the sale
+  final double expectedQty; // crates taken at the sale (quarters, #629)
   final int rateKobo; // deposit per crate (snapshot)
   final int paidKobo; // deposit actually paid for this brand
   final TextEditingController controller;
@@ -622,7 +638,7 @@ class _ManufacturerRow {
   });
 
   /// Full deposit value of all crates taken.
-  int get fullKobo => rateKobo * expectedQty;
+  int get fullKobo => lineTotalKobo(rateKobo, expectedQty);
 
   /// money-track = a deposit was paid (full or part); else crate-track.
   bool get isMoneyTrack => paidKobo > 0;
@@ -637,7 +653,7 @@ class _ManufacturerRow {
 class _ManufacturerAccum {
   final String id;
   final String name;
-  int totalQty = 0;
+  double totalQty = 0;
 
   _ManufacturerAccum({required this.id, required this.name});
 }

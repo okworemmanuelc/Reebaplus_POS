@@ -28,7 +28,6 @@ void main() {
 
   const testPrefs = {
     'push_soft_ask_shown_v1': true,
-    'pos_grid_columns': 2,
     'pos_is_list_view': false,
     'hint_pos_gestures': 2,
   };

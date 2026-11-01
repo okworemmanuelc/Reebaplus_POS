@@ -54,7 +54,7 @@ void main() {
             orderId: orderId,
             productId: Value(product),
             storeId: st,
-            quantity: qty,
+            quantity: qty.toDouble(),
             unitPriceKobo: 500,
             totalKobo: qty * 500,
           ),

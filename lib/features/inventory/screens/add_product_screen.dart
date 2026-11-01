@@ -1,3 +1,4 @@
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'dart:async';
 
 import 'package:drift/drift.dart' as drift;
@@ -165,7 +166,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   // again clears it.
   String? _unit;
   bool _trackEmpties = false; // turns on when Bottle is picked
-  bool _allowFractionalSales = false;
+  // Decision 4 of #620: on unless the owner turns it off for this product.
+  bool _allowFractionalSales = true;
   // Colour selector is deferred (master plan §16.5); products keep a default.
   final String _colorHex = '#3B82F6';
   DateTime? _expiryDate; // optional single expiry date (all business types)
@@ -1027,7 +1029,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         ),
         // Receive Stock routes the opening quantity to its delivery list
         // below instead of into a store.
-        initialStock: widget.receiveMode ? null : intent.initialStock,
+        initialStock: widget.receiveMode ? null : intent.initialStock.toDouble(),
         storeId: intent.storeId,
         performedBy: auth.currentUser?.id,
       );
@@ -1064,7 +1066,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       if (widget.receiveMode) {
         ref
             .read(receiveCartProvider.notifier)
-            .addOrIncrement(newProduct, amount: intent.initialStock);
+            .addOrIncrement(newProduct, amount: intent.initialStock.toDouble());
         if (mounted) {
           AppNotification.showSuccess(
             context,
@@ -1285,7 +1287,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
           ),
         ),
         content: Text(
-          'You sold ${offer.unitsUncosted} unit(s) of "$productName" before a '
+          'You sold ${formatQty(offer.unitsUncosted)} unit(s) of "$productName" before a '
           'cost was recorded. Apply $costLabel per unit to those past sales so '
           'their profit is restated in the period they happened?',
         ),
@@ -1305,7 +1307,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     final restated = await db.costBatchesDao.applyCostBackfill(
       offer,
       description:
-          '$productName: applied $costLabel/unit to ${offer.unitsUncosted} '
+          '$productName: applied $costLabel/unit to ${formatQty(offer.unitsUncosted)} '
           'unit(s) across ${offer.lineIds.length} past uncosted sale(s)',
       staffId: staffId,
     );
@@ -1340,7 +1342,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     setState(() {
       _unit = null;
       _trackEmpties = false;
-      _allowFractionalSales = false;
+      _allowFractionalSales = true;
       _expiryDate = null;
       _selectedSupplier = null;
       _newSupplierName = null;
@@ -2135,10 +2137,10 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         InventoryCheckRow(
           value: _allowFractionalSales,
           onChanged: (v) => setState(() => _allowFractionalSales = v ?? false),
-          title: 'Allow fractional sales',
+          title: 'Allow part quantities',
           subtitle:
-              'Enables ±0.5 quantity steps when selling this '
-              '${_lexicon.itemLower}',
+              'Lets you sell part of this ${_lexicon.itemLower}, like 0.5. '
+              'Turn off to sell whole numbers only',
         ),
       ],
     );

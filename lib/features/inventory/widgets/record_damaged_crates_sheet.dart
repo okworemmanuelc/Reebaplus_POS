@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
+import 'package:reebaplus_pos/shared/utils/quantity_input.dart';
 import 'package:reebaplus_pos/core/crates/crate_count_store.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
@@ -66,7 +67,7 @@ class _RecordDamagedCratesSheetState
   late final List<StoreData> _stores;
   late final bool _mustPickStore;
   String? _storeId;
-  int? _warehouseCount;
+  double? _warehouseCount;
   bool _isLoadingWarehouse = false;
   String _reason = 'broken';
   bool _saving = false;
@@ -119,10 +120,8 @@ class _RecordDamagedCratesSheetState
     }
   }
 
-  int? get _quantity {
-    final n = int.tryParse(_quantityCtrl.text.trim());
-    return n != null && n > 0 ? n : null;
-  }
+  /// Positive quarter-step count (#629), or null.
+  double? get _quantity => Qty.parse(_quantityCtrl.text, allowZero: false);
 
   String? get _storeName {
     if (_storeId == null) return null;
@@ -142,10 +141,10 @@ class _RecordDamagedCratesSheetState
   String? _validateQuantity(String? value) {
     final raw = value?.trim() ?? '';
     if (raw.isEmpty) return 'Enter the number of damaged empties';
-    final n = int.tryParse(raw);
-    if (n == null || n <= 0) return 'Enter a number greater than 0';
+    final n = Qty.parse(raw, allowZero: false);
+    if (n == null) return 'Enter a number greater than 0 (0.5 for half)';
     if (_warehouseCount != null && n > _warehouseCount!) {
-      return 'Only $_warehouseCount empty crate${_warehouseCount == 1 ? '' : 's'} in warehouse';
+      return 'Only ${formatQty(_warehouseCount!)} empty crate${_warehouseCount == 1 ? '' : 's'} in warehouse';
     }
     return null;
   }
@@ -158,11 +157,11 @@ class _RecordDamagedCratesSheetState
       return 'Enter how many damaged empties to calculate loss.';
     }
     final rate = widget.manufacturer.depositAmountKobo;
-    final total = formatCurrency(quantity * rate / 100);
+    final total = formatCurrency(lineTotalKobo(rate, quantity) / 100);
     final each = formatCurrency(rate / 100);
     final reasonLabel = _reasonLabel;
-    return '-$quantity crates from $store\'s warehouse. '
-        'Loss: $total ($quantity × $each) • $reasonLabel.';
+    return '-${formatQty(quantity)} crates from $store\'s warehouse. '
+        'Loss: $total (${formatQty(quantity)} × $each) • $reasonLabel.';
   }
 
   Future<void> _notifyManagersAndCeo(
@@ -223,7 +222,7 @@ class _RecordDamagedCratesSheetState
         setState(() => _saving = false);
         AppNotification.showError(
           context,
-          'Only $currentWarehouse empty crate${currentWarehouse == 1 ? '' : 's'} in warehouse',
+          'Only ${formatQty(currentWarehouse)} empty crate${currentWarehouse == 1 ? '' : 's'} in warehouse',
         );
       }
       return;
@@ -260,14 +259,14 @@ class _RecordDamagedCratesSheetState
           .read(activityLogProvider)
           .logAction(
             'stock_damage',
-            'Damaged empties recorded: $quantity × ${widget.manufacturer.name} ($reasonLabel)',
+            'Damaged empties recorded: ${formatQty(quantity)} × ${widget.manufacturer.name} ($reasonLabel)',
             storeId: _storeId,
           );
       await _notifyManagersAndCeo(
         db,
         type: 'stock_damage',
         message:
-            'Damaged empties recorded: $quantity × ${widget.manufacturer.name} ($reasonLabel).',
+            'Damaged empties recorded: ${formatQty(quantity)} × ${widget.manufacturer.name} ($reasonLabel).',
         severity: 'warning',
       );
     } catch (_) {
@@ -278,7 +277,7 @@ class _RecordDamagedCratesSheetState
     Navigator.pop(context);
     AppNotification.showSuccess(
       context,
-      'Recorded $quantity damaged empt${quantity == 1 ? 'y' : 'ies'}.',
+      'Recorded ${formatQty(quantity)} damaged empt${quantity == 1 ? 'y' : 'ies'}.',
     );
   }
 
@@ -324,11 +323,12 @@ class _RecordDamagedCratesSheetState
                 key: const ValueKey(kRecordDamagedQuantityFieldKey),
                 controller: _quantityCtrl,
                 labelText: _warehouseCount != null
-                    ? 'Number of damaged empties ($_warehouseCount in warehouse)'
+                    ? 'Number of damaged empties (${formatQty(_warehouseCount!)} in warehouse)'
                     : 'Number of damaged empties',
                 hintText: 'e.g. 5',
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                // Quarter steps (#629): half a crate is 0.5.
+                keyboardType: stockQtyKeyboard(allowParts: true),
+                inputFormatters: stockQtyFormatters(allowParts: true),
                 textInputAction: TextInputAction.next,
                 validator: _validateQuantity,
                 onChanged: (_) => setState(() {}),

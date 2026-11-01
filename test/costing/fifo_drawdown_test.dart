@@ -142,5 +142,36 @@ void main() {
       expect(r.lineShortfall, isEmpty);
       expect(r.batchConsumption, [0]);
     });
+
+    test('a part quantity keeps its exact unit cost (one rounding, not two)', () {
+      // 0.5 @1001 = 500.5. The line total rounds to 501, but the unit cost must
+      // stay 1001: dividing the rounded total would give 1002.
+      final half = fifoDrawDown(
+        [const FifoBatch(qtyRemaining: 10, costKobo: 1001)],
+        [0.5],
+      );
+      expect(half.lineCogsKobo, [501]);
+      expect(half.lineUnitCostKobo, [1001]);
+
+      // 0.25 @1003 = 250.75: total 251, unit cost still 1003 (not 1004).
+      final quarter = fifoDrawDown(
+        [const FifoBatch(qtyRemaining: 10, costKobo: 1003)],
+        [0.25],
+      );
+      expect(quarter.lineCogsKobo, [251]);
+      expect(quarter.lineUnitCostKobo, [1003]);
+    });
+
+    test('unit cost weighs a split line and counts uncovered units as 0', () {
+      final r = fifoDrawDown(
+        [
+          const FifoBatch(qtyRemaining: 0.5, costKobo: 100),
+          const FifoBatch(qtyRemaining: 0.5, costKobo: 300),
+        ],
+        [1, 1],
+      );
+      expect(r.lineUnitCostKobo, [200, 0]);
+      expect(r.lineShortfall, [0, 1]);
+    });
   });
 }

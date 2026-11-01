@@ -72,7 +72,7 @@ void main() {
     return (manufacturerId, productId);
   }
 
-  Future<int?> crateBalance(String customerId, String manufacturerId) async {
+  Future<double?> crateBalance(String customerId, String manufacturerId) async {
     final row = await (db.select(db.customerCrateBalances)
           ..where((t) =>
               t.customerId.equals(customerId) &
@@ -117,7 +117,7 @@ void main() {
           orderId: 'placeholder',
           productId: Value(productId),
           storeId: storeId,
-          quantity: qty,
+          quantity: qty.toDouble(),
           unitPriceKobo: 100000,
           totalKobo: goodsKobo,
         ),

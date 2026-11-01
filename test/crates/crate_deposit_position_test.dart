@@ -37,14 +37,14 @@ void main() {
   CrateDepositMovement placed(int crates) => CrateDepositMovement(
     movementType: kCrateDepositMovementPlacement,
     signedAmountKobo: crates * rate,
-    crateCount: crates,
+    crateCount: crates.toDouble(),
   );
 
   CrateDepositMovement released(int crates, {int? amountKobo}) =>
       CrateDepositMovement(
         movementType: kCrateDepositMovementRelease,
         signedAmountKobo: -(amountKobo ?? crates * rate),
-        crateCount: -crates,
+        crateCount: -crates.toDouble(),
       );
 
   group('THE RELEASE GATE — a `none` brand reads zero, whatever it is fed', () {

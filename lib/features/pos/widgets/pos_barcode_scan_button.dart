@@ -20,6 +20,7 @@ import 'package:reebaplus_pos/features/pos/widgets/scan_link_product_sheet.dart'
 import 'package:reebaplus_pos/features/pos/widgets/scan_unknown_choice_sheet.dart';
 import 'package:reebaplus_pos/features/pos/widgets/scan_which_one_sheet.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 
 /// How the scan control is drawn (#384, the POS mockups).
 enum PosScanButtonShape {
@@ -303,7 +304,7 @@ class _PosBarcodeScanButtonState extends ConsumerState<PosBarcodeScanButton> {
     final outcome = resolveProduct(
       product: product,
       storeProducts: [
-        ProductDataWithStock(product: product, totalStock: stock),
+        ProductDataWithStock(product: product, totalStock: stock.toDouble()),
       ],
       cartQty: _cartQtyOf(product.id),
       tier: widget.tier,
@@ -357,7 +358,7 @@ class _PosBarcodeScanButtonState extends ConsumerState<PosBarcodeScanButton> {
       case ScanAllInCart(:final product, :final stock):
         AppNotification.showError(
           context,
-          'All $stock ${product.name} in stock are already in the cart',
+          'All ${formatQty(stock)} ${product.name} in stock are already in the cart',
         );
       case ScanSwitchedOff(:final product):
         AppNotification.showError(
@@ -394,7 +395,7 @@ class _PosBarcodeScanButtonState extends ConsumerState<PosBarcodeScanButton> {
     if (qty <= 0) return;
     AppNotification.showSuccess(
       context,
-      '${product.name} ×${_trimNum(qty)} added',
+      '${product.name} ×${formatQty(qty)} added',
     );
   }
 
@@ -404,8 +405,4 @@ class _PosBarcodeScanButtonState extends ConsumerState<PosBarcodeScanButton> {
       .value
       .where((i) => i['id'] == productId)
       .fold<double>(0, (s, i) => s + (i['qty'] as num).toDouble());
-
-  /// Formats a quantity without a trailing `.0` (3.0 → "3", 1.5 → "1.5").
-  static String _trimNum(double n) =>
-      n == n.toInt() ? n.toInt().toString() : n.toString();
 }

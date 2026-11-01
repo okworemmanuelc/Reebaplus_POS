@@ -1,5 +1,5 @@
 name: reebaplus_pos
-description: "Reebaplus POS app for a drinks distributor."
+description: "Reebaplus POS: offline-first point of sale and back office for any kind of business."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: "none" # Remove this line if you wish to publish to pub.dev

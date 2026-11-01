@@ -1,16 +1,22 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 
 class ReceiveCartLine {
   final String productId;
   final String productName;
   final String? unit;
-  final int qty;
+  /// Units arriving, in quarter steps (#630). Whole unless [allowParts].
+  final double qty;
   final int buyingPriceKobo;
   final int retailKobo;
   final int wholesaleKobo;
   final String? manufacturerId;
   final bool trackEmpties;
+
+  /// The product's parts switch (`allow_fractional_sales`): off means this
+  /// line takes whole numbers only (#630).
+  final bool allowParts;
 
   /// The product's category, for the receive cart's tile colour and icon
   /// (#394). Display only; in memory only (the receive cart is never saved).
@@ -26,6 +32,7 @@ class ReceiveCartLine {
     required this.wholesaleKobo,
     this.manufacturerId,
     required this.trackEmpties,
+    this.allowParts = false,
     this.categoryId,
   });
 
@@ -33,12 +40,13 @@ class ReceiveCartLine {
     String? productId,
     String? productName,
     String? unit,
-    int? qty,
+    double? qty,
     int? buyingPriceKobo,
     int? retailKobo,
     int? wholesaleKobo,
     String? manufacturerId,
     bool? trackEmpties,
+    bool? allowParts,
     String? categoryId,
   }) {
     return ReceiveCartLine(
@@ -51,6 +59,7 @@ class ReceiveCartLine {
       wholesaleKobo: wholesaleKobo ?? this.wholesaleKobo,
       manufacturerId: manufacturerId ?? this.manufacturerId,
       trackEmpties: trackEmpties ?? this.trackEmpties,
+      allowParts: allowParts ?? this.allowParts,
       categoryId: categoryId ?? this.categoryId,
     );
   }
@@ -60,6 +69,9 @@ class ReceiveCartLine {
   /// Cost Batch lands uncosted, so those units later sell at 0 COGS until a
   /// cost is recorded. Accepted, never blocked — only disclosed (#199).
   bool get isUncosted => buyingPriceKobo == 0;
+
+  /// What this line adds to the supplier invoice, in whole kobo (half up).
+  int get totalKobo => lineTotalKobo(buyingPriceKobo, qty);
 
   /// The line can carry crates on this receipt: a bottle that tracks empties
   /// AND has a manufacturer (the crate-debt owner). The one gate shared by the
@@ -72,7 +84,7 @@ class ReceiveCartNotifier extends Notifier<List<ReceiveCartLine>> {
   @override
   List<ReceiveCartLine> build() => [];
 
-  void addOrIncrement(ProductData product, {int amount = 1}) {
+  void addOrIncrement(ProductData product, {double amount = 1}) {
     final existingIndex = state.indexWhere((l) => l.productId == product.id);
     if (existingIndex >= 0) {
       final updated = List<ReceiveCartLine>.from(state);
@@ -93,13 +105,14 @@ class ReceiveCartNotifier extends Notifier<List<ReceiveCartLine>> {
           wholesaleKobo: product.wholesalerPriceKobo,
           manufacturerId: product.manufacturerId,
           trackEmpties: product.trackEmpties,
+          allowParts: product.allowFractionalSales,
           categoryId: product.categoryId,
         ),
       ];
     }
   }
 
-  void setQty(String productId, int qty) {
+  void setQty(String productId, double qty) {
     if (qty <= 0) {
       remove(productId);
       return;
@@ -112,7 +125,7 @@ class ReceiveCartNotifier extends Notifier<List<ReceiveCartLine>> {
     }
   }
 
-  void setProductQty(ProductData product, int qty) {
+  void setProductQty(ProductData product, double qty) {
     if (qty <= 0) {
       remove(product.id);
       return;
@@ -135,6 +148,7 @@ class ReceiveCartNotifier extends Notifier<List<ReceiveCartLine>> {
           wholesaleKobo: product.wholesalerPriceKobo,
           manufacturerId: product.manufacturerId,
           trackEmpties: product.trackEmpties,
+          allowParts: product.allowFractionalSales,
           categoryId: product.categoryId,
         ),
       ];
@@ -186,9 +200,9 @@ class ReceiveCartNotifier extends Notifier<List<ReceiveCartLine>> {
   }
 
   int get lineCount => state.length;
-  int get totalUnits => state.fold(0, (sum, line) => sum + line.qty);
+  double get totalUnits => state.fold(0.0, (sum, line) => sum + line.qty);
   int get invoiceTotalKobo =>
-      state.fold(0, (sum, line) => sum + (line.buyingPriceKobo * line.qty));
+      state.fold(0, (sum, line) => sum + line.totalKobo);
 
   /// Lines that would arrive with no recorded buying price (#199 / PRD #155
   /// US 37). Drives the checkout's Uncosted disclosure; it never blocks the
@@ -196,8 +210,8 @@ class ReceiveCartNotifier extends Notifier<List<ReceiveCartLine>> {
   int get uncostedLineCount => state.where((line) => line.isUncosted).length;
 
   /// Units carried by those lines — the quantity that would arrive at no cost.
-  int get uncostedUnits =>
-      state.fold(0, (sum, line) => sum + (line.isUncosted ? line.qty : 0));
+  double get uncostedUnits =>
+      state.fold(0.0, (sum, line) => sum + (line.isUncosted ? line.qty : 0));
 }
 
 final receiveCartProvider =

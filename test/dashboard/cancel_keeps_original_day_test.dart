@@ -86,7 +86,7 @@ OrderWithItems _order({
         orderId: id,
         productId: pid,
         storeId: 's1',
-        quantity: qty,
+        quantity: qty.toDouble(),
         unitPriceKobo: price,
         buyingPriceKobo: cost,
         totalKobo: qty * price,
@@ -125,7 +125,7 @@ ReconData _recon(List<OrderWithItems> orders, int from, int toInclusive) =>
       ),
     );
 
-Map<String, int> _figures(ReconData d) => {
+Map<String, num> _figures(ReconData d) => {
   'totalRevenueKobo': d.totalRevenueKobo,
   'totalSalesKobo': d.totalSalesKobo,
   'costedRevenueKobo': d.costedRevenueKobo,

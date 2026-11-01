@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/crates/crate_shortage.dart';
@@ -15,6 +14,8 @@ import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/crate_sheet_recorded_line.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
+import 'package:reebaplus_pos/shared/utils/quantity_input.dart';
 
 /// Test keys for [ReverseCrateWriteOffSheet] (#296).
 const String kReverseWriteOffSheetKey = 'reverse_write_off_sheet';
@@ -66,10 +67,8 @@ class _ReverseCrateWriteOffSheetState
     super.dispose();
   }
 
-  int? get _quantity {
-    final n = int.tryParse(_quantityCtrl.text.trim());
-    return n != null && n > 0 ? n : null;
-  }
+  /// Positive quarter-step count (#629), or null.
+  double? get _quantity => Qty.parse(_quantityCtrl.text, allowZero: false);
 
   String? _effectiveStoreId(CrateShortageBrand? brand) {
     if (brand == null) return null;
@@ -127,7 +126,7 @@ class _ReverseCrateWriteOffSheetState
     }
     AppNotification.showSuccess(
       context,
-      'Write-off of $quantity ${brand.manufacturerName} '
+      'Write-off of ${formatQty(quantity)} ${brand.manufacturerName} '
       'crate${quantity == 1 ? '' : 's'} reversed',
     );
     Navigator.pop(context);
@@ -144,9 +143,11 @@ class _ReverseCrateWriteOffSheetState
     final quantity = _quantity;
     if (quantity == null) return 'Enter how many crates turned up.';
     final plan = planCrateWriteOffReversal(state, quantity);
-    if (plan.isEmpty) return 'Only ${state.reversibleCrates} can be reversed.';
-    final gain = plan.fold(0, (sum, l) => sum + l.crates * l.ratePerCrateKobo);
-    return '$quantity written-off ${brand.manufacturerName} '
+    if (plan.isEmpty) {
+      return 'Only ${formatQty(state.reversibleCrates)} can be reversed.';
+    }
+    final gain = plan.fold(0, (sum, l) => sum + l.valueKobo);
+    return '${formatQty(quantity)} written-off ${brand.manufacturerName} '
         'crate${quantity == 1 ? '' : 's'} found at ${storeName ?? 'this store'}: '
         '${formatCurrency(gain / 100)} back into today\'s profit, at the value '
         'they were written off at. No earlier day changes.';
@@ -164,7 +165,7 @@ class _ReverseCrateWriteOffSheetState
     final storeIds = brand?.storesWithReversible ?? const <String>[];
     final storeId = _effectiveStoreId(brand);
     final state = storeId == null ? null : brand!.byStore[storeId];
-    final reversible = state?.reversibleCrates ?? 0;
+    final reversible = state?.reversibleCrates ?? 0.0;
     String? storeName(String? id) {
       for (final s in stores) {
         if (s.id == id) return s.name;
@@ -214,7 +215,7 @@ class _ReverseCrateWriteOffSheetState
                         value: id,
                         child: Text(
                           '${storeName(id) ?? 'Store'} — '
-                          '${brand!.byStore[id]!.reversibleCrates} found',
+                          '${formatQty(brand!.byStore[id]!.reversibleCrates)} found',
                         ),
                       ),
                   ],
@@ -226,13 +227,14 @@ class _ReverseCrateWriteOffSheetState
                 key: const ValueKey(kReverseWriteOffQuantityFieldKey),
                 controller: _quantityCtrl,
                 labelText: 'Crates found',
-                hintText: reversible > 0 ? 'Up to $reversible' : 'e.g. 2',
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                hintText: reversible > 0 ? 'Up to ${formatQty(reversible)}' : 'e.g. 2',
+                // Quarter steps (#629): half a crate is 0.5.
+                keyboardType: stockQtyKeyboard(allowParts: true),
+                inputFormatters: stockQtyFormatters(allowParts: true),
                 validator: (_) {
                   final n = _quantity;
                   if (n == null) return 'Enter how many crates turned up';
-                  if (n > reversible) return 'Only $reversible can be reversed';
+                  if (n > reversible) return 'Only ${formatQty(reversible)} can be reversed';
                   return null;
                 },
                 onChanged: (_) => setState(() {}),

@@ -1,5 +1,6 @@
 import 'package:reebaplus_pos/core/database/daos.dart';
 import 'package:reebaplus_pos/shared/models/order_status.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 
 /// Single source of truth for a period's headline **Total Sales** (#176 /
 /// PRD #155 story 28). Item-line gross MINUS discounts, **deposit-exclusive**
@@ -76,7 +77,7 @@ int orderGoodsNetKobo(
   var net = 0;
   for (final line in order.items) {
     if (!inScope(line.item.storeId)) continue;
-    net += line.item.quantity * line.item.unitPriceKobo;
+    net += lineTotalKobo(line.item.unitPriceKobo, line.item.quantity);
   }
   return net - orderDiscountKobo(order, inScope: inScope);
 }
@@ -115,10 +116,10 @@ bool _anyStore(String? _) => true;
 int lineConcessionKobo({
   required int? cataloguePriceKobo,
   required int unitPriceKobo,
-  required int quantity,
+  required double quantity,
 }) {
   if (cataloguePriceKobo == null) return 0;
-  return (cataloguePriceKobo - unitPriceKobo) * quantity;
+  return lineTotalKobo(cataloguePriceKobo - unitPriceKobo, quantity);
 }
 
 /// The goods-paid-now vs on-credit split of ONE order's contribution to Total

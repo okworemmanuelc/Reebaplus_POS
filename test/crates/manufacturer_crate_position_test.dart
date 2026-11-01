@@ -340,7 +340,7 @@ void main() {
       // Over 32 items so List.sort leaves insertion sort; an unstable sort
       // could move the Opening Count and change the answer.
       final at = DateTime(2026, 9, 1, 9);
-      CrateCountMovement count(String type, int delta) => CrateCountMovement(
+      CrateCountMovement count(String type, double delta) => CrateCountMovement(
             storeId: 'store-a',
             movementType: type,
             quantityDelta: delta,

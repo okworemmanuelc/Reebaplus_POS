@@ -68,10 +68,10 @@ void main() {
         manufacturerId: brand,
         storeId: storeId,
         performedBy: managerId,
-        countedEmpties: counted,
+        countedEmpties: counted.toDouble(),
       );
 
-  Future<int> openAt(String? storeId) =>
+  Future<double> openAt(String? storeId) =>
       db.cratePoolDao.watchCrateShortageByManufacturer(brand, storeId: storeId).first;
 
   Future<List<CrateShortfallWriteoffData>> writeOffRows() =>
@@ -247,7 +247,7 @@ void main() {
                   businessId: businessId,
                   manufacturerId: const Value(brand),
                   storeId: const Value(storeA),
-                  quantityDelta: delta,
+                  quantityDelta: delta.toDouble(),
                   movementType: type,
                   performedBy: const Value(managerId),
                   createdAt: Value(yesterday.add(Duration(minutes: minutes))),

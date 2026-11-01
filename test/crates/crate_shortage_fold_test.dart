@@ -21,7 +21,7 @@ void main() {
     createdAt: at(hours),
   );
 
-  CrateCountMovement count(int delta, int hours) => CrateCountMovement(
+  CrateCountMovement count(double delta, int hours) => CrateCountMovement(
     storeId: store,
     movementType: kCrateMovementCount,
     quantityDelta: delta,
@@ -29,7 +29,7 @@ void main() {
   );
 
   CrateShortageWriteOffEvent writeOff(
-    int crates,
+    double crates,
     int hours, {
     int ratePerCrateKobo = rate,
   }) => CrateShortageWriteOffEvent(

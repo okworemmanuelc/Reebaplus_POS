@@ -149,6 +149,58 @@ cloud table. See `docs/data/nigerian-areas.md`; migration 0189 is verified on th
 
 ## Storage Model
 
+**Quantities are quarter-step doubles (#620 / #627, Drift v98, cloud 0239).**
+Stock, sale-line, cost-layer and crate quantities (22 columns: `inventory.quantity`,
+`order_items.quantity`, `stock_transactions.quantity_delta`, `cost_batches.qty_*`,
+the crate ledgers/balances, `order_crate_lines.crates_taken`, stock-count and
+adjustment columns, `purchase_items.quantity`, `daily_closings.shortage_units`,
+...) are `double precision` in Postgres and `RealColumn` in Drift, always a
+multiple of 0.25 (cloud CHECK via `public.qty_is_quarter`; quarters are exact
+binary fractions, so sums stay exact). Van and online-order tables stay integer.
+Whole values must reach older clients as JSON integers: Postgres prints
+`5::float8` as `5`, and the app writes whole doubles as `5` (never `5.0`) through
+`CloudValueSerializer` / `encodeSyncPayload` (`core/database/sync_helpers.dart`).
+Pulls accept `5`, `5.0` and `0.5`. The ONE shared helper is
+`lib/shared/utils/quantity.dart`: `Qty` (parse/validate), `formatQty` (display, no
+trailing zeros, never a vulgar-fraction character) and `lineTotalKobo(unitKobo,
+qty)` = unit price x quantity rounded half up to whole kobo; the SQL twin is
+`public.line_total_kobo`. Money is never computed as `qty * price` inline. The
+v98 Drift step rebuilds nothing: SQLite's INTEGER affinity already keeps 0.5 as a
+REAL. Stock screens take quarters since S5 (#630): Receive Stock, stock
+adjustments and their approval requests, branch transfers and stock requests,
+stock counts and damages. Each respects the product's parts switch
+(`allow_fractional_sales`: off means whole numbers only). The typed-quantity
+rules live in `lib/shared/utils/quantity_input.dart` (`parseStockQty`,
+`stockQtyError`, `stockQtyFormatters`); the write boundary is
+`InventoryDao.assertQuantityAllowed` (positive, quarter step, whole when the
+switch is off), and `adjustStock` rejects an off-quarter delta. The sale path
+(S3) and crates (S4) enter parts separately.
+
+**Empties in parts (#629, Drift v100, cloud 0242).** Crates follow the same
+quarter steps on every brand, whatever a product's parts switch says: selling 0.5
+crate of a tracked bottle issues 0.5 crate, and every empties input (Confirm
+Returns, customer crate return, supplier crate movements, receipt empties,
+transfer empties, empties count, damaged / bought empties, write-off and reversal
+sheets) takes quarters through `stockQtyFormatters(allowParts: true)` + `Qty.parse`.
+Every crate money figure is proportional and whole-kobo through `lineTotalKobo`
+(`rate x crates`): the checkout deposit (`SaleCrateLine.fullDepositKobo`), the
+forfeit at Confirm, supplier deposit requests, write-off and shortage values,
+and the deposit position seam. `crate_count` on `crate_shortfall_writeoffs`,
+`supplier_crate_deposits` and `supplier_crate_deposit_requests` is a Real /
+quarter double. The crate-tracking rule itself (unit `bottle` + `track_empties`,
+per manufacturer) is unchanged.
+
+**Selling in parts (#628, Drift v99, cloud 0241).** Every product sells in quarter
+steps unless `products.allow_fractional_sales` is off (default true). `CartService`
+is the one gate: `addItem` / `updateQty` snap a line onto its step and cap it at
+`Qty.sellable(stock)` (whole units only when the switch is off). Cart, checkout and
+receipts total a line through `CartService.lineGrossKobo` / `lineTotalKobo`, summed
+in kobo, so the goods figure equals the server's recomputed gross. `0241` is the
+release switch: phones keep existing products whole until its value arrives by
+pull, so it deploys only after the minimum app version is raised (#620 decision
+12). Online-order lines are forced whole on the till. Receiving, adjustments,
+transfers and counts take parts in S5 (above); empties in S4.
+
 **Online category reference (#472).** Public, service-written
 `marketplace_categories` is bundled as `core/data/marketplace_categories.dart`,
 with exact SQL-seed parity tests. It is not a tenant table or an outbox target.

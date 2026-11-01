@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/features/subscription/read_only_store_gate.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
@@ -100,11 +101,15 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
     final hasFullAccess = canViewAll || assignedIds.contains(widget.store.id);
     final canRequest = Gates.requestStoreTransfer.allows(ref);
 
-    final totalStock = _inventory.fold<int>(0, (sum, p) => sum + p.totalStock);
-    final totalValue = _inventory.fold<double>(
-      0.0,
-      (sum, p) => sum + (p.totalStock * (p.product.retailerPriceKobo / 100.0)),
-    );
+    final totalStock = _inventory.fold<double>(0, (sum, p) => sum + p.totalStock);
+    // Stock value in whole kobo, rounded per product (#630).
+    final totalValue =
+        _inventory.fold<int>(
+          0,
+          (sum, p) =>
+              sum + lineTotalKobo(p.product.retailerPriceKobo, p.totalStock),
+        ) /
+        100.0;
     final activeProducts = _inventory.where((p) => p.totalStock > 0).length;
     final lowStock = _inventory
         .where(
@@ -157,7 +162,7 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
 
   Widget _buildFullView({
     required bool canRequest,
-    required int totalStock,
+    required double totalStock,
     required double totalValue,
     required int activeProducts,
     required int lowStock,
@@ -259,7 +264,7 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
   /// measured content column is at least [kStoreDetailsSideBySideWidth]
   /// (never a viewport predicate - PRD #239).
   Widget _buildHeaderCards(
-    int totalStock,
+    double totalStock,
     double totalValue,
     int activeProducts,
     int lowStock,
@@ -276,7 +281,7 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
           title: 'Store Value',
           value: formatCurrency(totalValue),
           subtitle: 'Total Units',
-          pillLabel: totalStock.toString(),
+          pillLabel: formatQty(totalStock),
           pillTone: TagPillTone.info,
         );
         Widget tiles(double width) {
@@ -436,7 +441,7 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
                             ),
                             SizedBox(width: context.getRSize(8)),
                             TagPill(
-                              label: '${item.totalStock} units',
+                              label: '${formatQty(item.totalStock)} units',
                               tone: isLow
                                   ? TagPillTone.danger
                                   : TagPillTone.green,

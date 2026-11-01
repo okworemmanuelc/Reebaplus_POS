@@ -2,6 +2,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
 import 'package:reebaplus_pos/shared/services/supplier_account_service.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 
 /// Atomic "Receive Stock" commit (Receive Stock spec, Section 9). One run =
 /// one supplier, or none (see "No supplier" below). On confirm, ALL of the following happen inside a single Drift
@@ -80,14 +81,25 @@ class ReceiveStockService {
     required DateTime dateReceived,
     required String staffId,
     required List<ReceiveCartLine> lines,
-    required Map<String, int> fullCratesReceivedByManufacturer,
-    required Map<String, int> emptiesReturnedByManufacturer,
+    required Map<String, double> fullCratesReceivedByManufacturer,
+    required Map<String, double> emptiesReturnedByManufacturer,
     String? note,
     int? amountPaidKobo,
     String? paymentMethod,
   }) async {
     if (lines.isEmpty) {
       throw ArgumentError('Cannot receive stock with an empty cart');
+    }
+    // Quarter steps only, and whole numbers for a product whose parts switch is
+    // off (#630). The screen filters this already; the commit is the authority.
+    for (final l in lines) {
+      if (Qty.validate(l.qty, allowZero: false) == null ||
+          (!l.allowParts && !Qty.isWhole(l.qty))) {
+        throw ArgumentError(
+          '${l.productName}: ${formatQty(l.qty)} is not a quantity this '
+          'product can be received in',
+        );
+      }
     }
     if (supplierId == null) {
       if (lines.any((l) => l.movesCrates)) {
@@ -98,11 +110,8 @@ class ReceiveStockService {
       }
     }
 
-    final invoiceTotalKobo = lines.fold<int>(
-      0,
-      (sum, l) => sum + l.buyingPriceKobo * l.qty,
-    );
-    final totalUnits = lines.fold<int>(0, (sum, l) => sum + l.qty);
+    final invoiceTotalKobo = lines.fold<int>(0, (sum, l) => sum + l.totalKobo);
+    final totalUnits = lines.fold<double>(0, (sum, l) => sum + l.qty);
 
     await _db.transaction(() async {
       // 1. Supplier invoice (skip a zero-value invoice — stock/crates still post).
@@ -179,8 +188,8 @@ class ReceiveStockService {
         for (final line in lines)
           if (line.movesCrates) line.manufacturerId!,
       };
-      var totalCratesReceived = 0;
-      var totalEmptiesReturned = 0;
+      var totalCratesReceived = 0.0;
+      var totalEmptiesReturned = 0.0;
       for (final manufacturerId in eligibleManufacturerIds) {
         // Leg 1 — #210: the full crates that ARRIVED. What we owe this supplier
         // RISES. Without this leg `SUM(quantity_delta)` could only ever fall,
@@ -240,7 +249,7 @@ class ReceiveStockService {
       await _db.activityLogDao.logActivity(
         action: 'stock.received',
         description:
-            'Received ${lines.length} product(s), $totalUnits unit(s) '
+            'Received ${lines.length} product(s), ${formatQty(totalUnits)} unit(s) '
             '${supplierId == null ? '(no supplier) — cost' : 'from $supplierName — invoice'} '
             '${formatCurrency(invoiceTotalKobo / 100)}'
             '${amountPaidKobo != null && amountPaidKobo > 0 ? ' (Paid: ${formatCurrency(amountPaidKobo / 100)})' : ''}'
@@ -257,14 +266,14 @@ class ReceiveStockService {
   /// the receipt moved no crates, so a receipt without crate activity reads
   /// exactly as it always did.
   String _crateSummary({
-    required int cratesReceived,
-    required int emptiesReturned,
+    required double cratesReceived,
+    required double emptiesReturned,
   }) {
     final parts = <String>[
       if (cratesReceived > 0)
-        '$cratesReceived full crate${cratesReceived == 1 ? '' : 's'} in',
+        '${formatQty(cratesReceived)} full crate${cratesReceived == 1 ? '' : 's'} in',
       if (emptiesReturned > 0)
-        '$emptiesReturned empty crate${emptiesReturned == 1 ? '' : 's'} back',
+        '${formatQty(emptiesReturned)} empty crate${emptiesReturned == 1 ? '' : 's'} back',
     ];
     return parts.isEmpty ? '' : ' — crates: ${parts.join(', ')}';
   }

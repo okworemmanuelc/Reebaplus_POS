@@ -91,7 +91,7 @@ void main() {
 
     // Source batch drawn down 10 → 6 (no phantom coverage for the moved units).
     final srcBatches = await batchesAt(fromStoreId);
-    expect(srcBatches.fold<int>(0, (s, b) => s + b.qtyRemaining), 6);
+    expect(srcBatches.fold<double>(0, (s, b) => s + b.qtyRemaining), 6);
 
     // Nothing at the destination until receipt.
     expect(await batchesAt(toStoreId), isEmpty);
@@ -131,7 +131,7 @@ void main() {
       initiatedBy: staffId,
     );
     // Drawn 10 → 6 at dispatch.
-    expect((await batchesAt(fromStoreId)).fold<int>(0, (s, b) => s + b.qtyRemaining),
+    expect((await batchesAt(fromStoreId)).fold<double>(0, (s, b) => s + b.qtyRemaining),
         6);
 
     await db.stockTransferDao.cancelTransfer(
@@ -139,7 +139,7 @@ void main() {
 
     // The 4 units' cost layer is restored to the source (back to 10 covered).
     final src = await batchesAt(fromStoreId);
-    expect(src.fold<int>(0, (s, b) => s + b.qtyRemaining), 10);
+    expect(src.fold<double>(0, (s, b) => s + b.qtyRemaining), 10);
     // A source sale still draws the real 15000 cost.
     final perUnit = await db.costBatchesDao.drawDownSale([
       SaleCostLine(

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
@@ -627,7 +628,7 @@ class _StoreCardState extends ConsumerState<_StoreCard> {
     final t = Theme.of(context);
     final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
-    final totalStock = _inventory.fold<int>(0, (s, p) => s + p.totalStock);
+    final totalStock = _inventory.fold<double>(0, (s, p) => s + p.totalStock);
     final productCount = _inventory.where((p) => p.totalStock > 0).length;
     final location = widget.store.location;
     final hasLocation = location != null && location.isNotEmpty;
@@ -719,7 +720,7 @@ class _StoreCardState extends ConsumerState<_StoreCard> {
                     icon: AppIcons.inventory,
                     tone: IconTileTone.info,
                     label: 'Total Units',
-                    value: totalStock.toString(),
+                    value: formatQty(totalStock),
                   ),
                 ),
                 VerticalDivider(width: 1, thickness: 1, color: t.dividerColor),

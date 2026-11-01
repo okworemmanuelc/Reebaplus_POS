@@ -7,15 +7,12 @@
 /// Behaviour-preserving: each rounding step is carried over verbatim.
 library;
 
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
+
 /// Naira (as the cart carries it) to whole kobo, rounding half away from zero.
 /// The one place the cart's naira doubles and a cash-received field enter the
 /// kobo world.
 int koboFromNaira(double naira) => (naira * 100).round();
-
-/// A cart line's displayed total (naira, whole units): `price × qty`,
-/// TRUNCATED toward zero — carried over from Checkout's line row as-is.
-int saleLineTotal({required double price, required double qty}) =>
-    (price * qty).toInt();
 
 /// One crate brand in the cart: how many crates and the deposit rate per crate.
 class SaleCrateLine {
@@ -41,8 +38,9 @@ class SaleCrateLine {
   /// Deposit per crate, kobo.
   final int rateKobo;
 
-  /// The deposit if this brand's crates were deposited in full.
-  int get fullDepositKobo => (rateKobo * crates).round();
+  /// The deposit if this brand's crates were deposited in full: proportional,
+  /// so half a crate is half the rate, rounded half up to the kobo (#629).
+  int get fullDepositKobo => lineTotalKobo(rateKobo, crates);
 }
 
 /// The figures of one sale at Checkout. Build with [SaleTotals.compute].

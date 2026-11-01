@@ -126,7 +126,7 @@ class ReceiveFixture {
               businessId: env.businessId,
               storeId: env.storeId,
               productId: id,
-              quantity: Value(stock),
+              quantity: Value(stock.toDouble()),
             ),
           );
       ids.add(id);
@@ -148,7 +148,7 @@ class ReceiveFixture {
           .write(const CategoriesCompanion(isDeleted: Value(true)));
 
   /// The receipt quantity of product [index] (0 when not on it).
-  int cartQty(WidgetTester tester, int index) {
+  double cartQty(WidgetTester tester, int index) {
     final container = ProviderScope.containerOf(
       tester.element(find.byType(ReceiveStockScreen)),
     );
@@ -157,6 +157,6 @@ class ReceiveFixture {
             .where((l) => l.productId == productIds[index])
             .firstOrNull
             ?.qty ??
-        0;
+        0.0;
   }
 }

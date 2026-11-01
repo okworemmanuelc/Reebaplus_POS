@@ -61,7 +61,7 @@ Future<_Fx> _seed(AppDatabase db, String businessId, {int stock = 5}) async {
           businessId: businessId,
           productId: productId,
           storeId: storeId,
-          quantity: Value(stock),
+          quantity: Value(stock.toDouble()),
         ),
       );
   return _Fx(storeId: storeId, staffId: staffId, productId: productId);
@@ -95,7 +95,7 @@ Future<String> _sell(
         orderId: 'placeholder',
         productId: Value(f.productId),
         storeId: f.storeId,
-        quantity: qty,
+        quantity: qty.toDouble(),
         unitPriceKobo: 100000,
         totalKobo: total,
       ),
@@ -133,7 +133,7 @@ void main() {
 
     await db.ordersDao.reverseRejectedSaleLocal(
       orderId: orderId,
-      items: [(productId: f.productId, storeId: f.storeId, quantity: 2)],
+      items: [(productId: f.productId, storeId: f.storeId, quantity: 2.0)],
       staffId: f.staffId,
     );
 
@@ -169,7 +169,7 @@ void main() {
 
     await db.ordersDao.reverseRejectedSaleLocal(
       orderId: orderId,
-      items: [(productId: f.productId, storeId: f.storeId, quantity: 2)],
+      items: [(productId: f.productId, storeId: f.storeId, quantity: 2.0)],
       staffId: f.staffId,
     );
 
@@ -197,7 +197,7 @@ void main() {
     );
 
     final items = [
-      (productId: f.productId, storeId: f.storeId, quantity: 2)
+      (productId: f.productId, storeId: f.storeId, quantity: 2.0)
     ];
     await db.ordersDao.reverseRejectedSaleLocal(
       orderId: orderId,
@@ -294,7 +294,7 @@ void main() {
       paymentMethod: 'cash',
     );
 
-    Future<int?> crateBal() async =>
+    Future<double?> crateBal() async =>
         (await (db.select(db.customerCrateBalances)
                   ..where((t) =>
                       t.customerId.equals(customerId) &
@@ -327,7 +327,7 @@ void main() {
     final ledgerSum = (await (db.select(db.crateLedger)
               ..where((t) => t.customerId.equals(customerId)))
             .get())
-        .fold<int>(0, (s, r) => s + r.quantityDelta);
+        .fold<double>(0, (s, r) => s + r.quantityDelta);
     expect(ledgerSum, 0, reason: 'issued +5 and adjusted −5 net to the cache');
 
     // The reversal enqueues nothing — the rejected sale never reached the cloud.

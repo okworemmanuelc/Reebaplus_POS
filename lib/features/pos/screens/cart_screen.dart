@@ -10,7 +10,6 @@ import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/customers/widgets/add_customer_sheet.dart';
 import 'package:reebaplus_pos/features/customers/data/services/customer_service.dart';
-import 'package:reebaplus_pos/core/utils/stock_calculator.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/crates/cart_crate_lines.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
@@ -43,6 +42,7 @@ import 'package:reebaplus_pos/shared/services/cart_crate_sync.dart';
 import 'package:reebaplus_pos/shared/services/ui_hint_service.dart';
 import 'package:flutter/services.dart';
 import 'package:reebaplus_pos/core/utils/product_unit.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 
 /// Key prefix on every cart line, so a viewport test can assert a *complete*
 /// line is laid out and hit-testable (PRD #239's second assertion — a list
@@ -822,12 +822,6 @@ class _CartScreenState extends ConsumerState<CartScreen>
     }
   }
 
-  /// A quantity as the cart shows it: "2", "1.5" (no trailing ".0").
-  static String _qtyLabel(double qty) {
-    if (qty == qty.roundToDouble()) return qty.toInt().toString();
-    return qty.toStringAsFixed(2).replaceFirst(RegExp(r'0+$'), '');
-  }
-
   /// "−10%" / "−₦500" for a discounted cart line (§13.3).
   String _discountBadgeLabel(Map<String, dynamic> item) {
     final kind = item['discountKind'] as String?;
@@ -869,10 +863,13 @@ class _CartScreenState extends ConsumerState<CartScreen>
         .read(cartProvider)
         .updateQty(item['name'] as String, qty + 1);
     if (!applied && mounted) {
-      final cap = ((item['maxStock'] as int?) ?? (1 << 30)).toDouble();
+      final cap = Qty.sellable(
+        (item['maxStock'] as num?)?.toDouble() ?? CartService.noCap,
+        allowParts: item['allowFractionalSales'] == true,
+      );
       AppNotification.showInfo(
         context,
-        '${_qtyLabel(cap)} in stock — quantity can\'t exceed this',
+        '${formatQty(cap)} in stock — quantity can\'t exceed this',
       );
     }
   }
@@ -907,15 +904,11 @@ class _CartScreenState extends ConsumerState<CartScreen>
   /// actually pressed, and means the displayed deposit and the deposit sent to
   /// checkout cannot drift apart.
   _CartQuote _quote(List<Map<String, dynamic>> items, {required bool isCrate}) {
-    final sub = items.fold<double>(
-      0.0,
-      (s, i) =>
-          s +
-          stockValue(
-            (i['price'] as num).toDouble(),
-            (i['qty'] as num).toDouble(),
-          ),
-    );
+    // Summed in kobo line by line, so a part quantity's rounded line total
+    // adds up to the same goods figure the sale records and the server
+    // recomputes (#628).
+    final sub =
+        items.fold<int>(0, (s, i) => s + CartService.lineGrossKobo(i)) / 100.0;
 
     // ── Bottle detection & crate deposit computation ──
     // Empty crates are tracked for any product whose unit == 'Bottle'.
@@ -1125,7 +1118,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
       final item = _isClearing ? _animatingItems[i] : cartItems[i];
       final qty = (item['qty'] as num?)?.toDouble() ?? 0.0;
       final price = (item['price'] as num?)?.toDouble() ?? 0.0;
-      final gross = qty * price;
+      final gross = CartService.lineGrossKobo(item) / 100.0;
       final discountKobo = (item['discountKobo'] as int?) ?? 0;
       final net = gross - discountKobo / 100.0;
       final rawCategory = item['category']?.toString();
@@ -1148,7 +1141,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
         icon: visual.icon,
         tileTint: visual.tint,
         tileIconColor: visual.iconColor,
-        quantityLabel: _qtyLabel(qty),
+        quantityLabel: formatQty(qty),
         unitPriceLabel: formatCurrency(price),
         totalLabel: formatCurrency(net),
         originalTotalLabel: discountKobo > 0 ? formatCurrency(gross) : null,
@@ -1215,13 +1208,13 @@ class _CartScreenState extends ConsumerState<CartScreen>
             SizedBox(height: context.getRSize(12)),
             EmptyCratesCard(
               goingOutLabel:
-                  '${_qtyLabel(depositLines.fold<double>(0, (s, l) => s + l.qty))} going out',
+                  '${formatQty(depositLines.fold<double>(0, (s, l) => s + l.qty))} going out',
               rows: [
                 for (final line in depositLines)
                   (
                     label: line.label,
                     color: line.color,
-                    qtyLabel: _qtyLabel(line.qty),
+                    qtyLabel: formatQty(line.qty),
                     amountLabel: formatCurrency(line.amount),
                   ),
               ],

@@ -111,7 +111,7 @@ class CrateSizeGroups extends Table {
   // Column name matches the cloud's existing `crate_size_label` text column.
   TextColumn get crateSizeLabel =>
       text().withDefault(const Constant('medium'))();
-  IntColumn get emptyCrateStock => integer().withDefault(const Constant(0))();
+  RealColumn get emptyCrateStock => real().withDefault(const Constant(0.0))();
   IntColumn get depositAmountKobo => integer().withDefault(const Constant(0))();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
@@ -132,7 +132,7 @@ class Manufacturers extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get name => text()();
-  IntColumn get emptyCrateStock => integer().withDefault(const Constant(0))();
+  RealColumn get emptyCrateStock => real().withDefault(const Constant(0.0))();
 
   /// The single canonical per-crate deposit rate (ADR 0023 rule 2). Both ends
   /// of a crate deposit — what a customer leaves with us and what we leave with
@@ -395,7 +395,7 @@ class SupplierCrateLedger extends Table {
   // The store the movement is attributed to (active-store picker, §21.11).
   // Nullable: onboarding-era writes carry none → shown only in "All Stores".
   TextColumn get storeId => text().nullable().references(Stores, #id)();
-  IntColumn get quantityDelta => integer()();
+  RealColumn get quantityDelta => real()();
   // 'received' (+) | 'returned' (−) | 'adjusted' (manual correction).
   TextColumn get movementType => text().withLength(min: 1, max: 32)();
   // Refundable deposit money that moved on this row (kobo). Always >= 0; the
@@ -434,7 +434,7 @@ class SupplierCrateBalances extends Table {
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get supplierId => text().references(Suppliers, #id)();
   TextColumn get manufacturerId => text().references(Manufacturers, #id)();
-  IntColumn get balance => integer().withDefault(const Constant(0))();
+  RealColumn get balance => real().withDefault(const Constant(0.0))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
       dateTime().withDefault(currentDateAndTime)();
@@ -483,7 +483,8 @@ class SupplierCrateDepositRequests extends Table {
   TextColumn get kind => text()();
 
   /// Crates this money leg covers. Always >= 0; the direction is [kind]'s.
-  IntColumn get crateCount => integer().withDefault(const Constant(0))();
+  /// Quarter steps (#629): half a crate is 0.5.
+  RealColumn get crateCount => real().withDefault(const Constant(0.0))();
 
   /// `manufacturers.deposit_amount_kobo` SNAPSHOTTED when the request was
   /// raised (ADR 0023 rule 2 — the single canonical rate). Snapshotted so a
@@ -584,7 +585,8 @@ class SupplierCrateDeposits extends Table {
 
   /// Crates this movement covers, signed the same way. 0 on the standing-float
   /// movements and on a standalone money settlement that carries no goods.
-  IntColumn get crateCount => integer().withDefault(const Constant(0))();
+  /// Quarter steps (#629).
+  RealColumn get crateCount => real().withDefault(const Constant(0.0))();
 
   /// The per-crate rate this movement was valued at, snapshotted. A later rate
   /// edit must not restate money that has already moved.
@@ -668,7 +670,8 @@ class CrateShortfallWriteoffs extends Table {
   /// future reversal path ships as code only — widening a CHECK on an
   /// append-only money ledger costs a table rebuild on every device, and v71 /
   /// #212 are the precedents for declaring the whole range up front.
-  IntColumn get crateCount => integer()();
+  /// Quarter steps (#629): half a crate is 0.5.
+  RealColumn get crateCount => real()();
 
   /// `manufacturers.deposit_amount_kobo` SNAPSHOTTED at the moment the decision
   /// was taken. The loss booked is `crate_count × rate_per_crate_kobo` forever
@@ -793,8 +796,11 @@ class Products extends Table {
   IntColumn get emptyCrateValueKobo =>
       integer().withDefault(const Constant(0))();
   BoolColumn get trackEmpties => boolean().withDefault(const Constant(false))();
+  // On by default (#620 decision 4): every product sells in parts unless its
+  // switch is turned off. An upgraded install keeps the old DEFAULT 0 in its
+  // table definition, so every insert sets this explicitly.
   BoolColumn get allowFractionalSales =>
-      boolean().withDefault(const Constant(false))();
+      boolean().withDefault(const Constant(true))();
   // Optional product barcode (schema v18). Surfaced in the UI only for
   // Pharmacy / Supermarket businesses — that UI lands with the barcode
   // scanner work (pivot step 30); the column ships now with the price drop.
@@ -1036,8 +1042,8 @@ class StockCounts extends Table {
   IntColumn get productsCounted => integer()();
   IntColumn get shortageCount => integer()(); // # products short (diff<0)
   IntColumn get surplusCount => integer()(); // # products over (diff>0)
-  IntColumn get shortageUnits => integer()(); // sum |diff| where diff<0
-  IntColumn get surplusUnits => integer()(); // sum  diff  where diff>0
+  RealColumn get shortageUnits => real()(); // sum |diff| where diff<0
+  RealColumn get surplusUnits => real()(); // sum  diff  where diff>0
   TextColumn get linesJson => text()(); // [{p,n,s,a,d}] changed lines
   TextColumn get countedBy => text().nullable().references(Users, #id)();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
@@ -1093,8 +1099,8 @@ class DailyClosings extends Table {
   IntColumn get stockCogsKobo => integer().withDefault(const Constant(0))();
   IntColumn get stockExpectedClosingKobo =>
       integer().withDefault(const Constant(0))();
-  IntColumn get itemsSold => integer().withDefault(const Constant(0))();
-  IntColumn get shortageUnits => integer().withDefault(const Constant(0))();
+  RealColumn get itemsSold => real().withDefault(const Constant(0.0))();
+  RealColumn get shortageUnits => real().withDefault(const Constant(0.0))();
   // Who reviewed (froze) the day, and when (review time).
   TextColumn get reviewedBy => text().nullable().references(Users, #id)();
   DateTimeColumn get reviewedAt => dateTime().withDefault(currentDateAndTime)();
@@ -1585,7 +1591,7 @@ class CustomerCrateBalances extends Table {
   // v28: crate tracking re-keyed from crate size group to manufacturer
   // (§13.4). A customer's crate debt is one balance per manufacturer.
   TextColumn get manufacturerId => text().references(Manufacturers, #id)();
-  IntColumn get balance => integer().withDefault(const Constant(0))();
+  RealColumn get balance => real().withDefault(const Constant(0.0))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
       dateTime().withDefault(currentDateAndTime)();
@@ -1605,7 +1611,7 @@ class ManufacturerCrateBalances extends Table {
   TextColumn get manufacturerId => text().references(Manufacturers, #id)();
   // v28: the crate-size-group dimension was dropped — one balance per
   // manufacturer (§13.4).
-  IntColumn get balance => integer().withDefault(const Constant(0))();
+  RealColumn get balance => real().withDefault(const Constant(0.0))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
       dateTime().withDefault(currentDateAndTime)();
@@ -1631,7 +1637,7 @@ class StoreCrateBalances extends Table {
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get storeId => text().references(Stores, #id)();
   TextColumn get manufacturerId => text().references(Manufacturers, #id)();
-  IntColumn get balance => integer().withDefault(const Constant(0))();
+  RealColumn get balance => real().withDefault(const Constant(0.0))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
       dateTime().withDefault(currentDateAndTime)();
@@ -1661,7 +1667,7 @@ class CrateLedger extends Table {
   // empty).
   TextColumn get crateSizeGroupId =>
       text().nullable().references(CrateSizeGroups, #id)();
-  IntColumn get quantityDelta => integer()();
+  RealColumn get quantityDelta => real()();
   TextColumn get movementType => text().withLength(min: 1, max: 32)();
   TextColumn get referenceOrderId =>
       text().nullable().references(Orders, #id)();
@@ -1715,7 +1721,7 @@ class Inventory extends Table {
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get productId => text().references(Products, #id)();
   TextColumn get storeId => text().references(Stores, #id)();
-  IntColumn get quantity => integer().withDefault(const Constant(0))();
+  RealColumn get quantity => real().withDefault(const Constant(0.0))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
       dateTime().withDefault(currentDateAndTime)();
@@ -1747,10 +1753,10 @@ class CostBatches extends Table {
   TextColumn get productId => text().references(Products, #id)();
   TextColumn get storeId => text().references(Stores, #id)();
   // Units still on the shelf from this batch; drawn down oldest-first by FIFO.
-  IntColumn get qtyRemaining => integer()();
+  RealColumn get qtyRemaining => real()();
   // Units this batch started with — kept so a partially-consumed batch still
   // reports what it originally held.
-  IntColumn get qtyOriginal => integer()();
+  RealColumn get qtyOriginal => real()();
   // Per-unit cost for this batch, in kobo. 0 == uncosted (see class doc). Cloud
   // side MUST be bigint (money column rule).
   IntColumn get costKobo => integer().withDefault(const Constant(0))();
@@ -1785,7 +1791,7 @@ class StockTransfers extends Table {
   TextColumn get fromLocationId => text().references(Stores, #id)();
   TextColumn get toLocationId => text().references(Stores, #id)();
   TextColumn get productId => text().references(Products, #id)();
-  IntColumn get quantity => integer()();
+  RealColumn get quantity => real()();
   TextColumn get status => text().withDefault(const Constant('pending'))();
   TextColumn get initiatedBy => text().references(Users, #id)();
   TextColumn get receivedBy => text().nullable().references(Users, #id)();
@@ -1819,7 +1825,7 @@ class StockAdjustments extends Table {
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get productId => text().references(Products, #id)();
   TextColumn get storeId => text().references(Stores, #id)();
-  IntColumn get quantityDiff => integer()();
+  RealColumn get quantityDiff => real()();
   TextColumn get reason => text()();
   TextColumn get performedBy => text().nullable().references(Users, #id)();
   // Money-integrity #7a (#170, PRD #155): a decrease (damage / count-shortage /
@@ -1847,7 +1853,7 @@ class StockTransactions extends Table {
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get productId => text().references(Products, #id)();
   TextColumn get locationId => text().references(Stores, #id)();
-  IntColumn get quantityDelta => integer()();
+  RealColumn get quantityDelta => real()();
   TextColumn get movementType => text()();
   TextColumn get orderId => text().nullable().references(Orders, #id)();
   TextColumn get transferId =>
@@ -1896,7 +1902,7 @@ class StockAdjustmentRequests extends Table {
   TextColumn get productId => text().references(Products, #id)();
   TextColumn get storeId => text().references(Stores, #id)();
   // Signed: positive = add, negative = remove.
-  IntColumn get quantityDiff => integer()();
+  RealColumn get quantityDiff => real()();
 
   /// What the goods cost, **per unit, in kobo** — captured on the request
   /// itself (#197, PRD #155 US 22) so the FIFO batch the approval mints carries
@@ -1988,7 +1994,7 @@ class OrderCrateLines extends Table {
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get orderId => text().references(Orders, #id)();
   TextColumn get manufacturerId => text().references(Manufacturers, #id)();
-  IntColumn get cratesTaken => integer()();
+  RealColumn get cratesTaken => real()();
   // Deposit rate per crate, snapshotted from Manufacturers.depositAmountKobo at
   // sale time so a later CEO rate edit doesn't change historic settlements.
   IntColumn get depositRateKobo => integer().withDefault(const Constant(0))();
@@ -2187,7 +2193,7 @@ class OrderItems extends Table {
   // lines bypass inventory (§26.4) — no stock_transactions / inventory rows.
   TextColumn get productId => text().nullable().references(Products, #id)();
   TextColumn get storeId => text().references(Stores, #id)();
-  IntColumn get quantity => integer()();
+  RealColumn get quantity => real()();
   IntColumn get unitPriceKobo => integer()();
   IntColumn get buyingPriceKobo => integer().withDefault(const Constant(0))();
   IntColumn get totalKobo => integer()();
@@ -2241,7 +2247,7 @@ class PurchaseItems extends Table {
   TextColumn get businessId => text().references(Businesses, #id)();
   TextColumn get purchaseId => text().references(Shipments, #id)();
   TextColumn get productId => text().references(Products, #id)();
-  IntColumn get quantity => integer()();
+  RealColumn get quantity => real()();
   IntColumn get unitPriceKobo => integer()();
   IntColumn get totalKobo => integer()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
@@ -2410,7 +2416,7 @@ class PendingCrateReturns extends Table {
   // v28: re-keyed from crate size group to manufacturer (§13.4) — which
   // manufacturer's crates the customer is returning.
   TextColumn get manufacturerId => text().references(Manufacturers, #id)();
-  IntColumn get quantity => integer()();
+  RealColumn get quantity => real()();
   TextColumn get submittedBy => text().references(Users, #id)();
   DateTimeColumn get submittedAt =>
       dateTime().withDefault(currentDateAndTime)();
@@ -3150,7 +3156,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 97;
+  int get schemaVersion => 100;
 
   /// The v90 (#473) listing columns, pinned to their defaults in every older
   /// products rebuild: TableMigration copies from the CURRENT schema, so a
@@ -6890,6 +6896,45 @@ class AppDatabase extends _$AppDatabase {
         if (has.isEmpty) {
           await m.addColumn(userBusinesses, userBusinesses.isHidden);
         }
+      }
+
+      if (from < 98) {
+        // ── v98 — #627: quarter quantities (IntColumn → RealColumn) ───────
+        //
+        // Mirrors supabase/migrations/0239_quarter_quantities.sql. The 22
+        // quantity columns became RealColumns (inventory.quantity,
+        // order_items.quantity, stock_transactions.quantity_delta, the crate
+        // ledgers/balances, cost_batches qty, …). NO table rebuild on purpose:
+        // an upgraded install keeps the old `INTEGER` declared type, and
+        // SQLite's INTEGER affinity stores 0.5 as a REAL and 5 as an INTEGER
+        // verbatim, so existing rows stay valid and fractional values work
+        // with zero copy risk (no TableMigration stale-column trap on 20
+        // tables). Drift reads either storage class back as a double. Fresh
+        // installs declare the columns REAL — same behaviour.
+      }
+
+      // ── v99 — #628: selling in parts ────────────────────────────────────
+      //
+      // Mirrors supabase/migrations/0241_selling_in_parts.sql. Nothing to run:
+      //  * `daily_closings.items_sold` became a RealColumn, with no rebuild for
+      //    the reason given at v98;
+      //  * `products.allow_fractional_sales` defaults to true for fresh
+      //    installs. Existing rows are NOT flipped here on purpose. Cloud 0241
+      //    sets every product to true and bumps `last_updated_at`, so the value
+      //    arrives by pull, and until it does the product stays whole numbers.
+      //    That makes 0241 the single switch for "any shop can sell parts"
+      //    (#620 decision 12).
+
+      if (from < 100) {
+        // ── v100 — #629: empties in parts (crate_count IntColumn → Real) ──
+        //
+        // Mirrors supabase/migrations/0242_empties_in_parts.sql:
+        // crate_shortfall_writeoffs, supplier_crate_deposits and
+        // supplier_crate_deposit_requests `.crate_count` became RealColumns.
+        // Same no-rebuild reasoning as v98: INTEGER affinity keeps 0.5 as a
+        // REAL and 5 as an INTEGER, and Drift reads both back as a double. Two
+        // of the three are append-only ledgers, so a rebuild would also fight
+        // their immutable / no-delete triggers.
       }
     },
     beforeOpen: (details) async {

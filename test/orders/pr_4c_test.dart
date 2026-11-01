@@ -83,7 +83,7 @@ Future<_Seed> _seed(
           businessId: businessId,
           productId: productId,
           storeId: storeId,
-          quantity: Value(initialStock),
+          quantity: Value(initialStock.toDouble()),
         ),
       );
 
@@ -136,7 +136,7 @@ OrderItemsCompanion _itemCompanion(
     orderId: 'placeholder', // overwritten by createOrder
     productId: Value(s.productId),
     storeId: s.storeId,
-    quantity: qty,
+    quantity: qty.toDouble(),
     unitPriceKobo: unitPriceKobo,
     totalKobo: qty * unitPriceKobo,
   );

@@ -73,13 +73,13 @@ void main() {
                   businessId: businessId,
                   productId: productId,
                   storeId: storeId,
-                  quantity: Value(s.openingStock),
+                  quantity: Value(s.openingStock.toDouble()),
                 ),
               );
           await db.costBatchesDao.recordInflowBatch(
             productId: productId,
             storeId: storeId,
-            quantity: s.openingStock,
+            quantity: s.openingStock.toDouble(),
             costKobo: s.buyingPriceKobo,
           );
         }
@@ -91,7 +91,7 @@ void main() {
                   businessId: businessId,
                   productId: productId,
                   storeId: storeId,
-                  quantity: Value(s.existingStock),
+                  quantity: Value(s.existingStock.toDouble()),
                 ),
               );
         }
@@ -102,8 +102,8 @@ void main() {
                   businessId: businessId,
                   productId: productId,
                   storeId: storeId,
-                  qtyRemaining: b.qty,
-                  qtyOriginal: b.qty,
+                  qtyRemaining: b.qty.toDouble(),
+                  qtyOriginal: b.qty.toDouble(),
                   costKobo: Value(b.costKobo),
                   receivedAt: Value(b.receivedAtUtc),
                 ),
@@ -146,12 +146,12 @@ void main() {
           // owns its receipt-dated batch below, so adjustStock must NOT also
           // create an inflow batch (that would double the FIFO layer).
           await db.inventoryDao.adjustStock(
-              productId, storeId, line.quantity, 'Stock received', staffId,
+              productId, storeId, line.quantity.toDouble(), 'Stock received', staffId,
               trackCost: false);
           await db.costBatchesDao.recordInflowBatch(
             productId: productId,
             storeId: storeId,
-            quantity: line.quantity,
+            quantity: line.quantity.toDouble(),
             costKobo: line.buyingPriceKobo,
             receivedAt: line.receivedAtUtc,
           );
@@ -168,8 +168,8 @@ void main() {
             s.operation == 'add_product' ? 'opening' : _dateKey(b.receivedAt);
         batches[key] = ExpectedInvBatch({
           'received_at': key,
-          'qty_remaining': b.qtyRemaining,
-          'qty_original': b.qtyOriginal,
+          'qty_remaining': b.qtyRemaining.round(),
+          'qty_original': b.qtyOriginal.round(),
           'cost_kobo': b.costKobo,
         });
       }
@@ -186,7 +186,7 @@ void main() {
         s,
         InventoryOutcome(
           batches: batches,
-          inventoryAfter: invRow?.quantity ?? 0,
+          inventoryAfter: (invRow?.quantity ?? 0).round(),
           supplierBalanceAfterKobo: supplierBalance,
         ),
       );

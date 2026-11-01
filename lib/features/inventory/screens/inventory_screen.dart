@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
@@ -104,13 +105,13 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   bool _showSearch = false;
   String _searchQuery = '';
   final _searchCtrl = TextEditingController();
-  int _totalCrateAssetsSum = 0;
+  double _totalCrateAssetsSum = 0;
 
   bool _isFirstLoad = true;
   StreamSubscription<List<ProductDataWithStock>>? _productsSub;
   StreamSubscription<List<ManufacturerData>>? _manufacturersSub;
   StreamSubscription<List<CategoryData>>? _categoriesSub;
-  StreamSubscription<int>? _emptyCratesSumSub;
+  StreamSubscription<double>? _emptyCratesSumSub;
   Color get _bg => Theme.of(context).scaffoldBackgroundColor;
 
   Color get _text => Theme.of(context).colorScheme.onSurface;
@@ -578,7 +579,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         InventoryFigureCard(
           key: const ValueKey('inventory-summary-crates'),
           label: 'Total Crates',
-          value: '${totalCrates.toInt()}',
+          value: formatQty(totalCrates),
           icon: AppIcons.beerMug,
           tone: IconTileTone.green,
           selected: _currentTab == _tabKeys.indexOf('crates'),
@@ -918,8 +919,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   /// Build the per-manufacturer crate stats (keyed by manufacturer id) from the
   /// active-store full/empty maps resolved in [_cratesTabSlivers].
   List<ManufacturerCrateStats> _computeCrateStats(
-    Map<String, int> fullByMfr,
-    Map<String, int> emptyByMfr,
+    Map<String, double> fullByMfr,
+    Map<String, double> emptyByMfr,
   ) {
     final allMfrs = {...fullByMfr.keys, ...emptyByMfr.keys};
     return allMfrs.map((mfr) {
@@ -1180,7 +1181,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       subtitle: product.subtitle,
       categoryName: categoryName,
       photoPath: product.imagePath,
-      stockLabel: currentStock.toString(),
+      stockLabel: formatQty(currentStock),
       unit: unitLabel(product.unit, crates: crates),
       state: isOut
           ? InventoryStockState.out
@@ -1212,24 +1213,25 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     final lockedStoreId = ref.watch(lockedStoreProvider).value;
     final fullByMfr =
         ref.watch(fullCratesByManufacturerProvider).valueOrNull ??
-        const <String, int>{};
-    final Map<String, int> emptyByMfr;
+        const <String, double>{};
+    final Map<String, double> emptyByMfr;
     if (lockedStoreId == null) {
       emptyByMfr =
           ref.watch(emptyCratesByManufacturerProvider).valueOrNull ??
-          const <String, int>{};
+          const <String, double>{};
     } else {
       emptyByMfr =
           ref.watch(storeCrateBalancesProvider).valueOrNull ??
-          const <String, int>{};
+          const <String, double>{};
     }
 
     final shortagesByMfr =
         ref.watch(crateShortagesByManufacturerProvider).valueOrNull ??
-        const <String, int>{};
+        const <String, double>{};
 
     final stats = _computeCrateStats(fullByMfr, emptyByMfr);
-    int emptyForMfr(ManufacturerData mfr) => emptyByMfr[mfr.id] ?? 0;
+    // Quarter steps (#629): half a crate shows as 0.5.
+    double emptyForMfr(ManufacturerData mfr) => emptyByMfr[mfr.id] ?? 0;
 
     final trackedMfrIds =
         ref.watch(crateTrackedManufacturerIdsProvider).valueOrNull ??
@@ -1244,8 +1246,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           mfr,
     ];
 
-    final totalEmpty = emptyByMfr.values.fold<int>(0, (s, v) => s + v);
-    final totalFull = stats.fold<int>(0, (s, e) => s + e.fullCratesEquiv);
+    final totalEmpty = emptyByMfr.values.fold<double>(0, (s, v) => s + v);
+    final totalFull = stats.fold<double>(0, (s, e) => s + e.fullCratesEquiv);
     final gap = context.getRSize(12);
 
     return [
@@ -1261,7 +1263,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                   Expanded(
                     child: InventoryFigureCard(
                       label: 'Empty In Stock',
-                      value: totalEmpty.toString(),
+                      value: formatQty(totalEmpty),
                       icon: AppIcons.beerMug,
                       tone: IconTileTone.warning,
                     ),
@@ -1270,7 +1272,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                   Expanded(
                     child: InventoryFigureCard(
                       label: 'Full (Crate)',
-                      value: totalFull.toString(),
+                      value: formatQty(totalFull),
                       icon: AppIcons.wineBottle,
                       tone: IconTileTone.info,
                     ),
@@ -1336,8 +1338,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     BuildContext context,
     ManufacturerData mfr,
     ManufacturerCrateStats stat, {
-    required int emptyCount,
-    int shortCount = 0,
+    required double emptyCount,
+    double shortCount = 0,
   }) {
     final t = Theme.of(context);
     final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
@@ -1398,7 +1400,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                       TagPill(
                         key: ValueKey('mfr_shortage_badge_${mfr.id}'),
                         // Wording unchanged (the badge test reads it).
-                        label: '⚠ $shortCount short',
+                        label: '⚠ ${formatQty(shortCount)} short',
                         tone: TagPillTone.warning,
                       ),
                     ],
@@ -1422,19 +1424,19 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                     _mfrSimpleStat(
                       context,
                       'Full',
-                      stat.fullCratesEquiv.toString(),
+                      formatQty(stat.fullCratesEquiv),
                       t.colorScheme.primary,
                     ),
                     _mfrSimpleStat(
                       context,
                       'Empty',
-                      emptyCount.toString(),
+                      formatQty(emptyCount),
                       f.warning,
                     ),
                     _mfrSimpleStat(
                       context,
                       'Total',
-                      totalAssets.toString(),
+                      formatQty(totalAssets),
                       f.green,
                     ),
                   ],

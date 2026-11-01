@@ -93,6 +93,7 @@ class SupabaseCloudTransport implements CloudTransport {
     // system_config: global, tiny, no `id` column — single unpaginated call.
     if (isGlobal) {
       final List<dynamic> data = await q.timeout(const Duration(seconds: 25));
+      query.onPage?.call(data.length);
       return data;
     }
 
@@ -116,6 +117,7 @@ class SupabaseCloudTransport implements CloudTransport {
 
         if (page.isEmpty) break;
         allRows.addAll(page);
+        query.onPage?.call(page.length);
         offset += page.length;
         if (page.length < currentPageSize) break; // last page
       } on TimeoutException catch (e) {

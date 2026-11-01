@@ -112,7 +112,7 @@ void main() {
     await db.inventoryDao.adjustStock(
       p,
       store,
-      qty,
+      qty.toDouble(),
       'opening',
       managerId,
       trackCost: false,
@@ -120,13 +120,13 @@ void main() {
     await db.costBatchesDao.recordInflowBatch(
       productId: p,
       storeId: store,
-      quantity: qty,
+      quantity: qty.toDouble(),
       costKobo: unitCostKobo,
       receivedAt: receivedAt,
     );
   }
 
-  Future<int> onHand(String store, {String? product}) async {
+  Future<double> onHand(String store, {String? product}) async {
     final row =
         await (db.select(db.inventory)..where(
               (t) =>

@@ -68,7 +68,7 @@ class SalesTargetFigures {
   }) : month = _months[now.month - 1],
        daysLeft = DateTime(now.year, now.month + 1, 0).day - now.day;
 
-  final int sold;
+  final double sold;
   final int target;
 
   /// The month's full name ("October").
@@ -81,7 +81,8 @@ class SalesTargetFigures {
   bool get reached => hasTarget && sold >= target;
 
   /// Crates still to sell, never below 0.
-  int get remaining => hasTarget ? (target - sold).clamp(0, target) : 0;
+  double get remaining =>
+      hasTarget ? (target - sold).clamp(0.0, target.toDouble()) : 0;
 
   /// The whole percent sold (may pass 100); 0 with no target.
   int get percent => hasTarget ? (sold * 100 / target).round() : 0;

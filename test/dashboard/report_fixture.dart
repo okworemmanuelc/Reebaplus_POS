@@ -61,7 +61,7 @@ OrderWithItems reportOrder(
           orderId: orderId,
           productId: lines[i].$1?.id,
           storeId: env.storeId,
-          quantity: lines[i].$2,
+          quantity: (lines[i].$2).toDouble(),
           unitPriceKobo: lines[i].$3,
           buyingPriceKobo: lines[i].$4,
           totalKobo: lines[i].$2 * lines[i].$3,

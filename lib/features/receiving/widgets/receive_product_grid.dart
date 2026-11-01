@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
@@ -176,7 +177,8 @@ class _ReceiveProductTileState extends ConsumerState<_ReceiveProductTile> {
     final cartQty = ref.watch(
       receiveCartProvider.select(
         (lines) =>
-            lines.where((l) => l.productId == product.id).firstOrNull?.qty ?? 0,
+            lines.where((l) => l.productId == product.id).firstOrNull?.qty ??
+            0.0,
       ),
     );
     final isOutOfStock = totalStock <= 0;
@@ -186,11 +188,12 @@ class _ReceiveProductTileState extends ConsumerState<_ReceiveProductTile> {
         product,
         crates: businessTracksCrates(ref.watch(currentBusinessProvider)),
       ),
-      stockLabel: isOutOfStock ? 'No stock' : 'Current: $totalStock',
+      stockLabel: isOutOfStock ? 'No stock' : 'Current: ${formatQty(totalStock)}',
       stockLevel: isOutOfStock ? StockLevel.out : StockLevel.ok,
       categoryName: widget.categoryName,
       photoPath: product.imagePath,
-      inCartQty: cartQty,
+      inCartQty: cartQty.ceil(),
+      inCartLabel: cartQty > 0 ? formatQty(cartQty) : null,
       tappableWhenOut: true,
       onTap: _add,
     );

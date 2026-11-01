@@ -28,8 +28,9 @@ class _SecuritySettingsScreenState
   /// Preset auto-lock intervals in seconds (§10.1: 1/3/5/10/15/30 min).
   static const _presets = [60, 180, 300, 600, 900, 1800];
 
-  /// Default when unset (§10.1: 5 minutes). Matches AutoLockWrapper's fallback.
-  static const _defaultSeconds = 300;
+  /// Default when unset: off (owner decision 2026-11-01). Matches
+  /// AutoLockWrapper's fallback.
+  static const _defaultSeconds = 0;
 
   int _autoLockSeconds = _defaultSeconds;
   bool _biometricsEnabled = false;

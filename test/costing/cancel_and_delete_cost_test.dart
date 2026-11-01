@@ -55,7 +55,7 @@ void main() {
         buyingPriceKobo: Value(buyingKobo),
         unit: const Value('Piece'),
       ),
-      initialStock: stock,
+      initialStock: stock.toDouble(),
       storeId: storeId,
       performedBy: staffId,
     );
@@ -98,14 +98,14 @@ void main() {
 
     // The sale drew 10 → 6 off the opening batch and snapshotted 15000/unit.
     expect(
-        (await batchesFor(productId)).fold<int>(0, (s, b) => s + b.qtyRemaining),
+        (await batchesFor(productId)).fold<double>(0, (s, b) => s + b.qtyRemaining),
         6);
 
     await db.ordersDao.markCancelled(order.id, 'customer changed mind', staffId);
 
     // The 4 units come back as a costed LAYER (total covered back to 10).
     final batches = await batchesFor(productId);
-    expect(batches.fold<int>(0, (s, b) => s + b.qtyRemaining), 10);
+    expect(batches.fold<double>(0, (s, b) => s + b.qtyRemaining), 10);
     // The restored layer carries the snapshot cost (a re-sale draws 15000).
     final perUnit = await db.costBatchesDao.drawDownSale([
       SaleCostLine(index: 0, productId: productId, storeId: storeId, quantity: 1),
@@ -178,7 +178,7 @@ void main() {
     expect(total, 120000);
     // The open batch is drawn to zero (no residual coverage).
     expect(
-        (await batchesFor(productId)).fold<int>(0, (s, b) => s + b.qtyRemaining),
+        (await batchesFor(productId)).fold<double>(0, (s, b) => s + b.qtyRemaining),
         0);
     // The write-off adjustment carries the snapshotted value (booked, visible).
     final adj = await (db.select(db.stockAdjustments)

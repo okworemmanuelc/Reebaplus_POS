@@ -19,6 +19,7 @@ import 'package:reebaplus_pos/shared/widgets/redesign/icon_tile.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/shared/utils/product_icon_helper.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 
 /// Quick Sale modal (master plan §12.3). For a CEO/Manager it adds straight to
 /// the cart. For a role below Manager ([requireApproval] true, §12.3.1) "Send
@@ -99,6 +100,19 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal>
       _qtyCtrl.text.isNotEmpty &&
       _priceCtrl.text.isNotEmpty;
 
+  /// The typed quantity, or null (with a message) when it is not a quarter
+  /// step above zero.
+  double? _validQty() {
+    final qty = Qty.parseSale(_qtyCtrl.text, allowParts: true);
+    if (qty == null) {
+      AppNotification.showError(
+        context,
+        'Quantity must be in steps of 0.25, like 0.25, 0.5, 0.75 or 1.',
+      );
+    }
+    return qty;
+  }
+
   Map<String, dynamic> _buildProduct(String name, double priceNaira) =>
       buildQuickSaleProduct(name, priceNaira);
 
@@ -111,13 +125,12 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal>
       );
       return;
     }
+    final qty = _validQty();
+    if (qty == null) return;
     final priceNaira = parseCurrency(_priceCtrl.text);
     ref
         .read(cartProvider)
-        .addItem(
-          _buildProduct(_nameCtrl.text, priceNaira),
-          qty: double.tryParse(_qtyCtrl.text) ?? 1.0,
-        );
+        .addItem(_buildProduct(_nameCtrl.text, priceNaira), qty: qty);
     Navigator.pop(context);
   }
 
@@ -152,14 +165,13 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal>
       return;
     }
     final name = _nameCtrl.text.trim();
-    final qty = double.tryParse(_qtyCtrl.text) ?? 1.0;
+    final qty = _validQty();
+    if (qty == null) return;
     final priceNaira = parseCurrency(_priceCtrl.text);
-    final qtyLabel = qty == qty.roundToDouble()
-        ? qty.toInt().toString()
-        : qty.toString();
+    final lineNaira = lineTotalKobo((priceNaira * 100).round(), qty) / 100.0;
     final summary =
-        '$qtyLabel × $name @ ${formatCurrency(priceNaira)} '
-        '= ${formatCurrency(qty * priceNaira)}';
+        '${formatQty(qty)} × $name @ ${formatCurrency(priceNaira)} '
+        '= ${formatCurrency(lineNaira)}';
     final uid = ref.read(authProvider).currentUser?.id;
 
     setState(() => _submitting = true);
@@ -374,8 +386,8 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal>
               SizedBox(width: context.getRSize(10)),
               Expanded(
                 child: Text(
-                  '${_pendingQty == _pendingQty.roundToDouble() ? _pendingQty.toInt() : _pendingQty} × '
-                  '$_pendingName · ${formatCurrency(_pendingQty * _pendingPriceNaira)}',
+                  '${formatQty(_pendingQty)} × '
+                  '$_pendingName · ${formatCurrency(lineTotalKobo((_pendingPriceNaira * 100).round(), _pendingQty) / 100.0)}',
                   style: context
                       .semiBoldStyle(13)
                       .copyWith(color: t.colorScheme.onSurface),
@@ -432,6 +444,7 @@ abstract final class QuickSaleKeys {
 @visibleForTesting
 Map<String, dynamic> buildQuickSaleProduct(String name, double priceNaira) => {
   'name': name,
+  'allowFractionalSales': true,
   'subtitle': 'Quick Sale',
   'price': priceNaira,
   'icon': kStoredIconBolt,
