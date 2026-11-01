@@ -9,6 +9,7 @@ import 'package:screenshot/screenshot.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'package:reebaplus_pos/core/crates/crate_exchange.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -47,6 +48,7 @@ import 'package:reebaplus_pos/shared/services/orders/debt_limit.dart';
 import 'package:reebaplus_pos/shared/services/orders/sale_totals.dart';
 import 'package:reebaplus_pos/core/online_orders/pay_on_delivery.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
+import 'package:reebaplus_pos/shared/utils/quantity_input.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CheckoutPage — shown after "Proceed to Checkout" in the cart.
@@ -123,6 +125,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   // revenue (§13.4). Keyed by manufacturerId → kobo.
   final Map<String, int> _depositByMfr = {};
 
+  // #649 Empties Exchange — the crates handed over now, per manufacturer, as
+  // typed. Always starts blank: an untouched field must never claim crates
+  // arrived (#171).
+  final Map<String, TextEditingController> _emptiesCtrls = {};
+
   // Computed on confirm — passed to receipt
 
   double _amountPaid = 0;
@@ -174,6 +181,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       final mfrId = line['manufacturerId'] as String?;
       if (mfrId == null) continue;
       _depositByMfr[mfrId] = 0;
+      _emptiesCtrls[mfrId] = TextEditingController();
     }
     AppLogger.info(
       'CheckoutPage: Initializing with ${widget.cart.length} items. Total: ${widget.total}',
@@ -235,6 +243,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   void dispose() {
     _cart.activeCustomer.removeListener(_onCustomerChanged);
     _cashReceivedCtrl.dispose();
+    for (final ctrl in _emptiesCtrls.values) {
+      ctrl.dispose();
+    }
     _manufacturersSub?.cancel();
     _activeStoreSub?.cancel();
     super.dispose();
@@ -360,7 +371,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   SaleTotals get _sale => SaleTotals.compute(
     goodsTotalNaira: widget.total,
     lineDiscountsKobo: widget.cart.map((i) => (i['discountKobo'] as int?) ?? 0),
-    crateLines: widget.crateLines.map(SaleCrateLine.fromMap).toList(),
+    crateLines: _outstandingCrateLines.map(SaleCrateLine.fromMap).toList(),
     isWalkIn: _isWalkIn,
     isCashTransfer: _mode == PayMode.cashTransfer,
     isCrateBusiness: _isCrateBusiness,
@@ -368,6 +379,32 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   );
 
   int get _discountTotalKobo => _sale.discountKobo;
+
+  /// This sale's crates per brand, before any Empties Exchange.
+  Map<String, double> get _cratesInSale => {
+    for (final line in widget.crateLines.map(SaleCrateLine.fromMap))
+      line.manufacturerId: line.crates,
+  };
+
+  /// #649 — the empties entered, per brand. Blank, 0 and a count the cashier is
+  /// still typing wrong all read as none; [_confirmPayment] refuses a bad one.
+  Map<String, double> get _emptiesReturned => {
+    for (final entry in _emptiesCtrls.entries)
+      if ((Qty.parse(entry.value.text) ?? 0) > 0)
+        entry.key: Qty.parse(entry.value.text)!,
+  };
+
+  /// [CheckoutPage.crateLines] after the Empties Exchange: crates reduced to
+  /// what is still to come back, fully covered brands dropped. Everything about
+  /// the deposit reads these: empties already handed over carry none.
+  List<Map<String, dynamic>> get _outstandingCrateLines {
+    final left = outstandingCrates(_cratesInSale, _emptiesReturned);
+    return [
+      for (final line in widget.crateLines)
+        if (left[SaleCrateLine.fromMap(line).manufacturerId] case final crates?)
+          {...line, 'crates': crates},
+    ];
+  }
 
   /// §13.4 / rule #13 — the selected business is Bar / Beer Distributor. The
   /// cart only passes crateLines for a crate business, but guard here too so the
@@ -487,9 +524,13 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                 _buildMissingCrateValueNotice(),
                 SizedBox(height: context.getRSize(12)),
               ],
+              if (Gates.recordCrateReturn.allows(ref)) ...[
+                _buildEmptiesReturnedSection(),
+                SizedBox(height: context.getRSize(24)),
+              ],
               if (_depositApplies)
                 _buildCrateDepositSection()
-              else
+              else if (_outstandingCrateLines.isNotEmpty)
                 _buildReadOnlyCratesSection(),
             ],
 
@@ -586,7 +627,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   /// order's crate line and, with no deposit paid, issues the crate debt at ₦0.
   /// Sorted for a stable read.
   List<String> get _unratedCrateBrands => <String>{
-    for (final line in widget.crateLines)
+    for (final line in _outstandingCrateLines)
       if (((line['rateKobo'] as int?) ?? 0) <= 0)
         (line['name'] as String?) ?? 'Brand',
   }.toList()..sort();
@@ -606,6 +647,110 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           'a crate value is set for the brand. You can complete this '
           'sale — no deposit will be collected for them.',
     );
+  }
+
+  // ── Empties Returned (Empties Exchange, per brand) ───────────────────────────
+  /// #649 — the crates the customer hands over now. If they cover every brand
+  /// the sale completes straight away; otherwise it goes to Pending and Confirm
+  /// counts only what is still out. One row per brand, always the full count in
+  /// this sale. Old empties go through the customer's Record Crate Return.
+  Widget _buildEmptiesReturnedSection() {
+    final note = _emptiesNote;
+    return Column(
+      key: CheckoutKeys.emptiesReturnedSection,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _sectionLabel('Empties Returned'),
+        SizedBox(height: context.getRSize(10)),
+        _crateCard([
+          for (final line in widget.crateLines) _emptiesReturnedRow(line),
+        ]),
+        if (note != null) ...[
+          SizedBox(height: context.getRSize(8)),
+          Text(
+            note,
+            key: CheckoutKeys.emptiesReturnedNote,
+            style: context.regularStyle(12).copyWith(color: _subtext),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// What the entered empties do to this sale. Nothing when none are entered,
+  /// or while a count is one [_confirmPayment] would refuse.
+  String? get _emptiesNote {
+    final returned = _emptiesReturned;
+    if (returned.isEmpty || _emptiesCountError != null) return null;
+    final taken = _cratesInSale;
+    if (crateExchangeClearsSale(taken: taken, returned: returned)) {
+      return 'All crates back. This sale completes now.';
+    }
+    final left = outstandingCrates(
+      taken,
+      returned,
+    ).values.fold<double>(0, (s, v) => s + v);
+    return '${formatQty(left)} crate${left == 1 ? '' : 's'} still to come '
+        'back. This sale goes to Pending.';
+  }
+
+  /// Why the entered counts can't be recorded, or null when they can.
+  String? get _emptiesCountError {
+    final typed = _emptiesCtrls.values.map((c) => c.text.trim());
+    if (typed.any((t) => t.isNotEmpty && Qty.parse(t) == null)) {
+      return 'Crate counts go in quarters: 0, 0.25, 0.5, 0.75, 1 …';
+    }
+    final refused = crateExchangeProblem(
+      taken: _cratesInSale,
+      returned: _emptiesReturned,
+    );
+    if (refused == null) return null;
+    final line = widget.crateLines.firstWhere(
+      (l) => l['manufacturerId'] == refused.manufacturerId,
+    );
+    final crates = SaleCrateLine.fromMap(line).crates;
+    final name = (line['name'] as String?) ?? 'Brand';
+    return crates == 1
+        ? 'Only 1 crate of $name is in this sale.'
+        : 'Only ${formatQty(crates)} crates of $name are in this sale.';
+  }
+
+  Widget _emptiesReturnedRow(Map<String, dynamic> line) {
+    final mfrId = line['manufacturerId'] as String;
+    final name = (line['name'] as String?) ?? 'Brand';
+    final crates = (line['crates'] as num?)?.toDouble() ?? 0;
+    return _crateRowBody(
+      name,
+      '${formatQty(crates)} crate${crates == 1 ? '' : 's'} in this sale',
+      trailing: [
+        SizedBox(width: context.getRSize(8)),
+        SizedBox(
+          width: context.getRSize(80),
+          child: AppInput(
+            key: CheckoutKeys.emptiesReturned(mfrId),
+            controller: _emptiesCtrls[mfrId],
+            keyboardType: stockQtyKeyboard(allowParts: true),
+            inputFormatters: stockQtyFormatters(allowParts: true),
+            textAlign: TextAlign.center,
+            onChanged: (_) => _onEmptiesChanged(mfrId),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Moves the payable live: a deposit can't outgrow the crates it now covers,
+  /// and a brand with none outstanding holds none.
+  void _onEmptiesChanged(String mfrId) {
+    setState(() {
+      final fullKobo = _outstandingCrateLines
+          .map(SaleCrateLine.fromMap)
+          .where((line) => line.manufacturerId == mfrId)
+          .fold<int>(0, (s, line) => s + line.fullDepositKobo);
+      if ((_depositByMfr[mfrId] ?? 0) > fullKobo) {
+        _depositByMfr[mfrId] = fullKobo;
+      }
+    });
   }
 
   // ── Crate deposit (editable, per brand) ──────────────────────────────────────
@@ -634,7 +779,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         ),
         SizedBox(height: context.getRSize(10)),
         _crateCard([
-          for (final line in widget.crateLines) _crateDepositRow(line),
+          for (final line in _outstandingCrateLines) _crateDepositRow(line),
         ]),
       ],
     );
@@ -658,7 +803,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         ),
         SizedBox(height: context.getRSize(10)),
         _crateCard([
-          for (final line in widget.crateLines) _readOnlyCrateRow(line),
+          for (final line in _outstandingCrateLines) _readOnlyCrateRow(line),
         ]),
       ],
     );
@@ -1002,6 +1147,29 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       return;
     }
 
+    // ── Empties Exchange (#649) ───────────────────────────────────────────────
+    // First, because a count changes the payable the checks below read. A grant
+    // revoked mid-flow hides the field, so drop what it held rather than leave
+    // the next Confirm stuck on counts nobody can see or change.
+    final emptiesError = _emptiesCountError;
+    if (emptiesError != null) {
+      AppNotification.showError(context, emptiesError);
+      return;
+    }
+    if (_emptiesReturned.isNotEmpty) {
+      try {
+        Gates.recordCrateReturn.require(ref);
+      } on GateDeniedError {
+        setState(() {
+          for (final ctrl in _emptiesCtrls.values) {
+            ctrl.clear();
+          }
+        });
+        showGateDenied(context, Gates.recordCrateReturn);
+        return;
+      }
+    }
+
     // ── Auto-switch to Credit Payment when credit covers the bill ────────────
     // If the cashier left the amount blank and the customer's credit balance
     // already covers the whole payable, book it as a credit payment instead of
@@ -1214,6 +1382,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             crateDepositPaidByManufacturer: _depositApplies
                 ? Map<String, int>.from(_depositByMfr)
                 : const {},
+            // #649 — netted inside the sale's transaction: it decides the
+            // status and leaves only outstanding crates on the order.
+            cratesReturnedByManufacturer: _emptiesReturned,
             discountKobo: _discountTotalKobo,
             // 'wallet' debits the whole total from the wallet (no cash lands);
             // 'cash' covers Cash / Transfer and Credit Sale — the entered amount
@@ -1282,7 +1453,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   Future<ReceiptExtras?> _loadReceiptExtras() async {
     try {
       final vat = await ref.read(vatConfigProvider.future);
-      final crates = widget.crateLines.map(SaleCrateLine.fromMap).toList();
+      final crates = _outstandingCrateLines.map(SaleCrateLine.fromMap).toList();
       return await loadReceiptExtras(
         ref.read(databaseProvider),
         business: ref.read(currentBusinessProvider),
@@ -2243,6 +2414,10 @@ abstract final class CheckoutKeys {
   static const crateValueMissing = Key('checkout-crate-value-missing');
   static const crateDeposit = Key('checkout-crate-deposit');
   static const cratesTaken = Key('checkout-crates-taken');
+  static const emptiesReturnedSection = Key('checkout-empties-returned');
+  static const emptiesReturnedNote = Key('checkout-empties-returned-note');
+  static Key emptiesReturned(String manufacturerId) =>
+      Key('checkout-empties-returned-$manufacturerId');
   static Key depositRow(String manufacturerId) =>
       Key('checkout-deposit-row-$manufacturerId');
   static const depositSheet = Key('checkout-deposit-sheet');
