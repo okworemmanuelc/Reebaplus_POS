@@ -118,6 +118,9 @@ void main() {
       'users_backfill_v1::$bizB': true,
       'first_pull_done_v1_$bizA': true,
       'first_pull_done_v1_$bizB': true,
+      'active_store.$bizA.user-1': 'store-x',
+      'active_store.$bizA.user-2': '__all__',
+      'active_store.$bizB.user-1': 'store-y',
     });
 
     await db.clearBusinessData(bizA);
@@ -126,6 +129,8 @@ void main() {
     expect(prefs.getString('last_sync_timestamp::$bizA'), isNull);
     expect(prefs.getBool('users_backfill_v1::$bizA'), isNull);
     expect(prefs.getBool('first_pull_done_v1_$bizA'), isNull);
+    expect(prefs.getString('active_store.$bizA.user-1'), isNull);
+    expect(prefs.getString('active_store.$bizA.user-2'), isNull);
 
     expect(
       prefs.getString('last_sync_timestamp::$bizB'),
@@ -135,6 +140,7 @@ void main() {
     );
     expect(prefs.getBool('users_backfill_v1::$bizB'), isTrue);
     expect(prefs.getBool('first_pull_done_v1_$bizB'), isTrue);
+    expect(prefs.getString('active_store.$bizB.user-1'), 'store-y');
   });
 
   test('removes the cleared business\'s photo copies, logo and pending '
