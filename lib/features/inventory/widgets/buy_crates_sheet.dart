@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
+import 'package:reebaplus_pos/shared/utils/quantity_input.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/crates/crate_count_store.dart';
@@ -216,10 +217,8 @@ class _BuyCratesSheetState extends ConsumerState<BuyCratesSheet> {
                 labelText: 'Number of crates',
                 hintText: 'e.g. 10',
                 // Quarter steps (#629): half a crate is 0.5.
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                inputFormatters: [CurrencyInputFormatter(grouping: false)],
+                keyboardType: stockQtyKeyboard(allowParts: true),
+                inputFormatters: stockQtyFormatters(allowParts: true),
                 textInputAction: TextInputAction.next,
                 validator: _validateQuantity,
                 onChanged: (_) => setState(() {}),

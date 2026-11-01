@@ -547,14 +547,10 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
     bool submitting = false;
 
     // Parts of a damaged product need its switch on. A tracked bottle also
-    // damages its crate (#299), and crates in parts belong to the empties
-    // work (S4, #620), so those stay whole here.
+    // damages its crate (#299), in the same part (#629: half a crate of
+    // drinks damaged is half a crate shell lost, valued at half the rate).
     bool partsAllowedFor(ProductStockWithStore? it) =>
-        it != null &&
-        it.product.allowFractionalSales &&
-        !(tracksCrates &&
-            it.product.unit?.toLowerCase() == 'bottle' &&
-            it.product.trackEmpties);
+        it != null && it.product.allowFractionalSales;
 
     await showModalBottomSheet(
       context: context,

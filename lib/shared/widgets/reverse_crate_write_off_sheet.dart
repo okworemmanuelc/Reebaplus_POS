@@ -8,7 +8,6 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
-import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
@@ -16,6 +15,7 @@ import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/crate_sheet_recorded_line.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
+import 'package:reebaplus_pos/shared/utils/quantity_input.dart';
 
 /// Test keys for [ReverseCrateWriteOffSheet] (#296).
 const String kReverseWriteOffSheetKey = 'reverse_write_off_sheet';
@@ -229,10 +229,8 @@ class _ReverseCrateWriteOffSheetState
                 labelText: 'Crates found',
                 hintText: reversible > 0 ? 'Up to ${formatQty(reversible)}' : 'e.g. 2',
                 // Quarter steps (#629): half a crate is 0.5.
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                inputFormatters: [CurrencyInputFormatter(grouping: false)],
+                keyboardType: stockQtyKeyboard(allowParts: true),
+                inputFormatters: stockQtyFormatters(allowParts: true),
                 validator: (_) {
                   final n = _quantity;
                   if (n == null) return 'Enter how many crates turned up';

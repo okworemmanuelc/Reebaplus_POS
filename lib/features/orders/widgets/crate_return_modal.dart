@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
+import 'package:reebaplus_pos/shared/utils/quantity_input.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -8,7 +9,6 @@ import 'package:reebaplus_pos/core/crates/crate_bearing_sale.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
-import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/services/orders/crate_return_input.dart';
@@ -607,10 +607,8 @@ class _ManufacturerReturnTile extends StatelessWidget {
             child: AppInput(
               key: Key('crate-return-count-${row.manufacturerId}'),
               controller: row.controller,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              inputFormatters: [CurrencyInputFormatter(grouping: false)],
+              keyboardType: stockQtyKeyboard(allowParts: true),
+              inputFormatters: stockQtyFormatters(allowParts: true),
               textAlign: TextAlign.center,
             ),
           ),

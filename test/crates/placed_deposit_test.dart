@@ -180,7 +180,7 @@ void main() {
     dateReceived: DateTime(2026, 7, 30),
     staffId: stockKeeperId,
     lines: [lineFor(manufacturerId)],
-    fullCratesReceivedByManufacturer: {manufacturerId: crates},
+    fullCratesReceivedByManufacturer: {manufacturerId: crates.toDouble()},
     emptiesReturnedByManufacturer: const {},
   );
 

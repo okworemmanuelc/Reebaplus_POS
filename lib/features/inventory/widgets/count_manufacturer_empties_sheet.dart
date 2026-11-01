@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
+import 'package:reebaplus_pos/shared/utils/quantity_input.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/crates/crate_count_store.dart';
@@ -268,8 +268,8 @@ class _CountManufacturerEmptiesSheetState
           labelText: 'Counted empties',
           hintText: 'Enter physical count',
           // Quarter steps (#629): half a crate is 0.5.
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          inputFormatters: [CurrencyInputFormatter(grouping: false)],
+          keyboardType: stockQtyKeyboard(allowParts: true),
+          inputFormatters: stockQtyFormatters(allowParts: true),
           onChanged: (_) => setState(() => _errorMessage = null),
         ),
 

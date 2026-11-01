@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:reebaplus_pos/shared/utils/quantity_input.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -81,9 +81,9 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
   // Crate size is a CATEGORY here (Big/Medium/Small), never a bottle count, so
   // neither figure can be worked out from the quantity delivered — both are
   // typed by whoever took the delivery (ADR 0023).
-  final Map<String, int> _fullCratesReceivedByManufacturer = {};
+  final Map<String, double> _fullCratesReceivedByManufacturer = {};
   final Map<String, TextEditingController> _fullCratesControllers = {};
-  final Map<String, int> _emptiesReturnedByManufacturer = {};
+  final Map<String, double> _emptiesReturnedByManufacturer = {};
   final Map<String, TextEditingController> _emptiesControllers = {};
 
   @override
@@ -135,7 +135,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
         final fullCratesCtrl = TextEditingController(text: '0');
         fullCratesCtrl.addListener(() {
           _fullCratesReceivedByManufacturer[mfrId] =
-              int.tryParse(fullCratesCtrl.text) ?? 0;
+              Qty.parse(fullCratesCtrl.text) ?? 0; // quarters (#629)
         });
         _fullCratesControllers[mfrId] = fullCratesCtrl;
         _fullCratesReceivedByManufacturer[mfrId] = 0;
@@ -143,7 +143,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
         final emptiesCtrl = TextEditingController(text: '0');
         emptiesCtrl.addListener(() {
           _emptiesReturnedByManufacturer[mfrId] =
-              int.tryParse(emptiesCtrl.text) ?? 0;
+              Qty.parse(emptiesCtrl.text) ?? 0; // quarters (#629)
         });
         _emptiesControllers[mfrId] = emptiesCtrl;
         _emptiesReturnedByManufacturer[mfrId] = 0;
@@ -230,8 +230,9 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
       for (final line in cart)
         if (line.movesCrates) line.manufacturerId!,
     };
-    int crateTotal(Map<String, int> byManufacturer) => eligibleManufacturerIds
-        .fold(0, (sum, id) => sum + (byManufacturer[id] ?? 0));
+    double crateTotal(Map<String, double> byManufacturer) =>
+        eligibleManufacturerIds
+            .fold(0.0, (sum, id) => sum + (byManufacturer[id] ?? 0));
 
     final confirmed = await _showConfirmationDialog(
       supplierName: supplier?.name,
@@ -268,10 +269,10 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
             dateReceived: _dateReceived,
             staffId: staffId,
             lines: cart,
-            fullCratesReceivedByManufacturer: Map<String, int>.from(
+            fullCratesReceivedByManufacturer: Map<String, double>.from(
               _fullCratesReceivedByManufacturer,
             ),
-            emptiesReturnedByManufacturer: Map<String, int>.from(
+            emptiesReturnedByManufacturer: Map<String, double>.from(
               _emptiesReturnedByManufacturer,
             ),
             note: note.isEmpty ? null : note,
@@ -308,14 +309,14 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
     required int invoiceTotalKobo,
     required String storeName,
     required int uncostedItemCount,
-    required int fullCratesReceived,
-    required int emptiesReturned,
+    required double fullCratesReceived,
+    required double emptiesReturned,
   }) {
     final theme = Theme.of(context);
     final f = theme.extension<AppFixedColors>() ?? AppFixedColors.light;
     final crateParts = <String>[
-      if (fullCratesReceived > 0) '$fullCratesReceived full in',
-      if (emptiesReturned > 0) '$emptiesReturned empty back',
+      if (fullCratesReceived > 0) '${formatQty(fullCratesReceived)} full in',
+      if (emptiesReturned > 0) '${formatQty(emptiesReturned)} empty back',
     ];
     return showDialog<bool>(
       context: context,
@@ -813,8 +814,8 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
                 child: AppInput(
                   controller: _fullCratesControllers[group.manufacturerId],
                   labelText: 'Full crates in',
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  keyboardType: stockQtyKeyboard(allowParts: true),
+                  inputFormatters: stockQtyFormatters(allowParts: true),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -823,8 +824,8 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
                 child: AppInput(
                   controller: _emptiesControllers[group.manufacturerId],
                   labelText: 'Empty crates back',
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  keyboardType: stockQtyKeyboard(allowParts: true),
+                  inputFormatters: stockQtyFormatters(allowParts: true),
                   textAlign: TextAlign.center,
                 ),
               ),

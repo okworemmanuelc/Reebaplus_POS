@@ -8,7 +8,6 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
-import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
@@ -16,6 +15,7 @@ import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/crate_sheet_recorded_line.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
+import 'package:reebaplus_pos/shared/utils/quantity_input.dart';
 
 /// Test keys for [CrateShortageWriteOffSheet] (#296).
 const String kCrateWriteOffSheetKey = 'crate_write_off_sheet';
@@ -261,10 +261,8 @@ class _CrateShortageWriteOffSheetState
                 labelText: 'Crates to write off',
                 hintText: storeOpen > 0 ? 'Up to ${formatQty(storeOpen)}' : 'e.g. 2',
                 // Quarter steps (#629): half a crate is 0.5.
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                inputFormatters: [CurrencyInputFormatter(grouping: false)],
+                keyboardType: stockQtyKeyboard(allowParts: true),
+                inputFormatters: stockQtyFormatters(allowParts: true),
                 textInputAction: TextInputAction.next,
                 validator: (_) {
                   final n = _quantity;

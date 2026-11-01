@@ -72,12 +72,12 @@ void main() {
       expect(state.writtenOffCrates, 0.5);
       expect(state.outstandingWriteOffs.single.valueKobo, 12501);
 
-      final brand = CrateShortageBrand(
+      const brand = CrateShortageBrand(
         manufacturerId: 'm',
         manufacturerName: 'Star',
         ratePerCrateKobo: oddRate,
         byStore: {
-          's': const CrateShortageState(
+          's': CrateShortageState(
             openCrates: 0.5,
             reversibleCrates: 0,
             outstandingWriteOffs: [],

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
+import 'package:reebaplus_pos/shared/utils/quantity_input.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:intl/intl.dart';
 
@@ -1423,10 +1424,8 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
                         ? 'Crates returned to supplier'
                         : 'Crates received from supplier',
                     // Quarter steps (#629): half a crate is 0.5.
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    inputFormatters: [CurrencyInputFormatter(grouping: false)],
+                    keyboardType: stockQtyKeyboard(allowParts: true),
+                    inputFormatters: stockQtyFormatters(allowParts: true),
                     validator: (v) {
                       final raw = (v ?? '').trim();
                       if (raw.isNotEmpty && Qty.parse(raw) == null) {

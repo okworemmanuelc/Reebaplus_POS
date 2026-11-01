@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
+import 'package:reebaplus_pos/shared/utils/quantity_input.dart';
 import 'package:reebaplus_pos/core/crates/crate_count_store.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
@@ -327,10 +327,8 @@ class _RecordDamagedCratesSheetState
                     : 'Number of damaged empties',
                 hintText: 'e.g. 5',
                 // Quarter steps (#629): half a crate is 0.5.
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                inputFormatters: [CurrencyInputFormatter(grouping: false)],
+                keyboardType: stockQtyKeyboard(allowParts: true),
+                inputFormatters: stockQtyFormatters(allowParts: true),
                 textInputAction: TextInputAction.next,
                 validator: _validateQuantity,
                 onChanged: (_) => setState(() {}),
