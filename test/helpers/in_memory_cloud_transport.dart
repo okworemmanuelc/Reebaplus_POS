@@ -170,6 +170,7 @@ class InMemoryCloudTransport implements CloudTransport {
         return '${a['id']}'.compareTo('${b['id']}');
       });
     }
+    query.onPage?.call(result.length);
     return result;
   }
 
