@@ -9,6 +9,7 @@ import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/receiving/screens/receive_checkout_screen.dart';
 import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
@@ -177,9 +178,9 @@ class _ReceiveCartLineCard extends ConsumerWidget {
         icon: visual.icon,
         tileTint: visual.tint,
         tileIconColor: visual.iconColor,
-        quantityLabel: '${line.qty}',
+        quantityLabel: formatQty(line.qty),
         unitPriceLabel: cost,
-        totalLabel: formatCurrency(line.buyingPriceKobo * line.qty / 100),
+        totalLabel: formatCurrency(line.totalKobo / 100),
         detail: detail,
         badges: [TagPill(label: 'Cost: $cost', dense: true)],
         onTap: () => EditReceiveItemModal.show(context, line),
@@ -226,7 +227,7 @@ class _ReceiveCartFooter extends ConsumerWidget {
         SizedBox(height: context.getRSize(16)),
         AppButton(
           key: ReceiveKeys.continueButton,
-          text: 'Continue (${notifier.totalUnits} items)',
+          text: 'Continue (${formatQty(notifier.totalUnits)} items)',
           isFullWidth: true,
           onPressed: () {
             Navigator.of(context).push(

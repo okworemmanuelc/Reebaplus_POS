@@ -5,6 +5,7 @@ import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/icon_tile.dart';
 
 /// The receive-side Uncosted disclosure (#199 / PRD #155 US 37).
@@ -27,7 +28,7 @@ class UncostedReceiveWarning extends StatelessWidget {
   final int itemCount;
 
   /// Units carried by those lines — the quantity that would arrive at no cost.
-  final int unitCount;
+  final double unitCount;
 
   const UncostedReceiveWarning({
     super.key,
@@ -70,7 +71,7 @@ class UncostedReceiveWarning extends StatelessWidget {
                 ),
                 SizedBox(height: context.getRSize(6)),
                 Text(
-                  '$unitCount ${unitCount == 1 ? 'unit' : 'units'} would '
+                  '${formatQty(unitCount)} ${unitCount == 1 ? 'unit' : 'units'} would '
                   'arrive with no recorded cost, so nothing is added to the '
                   "supplier's account for "
                   '${unitCount == 1 ? 'it' : 'them'} and profit will read '
