@@ -48,7 +48,6 @@ import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/core/utils/product_unit.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
-import 'package:reebaplus_pos/shared/utils/quantity.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ProductDetailScreen — full-screen product information view (#487 PR 3)

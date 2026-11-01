@@ -10,7 +10,6 @@ import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/features/receiving/screens/receive_cart_screen.dart';
 import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
 import 'package:reebaplus_pos/features/receiving/widgets/receive_parts.dart';
-import 'package:reebaplus_pos/shared/widgets/redesign/cart_line.dart';
 
 import '../helpers/screen_harness.dart';
 import '../receiving/receive_fixture.dart';

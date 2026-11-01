@@ -78,6 +78,7 @@ void main() {
             businessId: businessId,
             name: 'Single Bottle',
             unit: const Value('Bottle'),
+            allowFractionalSales: const Value(false),
             buyingPriceKobo: const Value(500),
           ),
         );
