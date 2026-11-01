@@ -7,6 +7,9 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #648: Customers list search, debtors first, phone optional (2026-11-01, branch `feat/648-customers-search-debt-first`)
+The Customers list has a "Search name or phone" field as its first scrolling item (name, or phone ignoring spaces and symbols; address not searched). Customers who owe (`balance < 0`) come first, biggest debt first, ties by name; the rest keep the name order; same order while searching. Phone is optional on the Add and Edit sheets. New `customerListView` / `customerMatchesQuery` in `features/customers/data/customer_list_view.dart`; the payment sheet picker now uses the same matcher (Cart picker untouched). App-only: no table, sync or money change, so no pos-parity issue. Tests: `test/customers/customer_list_view_test.dart` and the list/sheet cases in `customers_screen_redesign_test.dart`; customers goldens regenerated.
+
 ### Product name alone, no unit or size (2026-11-01, branch `fix/product-name-no-unit`)
 
 `productDisplayName(name)` takes only the name: "Heineken", not "Bottle Heineken" or "Heineken (B)", on Inventory rows, the cart, Add Product suggestions and every receipt (screen, paper, printed text). Sizes are typed into the name; the form already saves no size, so only older products hold one, and it still shows on the POS/Receive tile subtitles, scan sheets and the Manufacturer screen. The unit keeps its own label. App-only: no table, status or money change. Leftover: `tracksCrates` on `ReceiptWidget`, `PaperReceipt` and `buildReceiptLines` is now unused.

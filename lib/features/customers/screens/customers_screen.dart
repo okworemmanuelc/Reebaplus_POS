@@ -15,9 +15,11 @@ import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/app_drawer.dart';
+import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/first_run_empty_state.dart';
 import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
+import 'package:reebaplus_pos/features/customers/data/customer_list_view.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/customers/widgets/add_customer_sheet.dart';
 import 'package:reebaplus_pos/features/customers/widgets/customer_parts.dart';
@@ -37,6 +39,8 @@ class CustomersScreen extends ConsumerStatefulWidget {
 
 class _CustomersScreenState extends ConsumerState<CustomersScreen> {
   bool _isFirstLoad = true;
+  final _searchCtrl = TextEditingController();
+  String _query = '';
 
   @override
   void initState() {
@@ -47,6 +51,12 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
     Future.microtask(() {
       if (mounted) setState(() => _isFirstLoad = false);
     });
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   @override
@@ -138,8 +148,19 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                       context.getRSize(16),
                       (constraints.maxWidth - kSettingsMaxContentWidth) / 2,
                     );
+                    final shown = customerListView(filtered, balances, _query);
+                    final hasWholesale = !businessSellsOnePrice(
+                      ref.watch(currentBusinessProvider),
+                    );
+                    final t = Theme.of(context);
+                    final muted =
+                        t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+                    // The search field is the first scrolling item (not
+                    // pinned: fixed chrome starves the list sideways, #239).
+                    // It sits at the same spot in the tree whatever the
+                    // results, so it keeps its focus and text (#648).
                     return AppRefreshWrapper(
-                      child: ListView.separated(
+                      child: ListView.builder(
                         key: CustomersKeys.list,
                         padding: EdgeInsets.fromLTRB(
                           gutter,
@@ -148,31 +169,58 @@ class _CustomersScreenState extends ConsumerState<CustomersScreen> {
                           // Clears the Add Customer button.
                           context.getRSize(100) + context.deviceBottomPadding,
                         ),
-                        itemCount: filtered.length,
-                        separatorBuilder: (context, index) =>
-                            SizedBox(height: context.getRSize(12)),
+                        itemCount: shown.isEmpty ? 2 : shown.length + 1,
                         itemBuilder: (context, index) {
-                          final c = filtered[index];
+                          if (index == 0) {
+                            return Padding(
+                              padding: EdgeInsets.only(
+                                bottom: context.getRSize(12),
+                              ),
+                              child: AppInput(
+                                key: CustomersKeys.search,
+                                controller: _searchCtrl,
+                                hintText: 'Search name or phone',
+                                prefixIcon: Icon(AppIcons.search, color: muted),
+                                textInputAction: TextInputAction.search,
+                                onChanged: (v) => setState(() => _query = v),
+                              ),
+                            );
+                          }
+                          if (shown.isEmpty) {
+                            return Padding(
+                              padding: EdgeInsets.only(
+                                top: context.getRSize(24),
+                              ),
+                              child: const CustomersEmptyMessage(
+                                message: 'No customers match',
+                              ),
+                            );
+                          }
+                          final c = shown[index - 1];
                           final balanceKobo = balances[c.id] ?? 0;
-                          final hasWholesale = !businessSellsOnePrice(
-                            ref.watch(currentBusinessProvider),
-                          );
-                          return CustomerListRow(
-                            key: CustomersKeys.row(c.id),
-                            name: c.name,
-                            address: c.addressText,
-                            tierLabel: c.priceTier.name.toUpperCase(),
-                            balanceLabel: formatCurrency(balanceKobo / 100.0),
-                            owes: balanceKobo < 0,
-                            showTier: hasWholesale,
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                slideDownRoute(
-                                  CustomerDetailScreen(customer: c),
-                                ),
-                              );
-                            },
+                          return Padding(
+                            padding: EdgeInsets.only(
+                              bottom: index == shown.length
+                                  ? 0
+                                  : context.getRSize(12),
+                            ),
+                            child: CustomerListRow(
+                              key: CustomersKeys.row(c.id),
+                              name: c.name,
+                              address: c.addressText,
+                              tierLabel: c.priceTier.name.toUpperCase(),
+                              balanceLabel: formatCurrency(balanceKobo / 100.0),
+                              owes: balanceKobo < 0,
+                              showTier: hasWholesale,
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  slideDownRoute(
+                                    CustomerDetailScreen(customer: c),
+                                  ),
+                                );
+                              },
+                            ),
                           );
                         },
                       ),
