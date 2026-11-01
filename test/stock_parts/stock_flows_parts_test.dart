@@ -31,56 +31,100 @@ void main() {
     partsProduct = UuidV7.generate();
     wholeProduct = UuidV7.generate();
     for (final (id, name) in [(fromStore, 'Source'), (toStore, 'Dest')]) {
-      await db.into(db.stores).insert(StoresCompanion.insert(
-          id: Value(id), businessId: businessId, name: name));
+      await db
+          .into(db.stores)
+          .insert(
+            StoresCompanion.insert(
+              id: Value(id),
+              businessId: businessId,
+              name: name,
+            ),
+          );
     }
-    await db.into(db.users).insert(UsersCompanion.insert(
-        id: Value(staff), businessId: businessId, name: 'CEO', pin: '0000'));
-    await db.into(db.products).insert(ProductsCompanion.insert(
-        id: Value(partsProduct),
-        businessId: businessId,
-        name: 'Rice',
-        buyingPriceKobo: const Value(1000),
-        allowFractionalSales: const Value(true)));
-    await db.into(db.products).insert(ProductsCompanion.insert(
-        id: Value(wholeProduct),
-        businessId: businessId,
-        name: 'Bottle',
-        buyingPriceKobo: const Value(1000)));
+    await db
+        .into(db.users)
+        .insert(
+          UsersCompanion.insert(
+            id: Value(staff),
+            businessId: businessId,
+            name: 'CEO',
+            pin: '0000',
+          ),
+        );
+    await db
+        .into(db.products)
+        .insert(
+          ProductsCompanion.insert(
+            id: Value(partsProduct),
+            businessId: businessId,
+            name: 'Rice',
+            buyingPriceKobo: const Value(1000),
+            allowFractionalSales: const Value(true),
+          ),
+        );
+    await db
+        .into(db.products)
+        .insert(
+          ProductsCompanion.insert(
+            id: Value(wholeProduct),
+            businessId: businessId,
+            name: 'Bottle',
+            buyingPriceKobo: const Value(1000),
+          ),
+        );
     for (final p in [partsProduct, wholeProduct]) {
-      await db.into(db.inventory).insert(InventoryCompanion.insert(
-          businessId: businessId,
-          productId: p,
-          storeId: fromStore,
-          quantity: const Value(10)));
+      await db
+          .into(db.inventory)
+          .insert(
+            InventoryCompanion.insert(
+              businessId: businessId,
+              productId: p,
+              storeId: fromStore,
+              quantity: const Value(10),
+            ),
+          );
     }
   });
 
   tearDown(() => db.close());
 
   Future<double> stockAt(String product, String store) async {
-    final row = await (db.select(db.inventory)
-          ..where((t) => t.productId.equals(product) & t.storeId.equals(store)))
-        .getSingleOrNull();
+    final row =
+        await (db.select(db.inventory)..where(
+              (t) => t.productId.equals(product) & t.storeId.equals(store),
+            ))
+            .getSingleOrNull();
     return row?.quantity ?? 0;
   }
 
   group('adjustStock', () {
     test('applies a quarter and records it on the ledger', () async {
       await db.inventoryDao.adjustStock(
-          partsProduct, fromStore, 0.25, 'found one', staff);
+        partsProduct,
+        fromStore,
+        0.25,
+        'found one',
+        staff,
+      );
       expect(await stockAt(partsProduct, fromStore), 10.25);
-      final tx = await db.customSelect(
-        'SELECT quantity_delta FROM stock_transactions WHERE product_id = ?',
-        variables: [Variable(partsProduct)],
-      ).getSingle();
+      final tx = await db
+          .customSelect(
+            'SELECT quantity_delta FROM stock_transactions WHERE product_id = ?',
+            variables: [Variable(partsProduct)],
+          )
+          .getSingle();
       expect(tx.read<double>('quantity_delta'), 0.25);
     });
 
     test('refuses an off-quarter change', () async {
       expect(
-        () => db.inventoryDao
-            .adjustStock(partsProduct, fromStore, 0.3, 'x', staff),
+        () => db.inventoryDao.adjustStock(
+          partsProduct,
+          fromStore,
+          0.3,
+          'x',
+          staff,
+        ),
         throwsArgumentError,
       );
     });
@@ -99,8 +143,10 @@ void main() {
       final req = await db.select(db.stockAdjustmentRequests).getSingle();
       expect(req.quantityDiff, -1.5);
 
-      await db.stockAdjustmentRequestsDao
-          .approveRequest(requestId: req.id, approverId: staff);
+      await db.stockAdjustmentRequestsDao.approveRequest(
+        requestId: req.id,
+        approverId: staff,
+      );
       expect(await stockAt(partsProduct, fromStore), 8.5);
     });
 
@@ -115,13 +161,17 @@ void main() {
         unitCostKobo: 800,
       );
       final req = await db.select(db.stockAdjustmentRequests).getSingle();
-      await db.stockAdjustmentRequestsDao
-          .approveRequest(requestId: req.id, approverId: staff);
-      final batch = await db.customSelect(
-        'SELECT qty_original, cost_kobo FROM cost_batches WHERE product_id = ? '
-        'AND qty_original = 0.5',
-        variables: [Variable(partsProduct)],
-      ).getSingle();
+      await db.stockAdjustmentRequestsDao.approveRequest(
+        requestId: req.id,
+        approverId: staff,
+      );
+      final batch = await db
+          .customSelect(
+            'SELECT qty_original, cost_kobo FROM cost_batches WHERE product_id = ? '
+            'AND qty_original = 0.5',
+            variables: [Variable(partsProduct)],
+          )
+          .getSingle();
       expect(batch.read<int>('cost_kobo'), 800);
     });
 
@@ -140,28 +190,32 @@ void main() {
       expect(await db.select(db.stockAdjustmentRequests).get(), isEmpty);
     });
 
-    test('approval refuses a part once the switch is off, request stays pending',
-        () async {
-      await db.stockAdjustmentRequestsDao.requestStockAdjustment(
-        productId: partsProduct,
-        storeId: fromStore,
-        quantityDiff: 0.5,
-        reason: 'x',
-        summary: 'x',
-        requestedBy: staff,
-      );
-      await (db.update(db.products)..where((t) => t.id.equals(partsProduct)))
-          .write(const ProductsCompanion(allowFractionalSales: Value(false)));
-      final req = await db.select(db.stockAdjustmentRequests).getSingle();
-      await expectLater(
-        db.stockAdjustmentRequestsDao
-            .approveRequest(requestId: req.id, approverId: staff),
-        throwsArgumentError,
-      );
-      final after = await db.select(db.stockAdjustmentRequests).getSingle();
-      expect(after.status, 'pending');
-      expect(await stockAt(partsProduct, fromStore), 10);
-    });
+    test(
+      'approval refuses a part once the switch is off, request stays pending',
+      () async {
+        await db.stockAdjustmentRequestsDao.requestStockAdjustment(
+          productId: partsProduct,
+          storeId: fromStore,
+          quantityDiff: 0.5,
+          reason: 'x',
+          summary: 'x',
+          requestedBy: staff,
+        );
+        await (db.update(db.products)..where((t) => t.id.equals(partsProduct)))
+            .write(const ProductsCompanion(allowFractionalSales: Value(false)));
+        final req = await db.select(db.stockAdjustmentRequests).getSingle();
+        await expectLater(
+          db.stockAdjustmentRequestsDao.approveRequest(
+            requestId: req.id,
+            approverId: staff,
+          ),
+          throwsArgumentError,
+        );
+        final after = await db.select(db.stockAdjustmentRequests).getSingle();
+        expect(after.status, 'pending');
+        expect(await stockAt(partsProduct, fromStore), 10);
+      },
+    );
 
     test('whole requests are unchanged for a switched-off product', () async {
       await db.stockAdjustmentRequestsDao.requestStockAdjustment(
@@ -173,8 +227,10 @@ void main() {
         requestedBy: staff,
       );
       final req = await db.select(db.stockAdjustmentRequests).getSingle();
-      await db.stockAdjustmentRequestsDao
-          .approveRequest(requestId: req.id, approverId: staff);
+      await db.stockAdjustmentRequestsDao.approveRequest(
+        requestId: req.id,
+        approverId: staff,
+      );
       expect(await stockAt(wholeProduct, fromStore), 7);
     });
   });
@@ -189,7 +245,10 @@ void main() {
         initiatedBy: staff,
       );
       expect(await stockAt(partsProduct, fromStore), 7.75);
-      await db.stockTransferDao.receiveTransfer(transferId: id, receivedBy: staff);
+      await db.stockTransferDao.receiveTransfer(
+        transferId: id,
+        receivedBy: staff,
+      );
       expect(await stockAt(partsProduct, toStore), 2.25);
       final t = await db.select(db.stockTransfers).getSingle();
       expect(t.quantity, 2.25);
@@ -237,41 +296,48 @@ void main() {
       expect(await stockAt(partsProduct, fromStore), 9.25);
     });
 
-    test('a request or dispatch for a switched-off product rejects parts',
-        () async {
-      expect(
-        () => db.stockTransferDao.requestTransfers(
+    test(
+      'a request or dispatch for a switched-off product rejects parts',
+      () async {
+        expect(
+          () => db.stockTransferDao.requestTransfers(
+            fromStoreId: fromStore,
+            toStoreId: toStore,
+            lines: [(productId: wholeProduct, quantity: 0.5)],
+            requestedBy: staff,
+          ),
+          throwsArgumentError,
+        );
+        final id = await db.stockTransferDao.requestTransfer(
           fromStoreId: fromStore,
           toStoreId: toStore,
-          lines: [(productId: wholeProduct, quantity: 0.5)],
+          productId: wholeProduct,
+          quantity: 2,
           requestedBy: staff,
-        ),
-        throwsArgumentError,
-      );
-      final id = await db.stockTransferDao.requestTransfer(
-        fromStoreId: fromStore,
-        toStoreId: toStore,
-        productId: wholeProduct,
-        quantity: 2,
-        requestedBy: staff,
-      );
-      await expectLater(
-        db.stockTransferDao.dispatchTransfer(
-          transferId: id,
-          dispatchedBy: staff,
-          quantity: 1.5,
-        ),
-        throwsArgumentError,
-      );
-      expect(await stockAt(wholeProduct, fromStore), 10);
-    });
+        );
+        await expectLater(
+          db.stockTransferDao.dispatchTransfer(
+            transferId: id,
+            dispatchedBy: staff,
+            quantity: 1.5,
+          ),
+          throwsArgumentError,
+        );
+        expect(await stockAt(wholeProduct, fromStore), 10);
+      },
+    );
   });
 
   group('stock counts', () {
     test('a count lands on a quarter and the session keeps the part', () async {
       // System 10, counted 9.75 -> diff -0.25.
       await db.inventoryDao.adjustStock(
-          partsProduct, fromStore, -0.25, 'Daily stock count adjustment', staff);
+        partsProduct,
+        fromStore,
+        -0.25,
+        'Daily stock count adjustment',
+        staff,
+      );
       await db.stockCountsDao.recordCount(
         storeId: fromStore,
         businessDate: '2026-11-01',
@@ -293,14 +359,20 @@ void main() {
 
   test('assertQuantityAllowed: zero only when asked, quarters only', () async {
     final dao = db.inventoryDao;
-    await expectLater(dao.assertQuantityAllowed(partsProduct, 0),
-        throwsArgumentError);
+    await expectLater(
+      dao.assertQuantityAllowed(partsProduct, 0),
+      throwsArgumentError,
+    );
     await dao.assertQuantityAllowed(partsProduct, 0, allowZero: true);
-    await expectLater(dao.assertQuantityAllowed(partsProduct, 0.1),
-        throwsArgumentError);
+    await expectLater(
+      dao.assertQuantityAllowed(partsProduct, 0.1),
+      throwsArgumentError,
+    );
     await dao.assertQuantityAllowed(partsProduct, 0.75);
-    await expectLater(dao.assertQuantityAllowed(wholeProduct, 0.75),
-        throwsArgumentError);
+    await expectLater(
+      dao.assertQuantityAllowed(wholeProduct, 0.75),
+      throwsArgumentError,
+    );
     await dao.assertQuantityAllowed(wholeProduct, 6);
   });
 }

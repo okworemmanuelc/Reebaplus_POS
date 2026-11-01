@@ -85,4 +85,19 @@ void main() {
     list.clear();
     expect(items(), isEmpty);
   });
+
+  test(
+    'a part (#630) is kept; + and - step by one; at or below 1 the - removes',
+    () {
+      list.setQuantity(_product('a'), 0.5);
+      expect(quantities(), {'a': 0.5});
+      list.increment('a');
+      expect(quantities(), {'a': 1.5});
+      list.decrement('a');
+      expect(quantities(), {'a': 0.5});
+      list.decrement('a');
+      expect(items(), isEmpty);
+      expect(totalRequestedUnits([]), 0);
+    },
+  );
 }

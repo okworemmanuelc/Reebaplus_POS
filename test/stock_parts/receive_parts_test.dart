@@ -25,39 +25,73 @@ void main() {
     db = AppDatabase.forTesting(NativeDatabase.memory());
     db.businessIdResolver = () => businessId;
     service = ReceiveStockService(db, SupplierAccountService(db));
-    await db.into(db.businesses).insert(
-        BusinessesCompanion.insert(id: const Value(businessId), name: 'Biz'));
-    await db.into(db.users).insert(UsersCompanion.insert(
-        id: const Value(userId),
-        businessId: businessId,
-        name: 'Staff',
-        pin: '1234'));
-    await db.into(db.stores).insert(StoresCompanion.insert(
-        id: const Value(storeId), businessId: businessId, name: 'Main'));
-    await db.into(db.suppliers).insert(SuppliersCompanion.insert(
-        id: const Value(supplierId), businessId: businessId, name: 'Acme'));
-    await db.into(db.products).insert(ProductsCompanion.insert(
-        id: const Value(partsProduct),
-        businessId: businessId,
-        name: 'Rice (bag)',
-        unit: const Value('Bag'),
-        buyingPriceKobo: const Value(1001),
-        allowFractionalSales: const Value(true)));
-    await db.into(db.products).insert(ProductsCompanion.insert(
-        id: const Value(wholeProduct),
-        businessId: businessId,
-        name: 'Single Bottle',
-        unit: const Value('Bottle'),
-        buyingPriceKobo: const Value(500)));
+    await db
+        .into(db.businesses)
+        .insert(
+          BusinessesCompanion.insert(id: const Value(businessId), name: 'Biz'),
+        );
+    await db
+        .into(db.users)
+        .insert(
+          UsersCompanion.insert(
+            id: const Value(userId),
+            businessId: businessId,
+            name: 'Staff',
+            pin: '1234',
+          ),
+        );
+    await db
+        .into(db.stores)
+        .insert(
+          StoresCompanion.insert(
+            id: const Value(storeId),
+            businessId: businessId,
+            name: 'Main',
+          ),
+        );
+    await db
+        .into(db.suppliers)
+        .insert(
+          SuppliersCompanion.insert(
+            id: const Value(supplierId),
+            businessId: businessId,
+            name: 'Acme',
+          ),
+        );
+    await db
+        .into(db.products)
+        .insert(
+          ProductsCompanion.insert(
+            id: const Value(partsProduct),
+            businessId: businessId,
+            name: 'Rice (bag)',
+            unit: const Value('Bag'),
+            buyingPriceKobo: const Value(1001),
+            allowFractionalSales: const Value(true),
+          ),
+        );
+    await db
+        .into(db.products)
+        .insert(
+          ProductsCompanion.insert(
+            id: const Value(wholeProduct),
+            businessId: businessId,
+            name: 'Single Bottle',
+            unit: const Value('Bottle'),
+            buyingPriceKobo: const Value(500),
+          ),
+        );
   });
 
   tearDown(() => db.close());
 
   Future<double> stockOf(String productId) async {
-    final row = await db.customSelect(
-      'SELECT quantity FROM inventory WHERE product_id = ? AND store_id = ?',
-      variables: [Variable(productId), const Variable(storeId)],
-    ).getSingleOrNull();
+    final row = await db
+        .customSelect(
+          'SELECT quantity FROM inventory WHERE product_id = ? AND store_id = ?',
+          variables: [Variable(productId), const Variable(storeId)],
+        )
+        .getSingleOrNull();
     return row?.read<double>('quantity') ?? 0;
   }
 
@@ -90,28 +124,34 @@ void main() {
         emptiesReturnedByManufacturer: const {},
       );
 
-  test('a quarter lands in stock, the cost layer and the invoice (half up)',
-      () async {
-    await receive([line(partsProduct, qty: 1.5, price: 1001, parts: true)]);
+  test(
+    'a quarter lands in stock, the cost layer and the invoice (half up)',
+    () async {
+      await receive([line(partsProduct, qty: 1.5, price: 1001, parts: true)]);
 
-    expect(await stockOf(partsProduct), 1.5);
-    // 1001 x 1.5 = 1501.5 -> 1502 kobo owed.
-    expect(await db.supplierLedgerDao.getBalanceKobo(supplierId), -1502);
+      expect(await stockOf(partsProduct), 1.5);
+      // 1001 x 1.5 = 1501.5 -> 1502 kobo owed.
+      expect(await db.supplierLedgerDao.getBalanceKobo(supplierId), -1502);
 
-    final batch = await db.customSelect(
-      'SELECT qty_original, qty_remaining, cost_kobo FROM cost_batches '
-      'WHERE product_id = ?',
-      variables: [const Variable(partsProduct)],
-    ).getSingle();
-    expect(batch.read<double>('qty_original'), 1.5);
-    expect(batch.read<double>('qty_remaining'), 1.5);
-    expect(batch.read<int>('cost_kobo'), 1001); // per-unit cost stays exact
+      final batch = await db
+          .customSelect(
+            'SELECT qty_original, qty_remaining, cost_kobo FROM cost_batches '
+            'WHERE product_id = ?',
+            variables: [const Variable(partsProduct)],
+          )
+          .getSingle();
+      expect(batch.read<double>('qty_original'), 1.5);
+      expect(batch.read<double>('qty_remaining'), 1.5);
+      expect(batch.read<int>('cost_kobo'), 1001); // per-unit cost stays exact
 
-    final log = await db.customSelect(
-      "SELECT description FROM activity_logs WHERE action = 'stock.received'",
-    ).getSingle();
-    expect(log.read<String>('description'), contains('1.5 unit(s)'));
-  });
+      final log = await db
+          .customSelect(
+            "SELECT description FROM activity_logs WHERE action = 'stock.received'",
+          )
+          .getSingle();
+      expect(log.read<String>('description'), contains('1.5 unit(s)'));
+    },
+  );
 
   test('0.25 and 0.75 are accepted and sum exactly', () async {
     await receive([line(partsProduct, qty: 0.25, price: 400, parts: true)]);
@@ -141,9 +181,11 @@ void main() {
     await receive([line(wholeProduct, qty: 5, price: 500)]);
     expect(await stockOf(wholeProduct), 5);
     expect(await db.supplierLedgerDao.getBalanceKobo(supplierId), -2500);
-    final log = await db.customSelect(
-      "SELECT description FROM activity_logs WHERE action = 'stock.received'",
-    ).getSingle();
+    final log = await db
+        .customSelect(
+          "SELECT description FROM activity_logs WHERE action = 'stock.received'",
+        )
+        .getSingle();
     expect(log.read<String>('description'), contains('5 unit(s)'));
   });
 
@@ -166,10 +208,14 @@ void main() {
       cart.addOrIncrement(parts);
       cart.addOrIncrement(whole);
       final lines = container.read(receiveCartProvider);
-      expect(lines.firstWhere((l) => l.productId == partsProduct).allowParts,
-          isTrue);
-      expect(lines.firstWhere((l) => l.productId == wholeProduct).allowParts,
-          isFalse);
+      expect(
+        lines.firstWhere((l) => l.productId == partsProduct).allowParts,
+        isTrue,
+      );
+      expect(
+        lines.firstWhere((l) => l.productId == wholeProduct).allowParts,
+        isFalse,
+      );
     });
 
     test('totals use lineTotalKobo and units show quarters', () {
