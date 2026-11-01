@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- #614: USB receipt printers. Interface class 7 = USB printer class.
+     Plugging one in offers to open Reebaplus and, with "always use", Android
+     remembers the USB permission for it. -->
+<resources>
+    <usb-device class="7" />
+</resources>

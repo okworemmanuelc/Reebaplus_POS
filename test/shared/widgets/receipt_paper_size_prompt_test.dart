@@ -12,11 +12,17 @@ import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
 import 'package:reebaplus_pos/shared/services/printer_service.dart';
 import 'package:reebaplus_pos/shared/widgets/receipt_paper_size_prompt.dart';
 
+import '../../helpers/fake_usb_printer_channel.dart';
+
 const _printer = '00:11:22:33:44:55';
 
 /// Never touches the Bluetooth plugin: connection state is scripted.
 class _FakePrinterService extends PrinterService {
-  _FakePrinterService({required this.connected, this.autoConnects = false});
+  _FakePrinterService({
+    required this.connected,
+    this.autoConnects = false,
+    super.usb,
+  });
 
   final bool connected;
   final bool autoConnects;
@@ -132,6 +138,44 @@ void main() {
     final read = await _pumpRunner(
       tester,
       _FakePrinterService(connected: false, autoConnects: true),
+    );
+    await tester.tap(find.text('print'));
+
+    expect(
+      await read(),
+      (connected: true, paperSize: ReceiptPaperSize.mm58),
+    );
+  });
+
+  testWidgets('a USB printer never asks and defaults to 80mm (#614)', (
+    tester,
+  ) async {
+    // A Bluetooth printer that was never set up would normally be asked.
+    SharedPreferences.setMockInitialValues({'last_printer_mac': _printer});
+    final read = await _pumpRunner(
+      tester,
+      _FakePrinterService(
+        connected: false,
+        usb: FakeUsbPrinterChannel(printers: [fakeUsbPrinter()]),
+      ),
+    );
+    await tester.tap(find.text('print'));
+    final result = await read();
+
+    expect(find.text('Which paper does this printer use?'), findsNothing);
+    expect(result, (connected: true, paperSize: ReceiptPaperSize.mm80));
+  });
+
+  testWidgets('a USB printer prints at its saved size (#614)', (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'printer_paper_size:usb:1208:514': 'mm58',
+    });
+    final read = await _pumpRunner(
+      tester,
+      _FakePrinterService(
+        connected: false,
+        usb: FakeUsbPrinterChannel(printers: [fakeUsbPrinter()]),
+      ),
     );
     await tester.tap(find.text('print'));
 

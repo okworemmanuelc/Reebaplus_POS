@@ -15,11 +15,15 @@ import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
 import 'package:reebaplus_pos/shared/services/printer_service.dart';
 
+import '../../helpers/fake_usb_printer_channel.dart';
+
 const _small = '00:11:22:33:44:55';
 const _large = '66:77:88:99:AA:BB';
 
 /// Never touches the Bluetooth plugin or `permission_handler`.
 class _FakePrinterService extends PrinterService {
+  _FakePrinterService({super.usb});
+
   @override
   Future<bool> requestPermissions() async => true;
 
@@ -30,11 +34,17 @@ class _FakePrinterService extends PrinterService {
   ];
 }
 
-Future<PrinterService> _pump(WidgetTester tester) async {
-  final printer = _FakePrinterService();
+Future<PrinterService> _pump(
+  WidgetTester tester, {
+  FakeUsbPrinterChannel? usb,
+}) async {
+  final printer = _FakePrinterService(usb: usb);
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [printerServiceProvider.overrideWithValue(printer)],
+      overrides: [
+        printerServiceProvider.overrideWithValue(printer),
+        currentBusinessNameProvider.overrideWithValue('Ada Bar'),
+      ],
       child: MaterialApp(
         theme: AppTheme.dark(),
         home: const ReceiptPrinterSettingsScreen(),
@@ -99,5 +109,64 @@ void main() {
     expect(await printer.printStyleFor(_large), ReceiptPrintStyle.picture);
     expect(await printer.printStyleFor(_small), ReceiptPrintStyle.text);
     expect(find.text('Picture: matches the design exactly'), findsOneWidget);
+  });
+
+  group('USB printers (#614)', () {
+    testWidgets('a plugged-in USB printer is listed first at 80mm + Text', (
+      tester,
+    ) async {
+      final usb = FakeUsbPrinterChannel(printers: [fakeUsbPrinter()]);
+      final printer = await _pump(tester, usb: usb);
+
+      expect(find.text('TM-T20'), findsOneWidget);
+      expect(find.text('USB. Receipts print here first'), findsOneWidget);
+      expect(find.byKey(const Key('usb-printer-help')), findsNothing);
+      final usbY = tester.getTopLeft(find.text('TM-T20')).dy;
+      final btY = tester.getTopLeft(find.text('Counter printer')).dy;
+      expect(usbY, lessThan(btY));
+      expect(await printer.paperSizeFor('usb:1208:514'), ReceiptPaperSize.mm80);
+      expect(await printer.printStyleFor('usb:1208:514'), ReceiptPrintStyle.text);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Test print writes to the USB printer', (tester) async {
+      final usb = FakeUsbPrinterChannel(printers: [fakeUsbPrinter()]);
+      await _pump(tester, usb: usb);
+
+      await tester.tap(find.byKey(const Key('usb-test-print-usb:1208:514')));
+      await tester.pumpAndSettle();
+
+      expect(usb.writes.single.$1, 'usb:1208:514');
+      expect(String.fromCharCodes(usb.writes.single.$2), contains('Ada Bar'));
+      await tester.pump(const Duration(seconds: 5));
+    });
+
+    testWidgets('opening the screen asks access for a new USB printer', (
+      tester,
+    ) async {
+      final usb = FakeUsbPrinterChannel(
+        printers: [fakeUsbPrinter(hasPermission: false)],
+      );
+      await _pump(tester, usb: usb);
+
+      expect(usb.permissionRequests, ['usb:1208:514']);
+      expect(find.text('USB. Receipts print here first'), findsOneWidget);
+    });
+
+    testWidgets('no USB printer shows the plug-in help line', (tester) async {
+      await _pump(tester, usb: FakeUsbPrinterChannel());
+
+      expect(
+        find.text('Plug an 80mm USB receipt printer into this tablet to use '
+            'it.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('off Android there is no USB section', (tester) async {
+      await _pump(tester, usb: FakeUsbPrinterChannel(isSupported: false));
+
+      expect(find.byKey(const Key('usb-printer-help')), findsNothing);
+    });
   });
 }

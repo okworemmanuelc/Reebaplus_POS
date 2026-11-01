@@ -30,6 +30,10 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" android:maxSdkVersion="30" />
 
+    <!-- #614: USB receipt printers on tablets (USB Host API). Not required,
+         so phones without USB host still install the app. -->
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+
     <!-- #285: keep the local database out of phone backups. The Drift DB is
          restored without the secure-storage session that scopes it, so a
          restored or transferred copy can arrive on a phone signed in to a
@@ -78,6 +82,19 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="reebaplus" />
             </intent-filter>
+
+            <!-- #614: plugging in a USB receipt printer (class 7, see
+                 res/xml/usb_device_filter.xml) offers to open the app and
+                 lets Android remember the USB permission. singleTop keeps
+                 a running app in place (onNewIntent) rather than stacking
+                 a second copy; the intent carries no route, so deep links
+                 are untouched. -->
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/usb_device_filter" />
         </activity>
         <!-- FCM (#138): the channel the system tray uses for a notification
              message delivered while the app is backgrounded/killed. Must match

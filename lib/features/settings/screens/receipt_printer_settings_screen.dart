@@ -9,8 +9,11 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/features/settings/screens/settings_page_parts.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
+import 'package:reebaplus_pos/shared/services/usb_printer_channel.dart';
+import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
 /// Settings > Receipt printer. Lists this device's printers with the paper
@@ -18,6 +21,9 @@ import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 /// question (see `prepareReceiptPrinter`) can be fixed without making a print
 /// fail. Device-local hardware setting — reachable from both CEO Settings and
 /// Staff Settings, since whoever runs the till may need it.
+///
+/// On Android, plugged-in USB printers (#614) are listed first — receipts go
+/// to them before any Bluetooth printer — each with a Test print button.
 class ReceiptPrinterSettingsScreen extends ConsumerStatefulWidget {
   const ReceiptPrinterSettingsScreen({super.key});
 
@@ -30,6 +36,9 @@ class _ReceiptPrinterSettingsScreenState
     extends ConsumerState<ReceiptPrinterSettingsScreen> {
   bool _loading = true;
   List<BluetoothInfo> _devices = [];
+  List<UsbPrinterInfo> _usbPrinters = [];
+  bool _supportsUsb = false;
+  String? _testingId;
   Map<String, ReceiptPaperSize?> _sizes = {};
   Map<String, ReceiptPrintStyle> _styles = {};
   String? _lastMac;
@@ -44,9 +53,20 @@ class _ReceiptPrinterSettingsScreenState
     setState(() => _loading = true);
     final printer = ref.read(printerServiceProvider);
     List<BluetoothInfo> devices = [];
+    List<UsbPrinterInfo> usbPrinters = [];
+    final supportsUsb = printer.supportsUsb;
     final sizes = <String, ReceiptPaperSize?>{};
     final styles = <String, ReceiptPrintStyle>{};
     String? lastMac;
+    if (supportsUsb) {
+      // Opening this screen is setting up: ask Android for access to any
+      // plugged-in printer not allowed yet.
+      usbPrinters = await printer.usbPrinters(askPermission: true);
+      for (final u in usbPrinters) {
+        sizes[u.id] = await printer.paperSizeFor(u.id);
+        styles[u.id] = await printer.printStyleFor(u.id);
+      }
+    }
     try {
       await printer.requestPermissions();
       devices = await printer.getPairedDevices();
@@ -67,6 +87,8 @@ class _ReceiptPrinterSettingsScreenState
     if (!mounted) return;
     setState(() {
       _devices = devices;
+      _usbPrinters = usbPrinters;
+      _supportsUsb = supportsUsb;
       _sizes = sizes;
       _styles = styles;
       _lastMac = lastMac;
@@ -82,6 +104,27 @@ class _ReceiptPrinterSettingsScreenState
   Future<void> _setStyle(String mac, ReceiptPrintStyle style) async {
     setState(() => _styles[mac] = style);
     await ref.read(printerServiceProvider).savePrintStyleFor(mac, style);
+  }
+
+  Future<void> _testPrint(UsbPrinterInfo usb) async {
+    setState(() => _testingId = usb.id);
+    final ok = await ref
+        .read(printerServiceProvider)
+        .testPrintUsb(
+          usb.id,
+          businessName: ref.read(currentBusinessNameProvider),
+        );
+    if (!mounted) return;
+    setState(() => _testingId = null);
+    if (ok) {
+      AppNotification.showSuccess(context, 'Test print sent');
+    } else {
+      AppNotification.showError(
+        context,
+        "Couldn't print. Check the printer is on, has paper and is "
+        'plugged in.',
+      );
+    }
   }
 
   @override
@@ -122,6 +165,21 @@ class _ReceiptPrinterSettingsScreenState
                     style: context.regularStyle(13).copyWith(color: muted),
                   ),
                   SizedBox(height: context.getRSize(20)),
+                  if (_supportsUsb) ...[
+                    if (_usbPrinters.isEmpty) ...[
+                      Text(
+                        'Plug an 80mm USB receipt printer into this tablet '
+                        'to use it.',
+                        key: const Key('usb-printer-help'),
+                        style: context.regularStyle(13).copyWith(color: muted),
+                      ),
+                      SizedBox(height: context.getRSize(20)),
+                    ],
+                    for (final u in _usbPrinters) ...[
+                      _usbCard(context, u),
+                      SizedBox(height: context.getRSize(12)),
+                    ],
+                  ],
                   if (_devices.isEmpty)
                     Padding(
                       padding: EdgeInsets.only(top: context.getRSize(24)),
@@ -149,7 +207,49 @@ class _ReceiptPrinterSettingsScreenState
   Widget _printerCard(BuildContext context, BluetoothInfo device) {
     final size = _sizes[device.macAdress];
     final isLast = device.macAdress == _lastMac;
-    final style = _styles[device.macAdress] ?? ReceiptPrintStyle.text;
+    return _card(
+      context,
+      id: device.macAdress,
+      title: device.name.isEmpty ? device.macAdress : device.name,
+      subtitle: isLast
+          ? 'Last used'
+          : size == null
+          ? 'Not set yet. Asked on first print'
+          : device.macAdress,
+    );
+  }
+
+  Widget _usbCard(BuildContext context, UsbPrinterInfo usb) {
+    final testing = _testingId == usb.id;
+    return _card(
+      context,
+      id: usb.id,
+      title: usb.name,
+      subtitle: usb.hasPermission
+          ? 'USB. Receipts print here first'
+          : 'USB. Not allowed yet, tap refresh and allow it',
+      footer: AppButton(
+        key: Key('usb-test-print-${usb.id}'),
+        text: 'Test print',
+        variant: AppButtonVariant.outline,
+        icon: AppIcons.print,
+        isLoading: testing,
+        onPressed: testing || !usb.hasPermission
+            ? null
+            : () => _testPrint(usb),
+      ),
+    );
+  }
+
+  Widget _card(
+    BuildContext context, {
+    required String id,
+    required String title,
+    required String subtitle,
+    Widget? footer,
+  }) {
+    final size = _sizes[id];
+    final style = _styles[id] ?? ReceiptPrintStyle.text;
     final muted = Theme.of(context).textTheme.bodySmall?.color ??
         Theme.of(context).colorScheme.onSurface;
 
@@ -160,12 +260,8 @@ class _ReceiptPrinterSettingsScreenState
           SettingsControlRow(
             icon: AppIcons.print,
             tone: IconTileTone.neutral,
-            title: device.name.isEmpty ? device.macAdress : device.name,
-            subtitle: isLast
-                ? 'Last used'
-                : size == null
-                ? 'Not set yet. Asked on first print'
-                : device.macAdress,
+            title: title,
+            subtitle: subtitle,
           ),
           SizedBox(height: context.getRSize(14)),
           SizedBox(
@@ -186,7 +282,7 @@ class _ReceiptPrinterSettingsScreenState
               selected: size == null ? const {} : {size},
               onSelectionChanged: (selection) {
                 if (selection.isEmpty) return;
-                _setSize(device.macAdress, selection.first);
+                _setSize(id, selection.first);
               },
             ),
           ),
@@ -210,7 +306,7 @@ class _ReceiptPrinterSettingsScreenState
               selected: {style},
               onSelectionChanged: (selection) {
                 if (selection.isEmpty) return;
-                _setStyle(device.macAdress, selection.first);
+                _setStyle(id, selection.first);
               },
             ),
           ),
@@ -221,6 +317,10 @@ class _ReceiptPrinterSettingsScreenState
                 : 'Picture: matches the design exactly',
             style: context.regularStyle(12).copyWith(color: muted),
           ),
+          if (footer != null) ...[
+            SizedBox(height: context.getRSize(14)),
+            footer,
+          ],
         ],
       ),
     );
