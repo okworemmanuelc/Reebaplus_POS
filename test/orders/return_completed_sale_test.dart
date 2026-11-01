@@ -146,7 +146,7 @@ void main() {
 
   Future<void> doReturn(
     String id, {
-    Map<String, int> damaged = const {},
+    Map<String, double> damaged = const {},
     String key = 'broken',
     GateContext gate = _granted,
   }) =>

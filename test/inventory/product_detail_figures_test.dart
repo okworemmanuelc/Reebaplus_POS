@@ -121,7 +121,7 @@ void main() {
 
   group('SalesTargetFigures', () {
     SalesTargetFigures at(DateTime now, {int sold = 136, int target = 200}) =>
-        SalesTargetFigures(sold: sold, target: target, now: now);
+        SalesTargetFigures(sold: sold.toDouble(), target: target, now: now);
 
     test('days left is the last day of the month minus today', () {
       expect(at(DateTime(2026, 10, 23)).daysLeft, 8);
