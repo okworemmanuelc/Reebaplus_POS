@@ -7,6 +7,9 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Store switch needs confirming (2026-11-01, merged, PR #642)
+Branch `feat/pos-store-confirm`. `showStorePickerSheet`, used by both the POS gate and the side menu, now asks "Switch to <store>?" (Confirm / Cancel) before any switch, All Stores included. Cancel keeps the sheet open. Tapping the store already in force just closes the sheet, except a silently defaulted store, which POS still needs explicitly chosen. No schema, sync or money change, so no pos-parity issue.
+
 ### Plan limits: brief notice, not a standing banner (2026-11-01)
 - Removed the permanent "N shops read-only / staff paused / plan ended — Upgrade" banner. Only a failed Play payment (grace/hold) keeps a standing banner.
 - Adding a shop/staff over the limit, or changing a read-only shop, now shows a 3-second notice with **Upgrade** (`showPlanLimitNotice` / `showUpgradeNotice` in `plan_limit_widgets.dart`) instead of a pop-up.
