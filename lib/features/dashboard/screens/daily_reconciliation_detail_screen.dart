@@ -19,6 +19,7 @@ import 'package:reebaplus_pos/features/dashboard/widgets/changed_since_review_ba
 import 'package:reebaplus_pos/shared/widgets/crate_shortage_write_off_sheet.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 
 /// One reconciliation bucket's detail (§25.9) — a Day / Week / Month / Year span
 /// in the active store scope. Rolls up sales, stock audit, valued shrinkage,
@@ -487,7 +488,7 @@ class _DailyReconciliationDetailScreenState
       AppIcons.analytics,
       context.primaryColor,
       [
-        _line(context, theme, 'Items sold', fmtNumber(d.itemsSold)),
+        _line(context, theme, 'Items sold', formatQtyGrouped(d.itemsSold)),
         _line(context, theme, 'Products (SKUs) sold', fmtNumber(d.skus)),
         _line(
           context,
@@ -540,7 +541,7 @@ class _DailyReconciliationDetailScreenState
           'Top items',
           d.topItems.isEmpty
               ? '—'
-              : d.topItems.map((e) => '${e.name} (×${e.qty})').join('\n'),
+              : d.topItems.map((e) => '${e.name} (×${formatQty(e.qty)})').join('\n'),
         ),
       ],
       badges: badges,
@@ -681,7 +682,7 @@ class _DailyReconciliationDetailScreenState
       if (d.uncostedItems > 0) ...[
         const SizedBox(height: 6),
         Text(
-          'Includes ${fmtNumber(d.uncostedItems)} item(s) sold with no recorded '
+          'Includes ${formatQtyGrouped(d.uncostedItems)} item(s) sold with no recorded '
           'buying price (e.g. quick sales) as takings — counted in full above '
           'because no cost was recorded to deduct, so they carry no COGS or '
           'gross margin.',
@@ -1001,7 +1002,7 @@ class _DailyReconciliationDetailScreenState
             context,
             theme,
             'Damages recorded',
-            '${fmtNumber(d.damageUnits)} unit(s) · ${formatCurrency(d.damageRetailKobo / 100.0)}',
+            '${formatQtyGrouped(d.damageUnits)} unit(s) · ${formatCurrency(d.damageRetailKobo / 100.0)}',
           ),
           _divider(theme),
           _line(
@@ -1300,7 +1301,7 @@ class _DailyReconciliationDetailScreenState
         if (d.uncostedInventoryItems > 0) ...[
           const SizedBox(height: 6),
           Text(
-            'Excludes ${fmtNumber(d.uncostedInventoryItems)} inventory item(s) with no recorded buying price.',
+            'Excludes ${formatQtyGrouped(d.uncostedInventoryItems)} inventory item(s) with no recorded buying price.',
             style: context.bodySmall.copyWith(color: theme.hintColor),
           ),
         ],
@@ -1687,7 +1688,7 @@ class _DailyReconciliationDetailScreenState
                         ),
                         SizedBox(height: context.getRSize(4)),
                         Text(
-                          '${fmtNumber(b.itemsSold)} items sold',
+                          '${formatQtyGrouped(b.itemsSold)} items sold',
                           style: context
                               .regularStyle(13)
                               .copyWith(color: muted),
@@ -1786,7 +1787,7 @@ class _DailyReconciliationDetailScreenState
         ChangedSinceReviewBadge(
           label:
               '${f.label} ${f.delta!.delta > 0 ? '+' : '−'} '
-              '${f.isUnits ? fmtNumber(f.delta!.delta.abs()) : formatCurrency(f.delta!.delta.abs() / 100.0)}',
+              '${f.isUnits ? formatQtyGrouped(f.delta!.delta.abs()) : formatCurrency(f.delta!.delta.abs() / 100.0)}',
         ),
   ];
 
@@ -1939,7 +1940,7 @@ class _DailyReconciliationDetailScreenState
   ) async {
     String money(int kobo) => (kobo / 100.0).toStringAsFixed(2);
     final rows = <List<String>>[
-      ['Items sold', '${d.itemsSold}'],
+      ['Items sold', formatQty(d.itemsSold)],
       ['Products (SKUs) sold', '${d.skus}'],
       ['Total sales', money(d.totalSalesKobo)],
       if (d.salesOnCreditKobo != 0) ...[

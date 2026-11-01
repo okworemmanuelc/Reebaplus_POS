@@ -176,6 +176,17 @@ rules live in `lib/shared/utils/quantity_input.dart` (`parseStockQty`,
 switch is off), and `adjustStock` rejects an off-quarter delta. The sale path
 (S3) and crates (S4) enter parts separately.
 
+**Selling in parts (#628, Drift v99, cloud 0241).** Every product sells in quarter
+steps unless `products.allow_fractional_sales` is off (default true). `CartService`
+is the one gate: `addItem` / `updateQty` snap a line onto its step and cap it at
+`Qty.sellable(stock)` (whole units only when the switch is off). Cart, checkout and
+receipts total a line through `CartService.lineGrossKobo` / `lineTotalKobo`, summed
+in kobo, so the goods figure equals the server's recomputed gross. `0241` is the
+release switch: phones keep existing products whole until its value arrives by
+pull, so it deploys only after the minimum app version is raised (#620 decision
+12). Online-order lines are forced whole on the till. Receiving, adjustments,
+transfers and counts take parts in S5 (above); empties in S4.
+
 **Online category reference (#472).** Public, service-written
 `marketplace_categories` is bundled as `core/data/marketplace_categories.dart`,
 with exact SQL-seed parity tests. It is not a tenant table or an outbox target.

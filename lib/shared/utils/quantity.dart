@@ -11,6 +11,8 @@
 // (`public.qty_is_quarter`, `public.line_total_kobo`) and MUST agree with the
 // rules below.
 
+import 'package:intl/intl.dart' show NumberFormat;
+
 /// Smallest quantity step: a quarter.
 const double kQtyStep = 0.25;
 
@@ -36,8 +38,10 @@ class Qty {
   /// quarter step (`0.3`, `1.1`). `0` is accepted unless [allowZero] is false.
   static double? parse(String? raw, {bool allowZero = true}) {
     if (raw == null) return null;
-    final text = raw.trim().replaceAll(',', '.');
+    var text = raw.trim().replaceAll(',', '.');
     if (text.isEmpty) return null;
+    // `1.` is a number still being typed; Dart's parser refuses it.
+    if (text.endsWith('.') && text != '.') text = '${text}0';
     // Digits with an optional single decimal part; no sign, no exponent, so
     // `-1`, `1e3` and `0x10` are rejected up front.
     if (!RegExp(r'^(\d+(\.\d*)?|\.\d+)$').hasMatch(text)) return null;
@@ -54,6 +58,32 @@ class Qty {
     if (value == 0 && !allowZero) return null;
     return value;
   }
+
+  /// The smallest amount a line can move by: a quarter, or one whole unit for
+  /// a product whose "Allow part quantities" switch is off (#628).
+  static double stepFor({required bool allowParts}) =>
+      allowParts ? kQtyStep : 1;
+
+  /// Typed sale quantity for a line. Null when [raw] is not a positive quarter
+  /// step, or is a fraction on a whole-numbers-only product.
+  static double? parseSale(String? raw, {required bool allowParts}) {
+    final value = parse(raw, allowZero: false);
+    if (value == null) return null;
+    return allowParts || isWhole(value) ? value : null;
+  }
+
+  /// [value] rounded DOWN onto the line's step: `snapDown(1.3, parts)` is 1.25,
+  /// `snapDown(1.75, whole only)` is 1. Quantity is never rounded up, so a
+  /// snapped line can never pass the stock it was capped at.
+  static double snapDown(double value, {required bool allowParts}) {
+    final step = stepFor(allowParts: allowParts);
+    return (value / step).floorToDouble() * step;
+  }
+
+  /// What can be sold of [stock]: all of it in parts, or only the whole units
+  /// (1.5 in stock is 1 for a whole-numbers-only product).
+  static double sellable(double stock, {required bool allowParts}) =>
+      snapDown(stock, allowParts: allowParts);
 
   /// Reads a quantity from a JSON / DB value: `5`, `5.0`, `0.5` or numeric
   /// text. Null / unparsable input yields [fallback]. No step validation (the
@@ -88,6 +118,10 @@ String formatQty(num value) {
   }
   return text == '-0' ? '0' : text;
 }
+
+/// [formatQty] with thousands separators, for report figures: `1,250.5`.
+String formatQtyGrouped(num value) =>
+    NumberFormat('#,##0.##', 'en_US').format(value);
 
 /// Line total in whole kobo: `unitKobo x qty`, rounded to the nearest kobo
 /// with halves rounded away from zero (half-up for sales; refunds mirror it).

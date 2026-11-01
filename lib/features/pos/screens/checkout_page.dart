@@ -46,6 +46,7 @@ import 'package:reebaplus_pos/shared/services/cart_service.dart';
 import 'package:reebaplus_pos/shared/services/orders/debt_limit.dart';
 import 'package:reebaplus_pos/shared/services/orders/sale_totals.dart';
 import 'package:reebaplus_pos/core/online_orders/pay_on_delivery.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CheckoutPage — shown after "Proceed to Checkout" in the cart.
@@ -1295,7 +1296,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         depositCrates: {
           for (final c in crates)
             if ((_depositByMfr[c.manufacturerId] ?? 0) > 0)
-              c.manufacturerId: c.crates.round(),
+              c.manufacturerId: c.crates,
         },
       );
     } catch (_) {
@@ -2144,7 +2145,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         ? rawQty.toDouble()
         : double.tryParse(rawQty.toString()) ?? 0.0;
 
-    final int lineTotal = saleLineTotal(price: price, qty: qty);
+    final double lineTotal = CartService.lineGrossKobo(item) / 100.0;
 
     // The category tile, as the Cart's lines (#385).
     final rawCategory = item['category']?.toString();
@@ -2184,7 +2185,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
-                  '${qty.toStringAsFixed(1)} × ${formatCurrency(price)}',
+                  '${formatQty(qty)} × ${formatCurrency(price)}',
                   style: context.regularStyle(12).copyWith(color: _subtext),
                 ),
               ],

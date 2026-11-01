@@ -48,6 +48,7 @@ import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/core/utils/product_unit.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ProductDetailScreen — full-screen product information view (#487 PR 3)
@@ -567,7 +568,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     final stock = ref
             .watch(productStockByStoreProvider(widget.item.id))
             .valueOrNull ??
-        const <String, int>{};
+        const <String, double>{};
     final inStockOnline = stores.any(
       (s) =>
           s.kind == kStoreKindStore &&
@@ -841,7 +842,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   Widget _buildTarget(BuildContext context) {
     return ProductSalesTargetCard(
       figures: SalesTargetFigures(
-        sold: _monthUnits.round(), // whole until S3 (#620)
+        sold: _monthUnits,
         target: _productData?.monthlyTargetUnits ?? 0,
         now: _now,
       ),

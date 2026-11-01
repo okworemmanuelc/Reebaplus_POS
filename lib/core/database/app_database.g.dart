@@ -11738,7 +11738,7 @@ class $ProductsTable extends Products
     defaultConstraints: GeneratedColumn.constraintIsAlways(
       'CHECK ("allow_fractional_sales" IN (0, 1))',
     ),
-    defaultValue: const Constant(false),
+    defaultValue: const Constant(true),
   );
   static const VerificationMeta _barcodeMeta = const VerificationMeta(
     'barcode',
@@ -38623,13 +38623,13 @@ class $DailyClosingsTable extends DailyClosings
     'itemsSold',
   );
   @override
-  late final GeneratedColumn<int> itemsSold = GeneratedColumn<int>(
+  late final GeneratedColumn<double> itemsSold = GeneratedColumn<double>(
     'items_sold',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.double,
     requiredDuringInsert: false,
-    defaultValue: const Constant(0),
+    defaultValue: const Constant(0.0),
   );
   static const VerificationMeta _shortageUnitsMeta = const VerificationMeta(
     'shortageUnits',
@@ -39011,7 +39011,7 @@ class $DailyClosingsTable extends DailyClosings
         data['${effectivePrefix}stock_expected_closing_kobo'],
       )!,
       itemsSold: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
+        DriftSqlType.double,
         data['${effectivePrefix}items_sold'],
       )!,
       shortageUnits: attachedDatabase.typeMapping.read(
@@ -39063,7 +39063,7 @@ class DailyClosingData extends DataClass
   final int netCashMovementKobo;
   final int stockCogsKobo;
   final int stockExpectedClosingKobo;
-  final int itemsSold;
+  final double itemsSold;
   final double shortageUnits;
   final String? reviewedBy;
   final DateTime reviewedAt;
@@ -39120,7 +39120,7 @@ class DailyClosingData extends DataClass
     map['stock_expected_closing_kobo'] = Variable<int>(
       stockExpectedClosingKobo,
     );
-    map['items_sold'] = Variable<int>(itemsSold);
+    map['items_sold'] = Variable<double>(itemsSold);
     map['shortage_units'] = Variable<double>(shortageUnits);
     if (!nullToAbsent || reviewedBy != null) {
       map['reviewed_by'] = Variable<String>(reviewedBy);
@@ -39192,7 +39192,7 @@ class DailyClosingData extends DataClass
       stockExpectedClosingKobo: serializer.fromJson<int>(
         json['stockExpectedClosingKobo'],
       ),
-      itemsSold: serializer.fromJson<int>(json['itemsSold']),
+      itemsSold: serializer.fromJson<double>(json['itemsSold']),
       shortageUnits: serializer.fromJson<double>(json['shortageUnits']),
       reviewedBy: serializer.fromJson<String?>(json['reviewedBy']),
       reviewedAt: serializer.fromJson<DateTime>(json['reviewedAt']),
@@ -39224,7 +39224,7 @@ class DailyClosingData extends DataClass
       'stockExpectedClosingKobo': serializer.toJson<int>(
         stockExpectedClosingKobo,
       ),
-      'itemsSold': serializer.toJson<int>(itemsSold),
+      'itemsSold': serializer.toJson<double>(itemsSold),
       'shortageUnits': serializer.toJson<double>(shortageUnits),
       'reviewedBy': serializer.toJson<String?>(reviewedBy),
       'reviewedAt': serializer.toJson<DateTime>(reviewedAt),
@@ -39252,7 +39252,7 @@ class DailyClosingData extends DataClass
     int? netCashMovementKobo,
     int? stockCogsKobo,
     int? stockExpectedClosingKobo,
-    int? itemsSold,
+    double? itemsSold,
     double? shortageUnits,
     Value<String?> reviewedBy = const Value.absent(),
     DateTime? reviewedAt,
@@ -39461,7 +39461,7 @@ class DailyClosingsCompanion extends UpdateCompanion<DailyClosingData> {
   final Value<int> netCashMovementKobo;
   final Value<int> stockCogsKobo;
   final Value<int> stockExpectedClosingKobo;
-  final Value<int> itemsSold;
+  final Value<double> itemsSold;
   final Value<double> shortageUnits;
   final Value<String?> reviewedBy;
   final Value<DateTime> reviewedAt;
@@ -39542,7 +39542,7 @@ class DailyClosingsCompanion extends UpdateCompanion<DailyClosingData> {
     Expression<int>? netCashMovementKobo,
     Expression<int>? stockCogsKobo,
     Expression<int>? stockExpectedClosingKobo,
-    Expression<int>? itemsSold,
+    Expression<double>? itemsSold,
     Expression<double>? shortageUnits,
     Expression<String>? reviewedBy,
     Expression<DateTime>? reviewedAt,
@@ -39600,7 +39600,7 @@ class DailyClosingsCompanion extends UpdateCompanion<DailyClosingData> {
     Value<int>? netCashMovementKobo,
     Value<int>? stockCogsKobo,
     Value<int>? stockExpectedClosingKobo,
-    Value<int>? itemsSold,
+    Value<double>? itemsSold,
     Value<double>? shortageUnits,
     Value<String?>? reviewedBy,
     Value<DateTime>? reviewedAt,
@@ -39698,7 +39698,7 @@ class DailyClosingsCompanion extends UpdateCompanion<DailyClosingData> {
       );
     }
     if (itemsSold.present) {
-      map['items_sold'] = Variable<int>(itemsSold.value);
+      map['items_sold'] = Variable<double>(itemsSold.value);
     }
     if (shortageUnits.present) {
       map['shortage_units'] = Variable<double>(shortageUnits.value);
@@ -106497,7 +106497,7 @@ typedef $$DailyClosingsTableCreateCompanionBuilder =
       Value<int> netCashMovementKobo,
       Value<int> stockCogsKobo,
       Value<int> stockExpectedClosingKobo,
-      Value<int> itemsSold,
+      Value<double> itemsSold,
       Value<double> shortageUnits,
       Value<String?> reviewedBy,
       Value<DateTime> reviewedAt,
@@ -106525,7 +106525,7 @@ typedef $$DailyClosingsTableUpdateCompanionBuilder =
       Value<int> netCashMovementKobo,
       Value<int> stockCogsKobo,
       Value<int> stockExpectedClosingKobo,
-      Value<int> itemsSold,
+      Value<double> itemsSold,
       Value<double> shortageUnits,
       Value<String?> reviewedBy,
       Value<DateTime> reviewedAt,
@@ -106689,7 +106689,7 @@ class $$DailyClosingsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get itemsSold => $composableBuilder(
+  ColumnFilters<double> get itemsSold => $composableBuilder(
     column: $table.itemsSold,
     builder: (column) => ColumnFilters(column),
   );
@@ -106873,7 +106873,7 @@ class $$DailyClosingsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get itemsSold => $composableBuilder(
+  ColumnOrderings<double> get itemsSold => $composableBuilder(
     column: $table.itemsSold,
     builder: (column) => ColumnOrderings(column),
   );
@@ -107053,7 +107053,7 @@ class $$DailyClosingsTableAnnotationComposer
     builder: (column) => column,
   );
 
-  GeneratedColumn<int> get itemsSold =>
+  GeneratedColumn<double> get itemsSold =>
       $composableBuilder(column: $table.itemsSold, builder: (column) => column);
 
   GeneratedColumn<double> get shortageUnits => $composableBuilder(
@@ -107194,7 +107194,7 @@ class $$DailyClosingsTableTableManager
                 Value<int> netCashMovementKobo = const Value.absent(),
                 Value<int> stockCogsKobo = const Value.absent(),
                 Value<int> stockExpectedClosingKobo = const Value.absent(),
-                Value<int> itemsSold = const Value.absent(),
+                Value<double> itemsSold = const Value.absent(),
                 Value<double> shortageUnits = const Value.absent(),
                 Value<String?> reviewedBy = const Value.absent(),
                 Value<DateTime> reviewedAt = const Value.absent(),
@@ -107248,7 +107248,7 @@ class $$DailyClosingsTableTableManager
                 Value<int> netCashMovementKobo = const Value.absent(),
                 Value<int> stockCogsKobo = const Value.absent(),
                 Value<int> stockExpectedClosingKobo = const Value.absent(),
-                Value<int> itemsSold = const Value.absent(),
+                Value<double> itemsSold = const Value.absent(),
                 Value<double> shortageUnits = const Value.absent(),
                 Value<String?> reviewedBy = const Value.absent(),
                 Value<DateTime> reviewedAt = const Value.absent(),

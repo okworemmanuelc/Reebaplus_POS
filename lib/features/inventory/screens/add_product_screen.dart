@@ -166,7 +166,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   // again clears it.
   String? _unit;
   bool _trackEmpties = false; // turns on when Bottle is picked
-  bool _allowFractionalSales = false;
+  // Decision 4 of #620: on unless the owner turns it off for this product.
+  bool _allowFractionalSales = true;
   // Colour selector is deferred (master plan §16.5); products keep a default.
   final String _colorHex = '#3B82F6';
   DateTime? _expiryDate; // optional single expiry date (all business types)
@@ -1341,7 +1342,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     setState(() {
       _unit = null;
       _trackEmpties = false;
-      _allowFractionalSales = false;
+      _allowFractionalSales = true;
       _expiryDate = null;
       _selectedSupplier = null;
       _newSupplierName = null;
@@ -2141,10 +2142,10 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         InventoryCheckRow(
           value: _allowFractionalSales,
           onChanged: (v) => setState(() => _allowFractionalSales = v ?? false),
-          title: 'Allow fractional sales',
+          title: 'Allow part quantities',
           subtitle:
-              'Enables ±0.5 quantity steps when selling this '
-              '${_lexicon.itemLower}',
+              'Lets you sell part of this ${_lexicon.itemLower}, like 0.5. '
+              'Turn off to sell whole numbers only',
         ),
       ],
     );

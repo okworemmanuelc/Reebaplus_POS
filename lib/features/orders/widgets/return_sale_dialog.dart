@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
@@ -10,7 +11,7 @@ import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 class ReturnLineInput {
   final String lineId;
   final String name;
-  final int quantity;
+  final double quantity;
 
   /// False for a Quick Sale line (no product): shown without a stepper.
   final bool canBeDamaged;
@@ -29,7 +30,7 @@ class ReturnSaleInput {
   final String damageReasonKey;
 
   /// Keyed by order-item id; only lines with a damaged quantity above 0.
-  final Map<String, int> damagedQtyByLine;
+  final Map<String, double> damagedQtyByLine;
 
   const ReturnSaleInput({
     required this.reason,
@@ -80,7 +81,7 @@ class _ReturnSaleDialog extends StatefulWidget {
 
 class _ReturnSaleDialogState extends State<_ReturnSaleDialog> {
   final _reason = TextEditingController();
-  final _damaged = <String, int>{};
+  final _damaged = <String, double>{};
   String _damageKey = 'broken';
 
   @override
@@ -92,7 +93,7 @@ class _ReturnSaleDialogState extends State<_ReturnSaleDialog> {
   bool get _anyDamaged => _damaged.values.any((v) => v > 0);
 
   void _step(ReturnLineInput l, int by) => setState(() {
-    final next = ((_damaged[l.lineId] ?? 0) + by).clamp(0, l.quantity);
+    final next = ((_damaged[l.lineId] ?? 0) + by).clamp(0.0, l.quantity);
     _damaged[l.lineId] = next;
   });
 
@@ -140,7 +141,7 @@ class _ReturnSaleDialogState extends State<_ReturnSaleDialog> {
                 children: [
                   Expanded(
                     child: Text(
-                      '${l.quantity} × ${l.name}',
+                      '${formatQty(l.quantity)} × ${l.name}',
                       style: context.regularStyle(13).copyWith(
                         color: cs.onSurface,
                       ),
@@ -154,7 +155,7 @@ class _ReturnSaleDialogState extends State<_ReturnSaleDialog> {
                           ? () => _step(l, -1)
                           : null,
                     ),
-                    Text('${_damaged[l.lineId] ?? 0}'),
+                    Text(formatQty(_damaged[l.lineId] ?? 0)),
                     IconButton(
                       key: Key('return-inc-${l.lineId}'),
                       icon: const Icon(AppIcons.addCircle),

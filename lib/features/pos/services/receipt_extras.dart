@@ -50,7 +50,7 @@ ReceiptExtras composeReceiptExtras({
   int depositKobo = 0,
   int? fullDepositKobo,
   List<CrateBalanceEntry>? crateBalances,
-  Map<String, int> depositCrates = const {},
+  Map<String, double> depositCrates = const {},
 }) {
   final vatOn = vat.enabled && vat.rateBps > 0;
   final goodsKobo = totalKobo - depositKobo;
@@ -82,7 +82,7 @@ ReceiptExtras composeReceiptExtras({
 /// customer, so they are not counted.
 Map<String, double> _cratesOwed(
   List<CrateBalanceEntry> balances,
-  Map<String, int> depositCrates,
+  Map<String, double> depositCrates,
 ) {
   final owed = <String, double>{
     for (final b in balances)
@@ -112,7 +112,7 @@ Future<ReceiptExtras> loadReceiptExtras(
   String? customerId,
   String? orderId,
   int? fullDepositKobo,
-  Map<String, int>? depositCrates,
+  Map<String, double>? depositCrates,
 }) async {
   var cashier = cashierName;
   if (cashier == null && staffId != null) {
@@ -130,7 +130,7 @@ Future<ReceiptExtras> loadReceiptExtras(
     }
     covered ??= {
       for (final l in lines)
-        if (l.depositPaidKobo > 0) l.manufacturerId: l.cratesTaken.round(),
+        if (l.depositPaidKobo > 0) l.manufacturerId: l.cratesTaken,
     };
   }
   List<CrateBalanceEntry>? balances;

@@ -7,6 +7,12 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #628: Selling in parts (2026-11-01, ready for review)
+- Slice S3 of PRD #620. Till, scan and cart all reach the Edit Quantity sheet: ±0.5 chips when the product's switch is on, 0.25 / 0.75 typed, whole numbers only when off, and an off-grid value blocks the sheet. `CartService` enforces the same rule and takes real stock (`maxStock` is a double).
+- Line money goes through `lineTotalKobo` from cart to receipts (cart totals sum kobo, not naira doubles). `order_commands` no longer truncates. Cancel and return carry parts, including a damaged part on a return.
+- Reports keep decimals: items sold, top items, uncosted items, damage units, stock by store, sales target. `daily_closings.items_sold` is Real (Drift v99) / double with a quarter CHECK (cloud 0241, NOT deployed).
+- Cloud 0241 sets `allow_fractional_sales` default true, backfills all products, fixes the `pos_create_product_v2` default. RELEASE GATE: deploy only after Play + minimum version raised, because the backfill reaches every phone by pull. No local backfill on purpose: the phone stays whole until the cloud value lands.
+- Left for S4 (#629): a half crate already flows into `order_crate_lines` / the crate ledger as 0.5, but the Confirm Returns modal still rounds. Left for S5 (#630): shortage / surplus units in reports. Open: supervisor files the `pos-parity` issue.
 ### Issue #630: Stock in parts, S5 of PRD #620 (2026-11-01, ready for review)
 - Quarters can be typed in Receive Stock (edit sheet; cart, checkout, invoice and cost layer take parts), the Adjust Stock sheet and its approval requests, branch transfer dispatch and Request Stock, the Daily Stock Count and Record Damages. `purchase_items` is already a quarter column from #627 and nothing in the app writes it. No migration: the cloud accepts quarters since 0239.
 - Each screen respects the product switch (`allow_fractional_sales` off: digits-only input, whole numbers only). The DAOs enforce it too (`InventoryDao.assertQuantityAllowed` on adjustment requests, approval, transfers, requests, dispatch; `adjustStock` rejects off-quarter deltas). Approval re-checks, so a request raised before the switch went off stays pending.

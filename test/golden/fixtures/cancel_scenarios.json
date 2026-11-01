@@ -575,6 +575,49 @@
           ]
         }
       }
+    },
+    {
+      "name": "cancel parts (#628): a 1.5 line refunds its exact total and 1.5 units come back costed",
+      "_note": "Dart-arm only, like every scenario here (see ARM COVERAGE above).",
+      "dart_arm_only": true,
+      "products": [
+        { "key": "P1", "name": "Star 60cl", "unit_price_kobo": 100000, "scalar_cost_kobo": 50000 }
+      ],
+      "inventory": [{ "product": "P1", "quantity": 100 }],
+      "batches": [{ "product": "P1", "qty": 20, "cost_kobo": 50000, "received_at": "2026-01-01" }],
+      "checkout": {
+        "payment_method": "cash",
+        "discount_kobo": 0,
+        "amount_paid_kobo": 150000,
+        "items": [{ "product": "P1", "quantity": 1.5 }]
+      },
+      "expected": {
+        "order": {
+          "status": "completed", "payment_type": "cash",
+          "total_amount_kobo": 150000, "discount_kobo": 0,
+          "net_amount_kobo": 150000, "amount_paid_kobo": 150000,
+          "completed_at_null": false
+        },
+        "items": [{ "product": "P1", "quantity": 1.5, "unit_price_kobo": 100000, "total_kobo": 150000, "buying_price_kobo": 50000 }],
+        "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 18.5 }],
+        "inventory_after": [{ "product": "P1", "quantity": 98.5 }],
+        "product_scalar_cost": [{ "product": "P1", "buying_price_kobo": 50000 }],
+        "payment": { "method": "cash", "amount_kobo": 150000 }
+      },
+      "cancel": {
+        "reason": "customer changed mind",
+        "expected": {
+          "order": { "status": "cancelled", "cancelled_at_null": false },
+          "payments": [
+            { "type": "sale", "method": "cash", "amount_kobo": 150000, "voided": false },
+            { "type": "refund", "method": "cash", "amount_kobo": 150000, "voided": false }
+          ],
+          "wallet_legs": [],
+          "inventory_after": [{ "product": "P1", "quantity": 100 }],
+          "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 18.5 }],
+          "restored_cost_layers": [{ "product": "P1", "qty": 1.5, "cost_kobo": 50000 }]
+        }
+      }
     }
   ]
 }

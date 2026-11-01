@@ -163,7 +163,7 @@ void main() {
       expect(find.byKey(AddProductKeys.description), findsOneWidget);
       expect(find.byKey(AddProductKeys.supplier), findsOneWidget);
       expect(find.text('No expiry date'), findsOneWidget);
-      expect(find.text('Allow fractional sales'), findsOneWidget);
+      expect(find.text('Allow part quantities'), findsOneWidget);
       // 48dp targets: photo, pickers, chips, stepper, date.
       expectTarget(tester, find.byType(ProductPhotoBox));
       await tester.ensureVisible(find.byKey(AddProductKeys.category));

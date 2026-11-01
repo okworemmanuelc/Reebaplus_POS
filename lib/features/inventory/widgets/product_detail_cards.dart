@@ -19,6 +19,7 @@ import 'package:reebaplus_pos/features/inventory/widgets/product_detail_figures.
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 
 // The cards of the redesigned Product Details (#487 PR 3). Plain data in,
 // theme-only styling, no database: the screen reads and writes, these draw.
@@ -840,7 +841,7 @@ class ProductSalesTargetCard extends StatelessWidget {
       note = 'Target reached.';
     } else {
       note =
-          '${fg.remaining} ${unitCountNoun(unit, fg.remaining, crates: crates)} to go. '
+          '${formatQty(fg.remaining)} ${unitCountNoun(unit, fg.remaining, crates: crates)} to go. '
           'That is about ${fg.perDay} ${unitCountNoun(unit, fg.perDay, crates: crates)} a day.';
     }
     return DetailPanel(
@@ -861,7 +862,7 @@ class ProductSalesTargetCard extends StatelessWidget {
             textBaseline: TextBaseline.alphabetic,
             children: [
               Text(
-                '${fg.sold}',
+                formatQty(fg.sold),
                 style: context
                     .extraBoldStyle(30)
                     .copyWith(color: t.colorScheme.onSurface),

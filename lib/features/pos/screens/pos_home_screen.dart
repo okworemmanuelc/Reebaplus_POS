@@ -811,7 +811,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
         .addItem(
           item.product,
           qty: 1.0,
-          maxStock: item.totalStock.floor(),
+          maxStock: item.totalStock,
           tier: _controller!.selectedGroup,
         );
     if (accepted) {
