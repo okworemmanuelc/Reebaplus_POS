@@ -7,6 +7,10 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #622: Hidden support CEO (2026-11-01, ready for review)
+
+A Reebaplus support login can sit in a shop as a full-rights CEO yet never appear in the staff list, pickers, counts, plan staff limit or notification audiences; its own actions still show its name. `user_businesses.is_hidden` (cloud **0238 NOT deployed**, Drift v97), set only by the server/console. Details in `BUILD_LOG.md` (2026-11-01). Part of #619. pos-parity issue in reebaplus-web: supervisor files it; console must show it as "Support".
+
 ### Issue #608: Play Console recommendations (2026-10-31, ready for review)
 
 Edge-to-edge on Android 10–14 too: `MainActivity` calls `enableEdgeToEdge()` after `super.onCreate`, and `main.dart` sets `SystemUiMode.edgeToEdge`, because without it Flutter re-applies its old flags on resume and undoes it on API 29. Android 15+ was already edge-to-edge (targetSdk 36), so no new inset bugs are possible. Deleted the dead `com.reebaplus.reebaplus_pos.MainActivity`. AGP 8.11.1 → 8.13.2 + `android.r8.optimizedResourceShrinking=true`. Bitmap-downsampling warning = third-party code the app never reaches (no change). AGP 9 = #609 (on hold until Flutter 3.47+ built-in Kotlin). No Drift/cloud change.

@@ -4428,4 +4428,18 @@ void main() {
       db = await openAndInit(); // idempotent re-upgrade
     } finally { await db.close(); }
   });
+
+  test('v96 to v97 adds user_businesses.is_hidden (#622)', () async {
+    var db = await openAndInit();
+    await db.customStatement('ALTER TABLE user_businesses DROP COLUMN is_hidden');
+    await db.customStatement('PRAGMA user_version = 96');
+    await db.close();
+    db = await openAndInit();
+    try {
+      expect(await columnsOf(db, 'user_businesses'), contains('is_hidden'));
+      await db.customStatement('PRAGMA user_version = 96');
+      await db.close();
+      db = await openAndInit(); // idempotent re-upgrade
+    } finally { await db.close(); }
+  });
 }

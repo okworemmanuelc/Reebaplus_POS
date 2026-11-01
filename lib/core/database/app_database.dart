@@ -2834,6 +2834,11 @@ class UserBusinesses extends Table {
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
       dateTime().withDefault(currentDateAndTime)();
+  // #622: the Reebaplus support login. A hidden member is a full-rights CEO that
+  // never shows in the staff list, pickers, staff filters or counts. Cloud-
+  // authoritative (server/console only; guard trigger in 0238), pulled, never
+  // pushed (user_businesses pushColumns omits it).
+  BoolColumn get isHidden => boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -3145,7 +3150,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 96;
+  int get schemaVersion => 97;
 
   /// The v90 (#473) listing columns, pinned to their defaults in every older
   /// products rebuild: TableMigration copies from the CURRENT schema, so a
@@ -6868,6 +6873,22 @@ class AppDatabase extends _$AppDatabase {
         ).get();
         if (has.isEmpty) {
           await m.addColumn(businesses, businesses.billingIssue);
+        }
+      }
+
+      if (from < 97) {
+        // ── v97 — #622: user_businesses.is_hidden ─────────────────────────
+        //
+        // Mirrors supabase/migrations/0238_user_businesses_is_hidden.sql.
+        // The v61 step rebuilds user_businesses from the CURRENT Dart
+        // definition (TableMigration), so a DB stepped up from < 61 already has
+        // the column: guard with pragma_table_info (stale-column trap).
+        final has = await customSelect(
+          "SELECT 1 FROM pragma_table_info('user_businesses') "
+          "WHERE name = 'is_hidden'",
+        ).get();
+        if (has.isEmpty) {
+          await m.addColumn(userBusinesses, userBusinesses.isHidden);
         }
       }
     },

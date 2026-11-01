@@ -236,6 +236,17 @@ void main() {
       'created_at',
       'last_updated_at',
     },
+    // #622: `is_hidden` is cloud-authoritative (0238 guard) — pulled, never pushed.
+    'user_businesses': {
+      'id',
+      'business_id',
+      'user_id',
+      'role_id',
+      'status',
+      'last_login_at',
+      'created_at',
+      'last_updated_at',
+    },
     'profiles': {
       'id',
       'business_id',
