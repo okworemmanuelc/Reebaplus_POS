@@ -7,6 +7,12 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #626: Must-update switch (2026-11-01, ready for review)
+- `ForceUpdateWrapper` compares the `PackageInfo` build number with server `app_config.min_android_build` (launch + resume, 1-min debounce); below = full-screen Update Required with a Play Store button. Offline/error/non-Android never block; the child renders immediately (no spinner gate). Tests: below/equal/above/offline/error/non-Android.
+- Cloud migration 0240 (`app_config`, seed 0) NOT deployed (supervisor deploys); console control = pos-parity issue in reebaplus-web (supervisor files).
+
+### Issue #621: No credit limit unless one is set (2026-11-01, ready for review)
+
 ### Issue #622: Hidden support CEO (2026-11-01, merged)
 
 A Reebaplus support login can sit in a shop as a full-rights CEO yet never appear in the staff list, pickers, counts, plan staff limit or notification audiences; its own actions still show its name. `user_businesses.is_hidden` (cloud 0238 deployed 2026-11-01, Drift v97), set only by the server/console. Details in `BUILD_LOG.md` (2026-11-01). Part of #619. pos-parity issue in reebaplus-web: supervisor files it; console must show it as "Support".
