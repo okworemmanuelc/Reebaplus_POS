@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
@@ -350,7 +351,7 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
             name: product.name,
             subtitle: subtitle,
             priceLabel: formatCurrency(price),
-            stockLabel: '$stock',
+            stockLabel: formatQty(stock),
             stockLevel: level,
             categoryName: widget.categoryName,
             photoPath: product.imagePath,
@@ -363,7 +364,7 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
           name: product.name,
           subtitle: subtitle,
           priceLabel: formatCurrency(price),
-          stockLabel: '$stock',
+          stockLabel: formatQty(stock),
           stockLevel: level,
           categoryName: widget.categoryName,
           photoPath: product.imagePath,

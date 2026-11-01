@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -265,7 +266,7 @@ class StoreTransferHub extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '$productName · ${tr.quantity} unit(s)',
+                              '$productName · ${formatQty(tr.quantity)} unit(s)',
                               style: context
                                   .boldStyle(13)
                                   .copyWith(color: text),
@@ -496,7 +497,7 @@ class _TransferActionCardState extends ConsumerState<_TransferActionCard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${widget.productName} · ${widget.transfer.quantity} unit(s)',
+                      '${widget.productName} · ${formatQty(widget.transfer.quantity)} unit(s)',
                       style: context.boldStyle(14).copyWith(color: text),
                     ),
                     SizedBox(height: context.getRSize(4)),

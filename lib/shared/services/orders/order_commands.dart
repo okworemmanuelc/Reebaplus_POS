@@ -531,7 +531,7 @@ class OrderCommands {
           ? customer!.name.trim()
           : 'Customer';
       final summary = owing
-          .map((b) => '${b.balance} ${b.manufacturerName}')
+          .map((b) => '${formatQty(b.balance)} ${b.manufacturerName}')
           .join(', ');
       final message = '$who now owes crates after $orderNumber: $summary';
 

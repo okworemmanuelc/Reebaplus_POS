@@ -1518,7 +1518,7 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
     await db.activityLogDao.log(
       action: 'stock_transfer_dispatched',
       description:
-          'Dispatched $quantity unit(s) of $productId '
+          'Dispatched ${formatQty(quantity)} unit(s) of $productId '
           'from $fromStoreId → $toStoreId',
       staffId: initiatedBy,
       storeId: fromStoreId,
@@ -1536,7 +1536,7 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
     }..remove(initiatedBy)) {
       await db.notificationsDao.fireNotification(
         type: 'stock_transfer.dispatched',
-        message: 'Incoming transfer: $quantity unit(s) arriving at your store.',
+        message: 'Incoming transfer: ${formatQty(quantity)} unit(s) arriving at your store.',
         severity: 'info',
         linkedRecordId: transferId,
         recipientUserId: uid,
@@ -1633,7 +1633,7 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
     await db.activityLogDao.log(
       action: 'stock_transfer_received',
       description:
-          'Received $quantity unit(s) of $productId '
+          'Received ${formatQty(quantity)} unit(s) of $productId '
           'at $toStoreId from $fromStoreId',
       staffId: receivedBy,
       storeId: toStoreId,
@@ -1648,7 +1648,7 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
     if (transfer != null) {
       await db.notificationsDao.fireNotification(
         type: 'stock_transfer.received',
-        message: 'Your transfer of $quantity unit(s) was confirmed received.',
+        message: 'Your transfer of ${formatQty(quantity)} unit(s) was confirmed received.',
         severity: 'info',
         linkedRecordId: transferId,
         recipientUserId: transfer.initiatedBy,
@@ -1824,7 +1824,7 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
       fromStoreId: fromStoreId,
       requestedBy: requestedBy,
       linkedTransferId: transferId,
-      message: 'Stock request: $quantity unit(s) requested from your store.',
+      message: 'Stock request: ${formatQty(quantity)} unit(s) requested from your store.',
     );
 
     return transferId;
@@ -1950,7 +1950,7 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
     return db.activityLogDao.log(
       action: 'stock_transfer_requested',
       description:
-          'Requested $quantity unit(s) of $productId '
+          'Requested ${formatQty(quantity)} unit(s) of $productId '
           'from $fromStoreId → $toStoreId',
       staffId: requestedBy,
       storeId: toStoreId,

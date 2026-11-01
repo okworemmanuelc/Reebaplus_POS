@@ -916,7 +916,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
           throw ArgumentError.value(
             quantity,
             'quantity',
-            'Damage ($quantity) cannot exceed warehouse count ($available) at store $storeId',
+            'Damage (${formatQty(quantity)}) cannot exceed warehouse count (${formatQty(available)}) at store $storeId',
           );
         }
       }

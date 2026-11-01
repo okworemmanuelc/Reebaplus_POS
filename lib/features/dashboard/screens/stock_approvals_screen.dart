@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/crates/crate_deposit_ledger_types.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -475,7 +476,7 @@ class _ApprovalCardState extends ConsumerState<_ApprovalCard> {
   Widget build(BuildContext context) {
     final r = widget.request;
     final isRemove = r.quantityDiff < 0;
-    final qtyLabel = '${isRemove ? '−' : '+'}${r.quantityDiff.abs()}';
+    final qtyLabel = '${isRemove ? '−' : '+'}${formatQty(r.quantityDiff.abs())}';
     final totalCostLabel = _totalCostLabel;
 
     return _ApprovalShell(
