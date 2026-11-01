@@ -7,6 +7,9 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #641: POS tile price on its own line (2026-11-01)
+Branch `fix/641-pos-tile-price-line`. `ProductTile` with a `priceLabel` puts the price on its own full-width line (Bold 16, FittedBox only as a 7-figure safety net) with the stock pill below it; tiles without a price (Receive, Request Stock) are unchanged. `posTileSubtitle` is now size · unit (description dropped from the tile); the line may wrap to 2 (`subtitleMaxLines`, 1 on a short sideways phone via `posTileSubtitleLines`). `posTileExtent` = price line + 4 + pill line + 6 + extra subtitle line; on a short screen the tile leaves the art out (`showArt: false`) so a full row still fits. POS goldens regenerated; Receive/Request unchanged. Tests: `test/pos/pos_tile_price_line_test.dart`.
+
 ### Store switch needs confirming (2026-11-01, merged, PR #642)
 Branch `feat/pos-store-confirm`. `showStorePickerSheet`, used by both the POS gate and the side menu, now asks "Switch to <store>?" (Confirm / Cancel) before any switch, All Stores included. Cancel keeps the sheet open. Tapping the store already in force just closes the sheet, except a silently defaulted store, which POS still needs explicitly chosen. No schema, sync or money change, so no pos-parity issue.
 
@@ -14,7 +17,7 @@ Branch `feat/pos-store-confirm`. `showStorePickerSheet`, used by both the POS ga
 - Removed the permanent "N shops read-only / staff paused / plan ended — Upgrade" banner. Only a failed Play payment (grace/hold) keeps a standing banner.
 - Adding a shop/staff over the limit, or changing a read-only shop, now shows a 3-second notice with **Upgrade** (`showPlanLimitNotice` / `showUpgradeNotice` in `plan_limit_widgets.dart`) instead of a pop-up.
 
-### Home eye toggle, auto-lock off by default, POS 3 columns (2026-11-01, ready for review)
+### Home eye toggle, auto-lock off by default, POS 3 columns (2026-11-01)
 Branch `feat/home-hide-figures-lock-off-pos-3col`. (1) Home: eye button in the Performance Overview header hides every money figure (device-local `home_hide_figures`). (2) Auto-lock: unset `auto_lock_interval_seconds` now means off in `AutoLockWrapper` and the Security screen (was 5 min); a saved timer is unchanged. The 12-hour shift logout is untouched. (3) POS: the grid-column fallback is 3 (was 2), so a medium phone (380–600dp) opens on three columns; small phones stay capped at 2, and a saved choice wins. No schema, sync or money change, so no pos-parity issue.
 
 ### Any-business narrative, not drinks-only (2026-11-01)
@@ -25,19 +28,19 @@ Branch `chore/generic-business-narrative`. Reebaplus is for any kind of business
 - Cloud 0242 (deployed 2026-11-01): `crate_count` on `crate_shortfall_writeoffs`, `supplier_crate_deposits`, `supplier_crate_deposit_requests` -> double + quarter CHECK; `console_crate_balances` keeps parts and values with `line_total_kobo`; `console_crate_ledger_net` returns double precision (DROP + re-GRANT). Drift v100 (no rebuild). The crate RPCs needed no change (0239 already doubles).
 - Safe to deploy 0242 ahead of the app (no client can write a fractional crate_count before the new version). pos-parity: console must read crate `balance` and the ledger net as numbers that can be 0.5; the web POS deposit must be `line_total_kobo(rate, crates)` (supervisor files it).
 - Tests: `test/crates/empties_in_parts_test.dart`, two half-crate golden scenarios in `crate_sale_scenarios.json`.
-### Issue #628: Selling in parts (2026-11-01, ready for review)
+### Issue #628: Selling in parts (2026-11-01)
 - Slice S3 of PRD #620. Till, scan and cart all reach the Edit Quantity sheet: ±0.5 chips when the product's switch is on, 0.25 / 0.75 typed, whole numbers only when off, and an off-grid value blocks the sheet. `CartService` enforces the same rule and takes real stock (`maxStock` is a double).
 - Line money goes through `lineTotalKobo` from cart to receipts (cart totals sum kobo, not naira doubles). `order_commands` no longer truncates. Cancel and return carry parts, including a damaged part on a return.
 - Reports keep decimals: items sold, top items, uncosted items, damage units, stock by store, sales target. `daily_closings.items_sold` is Real (Drift v99) / double with a quarter CHECK (cloud 0241, NOT deployed).
 - Cloud 0241 sets `allow_fractional_sales` default true, backfills all products, fixes the `pos_create_product_v2` default. RELEASE GATE: deploy only after Play + minimum version raised, because the backfill reaches every phone by pull. No local backfill on purpose: the phone stays whole until the cloud value lands.
 - Left for S4 (#629): a half crate already flows into `order_crate_lines` / the crate ledger as 0.5, but the Confirm Returns modal still rounds. Left for S5 (#630): shortage / surplus units in reports. Open: supervisor files the `pos-parity` issue.
-### Issue #630: Stock in parts, S5 of PRD #620 (2026-11-01, ready for review)
+### Issue #630: Stock in parts, S5 of PRD #620 (2026-11-01)
 - Quarters can be typed in Receive Stock (edit sheet; cart, checkout, invoice and cost layer take parts), the Adjust Stock sheet and its approval requests, branch transfer dispatch and Request Stock, the Daily Stock Count and Record Damages. `purchase_items` is already a quarter column from #627 and nothing in the app writes it. No migration: the cloud accepts quarters since 0239.
 - Each screen respects the product switch (`allow_fractional_sales` off: digits-only input, whole numbers only). The DAOs enforce it too (`InventoryDao.assertQuantityAllowed` on adjustment requests, approval, transfers, requests, dispatch; `adjustStock` rejects off-quarter deltas). Approval re-checks, so a request raised before the switch went off stays pending.
 - Money: receive cart/invoice, approval cost label and inventory value (home, store details) use `lineTotalKobo`. Display: `formatQty` on cart, checkout, request, dispatch, count, history and stock-by-store.
 - Left on purpose: Record Damages on a tracked-bottle product stays whole (its crate leg belongs to S4); transfer empties, crates on a receipt and Add Product's opening stock stay whole; the sale path and van/online stay as they were. This slice does not touch the `allow_fractional_sales` default (S3). `pos-parity` for the web is S6.
 - Tests: `test/stock_parts/` (input rules, receive service + cart, adjust/request/approve, transfers, requests, count DAO, count screen, receive edit sheet, request sheet).
-### Issue #627: Quantity foundation, quarter quantities (2026-11-01, ready for review)
+### Issue #627: Quantity foundation, quarter quantities (2026-11-01)
 - Slice S2 of PRD #620. 22 quantity columns become `double precision` (cloud 0239, NOT deployed) / `RealColumn` (Drift v98, no table rebuild) with a quarter-step CHECK each; van and online-order tables untouched. Shared `lib/shared/utils/quantity.dart` (`Qty`, `formatQty`, `lineTotalKobo`) + SQL twins `qty_is_quarter` / `line_total_kobo`.
 - 27 SQL functions recreated with double quantity types (list in the PR body); whole-number behaviour unchanged. Pushes send whole doubles as integers; pulls accept 5 / 5.0 / 0.5.
 - No UI for entering parts: screens bridge to int with `.round()` / `.floor()` and say so in a comment; S3-S5 widen them. `order_commands.dart` qty `.toInt()` untouched (S3).
@@ -46,11 +49,11 @@ Branch `chore/generic-business-narrative`. Reebaplus is for any kind of business
 
 `tool/legacy_import/` builds `import.sql`, `checks.sql` and `report.md` from an export, next to the export and never in the repo. No Drift or cloud change, so no pos-parity issue. Needs #627 on the target (the SQL checks the column types and stops otherwise). Trigger decisions and the FIFO design are in `tool/legacy_import/README.md`. Key decision: deliveries write no `cost_batches` of their own, a deliberate departure from the issue. `pos_recost_pairs` replays history after every sale push, so history gets layers that reproduce each line's cost exactly, and the opening layers stay whole for new sales. Next: real login ids, then the dev dry run. Part of #619.
 
-### Issue #626: Must-update switch (2026-11-01, ready for review)
+### Issue #626: Must-update switch (2026-11-01)
 - `ForceUpdateWrapper` compares the `PackageInfo` build number with server `app_config.min_android_build` (launch + resume, 1-min debounce); below = full-screen Update Required with a Play Store button. Offline/error/non-Android never block; the child renders immediately (no spinner gate). Tests: below/equal/above/offline/error/non-Android.
 - Cloud migration 0240 (`app_config`, seed 0) NOT deployed (supervisor deploys); console control = pos-parity issue in reebaplus-web (supervisor files).
 
-### Issue #621: No credit limit unless one is set (2026-11-01, ready for review)
+### Issue #621: No credit limit unless one is set (2026-11-01)
 
 ### Issue #622: Hidden support CEO (2026-11-01, merged)
 

@@ -44,6 +44,11 @@ const int kPosLowStockAt = 5;
 /// beside the fixed cart panel at 1280dp, as the mockups draw).
 const double kPosTileMinWidth = 170;
 
+/// The size · unit line may wrap to 2 lines so the unit is never cut off
+/// (#641); a short sideways phone has no room, so it keeps 1.
+int posTileSubtitleLines(BuildContext context) =>
+    posShortHeight(context) ? 1 : 2;
+
 /// The height of one grid tile: padding, a fixed art area and room for a
 /// two-line name, the size · pack line and the price row, all grown with the
 /// text scale so a large system font never squeezes the text (ui-context
@@ -52,27 +57,23 @@ double posTileExtent(BuildContext context) {
   final scaler = MediaQuery.textScalerOf(context);
   double line(double base) => scaler.scale(context.getRFontSize(base)) * 1.35;
   return context.getRSize(10) * 2 + // tile padding
-      // art: smaller on a short screen, so a full row fits under the band
-      context.getRSize(posShortHeight(context) ? 20 : 60) +
-      context.getRSize(10) + // art → name
+      // no art on a short screen, so a full row fits under the band
+      (posShortHeight(context) ? 0 : context.getRSize(60 + 10)) +
       line(15) * 2 + // name, up to two lines
-      line(12) + // size · pack
+      line(12) * posTileSubtitleLines(context) + // size · unit
       context.getRSize(8) +
-      max(line(16), line(12) + context.getRSize(6)) + // price / stock pill
+      line(16) + // price, on its own line
+      context.getRSize(4) +
+      line(12) + context.getRSize(6) + // stock pill, below the price
       4; // the in-cart border
 }
 
-/// "60cl · Crate": the product's description (its subtitle), its size and
-/// its unit, the blanks skipped, joined with the mockup's " · " (#384). The
-/// tile showed size + unit before; the description leads now, as on Request
-/// Stock's tiles (#380), and the size word stays so nothing is lost. [crates]
-/// is `businessTracksCrates` for the active business (see [unitLabel]).
+/// "60cl · Bottle Crate": the product's size then its unit, the blanks
+/// skipped, joined with " · " (#641). The description no longer shows on the
+/// tile (it stays on Product Details). [crates] is `businessTracksCrates` for
+/// the active business (see [unitLabel]).
 String? posTileSubtitle(ProductData product, {required bool crates}) {
-  final parts = [
-    product.subtitle,
-    product.size,
-    unitLabel(product.unit, crates: crates),
-  ]
+  final parts = [product.size, unitLabel(product.unit, crates: crates)]
       .where((s) => s != null && s.trim().isNotEmpty && s != 'null')
       .map((s) => s!.trim())
       .toList();
@@ -367,6 +368,8 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
         return ProductTile(
           name: product.name,
           subtitle: subtitle,
+          subtitleMaxLines: posTileSubtitleLines(context),
+          showArt: !posShortHeight(context),
           priceLabel: formatCurrency(price),
           stockLabel: formatQty(stock),
           stockLevel: level,
