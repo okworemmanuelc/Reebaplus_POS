@@ -45,10 +45,14 @@ class ProductTile extends StatelessWidget {
     this.onTap,
     this.onLongPress,
     this.tappableWhenOut = false,
+    this.subtitleMaxLines = 1,
   });
 
   final String name;
   final String? subtitle;
+
+  /// Lines the [subtitle] may take (POS passes 2 so the unit is never cut off).
+  final int subtitleMaxLines;
 
   /// Formatted by the caller (e.g. `formatCurrency`); null shows no price.
   final String? priceLabel;
@@ -144,29 +148,32 @@ class ProductTile extends StatelessWidget {
           if (subtitle != null)
             Text(
               subtitle!,
-              maxLines: 1,
+              maxLines: subtitleMaxLines,
               overflow: TextOverflow.ellipsis,
               style: context.regularStyle(12).copyWith(color: muted),
             ),
           SizedBox(height: context.getRSize(8)),
+          if (priceLabel != null) ...[
+            // Own full-width line so 4-6 figure prices stay full size (#641);
+            // the FittedBox is only a safety net for 7-figure prices.
+            SizedBox(
+              width: double.infinity,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  priceLabel!,
+                  maxLines: 1,
+                  style: context
+                      .boldStyle(16)
+                      .copyWith(color: t.colorScheme.primary),
+                ),
+              ),
+            ),
+            SizedBox(height: context.getRSize(4)),
+          ],
           Row(
             children: [
-              if (priceLabel != null) ...[
-                Expanded(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      priceLabel!,
-                      maxLines: 1,
-                      style: context
-                          .boldStyle(16)
-                          .copyWith(color: t.colorScheme.primary),
-                    ),
-                  ),
-                ),
-                SizedBox(width: context.getRSize(6)),
-              ],
               Container(
                 padding: EdgeInsets.symmetric(
                   horizontal: context.getRSize(8),

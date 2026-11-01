@@ -7,6 +7,8 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #641: POS tile price on its own line (2026-11-01, ready for review)
+Branch `fix/641-pos-tile-price-line`. `ProductTile` with a `priceLabel` puts the price on its own full-width line (Bold 16, FittedBox only as a 7-figure safety net) with the stock pill below it; tiles without a price (Receive, Request Stock) are unchanged. `posTileSubtitle` is now size · unit (description dropped from the tile); the line may wrap to 2 (`subtitleMaxLines`, 1 on a short sideways phone via `posTileSubtitleLines`). `posTileExtent` = price line + 4 + pill line + 6 + extra subtitle line; on a short screen the art is 0 and the trailing 6 is dropped so a full row still fits. POS goldens regenerated; Receive/Request unchanged. Tests: `test/pos/pos_tile_price_line_test.dart`.
 ### Home eye toggle, auto-lock off by default, POS 3 columns (2026-11-01, ready for review)
 Branch `feat/home-hide-figures-lock-off-pos-3col`. (1) Home: eye button in the Performance Overview header hides every money figure (device-local `home_hide_figures`). (2) Auto-lock: unset `auto_lock_interval_seconds` now means off in `AutoLockWrapper` and the Security screen (was 5 min); a saved timer is unchanged. The 12-hour shift logout is untouched. (3) POS: the grid-column fallback is 3 (was 2), so a medium phone (380–600dp) opens on three columns; small phones stay capped at 2, and a saved choice wins. No schema, sync or money change, so no pos-parity issue.
 
