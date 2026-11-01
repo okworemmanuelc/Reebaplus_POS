@@ -120,7 +120,7 @@ class SupplierCrateService {
     required String supplierName,
     required String manufacturerId,
     required String manufacturerName,
-    required int crateCount,
+    required double crateCount,
     required String staffId,
     required String storeId,
     int? refundAmountKobo,
@@ -146,7 +146,7 @@ class SupplierCrateService {
       );
       final crateClause = crateCount == 0
           ? 'no crates'
-          : '$crateCount $manufacturerName crate'
+          : '${formatQty(crateCount)} $manufacturerName crate'
                 '${crateCount == 1 ? '' : 's'}';
       final refundClause = refundAmountKobo == null
           ? ' — refund awaiting confirmation'

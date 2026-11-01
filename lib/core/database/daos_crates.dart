@@ -1342,7 +1342,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
           supplierId: supplierId,
           manufacturerId: manufacturerId,
           storeId: storeId,
-          crateCount: quantity.round(), // supplier deposits stay whole (S4)
+          crateCount: quantity,
           requestedBy: performedBy,
           supplierCrateLedgerId: ledgerId,
         );
@@ -1424,7 +1424,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
           supplierId: supplierId,
           manufacturerId: manufacturerId,
           storeId: storeId,
-          crateCount: quantity.round(), // supplier deposits stay whole (S4)
+          crateCount: quantity,
           requestedBy: performedBy,
           kind: kCrateDepositMovementRelease,
           requestedAmountKobo: refundAmountKobo,
@@ -1489,7 +1489,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     required String supplierId,
     required String manufacturerId,
     required String storeId,
-    required int crateCount,
+    required double crateCount,
     required String performedBy,
     int? refundAmountKobo,
     String? note,
@@ -1504,14 +1504,14 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
         // one-legged state that produced the understated shortfall above.
         await recordCrateReturnByManufacturer(
           manufacturerId: manufacturerId,
-          quantity: crateCount.toDouble(),
+          quantity: crateCount,
           performedBy: performedBy,
           storeId: storeId,
         );
         requestId = await recordReturnToSupplier(
           supplierId: supplierId,
           manufacturerId: manufacturerId,
-          quantity: crateCount.toDouble(),
+          quantity: crateCount,
           performedBy: performedBy,
           storeId: storeId,
           refundAmountKobo: refundAmountKobo,
@@ -1688,7 +1688,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
       for (final r in rows) {
         final qty = r.read(sumExpr) ?? 0.0;
         final rate = r.read(manufacturers.depositAmountKobo) ?? 0;
-        total += (qty * rate).round();
+        total += lineTotalKobo(rate, qty);
       }
       return total;
     });
@@ -1749,7 +1749,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     required String supplierId,
     required String manufacturerId,
     required String storeId,
-    required int crateCount,
+    required double crateCount,
     required String requestedBy,
     String kind = kCrateDepositMovementPlacement,
     int? requestedAmountKobo,
@@ -1793,7 +1793,8 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
       // A float top-up covers no crates, so this is 0 and nothing is raised.
       // That is right: how much you chose to add to a float is a fact only the
       // person who paid it knows, and the app must never invent one.
-      amount = crateCount * rate;
+      // Proportional (#629): half a crate is half the rate, whole kobo.
+      amount = lineTotalKobo(rate, crateCount);
     } else {
       final held = (await _pairDepositPosition(
         supplierId: supplierId,
@@ -1805,7 +1806,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
       // SUGGESTION the approver overwrites with what was actually received.
       final implied = (kind == kCrateDepositMovementFloatPayout && crateCount == 0)
           ? held
-          : crateCount * rate;
+          : lineTotalKobo(rate, crateCount);
       amount = implied < held ? implied : (held < 0 ? 0 : held);
     }
     // No money to ask about — a `none`-era return, a zero rate, or a
@@ -2117,7 +2118,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     required int signedAmountKobo,
     required String performedBy,
     String? storeId,
-    int crateCount = 0,
+    double crateCount = 0,
     String paymentMethod = 'cash',
     String? note,
   }) async {
@@ -2293,7 +2294,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     required String manufacturerId,
     required String movementType,
     required int signedAmountKobo,
-    required int crateCount,
+    required double crateCount,
     required int ratePerCrateKobo,
     required String performedBy,
     required DateTime now,
@@ -2478,7 +2479,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
               ratePerCrateKobo: manufacturer.depositAmountKobo,
               movements: movementsBy[manufacturer.id] ?? const [],
               pending: pendingBy[manufacturer.id] ?? const [],
-              cratesOwed: cratesOwed.round(),
+              cratesOwed: cratesOwed,
               // Deliberately omitted — see the doc above. A shortfall is a
               // brand-level question and this is a pair-level read.
             ),
@@ -2646,7 +2647,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
               ratePerCrateKobo: entry.value.brand.depositAmountKobo,
               movements: movementsBy[entry.key] ?? const [],
               pending: pendingBy[entry.key] ?? const [],
-              cratesOwed: (owedBy[entry.key] ?? 0.0).round(),
+              cratesOwed: owedBy[entry.key] ?? 0.0,
               // No `emptiesOnHand`: the pool is brand-level and business-wide
               // while this is a PAIR, so asking a shortfall question here would
               // double-subtract across two suppliers of one brand (ADR 0023
@@ -2698,12 +2699,12 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
   /// wrong one confirms cash going the wrong way.
   String _crateDepositSummary({
     required String kind,
-    required int crateCount,
+    required double crateCount,
     required String manufacturerName,
     String? supplierName,
   }) {
     final crates =
-        '$crateCount crate${crateCount == 1 ? '' : 's'} of $manufacturerName';
+        '${formatQty(crateCount)} crate${crateCount == 1 ? '' : 's'} of $manufacturerName';
     // #214 — a float leg covers no crates at all, so it is named by what it IS
     // rather than by a crate count it does not have. "Top up" and "pay back"
     // are the words an owner uses for the two, and an approver must be able to
@@ -2836,7 +2837,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
   Future<String?> writeOffCrateShortage({
     required String manufacturerId,
     required String storeId,
-    required int crateCount,
+    required double crateCount,
     required String performedBy,
     String? note,
   }) async {
@@ -2876,7 +2877,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
   Future<List<String>> reverseCrateWriteOff({
     required String manufacturerId,
     required String storeId,
-    required int crateCount,
+    required double crateCount,
     required String performedBy,
     String? note,
   }) async {
@@ -2958,7 +2959,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
   Future<String?> recordCustomerForfeitShortfall({
     required String manufacturerId,
     required String orderId,
-    required int keptCrates,
+    required double keptCrates,
     required String performedBy,
     String? storeId,
     DateTime? at,
@@ -2973,7 +2974,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
       ),
       performedBy: performedBy,
       storeId: storeId,
-      note: 'Customer kept $keptCrates crate${keptCrates == 1 ? '' : 's'} — '
+      note: 'Customer kept ${formatQty(keptCrates)} crate${keptCrates == 1 ? '' : 's'} — '
           'their deposit covers the crate you owe the depot.',
       source: CrateWriteOffSource.customerForfeit,
       // #188 — deterministic per (order, brand), so a second offline device's
@@ -2990,7 +2991,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
   /// are decided together, at the one moment the arrangement has been read.
   Future<String?> _bookCrateShortfallLoss({
     required String manufacturerId,
-    required int Function(CrateMoneyArrangement) crateCount,
+    required double Function(CrateMoneyArrangement) crateCount,
     required String performedBy,
     required CrateWriteOffSource source,
     String? storeId,
@@ -3027,7 +3028,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
   Future<String> _insertCrateWriteOff({
     required String manufacturerId,
     required String? storeId,
-    required int crateCount,
+    required double crateCount,
     required int ratePerCrateKobo,
     required String performedBy,
     required CrateWriteOffSource source,
@@ -3203,7 +3204,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
           customerOnDepositCrates: onDeposit.crates,
           customerOnDepositKobo: onDeposit.kobo,
           customerNoDepositCrates: customerDebt,
-          shortCrates: shortage.toDouble(),
+          shortCrates: shortage,
           damagedCrates: damagedCount,
           damagedLossKobo: damagedLossKobo,
         );
@@ -3216,7 +3217,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
   /// When [storeId] is set, scopes to that store; when null, sums open
   /// shortages across all stores. Reads through [watchCrateShortageRollup]'s
   /// fold, so it can't disagree with Daily Reconciliation.
-  Stream<int> watchCrateShortageByManufacturer(
+  Stream<double> watchCrateShortageByManufacturer(
     String manufacturerId, {
     String? storeId,
   }) {
@@ -3234,9 +3235,9 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
   ///
   /// When [storeId] is set, scopes to that store; when null, sums open shortages
   /// across all stores per brand.
-  Stream<Map<String, int>> watchAllCrateShortages({String? storeId}) {
+  Stream<Map<String, double>> watchAllCrateShortages({String? storeId}) {
     return _crateShortageEventsQuery(storeId: storeId).map((byBrand) {
-      final result = <String, int>{};
+      final result = <String, double>{};
       for (final entry in byBrand.entries) {
         final open = foldTotalCrateShortage(entry.value.events);
         if (open > 0) result[entry.key] = open;
@@ -3373,9 +3374,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
           id: r.id,
           storeId: r.storeId,
           movementType: r.movementType,
-          // Crate Shortage still folds whole crates (its write-off counts are
-          // integer); fractional count rows are S4 (#620).
-          quantityDelta: r.quantityDelta.round(),
+          quantityDelta: r.quantityDelta, // quarter steps (#629)
           createdAt: r.createdAt,
         ),
       );

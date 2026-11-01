@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/crates/crate_shortage.dart';
@@ -9,12 +8,14 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
+import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/crate_sheet_recorded_line.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 
 /// Test keys for [CrateShortageWriteOffSheet] (#296).
 const String kCrateWriteOffSheetKey = 'crate_write_off_sheet';
@@ -73,10 +74,8 @@ class _CrateShortageWriteOffSheetState
     super.dispose();
   }
 
-  int? get _quantity {
-    final n = int.tryParse(_quantityCtrl.text.trim());
-    return n != null && n > 0 ? n : null;
-  }
+  /// Positive quarter-step count (#629), or null.
+  double? get _quantity => Qty.parse(_quantityCtrl.text, allowZero: false);
 
   /// The store to write off at: the one the user picked, or the only store
   /// with an open shortage for the brand.
@@ -142,7 +141,7 @@ class _CrateShortageWriteOffSheetState
     }
     AppNotification.showSuccess(
       context,
-      '$quantity ${brand.manufacturerName} '
+      '${formatQty(quantity)} ${brand.manufacturerName} '
       'crate${quantity == 1 ? '' : 's'} written off',
     );
     Navigator.pop(context);
@@ -155,10 +154,12 @@ class _CrateShortageWriteOffSheetState
     final quantity = _quantity;
     if (quantity == null) return 'Enter how many crates are gone.';
     final each = formatCurrency(brand.ratePerCrateKobo / 100);
-    final total = formatCurrency(quantity * brand.ratePerCrateKobo / 100);
-    return '$quantity ${brand.manufacturerName} '
+    final total = formatCurrency(
+      lineTotalKobo(brand.ratePerCrateKobo, quantity) / 100,
+    );
+    return '${formatQty(quantity)} ${brand.manufacturerName} '
         'crate${quantity == 1 ? '' : 's'} missing at ${storeName ?? 'this store'} '
-        'written off as lost: $total off today\'s profit ($quantity × $each, '
+        'written off as lost: $total off today\'s profit (${formatQty(quantity)} × $each, '
         'today\'s crate value). No earlier day changes.';
   }
 
@@ -174,7 +175,8 @@ class _CrateShortageWriteOffSheetState
     final brand = _manufacturerId == null ? null : rollup.brand(_manufacturerId!);
     final storeIds = brand?.storesWithOpenShortage ?? const <String>[];
     final storeId = _effectiveStoreId(brand);
-    final storeOpen = storeId == null ? 0 : brand!.byStore[storeId]!.openCrates;
+    final storeOpen =
+        storeId == null ? 0.0 : brand!.byStore[storeId]!.openCrates;
     String? storeName(String? id) {
       for (final s in stores) {
         if (s.id == id) return s.name;
@@ -223,7 +225,7 @@ class _CrateShortageWriteOffSheetState
                     for (final b in openBrands)
                       DropdownMenuItem(
                         value: b.manufacturerId,
-                        child: Text('${b.manufacturerName} — ${b.openCrates} missing'),
+                        child: Text('${b.manufacturerName} — ${formatQty(b.openCrates)} missing'),
                       ),
                   ],
                   onChanged: (id) => setState(() {
@@ -245,7 +247,7 @@ class _CrateShortageWriteOffSheetState
                         value: id,
                         child: Text(
                           '${storeName(id) ?? 'Store'} — '
-                          '${brand!.byStore[id]!.openCrates} missing',
+                          '${formatQty(brand!.byStore[id]!.openCrates)} missing',
                         ),
                       ),
                   ],
@@ -257,16 +259,19 @@ class _CrateShortageWriteOffSheetState
                 key: const ValueKey(kCrateWriteOffQuantityFieldKey),
                 controller: _quantityCtrl,
                 labelText: 'Crates to write off',
-                hintText: storeOpen > 0 ? 'Up to $storeOpen' : 'e.g. 2',
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                hintText: storeOpen > 0 ? 'Up to ${formatQty(storeOpen)}' : 'e.g. 2',
+                // Quarter steps (#629): half a crate is 0.5.
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                inputFormatters: [CurrencyInputFormatter(grouping: false)],
                 textInputAction: TextInputAction.next,
                 validator: (_) {
                   final n = _quantity;
                   if (n == null) return 'Enter how many crates are gone';
                   // Capped at what is actually missing: more would book a loss
                   // for crates standing in the warehouse.
-                  if (n > storeOpen) return 'Only $storeOpen missing';
+                  if (n > storeOpen) return 'Only ${formatQty(storeOpen)} missing';
                   return null;
                 },
                 onChanged: (_) => setState(() {}),

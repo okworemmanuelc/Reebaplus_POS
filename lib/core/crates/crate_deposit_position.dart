@@ -36,6 +36,7 @@ library;
 
 import 'package:reebaplus_pos/core/crates/crate_deposit_ledger_types.dart';
 import 'package:reebaplus_pos/core/crates/crate_money_arrangement.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 
 // ── Inputs ───────────────────────────────────────────────────────────────────
 
@@ -59,7 +60,8 @@ class CrateDepositMovement {
   final int signedAmountKobo;
 
   /// Crates this money movement covers, signed like [signedAmountKobo].
-  final int crateCount;
+  /// Quarter steps (#629).
+  final double crateCount;
 
   const CrateDepositMovement({
     required this.movementType,
@@ -83,8 +85,8 @@ class PendingCrateDeposit {
   /// What the request asks for, before any adjustment the approver makes.
   final int requestedAmountKobo;
 
-  /// Crates the request covers.
-  final int crateCount;
+  /// Crates the request covers. Quarter steps (#629).
+  final double crateCount;
 
   const PendingCrateDeposit({
     required this.kind,
@@ -113,21 +115,21 @@ class CrateDepositPosition {
   final int placedDepositKobo;
 
   /// Crates that money is currently covering (signed sum of `crate_count`).
-  final int placedCrates;
+  final double placedCrates;
 
   /// Money legs raised and awaiting a money-permitted role. NOT part of
   /// [placedDepositKobo] — see [PendingCrateDeposit].
   final int pendingDepositKobo;
 
   /// Crates covered by those pending legs.
-  final int pendingCrates;
+  final double pendingCrates;
 
   /// Empties we still owe the supplier(s) for full crates delivered —
   /// `SUM(supplier_crate_ledger.quantity_delta)` over the scope.
-  final int cratesOwed;
+  final double cratesOwed;
 
   /// Empties physically on hand for this brand.
-  final int emptiesOnHand;
+  final double emptiesOnHand;
 
   /// **The warning, not the loss** (ADR 0023 rules 4 and 5). Crates owed that
   /// are not sitting in the yard: `cratesOwed − emptiesOnHand`, floored at 0.
@@ -139,7 +141,7 @@ class CrateDepositPosition {
   /// [computeCrateDepositPosition]'s `emptiesOnHand`. A shortfall is a
   /// BRAND-level figure across every supplier; asking it of one supplier's
   /// slice would answer a question nobody posed.
-  final int shortfallCrates;
+  final double shortfallCrates;
 
   /// [shortfallCrates] at [ratePerCrateKobo].
   final int shortfallValueKobo;
@@ -153,7 +155,7 @@ class CrateDepositPosition {
   /// #215's card can show the two numbers ADR 0023 finding #3 says never meet —
   /// notional crate debt and real money paid — side by side, instead of
   /// quietly reporting one as the other.
-  final int unbackedCrates;
+  final double unbackedCrates;
 
   /// [unbackedCrates] at [ratePerCrateKobo].
   final int unbackedValueKobo;
@@ -209,7 +211,8 @@ class CrateDepositPosition {
   /// `per_delivery` since its first delivery; negative by the pre-switch
   /// history otherwise. Reported, never corrected — correcting it would restate
   /// history, which ADR 0021 forbids.
-  int get notionalDeltaKobo => placedDepositKobo - cratesOwed * ratePerCrateKobo;
+  int get notionalDeltaKobo =>
+      placedDepositKobo - lineTotalKobo(ratePerCrateKobo, cratesOwed);
 }
 
 // ── The business-wide roll-up (#215) ─────────────────────────────────────────
@@ -440,15 +443,15 @@ CrateDepositPosition computeCrateDepositPosition({
   required int ratePerCrateKobo,
   List<CrateDepositMovement> movements = const [],
   List<PendingCrateDeposit> pending = const [],
-  int cratesOwed = 0,
-  int? emptiesOnHand,
+  double cratesOwed = 0,
+  double? emptiesOnHand,
 }) {
   if (!arrangement.movesMoney) return CrateDepositPosition.zero;
 
   final rate = ratePerCrateKobo > 0 ? ratePerCrateKobo : 0;
 
   var placedDepositKobo = 0;
-  var placedCrates = 0;
+  var placedCrates = 0.0;
   for (final m in movements) {
     placedDepositKobo += m.signedAmountKobo;
     placedCrates += m.crateCount;
@@ -462,7 +465,7 @@ CrateDepositPosition computeCrateDepositPosition({
   // exists to avoid. #212 only ever raises `placement`; the two slices that
   // raise the others inherit this correct.
   var pendingDepositKobo = 0;
-  var pendingCrates = 0;
+  var pendingCrates = 0.0;
   for (final p in pending) {
     final outward = crateDepositMovementIsOutward(p.kind);
     pendingDepositKobo += outward
@@ -474,7 +477,7 @@ CrateDepositPosition computeCrateDepositPosition({
   // Only when the caller supplied a same-scope empties count. See the doc
   // above: a null here is "not asking", never "nothing is missing".
   final shortfallCrates = emptiesOnHand == null
-      ? 0
+      ? 0.0
       : _max0(cratesOwed - emptiesOnHand);
   final unbackedCrates = _max0(cratesOwed - placedCrates);
 
@@ -488,10 +491,10 @@ CrateDepositPosition computeCrateDepositPosition({
     cratesOwed: cratesOwed,
     emptiesOnHand: emptiesOnHand ?? 0,
     shortfallCrates: shortfallCrates,
-    shortfallValueKobo: shortfallCrates * rate,
+    shortfallValueKobo: lineTotalKobo(rate, shortfallCrates),
     unbackedCrates: unbackedCrates,
-    unbackedValueKobo: unbackedCrates * rate,
+    unbackedValueKobo: lineTotalKobo(rate, unbackedCrates),
   );
 }
 
-int _max0(int v) => v > 0 ? v : 0;
+double _max0(double v) => v > 0 ? v : 0.0;
