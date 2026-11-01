@@ -1018,9 +1018,11 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     required String? storeId,
     required double delta,
   }) async {
+    // last_updated_at stays put: nothing here reaches the outbox, so bumping it
+    // would put this phone ahead of the cloud and make the next pull drop a
+    // peer's real edit of this brand (timestamp LWW, invariant #12).
     await customUpdate(
-      'UPDATE manufacturers SET empty_crate_stock = empty_crate_stock + ?, '
-      "last_updated_at = CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER) "
+      'UPDATE manufacturers SET empty_crate_stock = empty_crate_stock + ? '
       'WHERE id = ? AND business_id = ?',
       variables: [
         Variable(delta),
