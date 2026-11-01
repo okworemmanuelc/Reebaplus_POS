@@ -6,6 +6,7 @@ import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 
 /// §12.1 store picker bottom sheet — the single shared active-store control used
 /// by both the nav drawer and the POS "select a store" gate. Selecting a store
@@ -18,16 +19,22 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 /// once, in [selectableStoresProvider], which this sheet and every other store
 /// surface read. The single exception it inherits for free: a driver
 /// (`Gates.vanSell`) assigned to a van sees that van, and only that van.
+///
+/// [confirmSelection] (used by the POS "select a store" gate) asks the user to
+/// confirm a concrete store before it becomes active, so a stray tap can't
+/// abruptly switch the store POS sells from. Cancelling leaves the sheet open.
 Future<void> showStorePickerSheet(
   BuildContext context,
   WidgetRef ref, {
   VoidCallback? onSelected,
   bool isDismissible = true,
+  bool confirmSelection = false,
 }) {
   final selectable = ref.read(selectableStoresProvider);
   final canViewAll = ref.read(canViewAllStoresProvider);
   final activeId = ref.read(lockedStoreProvider).value;
-  final inventoryCounts = ref.watch(storeInventoryCountsProvider).valueOrNull ?? {};
+  final inventoryCounts =
+      ref.watch(storeInventoryCountsProvider).valueOrNull ?? {};
 
   final t = Theme.of(context);
   final primary = t.colorScheme.primary;
@@ -92,7 +99,11 @@ Future<void> showStorePickerSheet(
                 children: options.map((o) {
                   final selected = o.id == activeId;
                   return InkWell(
-                    onTap: () {
+                    onTap: () async {
+                      if (confirmSelection && o.id != null) {
+                        final ok = await _confirmStoreSwitch(sheetCtx, o.name);
+                        if (!ok || !sheetCtx.mounted) return;
+                      }
                       ref.read(navigationProvider).setLockedStore(o.id);
                       Navigator.of(sheetCtx).pop();
                       onSelected?.call();
@@ -105,9 +116,7 @@ Future<void> showStorePickerSheet(
                       child: Row(
                         children: [
                           Icon(
-                            o.id == null
-                                ? AppIcons.category
-                                : AppIcons.store,
+                            o.id == null ? AppIcons.category : AppIcons.store,
                             size: context.getRSize(15),
                             color: selected ? primary : subtextColor,
                           ),
@@ -128,7 +137,8 @@ Future<void> showStorePickerSheet(
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
-                                if (o.id != null && inventoryCounts[o.id] != null) ...[
+                                if (o.id != null &&
+                                    inventoryCounts[o.id] != null) ...[
                                   SizedBox(height: context.getRSize(2)),
                                   Text(
                                     '${inventoryCounts[o.id]!.skuCount} SKUs (${formatQty(inventoryCounts[o.id]!.totalQuantity)} items)',
@@ -159,4 +169,34 @@ Future<void> showStorePickerSheet(
       );
     },
   );
+}
+
+/// Confirm dialog for [showStorePickerSheet]'s `confirmSelection` mode.
+/// Resolves true only when the user taps "Use this store".
+Future<bool> _confirmStoreSwitch(BuildContext context, String storeName) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text('Sell from $storeName?'),
+      content: Text(
+        'Sales, stock and receipts on this screen will use $storeName until '
+        'you change the store.',
+        style: const TextStyle(fontSize: 14),
+      ),
+      actions: [
+        AppButton(
+          text: 'Cancel',
+          variant: AppButtonVariant.ghost,
+          isFullWidth: false,
+          onPressed: () => Navigator.pop(ctx, false),
+        ),
+        AppButton(
+          text: 'Use this store',
+          isFullWidth: false,
+          onPressed: () => Navigator.pop(ctx, true),
+        ),
+      ],
+    ),
+  );
+  return ok ?? false;
 }

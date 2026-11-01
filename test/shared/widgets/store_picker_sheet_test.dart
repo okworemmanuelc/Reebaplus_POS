@@ -6,21 +6,27 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/shared/widgets/store_picker_sheet.dart';
 
-StoreData _store(String id, String name) => StoreData(onlineOrderingEnabled: false, 
-      id: id,
-      businessId: 'biz',
-      name: name,
-      location: null,
-      kind: kStoreKindStore,
-      isDeleted: false,
-      createdAt: DateTime.utc(2026, 1, 1),
-      lastUpdatedAt: DateTime.utc(2026, 1, 1),
-    );
+StoreData _store(String id, String name) => StoreData(
+  onlineOrderingEnabled: false,
+  id: id,
+  businessId: 'biz',
+  name: name,
+  location: null,
+  kind: kStoreKindStore,
+  isDeleted: false,
+  createdAt: DateTime.utc(2026, 1, 1),
+  lastUpdatedAt: DateTime.utc(2026, 1, 1),
+);
 
-Future<void> _openSheet(WidgetTester tester, Size logicalSize) async {
+Future<ProviderContainer> _openSheet(
+  WidgetTester tester,
+  Size logicalSize, {
+  bool confirmSelection = false,
+}) async {
   tester.view.devicePixelRatio = 1.0;
   tester.view.physicalSize = logicalSize;
   addTearDown(tester.view.reset);
@@ -48,7 +54,11 @@ Future<void> _openSheet(WidgetTester tester, Size logicalSize) async {
           builder: (context, ref, _) => Scaffold(
             body: Center(
               child: ElevatedButton(
-                onPressed: () => showStorePickerSheet(context, ref),
+                onPressed: () => showStorePickerSheet(
+                  context,
+                  ref,
+                  confirmSelection: confirmSelection,
+                ),
                 child: const Text('open'),
               ),
             ),
@@ -60,11 +70,13 @@ Future<void> _openSheet(WidgetTester tester, Size logicalSize) async {
   await tester.pump();
   await tester.tap(find.text('open'));
   await tester.pumpAndSettle();
+  return ProviderScope.containerOf(tester.element(find.text('Select Store')));
 }
 
 void main() {
-  testWidgets('landscape phone: store list scrolls instead of overflowing',
-      (tester) async {
+  testWidgets('landscape phone: store list scrolls instead of overflowing', (
+    tester,
+  ) async {
     await _openSheet(tester, const Size(891, 411));
 
     expect(tester.takeException(), isNull);
@@ -79,13 +91,67 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('portrait phone: every store fits without overflow',
-      (tester) async {
+  testWidgets('portrait phone: every store fits without overflow', (
+    tester,
+  ) async {
     await _openSheet(tester, const Size(411, 891));
 
     expect(tester.takeException(), isNull);
     for (final name in ['All Stores', 'Abuja HQ', 'Enugu Outlet']) {
       expect(find.text(name).hitTestable(), findsOneWidget);
     }
+  });
+
+  group('confirmSelection (POS gate)', () {
+    testWidgets(
+      'tapping a store asks for confirmation; Cancel keeps the sheet',
+      (tester) async {
+        final c = await _openSheet(
+          tester,
+          const Size(411, 891),
+          confirmSelection: true,
+        );
+
+        await tester.tap(find.text('Makurdi Branch'));
+        await tester.pumpAndSettle();
+        expect(find.text('Sell from Makurdi Branch?'), findsOneWidget);
+
+        await tester.tap(find.text('Cancel'));
+        await tester.pumpAndSettle();
+        expect(find.text('Sell from Makurdi Branch?'), findsNothing);
+        expect(find.text('Select Store'), findsOneWidget);
+        expect(c.read(navigationProvider).lockedStoreId.value, isNot('s2'));
+      },
+    );
+
+    testWidgets('confirming sets the active store and closes the sheet', (
+      tester,
+    ) async {
+      final c = await _openSheet(
+        tester,
+        const Size(411, 891),
+        confirmSelection: true,
+      );
+
+      await tester.tap(find.text('Makurdi Branch'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Use this store'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Select Store'), findsNothing);
+      expect(c.read(navigationProvider).lockedStoreId.value, 's2');
+    });
+
+    testWidgets('without confirmSelection a tap switches immediately', (
+      tester,
+    ) async {
+      await _openSheet(tester, const Size(411, 891));
+
+      await tester.tap(find.text('Makurdi Branch'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sell from Makurdi Branch?'), findsNothing);
+      expect(find.text('Select Store'), findsNothing);
+    });
   });
 }

@@ -240,7 +240,12 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
           final currentActive = ref.read(lockedStoreProvider).value;
           final currentChosen = ref.read(storeExplicitlyChosenProvider).value;
           if (currentActive == null || !currentChosen) {
-            showStorePickerSheet(context, ref, isDismissible: false);
+            showStorePickerSheet(
+              context,
+              ref,
+              isDismissible: false,
+              confirmSelection: true,
+            );
           }
         });
       }
@@ -621,8 +626,12 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
                   kMinInteractiveDimension,
                 ),
               ),
-              onPressed: () =>
-                  showStorePickerSheet(context, ref, isDismissible: false),
+              onPressed: () => showStorePickerSheet(
+                context,
+                ref,
+                isDismissible: false,
+                confirmSelection: true,
+              ),
               icon: AppIcon(
                 AppIcons.store,
                 size: context.getRSize(16),
