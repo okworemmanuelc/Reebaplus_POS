@@ -395,15 +395,15 @@ void main() {
         for (final e in manufacturerIdByKey.entries) e.value: e.key
       };
       final crateLines = <String, ActualCrateLine>{};
-      final crateLedgerIssued = <String, int>{};
-      final crateBalances = <String, int>{};
+      final crateLedgerIssued = <String, double>{};
+      final crateBalances = <String, double>{};
       if (customerId != null && manufacturerIdByKey.isNotEmpty) {
         final lineRows = await (db.select(db.orderCrateLines)
               ..where((l) => l.orderId.equals(orderId)))
             .get();
         for (final l in lineRows) {
           crateLines[keyByManufacturerId[l.manufacturerId]!] = ActualCrateLine(
-            cratesTaken: l.cratesTaken.round(),
+            cratesTaken: l.cratesTaken,
             depositRateKobo: l.depositRateKobo,
             depositPaidKobo: l.depositPaidKobo,
           );
@@ -416,13 +416,13 @@ void main() {
         for (final c in ledgerRows) {
           final key = keyByManufacturerId[c.manufacturerId]!;
           crateLedgerIssued[key] =
-              (crateLedgerIssued[key] ?? 0) + c.quantityDelta.round();
+              (crateLedgerIssued[key] ?? 0) + c.quantityDelta;
         }
         final balanceRows = await (db.select(db.customerCrateBalances)
               ..where((b) => b.customerId.equals(customerId!)))
             .get();
         for (final b in balanceRows) {
-          crateBalances[keyByManufacturerId[b.manufacturerId]!] = b.balance.round();
+          crateBalances[keyByManufacturerId[b.manufacturerId]!] = b.balance;
         }
       }
 

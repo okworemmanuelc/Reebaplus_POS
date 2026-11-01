@@ -471,6 +471,260 @@
         "crate_ledger": [{ "manufacturer": "M2", "quantity_delta": 1 }],
         "crate_balances": [{ "manufacturer": "M2", "balance": 1 }]
       }
+    },
+    {
+      "name": "1.5 crates on the crate-track path issue 1.5 crates of empties (#629)",
+      "business_type": "Beverage distributor",
+      "tracks_empty_crates": true,
+      "manufacturers": [
+        {
+          "key": "M1",
+          "name": "Star Co",
+          "deposit_rate_kobo": 50001
+        }
+      ],
+      "customer": {
+        "opening_balance_kobo": 0,
+        "debt_limit_kobo": 0
+      },
+      "products": [
+        {
+          "key": "P1",
+          "name": "Star 60cl",
+          "unit_price_kobo": 100000,
+          "scalar_cost_kobo": 50000,
+          "manufacturer": "M1"
+        }
+      ],
+      "inventory": [
+        {
+          "product": "P1",
+          "quantity": 100
+        }
+      ],
+      "batches": [
+        {
+          "product": "P1",
+          "qty": 20,
+          "cost_kobo": 50000,
+          "received_at": "2026-01-01"
+        }
+      ],
+      "checkout": {
+        "payment_method": "cash",
+        "discount_kobo": 0,
+        "amount_paid_kobo": 150000,
+        "items": [
+          {
+            "product": "P1",
+            "quantity": 1.5
+          }
+        ]
+      },
+      "expected": {
+        "order": {
+          "status": "pending",
+          "payment_type": "cash",
+          "total_amount_kobo": 150000,
+          "discount_kobo": 0,
+          "net_amount_kobo": 150000,
+          "amount_paid_kobo": 150000,
+          "completed_at_null": true
+        },
+        "items": [
+          {
+            "product": "P1",
+            "quantity": 1.5,
+            "unit_price_kobo": 100000,
+            "total_kobo": 150000,
+            "buying_price_kobo": 50000
+          }
+        ],
+        "batches_remaining": [
+          {
+            "product": "P1",
+            "received_at": "2026-01-01",
+            "qty_remaining": 18.5
+          }
+        ],
+        "inventory_after": [
+          {
+            "product": "P1",
+            "quantity": 98.5
+          }
+        ],
+        "product_scalar_cost": [
+          {
+            "product": "P1",
+            "buying_price_kobo": 50000
+          }
+        ],
+        "payment": {
+          "method": "cash",
+          "amount_kobo": 150000
+        },
+        "wallet_legs": [
+          {
+            "reference_type": "order_payment",
+            "signed_amount_kobo": -150000
+          },
+          {
+            "reference_type": "topup_cash",
+            "signed_amount_kobo": 150000
+          }
+        ],
+        "customer_balance_after_kobo": 0,
+        "crate_lines": [
+          {
+            "manufacturer": "M1",
+            "crates_taken": 1.5,
+            "deposit_rate_kobo": 50001,
+            "deposit_paid_kobo": 0
+          }
+        ],
+        "crate_ledger": [
+          {
+            "manufacturer": "M1",
+            "quantity_delta": 1.5
+          }
+        ],
+        "crate_balances": [
+          {
+            "manufacturer": "M1",
+            "balance": 1.5
+          }
+        ]
+      },
+      "_note": "Empties in parts (#620 decision 3): a part-crate sale issues the same part of a crate. 1.5 x 100k = 150k goods, no deposit, so 1.5 issued + balance 1.5."
+    },
+    {
+      "name": "half a crate on deposit (#629): the deposit is half the rate, rounded half up to the kobo",
+      "_note": "Empties in parts (#620 decision 3): 0.5 crate at a 50,001 kobo rate holds 25,000.5 -> 25,001 (line_total_kobo / lineTotalKobo). Goods 0.5 x 100k = 50k; tender 75,001 splits into a 50k `sale` row + a 25,001 `crate_deposit` row. Money-track: no issued row / balance.",
+      "business_type": "Bar",
+      "tracks_empty_crates": true,
+      "manufacturers": [
+        {
+          "key": "M1",
+          "name": "Star Co",
+          "deposit_rate_kobo": 50001
+        }
+      ],
+      "customer": {
+        "opening_balance_kobo": 0,
+        "debt_limit_kobo": 0
+      },
+      "products": [
+        {
+          "key": "P1",
+          "name": "Star 60cl",
+          "unit_price_kobo": 100000,
+          "scalar_cost_kobo": 50000,
+          "manufacturer": "M1"
+        }
+      ],
+      "inventory": [
+        {
+          "product": "P1",
+          "quantity": 100
+        }
+      ],
+      "batches": [
+        {
+          "product": "P1",
+          "qty": 20,
+          "cost_kobo": 50000,
+          "received_at": "2026-01-01"
+        }
+      ],
+      "checkout": {
+        "payment_method": "cash",
+        "discount_kobo": 0,
+        "amount_paid_kobo": 75001,
+        "deposit_paid_by_manufacturer": {
+          "M1": 25001
+        },
+        "items": [
+          {
+            "product": "P1",
+            "quantity": 0.5
+          }
+        ]
+      },
+      "expected": {
+        "order": {
+          "status": "pending",
+          "payment_type": "cash",
+          "total_amount_kobo": 75001,
+          "discount_kobo": 0,
+          "net_amount_kobo": 75001,
+          "amount_paid_kobo": 75001,
+          "completed_at_null": true
+        },
+        "items": [
+          {
+            "product": "P1",
+            "quantity": 0.5,
+            "unit_price_kobo": 100000,
+            "total_kobo": 50000,
+            "buying_price_kobo": 50000
+          }
+        ],
+        "batches_remaining": [
+          {
+            "product": "P1",
+            "received_at": "2026-01-01",
+            "qty_remaining": 19.5
+          }
+        ],
+        "inventory_after": [
+          {
+            "product": "P1",
+            "quantity": 99.5
+          }
+        ],
+        "product_scalar_cost": [
+          {
+            "product": "P1",
+            "buying_price_kobo": 50000
+          }
+        ],
+        "payment": {
+          "method": "cash",
+          "amount_kobo": 50000
+        },
+        "extra_payments": [
+          {
+            "type": "crate_deposit",
+            "method": "cash",
+            "amount_kobo": 25001
+          }
+        ],
+        "wallet_legs": [
+          {
+            "reference_type": "order_payment",
+            "signed_amount_kobo": -50000
+          },
+          {
+            "reference_type": "topup_cash",
+            "signed_amount_kobo": 50000
+          },
+          {
+            "reference_type": "crate_deposit",
+            "signed_amount_kobo": 25001
+          }
+        ],
+        "customer_balance_after_kobo": 0,
+        "crate_lines": [
+          {
+            "manufacturer": "M1",
+            "crates_taken": 0.5,
+            "deposit_rate_kobo": 50001,
+            "deposit_paid_kobo": 25001
+          }
+        ],
+        "crate_ledger": [],
+        "crate_balances": []
+      }
     }
   ]
 }

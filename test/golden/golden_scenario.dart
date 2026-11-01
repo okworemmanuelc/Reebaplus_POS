@@ -208,11 +208,11 @@ class ExpectedWalletLeg {
 /// took for a manufacturer, the deposit RATE snapshot (from the manufacturer),
 /// and the deposit PAID (0 on the web crate-track path). Keyed by manufacturer.
 class ExpectedCrateLine {
-  final int cratesTaken;
+  final double cratesTaken; // quarter steps (#629)
   final int depositRateKobo;
   final int depositPaidKobo;
   ExpectedCrateLine(Map<String, dynamic> j)
-      : cratesTaken = j['crates_taken'] as int,
+      : cratesTaken = (j['crates_taken'] as num).toDouble(),
         depositRateKobo = j['deposit_rate_kobo'] as int,
         depositPaidKobo = j['deposit_paid_kobo'] as int;
 
@@ -388,10 +388,10 @@ class GoldenScenario {
   final Map<String, ExpectedCrateLine> expectedCrateLines;
 
   /// manufacturerKey → expected summed 'issued' crate_ledger quantity_delta.
-  final Map<String, int> expectedCrateLedgerIssued;
+  final Map<String, double> expectedCrateLedgerIssued;
 
   /// manufacturerKey → expected customer_crate_balances.balance after the sale.
-  final Map<String, int> expectedCrateBalances;
+  final Map<String, double> expectedCrateBalances;
 
   /// #206: when set, the runner CANCELS the order after the checkout assertions
   /// pass and asserts this second block via [expectGoldenCancel]. Null ⇒ a
@@ -466,15 +466,17 @@ class GoldenScenario {
       final m = r as Map<String, dynamic>;
       crateLines[m['manufacturer'] as String] = ExpectedCrateLine(m);
     }
-    final crateLedger = <String, int>{};
+    final crateLedger = <String, double>{};
     for (final r in ((exp['crate_ledger'] as List?) ?? const [])) {
       final m = r as Map<String, dynamic>;
-      crateLedger[m['manufacturer'] as String] = m['quantity_delta'] as int;
+      crateLedger[m['manufacturer'] as String] =
+          (m['quantity_delta'] as num).toDouble();
     }
-    final crateBalances = <String, int>{};
+    final crateBalances = <String, double>{};
     for (final r in ((exp['crate_balances'] as List?) ?? const [])) {
       final m = r as Map<String, dynamic>;
-      crateBalances[m['manufacturer'] as String] = m['balance'] as int;
+      crateBalances[m['manufacturer'] as String] =
+          (m['balance'] as num).toDouble();
     }
 
     return GoldenScenario._(
@@ -658,7 +660,7 @@ class ActualWalletLeg {
 
 /// One posted order_crate_lines row, in fixture terms (Slice 4).
 class ActualCrateLine {
-  final int cratesTaken;
+  final double cratesTaken;
   final int depositRateKobo;
   final int depositPaidKobo;
   ActualCrateLine({
@@ -763,10 +765,10 @@ class CheckoutOutcome {
   final Map<String, ActualCrateLine> crateLines;
 
   /// manufacturerKey → summed 'issued' crate_ledger quantity_delta for this order.
-  final Map<String, int> crateLedgerIssued;
+  final Map<String, double> crateLedgerIssued;
 
   /// manufacturerKey → customer_crate_balances.balance after the sale.
-  final Map<String, int> crateBalances;
+  final Map<String, double> crateBalances;
 
   CheckoutOutcome({
     required this.orderNumber,

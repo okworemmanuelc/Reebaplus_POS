@@ -445,8 +445,8 @@ void main() {
         for (final e in manufacturerIdByKey.entries) e.value: e.key
       };
       final crateLines = <String, ActualCrateLine>{};
-      final crateLedgerIssued = <String, int>{};
-      final crateBalances = <String, int>{};
+      final crateLedgerIssued = <String, double>{};
+      final crateBalances = <String, double>{};
       if (customerId != null && manufacturerIdByKey.isNotEmpty) {
         final lineRows = await admin
             .from('order_crate_lines')
@@ -455,7 +455,7 @@ void main() {
         for (final l in lineRows) {
           crateLines[keyByManufacturerId[l['manufacturer_id']]!] =
               ActualCrateLine(
-            cratesTaken: (l['crates_taken'] as num).toInt(),
+            cratesTaken: (l['crates_taken'] as num).toDouble(),
             depositRateKobo: (l['deposit_rate_kobo'] as num).toInt(),
             depositPaidKobo: (l['deposit_paid_kobo'] as num).toInt(),
           );
@@ -468,7 +468,7 @@ void main() {
         for (final c in ledgerRows) {
           final key = keyByManufacturerId[c['manufacturer_id']]!;
           crateLedgerIssued[key] =
-              (crateLedgerIssued[key] ?? 0) + (c['quantity_delta'] as num).toInt();
+              (crateLedgerIssued[key] ?? 0) + (c['quantity_delta'] as num).toDouble();
         }
         final balRows = await admin
             .from('customer_crate_balances')
@@ -476,7 +476,7 @@ void main() {
             .eq('customer_id', customerId);
         for (final b in balRows) {
           crateBalances[keyByManufacturerId[b['manufacturer_id']]!] =
-              (b['balance'] as num).toInt();
+              (b['balance'] as num).toDouble();
         }
       }
 
