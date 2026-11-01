@@ -18,6 +18,8 @@ import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
+import 'package:reebaplus_pos/shared/services/cart_service.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 
 class EditItemModal extends ConsumerStatefulWidget {
   final Map<String, dynamic> item;
@@ -26,7 +28,7 @@ class EditItemModal extends ConsumerStatefulWidget {
   /// adds [newProduct] (with the chosen qty + discount) instead of editing an
   /// existing cart line. Backs the long-press flow on the POS product grid.
   final ProductData? newProduct;
-  final int maxStock;
+  final double maxStock;
   final PriceTier tier;
 
   /// Add mode only: start the quantity field on the cart total + 1 (capped at
@@ -38,7 +40,7 @@ class EditItemModal extends ConsumerStatefulWidget {
     super.key,
     required this.item,
     this.newProduct,
-    this.maxStock = 1 << 30,
+    this.maxStock = CartService.noCap,
     this.tier = PriceTier.retailer,
     this.shouldStartOnNextUnit = false,
   });
@@ -69,7 +71,7 @@ class EditItemModal extends ConsumerStatefulWidget {
   static Future<bool?> showForProduct(
     BuildContext context, {
     required ProductData product,
-    required int maxStock,
+    required double maxStock,
     required PriceTier tier,
     bool shouldStartOnNextUnit = false,
   }) {
@@ -154,12 +156,39 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
   static String _trimNum(num n) =>
       n == n.toInt() ? n.toInt().toString() : n.toString();
 
+  /// False for a product whose "Allow part quantities" switch is off: whole
+  /// numbers only, no ±0.5 chips (#628).
+  bool get _allowParts => widget.item['allowFractionalSales'] == true;
+
+  /// The smallest quantity a line can hold.
+  double get _minQty => Qty.stepFor(allowParts: _allowParts);
+
   /// Upper bound for the quantity field: the product's available stock — the
-  /// count shown on the POS card. Quantity can never go above this. In add
-  /// mode that's the card stock; in edit mode it's the line's stored max stock.
-  double get _maxQty => widget.isNew
-      ? widget.maxStock.toDouble()
-      : (((widget.item['maxStock'] as int?) ?? (1 << 30)).toDouble());
+  /// count shown on the POS card, whole units only when the switch is off.
+  /// Quantity can never go above this. In add mode that's the card stock; in
+  /// edit mode it's the line's stored max stock.
+  double get _maxQty => Qty.sellable(
+    widget.isNew
+        ? widget.maxStock
+        : ((widget.item['maxStock'] as num?)?.toDouble() ?? CartService.noCap),
+    allowParts: _allowParts,
+  );
+
+  /// The number in the field; an empty or half-typed field reads as 1.
+  double get _typedQty =>
+      double.tryParse(_qtyCtrl.text) ?? Qty.parse(_qtyCtrl.text) ?? 1.0;
+
+  /// What is wrong with the typed quantity, or null. The sheet can't be
+  /// confirmed while this is set.
+  String? get _qtyError {
+    if (_qtyCtrl.text.trim().isEmpty) return null;
+    final value = Qty.parse(_qtyCtrl.text);
+    if (value == null) return 'Use steps of 0.25, like 0.25, 0.5, 0.75 or 1';
+    if (!_allowParts && !Qty.isWhole(value)) {
+      return 'This product sells in whole numbers only';
+    }
+    return null;
+  }
 
   /// Total quantity of [productId] across the cart's lines.
   double _cartQtyOf(String productId) => ref
@@ -174,12 +203,12 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
   /// ([EditItemModal.shouldStartOnNextUnit], #317) starts one above the cart
   /// total instead, still capped at stock — the field keeps meaning "total".
   String _initialQtyText() {
-    if (!widget.isNew) return widget.item['qty'].toString();
+    if (!widget.isNew) return formatQty(Qty.fromJson(widget.item['qty']));
     if (widget.shouldStartOnNextUnit) {
       final next = _inCartAtOpen + 1;
-      return _trimNum(next > _maxQty ? _maxQty : next);
+      return formatQty(next > _maxQty ? _maxQty : next);
     }
-    return _trimNum(_inCartAtOpen > 0 ? _inCartAtOpen : 1.0);
+    return formatQty(_inCartAtOpen > 0 ? _inCartAtOpen : 1.0);
   }
 
   @override
@@ -194,14 +223,17 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
   }
 
   void _updateQty(double delta) {
-    final v = double.tryParse(_qtyCtrl.text) ?? 1.0;
-    final upper = _maxQty < 0.5 ? 0.5 : _maxQty;
-    final newValue = (v + delta).clamp(0.5, upper);
-    setState(() {
-      _qtyCtrl.text = newValue.toStringAsFixed(
-        newValue == newValue.toInt() ? 0 : 1,
-      );
-    });
+    final v = _typedQty;
+    // The − side stops at 0.5, or stays on a typed 0.25; whole numbers stop at 1.
+    final lower = _allowParts
+        ? (v < 0.5 && v >= kQtyStep ? v : 0.5)
+        : _minQty;
+    final upper = _maxQty < lower ? lower : _maxQty;
+    final newValue = Qty.snapDown(
+      v + delta,
+      allowParts: _allowParts,
+    ).clamp(lower, upper);
+    setState(() => _qtyCtrl.text = formatQty(newValue));
     // Re-select text after manual update via buttons
     _qtyCtrl.selection = TextSelection(
       baseOffset: 0,
@@ -272,11 +304,12 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
       });
     }
 
-    final rawQty = double.tryParse(_qtyCtrl.text) ?? 1.0;
+    final rawQty = _typedQty;
+    final qtyError = _qtyError;
     // Quantity can't exceed available stock (the POS card count). Snap an
     // over-limit entry back down to the cap, same pattern as the discount cap.
     if (rawQty > _maxQty) {
-      final capText = _trimNum(_maxQty);
+      final capText = formatQty(_maxQty);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || _qtyCtrl.text == capText) return;
         _qtyCtrl.text = capText;
@@ -291,9 +324,9 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
         ? (customKobo < floorKobo ? floorKobo : customKobo)
         : null;
     final effectiveUnitPriceKobo = effectiveCustomKobo ?? catalogUnitPriceKobo;
-    final lineTotalKobo = (effectiveUnitPriceKobo * qty).round();
+    final lineTotal = lineTotalKobo(effectiveUnitPriceKobo, qty);
     final resolved = _resolveDiscount(
-      lineTotalKobo: lineTotalKobo,
+      lineTotalKobo: lineTotal,
       maxPercent: maxPercent,
     );
 
@@ -397,9 +430,10 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                 ),
               ),
             ),
-            // Micro-adjustment chips — only when the product allows
-            // fractional sales (§13.2). Hidden entirely otherwise.
-            if (widget.item['allowFractionalSales'] == true) ...[
+            // Micro-adjustment chips — only when the product allows part
+            // quantities (§13.2, #628). Hidden entirely otherwise. 0.25 / 0.75
+            // are typed.
+            if (_allowParts) ...[
               SizedBox(height: context.getRSize(12)),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -410,12 +444,21 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                 ],
               ),
             ],
+            if (qtyError != null) ...[
+              SizedBox(height: context.getRSize(10)),
+              Text(
+                qtyError,
+                key: EditItemKeys.qtyError,
+                textAlign: TextAlign.center,
+                style: context.semiBoldStyle(12).copyWith(color: t.colorScheme.error),
+              ),
+            ],
             // What the cart already holds — add mode only, so the field reads
             // as the new total rather than an amount to add (#317).
             if (widget.isNew && _inCartAtOpen > 0) ...[
               SizedBox(height: context.getRSize(10)),
               Text(
-                '${_trimNum(_inCartAtOpen)} already in cart',
+                '${formatQty(_inCartAtOpen)} already in cart',
                 textAlign: TextAlign.center,
                 style: context.boldStyle(12).copyWith(color: primary),
               ),
@@ -424,7 +467,7 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
             if (widget.isNew) ...[
               SizedBox(height: context.getRSize(10)),
               Text(
-                '${_trimNum(widget.maxStock)} in stock — quantity can\'t exceed this',
+                '${formatQty(_maxQty)} in stock — quantity can\'t exceed this',
                 textAlign: TextAlign.center,
                 style: context.semiBoldStyle(12).copyWith(color: muted),
               ),
@@ -451,7 +494,7 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
             _discountSection(
               canDiscount: canDiscount,
               maxPercent: maxPercent,
-              lineTotalKobo: lineTotalKobo,
+              lineTotalKobo: lineTotal,
               discountKobo: discountKobo,
               cappedByRole: resolved.cappedByRole,
             ),
@@ -476,13 +519,12 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                     child: AppButton(
                       text: 'Add to Cart',
                       variant: AppButtonVariant.primary,
-                      onPressed: () {
+                      onPressed: qtyError != null ? null : () {
                         final cart = ref.read(cartProvider);
                         final id = widget.newProduct!.id;
                         // Never exceed available stock (the POS card count).
-                        final upper = _maxQty < 0.5 ? 0.5 : _maxQty;
-                        final qtyVal = (double.tryParse(_qtyCtrl.text) ?? 1.0)
-                            .clamp(0.5, upper);
+                        final upper = _maxQty < _minQty ? _minQty : _maxQty;
+                        final qtyVal = _typedQty.clamp(_minQty, upper);
                         // Set the line to this total (matches the cart editor):
                         // update if the product is already in the cart, else add.
                         final exists = cart.value.any((i) => i['id'] == id);
@@ -542,10 +584,9 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                     child: AppButton(
                       text: 'Save Changes',
                       variant: AppButtonVariant.primary,
-                      onPressed: () {
+                      onPressed: qtyError != null ? null : () {
                         final cart = ref.read(cartProvider);
-                        final qty = double.tryParse(_qtyCtrl.text) ?? 1.0;
-                        cart.updateQty(widget.item['name'], qty);
+                        cart.updateQty(widget.item['name'], _typedQty);
                         // Apply (or clear) the custom price before the discount
                         // so the discount clamps to the new line total (§13.4).
                         if (canSetCustomPrice) {
@@ -843,6 +884,7 @@ abstract final class EditItemKeys {
   static const quantity = Key('edit-item-quantity');
   static const minus = Key('edit-item-minus');
   static const plus = Key('edit-item-plus');
+  static const qtyError = Key('edit-item-qty-error');
   static const discountBlocked = Key('edit-item-discount-blocked');
   static Key kind(String kind) => Key('edit-item-kind-$kind');
 }

@@ -818,20 +818,20 @@ final storeNamesProvider = businessScopedStream<Map<String, String>>(
 /// and stuck empty. The factory hands the closure the resolved non-null
 /// businessId to bind into the custom SQL directly.
 final storeInventoryCountsProvider =
-    businessScopedStream<Map<String, ({int skuCount, int totalQuantity})>>(
+    businessScopedStream<Map<String, ({int skuCount, double totalQuantity})>>(
   (ref, db, businessId) {
     return db.customSelect(
       'SELECT store_id, SUM(quantity) as qty, COUNT(DISTINCT product_id) as sku_count FROM inventory WHERE business_id = ? GROUP BY store_id',
       variables: [Variable(businessId)],
       readsFrom: {db.inventory},
     ).watch().map((rows) {
-      final map = <String, ({int skuCount, int totalQuantity})>{};
+      final map = <String, ({int skuCount, double totalQuantity})>{};
       for (final row in rows) {
         final storeId = row.readNullable<String>('store_id');
         if (storeId != null) {
           map[storeId] = (
             skuCount: row.readNullable<num>('sku_count')?.toInt() ?? 0,
-            totalQuantity: row.readNullable<num>('qty')?.toInt() ?? 0,
+            totalQuantity: row.readNullable<num>('qty')?.toDouble() ?? 0,
           );
         }
       }

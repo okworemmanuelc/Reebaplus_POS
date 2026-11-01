@@ -2,7 +2,6 @@ import 'package:reebaplus_pos/core/settings/vat_settings.dart';
 import 'package:reebaplus_pos/core/utils/name_case.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/product_name.dart';
-import 'package:reebaplus_pos/core/utils/stock_calculator.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
 import 'package:reebaplus_pos/shared/widgets/receipt_format.dart';
 
@@ -331,7 +330,7 @@ List<ReceiptLine> buildReceiptLines({
   for (final item in cart) {
     final qty = ReceiptFormat.num(item['qty']);
     final price = ReceiptFormat.num(item['price']);
-    final amount = stockValue(price, qty).round();
+    final amount = ReceiptFormat.lineAmount(price, qty);
     final label = productDisplayName(
       item['name'].toString(),
       item['size'] as String?,

@@ -1,11 +1,16 @@
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
+
 /// Pure helpers shared by the phone [ReceiptWidget] and the paper receipt.
 class ReceiptFormat {
   ReceiptFormat._();
 
   /// Quantity with no decimals unless it is a fraction.
-  static String qty(double q) => q == q.roundToDouble()
-      ? q.toStringAsFixed(0)
-      : q.toStringAsFixed(2).replaceFirst(RegExp(r'0+$'), '');
+  static String qty(double q) => formatQty(q);
+
+  /// A line's amount: `price x qty` through the shared money rule, so a part
+  /// quantity prints what the sale recorded, not a figure rounded to naira.
+  static double lineAmount(double price, double qty) =>
+      lineTotalKobo((price * 100).round(), qty) / 100.0;
 
   static double num(dynamic v) =>
       v is double ? v : (v is int ? v.toDouble() : double.tryParse('$v') ?? 0.0);

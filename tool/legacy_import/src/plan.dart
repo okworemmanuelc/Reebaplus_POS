@@ -688,12 +688,6 @@ class Planner {
       });
     }
 
-    final fractional = <String>{
-      for (final item in export.rows('SaleItem'))
-        if (item.decimal('quantity') % 1 != 0) item.text('productId'),
-      for (final stock in export.rows('StoreStock'))
-        if (stock.decimal('stockQty') % 1 != 0) stock.text('productId'),
-    };
     final mainThreshold = <String, int>{
       for (final stock in export.rows('StoreStock'))
         if (stock.text('storeId') == _mainStore.id)
@@ -738,7 +732,8 @@ class Planner {
         'is_available': sqlBool(product.flag('isActive')),
         'low_stock_threshold': sqlInt(mainThreshold[product.id] ?? 5),
         'track_empties': sqlBool(isReturnable && manufacturerId != null),
-        'allow_fractional_sales': sqlBool(fractional.contains(product.id)),
+        // Every product can sell in parts (#620 decision 4).
+        'allow_fractional_sales': sqlBool(true),
         'created_at': sqlTime(product.time('createdAt')),
       });
       if (isReturnable && manufacturerId == null) {

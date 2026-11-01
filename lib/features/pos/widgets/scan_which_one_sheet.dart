@@ -12,6 +12,7 @@ import 'package:reebaplus_pos/shared/widgets/sales_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/icon_tile.dart';
 import 'package:reebaplus_pos/features/pos/services/barcode_scan_resolver.dart';
 import 'package:reebaplus_pos/core/utils/product_unit.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 
 /// Key prefix for a "Which one?" row; the product id follows (tests find a row
 /// by it).
@@ -144,8 +145,8 @@ class _ScanChoiceRow extends ConsumerWidget {
                           SizedBox(height: context.getRSize(2)),
                           Text(
                             reason == null
-                                ? '${choice.stock} in stock here'
-                                : '${choice.stock} in stock here · $reason',
+                                ? '${formatQty(choice.stock)} in stock here'
+                                : '${formatQty(choice.stock)} in stock here · $reason',
                             style: context
                                 .regularStyle(12)
                                 .copyWith(color: muted),

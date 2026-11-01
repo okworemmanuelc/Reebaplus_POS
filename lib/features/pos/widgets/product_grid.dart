@@ -79,10 +79,8 @@ String? posTileSubtitle(ProductData product, {required bool crates}) {
   return parts.isEmpty ? null : parts.join(' · ');
 }
 
-/// The cart-badge text for [qty]: whole numbers bare, fractions to one place.
-String posCartQtyLabel(double qty) => qty == qty.roundToDouble()
-    ? qty.toInt().toString()
-    : qty.toStringAsFixed(1);
+/// The cart-badge text for [qty]: whole numbers bare, fractions as decimals.
+String posCartQtyLabel(double qty) => formatQty(qty);
 
 /// The POS product grid, expressed as a **sliver** rather than a box.
 ///
@@ -276,7 +274,7 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
     final accepted = await EditItemModal.showForProduct(
       context,
       product: widget.item.product,
-      maxStock: widget.item.totalStock.floor(),
+      maxStock: widget.item.totalStock,
       tier: widget.controller.selectedGroup,
     );
     if (!mounted || accepted == null) return;
@@ -333,7 +331,13 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
         final double cartQty = cartItems
             .where((i) => i['id'] == product.id)
             .fold(0.0, (s, i) => s + (i['qty'] as num).toDouble());
-        final bool atStockLimit = !isOutOfStock && cartQty >= stock;
+        final bool atStockLimit =
+            !isOutOfStock &&
+            cartQty >=
+                Qty.sellable(
+                  stock,
+                  allowParts: product.allowFractionalSales,
+                );
         final VoidCallback? onTap = isOutOfStock
             ? null
             : (atStockLimit
