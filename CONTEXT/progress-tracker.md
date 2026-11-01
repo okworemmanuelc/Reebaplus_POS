@@ -7,6 +7,10 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #623: Legacy-POS import tool (2026-11-01, ready for review; NOT run on any database)
+
+`tool/legacy_import/` builds `import.sql`, `checks.sql` and `report.md` from an export, next to the export and never in the repo. No Drift or cloud change, so no pos-parity issue. Needs #627 on the target (the SQL checks the column types and stops otherwise). Trigger decisions and the FIFO design are in `tool/legacy_import/README.md`. Key decision: deliveries write no `cost_batches` of their own, a deliberate departure from the issue. `pos_recost_pairs` replays history after every sale push, so history gets layers that reproduce each line's cost exactly, and the opening layers stay whole for new sales. Next: real login ids, then the dev dry run. Part of #619.
+
 ### Issue #626: Must-update switch (2026-11-01, ready for review)
 - `ForceUpdateWrapper` compares the `PackageInfo` build number with server `app_config.min_android_build` (launch + resume, 1-min debounce); below = full-screen Update Required with a Play Store button. Offline/error/non-Android never block; the child renders immediately (no spinner gate). Tests: below/equal/above/offline/error/non-Android.
 - Cloud migration 0240 (`app_config`, seed 0) NOT deployed (supervisor deploys); console control = pos-parity issue in reebaplus-web (supervisor files).
