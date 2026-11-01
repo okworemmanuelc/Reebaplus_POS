@@ -196,7 +196,7 @@ void main() {
     return match.isEmpty ? 0 : match.single.position.placedDepositKobo;
   }
 
-  Future<int> supplierDebt(String supplierId, String manufacturerId) async {
+  Future<double> supplierDebt(String supplierId, String manufacturerId) async {
     final rows = await db.cratePoolDao.watchSupplierCrateDebt(supplierId).first;
     final match = rows.where((r) => r.manufacturerId == manufacturerId).toList();
     return match.isEmpty ? 0 : match.single.balance;

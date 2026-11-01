@@ -126,7 +126,7 @@ class ReceiveFixture {
               businessId: env.businessId,
               storeId: env.storeId,
               productId: id,
-              quantity: Value(stock),
+              quantity: Value(stock.toDouble()),
             ),
           );
       ids.add(id);

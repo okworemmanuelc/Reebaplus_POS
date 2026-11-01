@@ -134,7 +134,7 @@ void main() {
   Future<OrderData> order(String id) =>
       (db.select(db.orders)..where((o) => o.id.equals(id))).getSingle();
 
-  Future<int> inv([String? pid]) async => (await (db.select(db.inventory)
+  Future<double> inv([String? pid]) async => (await (db.select(db.inventory)
             ..where((t) => t.productId.equals(pid ?? productId)))
           .getSingle())
       .quantity;

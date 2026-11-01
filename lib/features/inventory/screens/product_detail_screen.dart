@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/features/subscription/read_only_store_gate.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_plan_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';

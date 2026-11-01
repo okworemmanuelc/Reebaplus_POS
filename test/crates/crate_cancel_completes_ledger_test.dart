@@ -120,7 +120,7 @@ void main() {
           orderId: 'placeholder',
           productId: Value(productId),
           storeId: storeId,
-          quantity: qty,
+          quantity: qty.toDouble(),
           unitPriceKobo: 100000,
           totalKobo: goodsKobo,
         ),
@@ -135,7 +135,7 @@ void main() {
   }
 
   // The customer's DERIVED crate debt per manufacturer (SUM over the ledger).
-  Future<Map<String, int>> debt(String customerId) async {
+  Future<Map<String, double>> debt(String customerId) async {
     final rows =
         await db.cratePoolDao.watchCustomerCrateDebt(customerId).first;
     return {for (final r in rows) r.manufacturerId: r.balance};

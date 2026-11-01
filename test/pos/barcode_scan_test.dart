@@ -260,7 +260,7 @@ void main() {
           businessId: businessId,
           productId: p.id,
           storeId: storeId,
-          quantity: Value(qty),
+          quantity: Value(qty.toDouble()),
         ),
       );
 

@@ -63,7 +63,7 @@ _seed(
             businessId: businessId,
             productId: productId,
             storeId: fromStoreId,
-            quantity: Value(initialStock),
+            quantity: Value(initialStock.toDouble()),
           ),
         );
   }
@@ -77,7 +77,7 @@ _seed(
 }
 
 /// Reads the current inventory quantity for [productId] at [storeId].
-Future<int> _stockAt(AppDatabase db, String productId, String storeId) async {
+Future<double> _stockAt(AppDatabase db, String productId, String storeId) async {
   final row = await (db.select(db.inventory)
         ..where(
           (t) => t.productId.equals(productId) & t.storeId.equals(storeId),

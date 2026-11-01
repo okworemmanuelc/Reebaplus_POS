@@ -147,7 +147,7 @@ void main() {
                 businessId: businessId,
                 productId: productIdByKey[inv.productKey]!,
                 storeId: storeId,
-                quantity: Value(inv.quantity),
+                quantity: Value(inv.quantity.toDouble()),
               ),
             );
       }
@@ -161,8 +161,8 @@ void main() {
                 businessId: businessId,
                 productId: productIdByKey[b.productKey]!,
                 storeId: storeId,
-                qtyRemaining: b.qty,
-                qtyOriginal: b.qty,
+                qtyRemaining: b.qty.toDouble(),
+                qtyOriginal: b.qty.toDouble(),
                 costKobo: Value(b.costKobo),
                 receivedAt: Value(b.receivedAtUtc),
               ),
@@ -191,7 +191,7 @@ void main() {
           orderId: orderId,
           productId: Value(productIdByKey[line.productKey]!),
           storeId: storeId,
-          quantity: line.quantity,
+          quantity: line.quantity.toDouble(),
           unitPriceKobo: charged,
           totalKobo: total,
           cataloguePriceKobo: Value(catalogueSnapshotKobo(
@@ -367,7 +367,7 @@ void main() {
                 ..where((i) =>
                     i.productId.equals(entry.value) & i.storeId.equals(storeId)))
               .getSingleOrNull();
-          if (invRow != null) out[entry.key] = invRow.quantity;
+          if (invRow != null) out[entry.key] = invRow.quantity.round(); // goldens are whole-number
         }
         return out;
       }
@@ -380,7 +380,7 @@ void main() {
           final row = await (db.select(db.costBatches)
                 ..where((b) => b.id.equals(id)))
               .getSingle();
-          out['$productKey|$receivedAt'] = row.qtyRemaining;
+          out['$productKey|$receivedAt'] = row.qtyRemaining.round();
         }
         return out;
       }
@@ -402,7 +402,7 @@ void main() {
             .get();
         for (final l in lineRows) {
           crateLines[keyByManufacturerId[l.manufacturerId]!] = ActualCrateLine(
-            cratesTaken: l.cratesTaken,
+            cratesTaken: l.cratesTaken.round(),
             depositRateKobo: l.depositRateKobo,
             depositPaidKobo: l.depositPaidKobo,
           );
@@ -415,13 +415,13 @@ void main() {
         for (final c in ledgerRows) {
           final key = keyByManufacturerId[c.manufacturerId]!;
           crateLedgerIssued[key] =
-              (crateLedgerIssued[key] ?? 0) + c.quantityDelta;
+              (crateLedgerIssued[key] ?? 0) + c.quantityDelta.round();
         }
         final balanceRows = await (db.select(db.customerCrateBalances)
               ..where((b) => b.customerId.equals(customerId!)))
             .get();
         for (final b in balanceRows) {
-          crateBalances[keyByManufacturerId[b.manufacturerId]!] = b.balance;
+          crateBalances[keyByManufacturerId[b.manufacturerId]!] = b.balance.round();
         }
       }
 
@@ -451,7 +451,7 @@ void main() {
           for (final i in orderItems)
             ActualItem(
               productKey: keyByProductId[i.productId]!,
-              quantity: i.quantity,
+              quantity: i.quantity.round(),
               unitPriceKobo: i.unitPriceKobo,
               totalKobo: i.totalKobo,
               buyingPriceKobo: i.buyingPriceKobo,
@@ -537,7 +537,7 @@ void main() {
           if (!seededBatchIds.contains(b.id))
             ActualRestoredLayer(
               productKey: keyByProductId[b.productId]!,
-              qty: b.qtyRemaining,
+              qty: b.qtyRemaining.round(),
               costKobo: b.costKobo,
             ),
       ];

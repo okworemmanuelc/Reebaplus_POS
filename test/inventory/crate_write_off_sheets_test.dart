@@ -77,7 +77,7 @@ void main() {
         manufacturerId: manufacturer.id,
         storeId: env.storeId,
         performedBy: userId,
-        countedEmpties: counted,
+        countedEmpties: counted.toDouble(),
       );
 
   // Real gaps between the steps: the fold orders same-second rows by their

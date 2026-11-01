@@ -66,7 +66,7 @@ void main() {
               businessId: businessId,
               productId: productId,
               storeId: storeId,
-              quantity: Value(s.startQty),
+              quantity: Value(s.startQty.toDouble()),
             ),
           );
 
@@ -75,7 +75,7 @@ void main() {
         await db.costBatchesDao.recordInflowBatch(
           productId: productId,
           storeId: storeId,
-          quantity: s.startQty,
+          quantity: s.startQty.toDouble(),
           costKobo: s.inflowCostKobo!,
         );
       }
@@ -85,7 +85,7 @@ void main() {
       await reqDao.requestStockAdjustment(
         productId: productId,
         storeId: storeId,
-        quantityDiff: s.quantityDiff,
+        quantityDiff: s.quantityDiff.toDouble(),
         reason: s.reason,
         summary: s.reason,
         requestedBy: requesterId,
@@ -129,7 +129,7 @@ void main() {
         final adj = await (db.select(db.stockAdjustments)
               ..where((a) =>
                   a.productId.equals(productId) &
-                  a.quantityDiff.equals(s.quantityDiff)))
+                  a.quantityDiff.equals(s.quantityDiff.toDouble())))
             .getSingleOrNull();
         snapshotValueKobo = adj?.valueKobo;
       }
@@ -147,7 +147,7 @@ void main() {
         s,
         StockAdjOutcome(
           status: finalReq.status,
-          inventoryAfter: inv?.quantity ?? 0,
+          inventoryAfter: (inv?.quantity ?? 0).round(),
           snapshotValueKobo: snapshotValueKobo,
           newBatchCostKobo: newBatchCostKobo,
         ),

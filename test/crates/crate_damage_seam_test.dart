@@ -72,7 +72,7 @@ void main() {
 
   tearDown(() => db.close());
 
-  Future<int> pool({String? store}) async =>
+  Future<double> pool({String? store}) async =>
       (await db.cratePoolDao
               .watchEmptiesPoolByManufacturer(storeId: store)
               .first)[manufacturerId] ??

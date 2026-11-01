@@ -16,7 +16,7 @@ StockAdjustmentRequestData approvalStockReq(
   businessId: env.businessId,
   productId: env.products.first.id,
   storeId: env.storeId,
-  quantityDiff: diff,
+  quantityDiff: diff.toDouble(),
   reason: 'Restock overflow',
   summary:
       '${diff < 0 ? 'Remove' : 'Add'} ${diff.abs()} ${env.products.first.name}',

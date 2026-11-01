@@ -121,7 +121,7 @@ void main() {
     expect(await (db.select(db.paymentTransactions)..where((r) => r.id.equals(sale.id)))
         .getSingle(), sale);
     expect((await db.select(db.crateLedger).get())
-        .fold<int>(0, (sum, r) => sum + r.quantityDelta), 0);
+        .fold<double>(0, (sum, r) => sum + r.quantityDelta), 0);
     expect((await db.select(db.syncQueue).get()).length, greaterThan(queuedBefore));
   });
 

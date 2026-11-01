@@ -125,7 +125,7 @@ void main() {
           orderId: id,
           productId: Value(productId),
           storeId: storeId,
-          quantity: qty,
+          quantity: qty.toDouble(),
           unitPriceKobo: unitPriceKobo,
           totalKobo: total,
         ),

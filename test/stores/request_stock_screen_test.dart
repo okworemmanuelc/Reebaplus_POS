@@ -68,7 +68,7 @@ void main() {
               businessId: env.businessId,
               storeId: ikejaId,
               productId: id,
-              quantity: Value(qty),
+              quantity: Value(qty.toDouble()),
             ),
           );
     }

@@ -81,7 +81,7 @@ void main() {
         buyingPriceKobo: Value(buyingKobo),
         unit: const Value('Piece'),
       ),
-      initialStock: initialStock,
+      initialStock: initialStock?.toDouble(),
       storeId: store,
       performedBy: staffId,
     );
@@ -237,7 +237,7 @@ void main() {
     expect(openingAfter.qtyRemaining, opening.qtyRemaining);
     expect(openingAfter.costKobo, opening.costKobo);
 
-    final totalRemaining = batches.fold<int>(0, (s, b) => s + b.qtyRemaining);
+    final totalRemaining = batches.fold<double>(0, (s, b) => s + b.qtyRemaining);
     expect(totalRemaining, 26);
     expect(totalRemaining, await stockOf(productId));
   });

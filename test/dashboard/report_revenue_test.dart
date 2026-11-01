@@ -64,7 +64,7 @@ OrderWithItems _order({
           orderId: orderId,
           productId: quickSale ? null : 'p$i',
           storeId: storeId ?? 's1',
-          quantity: lines[i].$1,
+          quantity: (lines[i].$1).toDouble(),
           unitPriceKobo: lines[i].$2,
           buyingPriceKobo: quickSale ? 0 : 5000,
           totalKobo: lines[i].$1 * lines[i].$2,

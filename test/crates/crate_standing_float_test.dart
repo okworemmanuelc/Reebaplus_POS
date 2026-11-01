@@ -182,7 +182,7 @@ void main() {
     return match.isEmpty ? 0 : match.single.position.placedDepositKobo;
   }
 
-  Future<int> supplierDebt(String manufacturerId) async {
+  Future<double> supplierDebt(String manufacturerId) async {
     final rows = await db.cratePoolDao.watchSupplierCrateDebt(supplierA).first;
     final match = rows.where((r) => r.manufacturerId == manufacturerId).toList();
     return match.isEmpty ? 0 : match.single.balance;
@@ -324,7 +324,7 @@ void main() {
         ),
         ratePerCrateKobo: manufacturer.depositAmountKobo,
         cratesOwed: 20,
-        emptiesOnHand: pool[floatBrand] ?? 0,
+        emptiesOnHand: (pool[floatBrand] ?? 0).round(),
       );
 
       expect(position.shortfallCrates, 7);

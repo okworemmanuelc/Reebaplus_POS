@@ -80,7 +80,7 @@ void main() {
             businessId: businessId,
             productId: id,
             storeId: storeId,
-            quantity: Value(stock),
+            quantity: Value(stock.toDouble()),
           ),
         );
     return id;
@@ -94,7 +94,7 @@ void main() {
   // createdAt, so target the exact row by its signed quantity diff.
   Future<StockAdjustmentData> adjustmentWithDiff(String productId, int diff) =>
       (db.select(db.stockAdjustments)..where(
-            (a) => a.productId.equals(productId) & a.quantityDiff.equals(diff),
+            (a) => a.productId.equals(productId) & a.quantityDiff.equals(diff.toDouble()),
           ))
           .getSingle();
 
@@ -234,7 +234,7 @@ void main() {
     await db.stockAdjustmentRequestsDao.requestStockAdjustment(
       productId: productId,
       storeId: storeId,
-      quantityDiff: quantityDiff,
+      quantityDiff: quantityDiff.toDouble(),
       reason: 'delivery from supplier',
       summary: 'Stock Keeper added $quantityDiff',
       requestedBy: staffId,

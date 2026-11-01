@@ -45,7 +45,7 @@ Future<({String staffId, String customerId, String manufacturerId, String pendin
           businessId: businessId,
           customerId: customerId,
           manufacturerId: manufacturerId,
-          quantity: quantity,
+          quantity: quantity.toDouble(),
           submittedBy: staffId,
         ),
       );

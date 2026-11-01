@@ -92,7 +92,7 @@ Future<AppDatabase> _bootDevice(_Fixture f, {required int startQty}) async {
           businessId: f.businessId,
           productId: f.productId,
           storeId: f.storeId,
-          quantity: Value(startQty),
+          quantity: Value(startQty.toDouble()),
         ),
       );
   return db;

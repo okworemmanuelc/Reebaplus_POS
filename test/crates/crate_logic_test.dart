@@ -105,7 +105,7 @@ void main() {
   group('Crates tab live refresh (watch-stream regression)', () {
     test('watchCrateBalancesWithGroups emits the new balance after a return',
         () async {
-      final emissions = <List<int>>[];
+      final emissions = <List<double>>[];
       final sub = db.customersDao
           .watchCrateBalancesWithGroups(customerId)
           .map((rows) => rows.map((e) => e.balance).toList())
@@ -135,7 +135,7 @@ void main() {
       final storeId = UuidV7.generate();
       await db.into(db.stores).insert(StoresCompanion.insert(
           id: Value(storeId), businessId: businessId, name: 'Main'));
-      final emissions = <int>[];
+      final emissions = <double>[];
       final sub = db.inventoryDao
           .watchEmptyCratesByManufacturer()
           .map((m) => m[manufacturerId] ?? 0)
@@ -174,7 +174,7 @@ void main() {
           storeId: storeId,
           quantity: const Value(24)));
 
-      final emissions = <int>[];
+      final emissions = <double>[];
       final sub = db.inventoryDao
           .watchFullCratesByManufacturer()
           .map((m) => m[manufacturerId] ?? 0)
@@ -471,7 +471,7 @@ void main() {
           customerId: customerId,
           submittedBy: userId,
           manufacturerId: manufacturerId,
-          quantity: qty,
+          quantity: qty.toDouble(),
         );
         await approvalService.approve(id, userId);
       }

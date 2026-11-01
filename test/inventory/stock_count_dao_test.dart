@@ -49,7 +49,7 @@ Future<({String storeId, String staffId, String productId})> _seed(
           businessId: businessId,
           productId: productId,
           storeId: storeId,
-          quantity: Value(qty),
+          quantity: Value(qty.toDouble()),
         ),
       );
   return (storeId: storeId, staffId: staffId, productId: productId);

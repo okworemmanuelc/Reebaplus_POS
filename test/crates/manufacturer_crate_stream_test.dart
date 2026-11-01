@@ -496,7 +496,7 @@ void main() {
                 businessId: businessId,
                 orderId: orderId,
                 manufacturerId: mfrA,
-                cratesTaken: crates,
+                cratesTaken: crates.toDouble(),
                 depositPaidKobo: Value(kobo),
               ),
             );
@@ -535,7 +535,7 @@ void main() {
                   businessId: businessId,
                   customerId: const Value(customerId),
                   manufacturerId: const Value(mfrA),
-                  quantityDelta: qty,
+                  quantityDelta: qty.toDouble(),
                   movementType: 'issued',
                   referenceOrderId: Value(orderId),
                 ),

@@ -59,7 +59,7 @@ void main() {
         buyingPriceKobo: Value(buyingKobo),
         unit: const Value('Piece'),
       ),
-      initialStock: stock,
+      initialStock: stock.toDouble(),
       storeId: storeId,
       performedBy: staffId,
     );

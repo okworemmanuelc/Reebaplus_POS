@@ -192,7 +192,7 @@ void main() {
         ..where((t) => t.actionType.equals(kReversalClaimAction)))
       .getSingle());
 
-  Future<int> inventoryQty() async => (await (db.select(db.inventory)
+  Future<double> inventoryQty() async => (await (db.select(db.inventory)
         ..where((t) => t.productId.equals(productId)))
       .getSingle())
       .quantity;

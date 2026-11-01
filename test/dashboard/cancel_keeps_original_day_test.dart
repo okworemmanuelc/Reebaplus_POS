@@ -86,7 +86,7 @@ OrderWithItems _order({
         orderId: id,
         productId: pid,
         storeId: 's1',
-        quantity: qty,
+        quantity: qty.toDouble(),
         unitPriceKobo: price,
         buyingPriceKobo: cost,
         totalKobo: qty * price,

@@ -122,7 +122,7 @@ Future<Map<String, ProductData>> seedPosMockup(
             businessId: b,
             storeId: env.storeId,
             productId: id,
-            quantity: Value(stock),
+            quantity: Value(stock.toDouble()),
           ),
         );
     byName[name] = await (db.select(

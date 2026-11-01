@@ -72,7 +72,7 @@ Future<_Seed> _seed(
           businessId: businessId,
           productId: productId,
           storeId: storeId,
-          quantity: Value(initialStock),
+          quantity: Value(initialStock.toDouble()),
         ),
       );
 
@@ -140,7 +140,7 @@ Future<void> _insertOrderItem(
           orderId: orderId,
           productId: Value(productId),
           storeId: s.storeId,
-          quantity: quantity,
+          quantity: quantity.toDouble(),
           unitPriceKobo: unitPriceKobo,
           totalKobo: quantity * unitPriceKobo,
         ),
