@@ -110,7 +110,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   StreamSubscription<List<ProductDataWithStock>>? _productsSub;
   StreamSubscription<List<ManufacturerData>>? _manufacturersSub;
   StreamSubscription<List<CategoryData>>? _categoriesSub;
-  StreamSubscription<int>? _emptyCratesSumSub;
+  StreamSubscription<double>? _emptyCratesSumSub;
   Color get _bg => Theme.of(context).scaffoldBackgroundColor;
 
   Color get _text => Theme.of(context).colorScheme.onSurface;

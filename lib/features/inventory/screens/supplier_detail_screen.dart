@@ -1148,7 +1148,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
   // Headline summary: net crates owed + refundable deposit held by the supplier.
   Widget _buildCrateSummaryCard(
     ThemeData theme,
-    int totalOwed,
+    double totalOwed,
     int depositHeldKobo,
   ) {
     final f = theme.extension<AppFixedColors>() ?? AppFixedColors.light;
@@ -1160,9 +1160,9 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
         ? f.green
         : _subtext;
     final headline = isOwe
-        ? 'You owe ${totalOwed.abs()} crate${totalOwed.abs() == 1 ? '' : 's'}'
+        ? 'You owe ${formatQty(totalOwed.abs())} crate${totalOwed.abs() == 1 ? '' : 's'}'
         : isCredit
-        ? '${totalOwed.abs()} crate${totalOwed.abs() == 1 ? '' : 's'} credit'
+        ? '${formatQty(totalOwed.abs())} crate${totalOwed.abs() == 1 ? '' : 's'} credit'
         : 'All crates settled';
     return Container(
       padding: EdgeInsets.all(context.getRSize(16)),

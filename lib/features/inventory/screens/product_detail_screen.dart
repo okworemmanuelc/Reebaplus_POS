@@ -840,7 +840,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   Widget _buildTarget(BuildContext context) {
     return ProductSalesTargetCard(
       figures: SalesTargetFigures(
-        sold: _monthUnits,
+        sold: _monthUnits.round(), // whole until S3 (#620)
         target: _productData?.monthlyTargetUnits ?? 0,
         now: _now,
       ),

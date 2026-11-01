@@ -158,7 +158,7 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
 
   Widget _buildFullView({
     required bool canRequest,
-    required int totalStock,
+    required double totalStock,
     required double totalValue,
     required int activeProducts,
     required int lowStock,
@@ -260,7 +260,7 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
   /// measured content column is at least [kStoreDetailsSideBySideWidth]
   /// (never a viewport predicate - PRD #239).
   Widget _buildHeaderCards(
-    int totalStock,
+    double totalStock,
     double totalValue,
     int activeProducts,
     int lowStock,
