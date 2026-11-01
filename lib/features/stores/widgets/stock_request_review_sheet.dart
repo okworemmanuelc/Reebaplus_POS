@@ -1,3 +1,4 @@
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -164,7 +165,7 @@ class _StockRequestReviewSheetState
                   productId: id,
                   name: item.product.name,
                   categoryName: categoryNames[item.product.categoryId],
-                  detail: '$sourceStoreName has ${available[id] ?? 0}',
+                  detail: '$sourceStoreName has ${formatQty(available[id] ?? 0)}',
                   quantity: item.quantity,
                   onIncrement: () => notifier.increment(id),
                   onDecrement: () => notifier.decrement(id),

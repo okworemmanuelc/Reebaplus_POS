@@ -2097,9 +2097,9 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
     await db.activityLogDao.log(
       action: 'stock_transfer_dispatched',
       description:
-          'Dispatched $dispatchedQty unit(s) of $productId '
+          'Dispatched ${formatQty(dispatchedQty!)} unit(s) of $productId '
           'from $fromStoreId → $toStoreId'
-          '${emptyCratesToSend > 0 ? " + $emptyCratesToSend empty crate(s)" : ""}',
+          '${emptyCratesToSend > 0 ? " + ${formatQty(emptyCratesToSend)} empty crate(s)" : ""}',
       staffId: dispatchedBy,
       storeId: fromStoreId,
       productId: productId,
@@ -2114,7 +2114,7 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
       await db.notificationsDao.fireNotification(
         type: 'stock_transfer.dispatched',
         message:
-            'Your request was dispatched: $dispatchedQty unit(s) on the way.',
+            'Your request was dispatched: ${formatQty(dispatchedQty!)} unit(s) on the way.',
         severity: 'info',
         linkedRecordId: transferId,
         recipientUserId: transfer.initiatedBy,

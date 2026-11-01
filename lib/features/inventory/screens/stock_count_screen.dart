@@ -370,7 +370,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
           ),
           SizedBox(width: ctx.getRSize(10)),
           TagPill(
-            label: '$sign$d',
+            label: '$sign${formatQty(d)}',
             tone: d < 0 ? TagPillTone.danger : TagPillTone.green,
           ),
         ],
@@ -418,9 +418,10 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
         changedLines.add({
           'p': item.product.id,
           'n': item.product.name,
-          's': item.totalStock,
-          'a': item.totalStock + diff,
-          'd': diff,
+          // Whole values stay JSON integers (lines_json is synced text).
+          's': Qty.toJson(item.totalStock),
+          'a': Qty.toJson(item.totalStock + diff),
+          'd': Qty.toJson(diff),
         });
       }
 
@@ -1356,7 +1357,7 @@ class _StockCountScreenState extends ConsumerState<StockCountScreen> {
               SizedBox(
                 width: context.getRSize(56),
                 child: Text(
-                  '$systemStock',
+                  formatQty(systemStock),
                   textAlign: TextAlign.center,
                   style: context.semiBoldStyle(13).copyWith(color: _subtext),
                 ),

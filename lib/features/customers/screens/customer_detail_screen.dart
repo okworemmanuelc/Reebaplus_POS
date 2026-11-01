@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:drift/drift.dart' show innerJoin;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
@@ -1695,8 +1696,8 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
     final label = isClear
         ? 'Clear'
         : isOwe
-        ? '${bal.abs()} crates owed'
-        : '${bal.abs()} crates credit';
+        ? '${formatQty(bal.abs())} crates owed'
+        : '${formatQty(bal.abs())} crates credit';
     return Padding(
       padding: EdgeInsets.only(bottom: context.getRSize(10)),
       child: CustomerDetailRow(

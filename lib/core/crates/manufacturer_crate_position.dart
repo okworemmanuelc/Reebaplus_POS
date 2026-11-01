@@ -15,6 +15,8 @@
 /// plain values and returns immutable data structures.
 library;
 
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
+
 export 'package:reebaplus_pos/core/crates/crate_shortage.dart'
     show
         CrateCountMovement,
@@ -59,7 +61,7 @@ class CrateStatusFigure {
 
   @override
   String toString() =>
-      'CrateStatusFigure($label: count=$count, moneyKobo=$moneyKobo, hasMoney=$hasMoney)';
+      'CrateStatusFigure($label: count=${formatQty(count)}, moneyKobo=$moneyKobo, hasMoney=$hasMoney)';
 }
 
 /// The complete read-only crate position of ONE brand.

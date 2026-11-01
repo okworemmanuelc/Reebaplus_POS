@@ -1249,7 +1249,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
   ) {
     final bal = entry.balance;
     final isOwe = bal > 0;
-    final label = isOwe ? '${bal.abs()} owed' : '${bal.abs()} credit';
+    final label = isOwe ? '${formatQty(bal.abs())} owed' : '${formatQty(bal.abs())} credit';
     return Padding(
       padding: EdgeInsets.only(bottom: context.getRSize(10)),
       child: Container(

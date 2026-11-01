@@ -585,7 +585,7 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
           final entry = movements[index];
           final delta = entry.quantityDelta;
           final isPositive = delta > 0;
-          final deltaText = isPositive ? '+$delta crates' : '$delta crates';
+          final deltaText = isPositive ? '+${formatQty(delta)} crates' : '${formatQty(delta)} crates';
           final deltaColor = isPositive ? f.green : f.danger;
 
           final details = [

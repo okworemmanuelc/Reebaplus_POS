@@ -515,7 +515,7 @@ class StockMovementRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  q > 0 ? '+$q' : '$q',
+                  q > 0 ? '+${formatQty(q)}' : formatQty(q),
                   style: context
                       .extraBoldStyle(16)
                       .copyWith(color: q > 0 ? f.green : f.danger),
