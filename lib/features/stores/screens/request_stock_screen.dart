@@ -15,6 +15,7 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/stores/state/stock_request_list.dart';
 import 'package:reebaplus_pos/features/stores/widgets/request_product_grid.dart';
 import 'package:reebaplus_pos/features/stores/widgets/stock_request_quantity_sheet.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/features/stores/widgets/stock_request_review_sheet.dart';
 import 'package:reebaplus_pos/shared/services/ui_hint_service.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
@@ -198,8 +199,9 @@ class _RequestStockScreenState extends ConsumerState<RequestStockScreen> {
       context,
       productName: item.product.name,
       sourceStoreName: _sourceStore?.name ?? '',
-      available: item.totalStock.floor(),
-      initialQuantity: current > 0 ? current : 1,
+      available: item.totalStock,
+      allowParts: item.product.allowFractionalSales,
+      initialQuantity: current > 0 ? current : 1.0,
     );
     if (!mounted || qty == null) return;
     ref.read(stockRequestListProvider.notifier).setQuantity(item.product, qty);
@@ -294,7 +296,7 @@ class _RequestStockScreenState extends ConsumerState<RequestStockScreen> {
             toStoreId: dst.id,
             lines: [
               for (final i in items)
-                (productId: i.product.id, quantity: i.quantity.toDouble()),
+                (productId: i.product.id, quantity: i.quantity),
             ],
             requestedBy: currentUser.id,
           );
@@ -316,7 +318,7 @@ class _RequestStockScreenState extends ConsumerState<RequestStockScreen> {
     required String sourceName,
     required String destName,
     required int productCount,
-    required int units,
+    required double units,
   }) {
     final t = Theme.of(context);
     Widget row(String label, String value) => Padding(
@@ -345,7 +347,7 @@ class _RequestStockScreenState extends ConsumerState<RequestStockScreen> {
             row(
               'Products',
               '$productCount ${productCount == 1 ? 'product' : 'products'}, '
-                  '$units ${units == 1 ? 'unit' : 'units'}',
+                  '${formatQty(units)} ${units == 1 ? 'unit' : 'units'}',
             ),
             SizedBox(height: context.getRSize(12)),
             Text(

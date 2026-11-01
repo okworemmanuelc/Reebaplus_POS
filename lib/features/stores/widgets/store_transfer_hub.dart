@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/shared/utils/quantity_input.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -121,7 +122,8 @@ class StoreTransferHub extends ConsumerWidget {
               productName: productNames[t.productId] ?? 'Product',
               counterpartyStore: storeNames[t.toLocationId] ?? 'a store',
               byUser: users[t.initiatedBy]?.name,
-              availableHere: (hereStock[t.productId] ?? 0).floor(),
+              availableHere: hereStock[t.productId] ?? 0,
+              allowParts: p?.allowFractionalSales ?? false,
               manufacturerId: manufacturerId,
               isCrateEligible: isCrateEligible,
               availableEmpties: availableEmpties,
@@ -345,7 +347,10 @@ class _TransferActionCard extends ConsumerStatefulWidget {
   final String productName;
   final String counterpartyStore;
   final String? byUser;
-  final int availableHere;
+  final double availableHere;
+
+  /// The product's parts switch: off means whole numbers only (#630).
+  final bool allowParts;
   final String? manufacturerId;
   final bool isCrateEligible;
   final int availableEmpties;
@@ -357,6 +362,7 @@ class _TransferActionCard extends ConsumerStatefulWidget {
     required this.counterpartyStore,
     this.byUser,
     this.availableHere = 0,
+    this.allowParts = false,
     this.manufacturerId,
     this.isCrateEligible = false,
     this.availableEmpties = 0,
@@ -406,12 +412,12 @@ class _TransferActionCardState extends ConsumerState<_TransferActionCard> {
           .dispatchTransfer(
             transferId: widget.transfer.id,
             dispatchedBy: uid,
-            quantity: qty.toDouble(),
+            quantity: qty,
             emptyCratesToSend: empties.toDouble(),
           ),
       empties > 0
-          ? 'Dispatched $qty unit(s) + $empties empty crate(s) to ${widget.counterpartyStore}.'
-          : 'Dispatched $qty unit(s) to ${widget.counterpartyStore}.',
+          ? 'Dispatched ${formatQty(qty)} unit(s) + $empties empty crate(s) to ${widget.counterpartyStore}.'
+          : 'Dispatched ${formatQty(qty)} unit(s) to ${widget.counterpartyStore}.',
     );
   }
 
@@ -443,14 +449,15 @@ class _TransferActionCardState extends ConsumerState<_TransferActionCard> {
   );
 
   /// Accept dialog: confirm or alter the dispatched quantity and optionally send empty crates.
-  Future<({int quantity, int empties})?> _askQuantity() {
+  Future<({double quantity, int empties})?> _askQuantity() {
     final showEmptiesField =
         widget.isCrateEligible && widget.availableEmpties > 0;
-    return showDialog<({int quantity, int empties})>(
+    return showDialog<({double quantity, int empties})>(
       context: context,
       builder: (_) => _DispatchDialog(
-        requested: widget.transfer.quantity.round(), // whole until S5 (#620)
+        requested: widget.transfer.quantity,
         availableHere: widget.availableHere,
+        allowParts: widget.allowParts,
         showEmptiesField: showEmptiesField,
         availableEmpties: widget.availableEmpties,
       ),
@@ -587,12 +594,14 @@ class _DispatchDialog extends StatefulWidget {
   const _DispatchDialog({
     required this.requested,
     required this.availableHere,
+    required this.allowParts,
     required this.showEmptiesField,
     required this.availableEmpties,
   });
 
-  final int requested;
-  final int availableHere;
+  final double requested;
+  final double availableHere;
+  final bool allowParts;
   final bool showEmptiesField;
   final int availableEmpties;
 
@@ -602,7 +611,7 @@ class _DispatchDialog extends StatefulWidget {
 
 class _DispatchDialogState extends State<_DispatchDialog> {
   late final TextEditingController _qtyCtrl = TextEditingController(
-    text: widget.requested.toString(),
+    text: formatQty(widget.requested),
   );
   final TextEditingController _emptiesCtrl = TextEditingController(text: '0');
 
@@ -614,9 +623,18 @@ class _DispatchDialogState extends State<_DispatchDialog> {
   }
 
   void _submit(BuildContext ctx) {
-    final q = int.tryParse(_qtyCtrl.text.trim()) ?? 0;
-    if (q <= 0) {
-      AppNotification.showError(ctx, 'Enter a quantity above 0.');
+    final q = parseStockQty(
+      _qtyCtrl.text,
+      allowParts: widget.allowParts,
+      allowZero: false,
+    );
+    if (q == null) {
+      AppNotification.showError(
+        ctx,
+        _qtyCtrl.text.trim().isEmpty || Qty.parse(_qtyCtrl.text) == 0
+            ? 'Enter a quantity above 0.'
+            : stockQtyError(_qtyCtrl.text, allowParts: widget.allowParts),
+      );
       return;
     }
     int empties = 0;
@@ -654,16 +672,16 @@ class _DispatchDialogState extends State<_DispatchDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Requested: ${widget.requested}   ·   '
-            'Available here: ${widget.availableHere}',
+            'Requested: ${formatQty(widget.requested)}   ·   '
+            'Available here: ${formatQty(widget.availableHere)}',
             style: context.regularStyle(12).copyWith(color: muted),
           ),
           SizedBox(height: context.getRSize(12)),
           AppInput(
             controller: _qtyCtrl,
             labelText: 'Quantity to send',
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            keyboardType: stockQtyKeyboard(allowParts: widget.allowParts),
+            inputFormatters: stockQtyFormatters(allowParts: widget.allowParts),
           ),
           if (widget.showEmptiesField) ...[
             SizedBox(height: context.getRSize(12)),

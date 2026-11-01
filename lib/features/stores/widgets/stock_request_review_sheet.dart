@@ -229,7 +229,7 @@ class _ReviewLine extends StatelessWidget {
   final String name;
   final String? categoryName;
   final String detail;
-  final int quantity;
+  final double quantity;
   final VoidCallback onIncrement;
   final VoidCallback onDecrement;
   final VoidCallback onRemove;
@@ -296,7 +296,7 @@ class _ReviewLine extends StatelessWidget {
             Align(
               alignment: AlignmentDirectional.centerEnd,
               child: QuantityStepper(
-                quantityLabel: '$quantity',
+                quantityLabel: formatQty(quantity),
                 isLastUnit: quantity <= 1,
                 onIncrement: onIncrement,
                 onDecrement: onDecrement,
