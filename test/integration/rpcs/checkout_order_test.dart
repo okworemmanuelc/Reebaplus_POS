@@ -479,24 +479,22 @@ void main() {
     expect(await balanceOf(customer), 0, reason: 'no wallet legs posted');
   }, skip: _skipReason);
 
-  test('a customer with no debt limit cannot go into debt at all', () async {
+  test('a customer with no debt limit (0) can buy on credit, uncapped (#621)',
+      () async {
     final product = await seedProduct();
     await seedInventory(product, 10);
     await seedBatch(product, 10, 50000);
-    final customer = await seedCustomer(debtLimitKobo: 0); // no credit allowed
+    final customer = await seedCustomer(debtLimitKobo: 0); // 0 = no limit
 
-    await expectLater(
-      () => checkout(
-        orderId: UuidV7.generate(),
-        productId: product,
-        quantity: 3,
-        method: 'credit',
-        amountPaidKobo: 0,
-        customerId: customer,
-      ),
-      throwsA(predicate(
-          (e) => e.toString().contains('debt_limit_exceeded'))),
+    await checkout(
+      orderId: UuidV7.generate(),
+      productId: product,
+      quantity: 3,
+      method: 'credit',
+      amountPaidKobo: 0,
+      customerId: customer,
     );
+    expect(await balanceOf(customer), -300000);
   }, skip: _skipReason);
 
   test('a credit sale without a customer is rejected', () async {

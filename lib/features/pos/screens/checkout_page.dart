@@ -1085,16 +1085,6 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       switch (_debtLimitResult) {
         case DebtLimitOk():
           break;
-        case DebtLimitNotSet():
-          AppNotification.showError(
-            context,
-            _isPayOnDelivery
-                ? '${customer.name} already owes money and has no debt limit '
-                      'set. Set a debt limit in the customer profile first.'
-                : '${customer.name} has no debt limit set. Set a debt limit in '
-                      'the customer profile before booking this debt.',
-          );
-          return;
         case DebtLimitExceeded(:final limitKobo, :final overByKobo):
           AppNotification.showError(
             context,
@@ -2085,9 +2075,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   }
 
   /// Red warning shown when a debt-adding sale breaches the customer's limit
-  /// (or none is set). The same condition blocks on Confirm Payment.
+  /// (no limit set = unlimited, never warned). Same condition blocks on
+  /// Confirm Payment.
   Widget _debtLimitWarning() {
     final msg = switch (_debtLimitResult) {
+      DebtLimitOk() => '',
       DebtLimitExceeded(:final limitKobo, :final overByKobo) =>
         _isPayOnDelivery
             ? '$_customerDisplayName is already over their debt limit of '
@@ -2096,12 +2088,6 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             : 'Over $_customerDisplayName\'s debt limit of '
                   '${formatCurrency(limitKobo / 100.0)} by '
                   '${formatCurrency(overByKobo / 100.0)}.',
-      _ =>
-        _isPayOnDelivery
-            ? '$_customerDisplayName already owes money and has no debt limit '
-                  'set — set one first.'
-            : '$_customerDisplayName has no debt limit set — set one before '
-                  'booking this debt.',
     };
     return Padding(
       padding: EdgeInsets.only(top: context.getRSize(8)),
