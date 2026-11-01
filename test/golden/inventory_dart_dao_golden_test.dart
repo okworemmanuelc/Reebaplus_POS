@@ -168,8 +168,8 @@ void main() {
             s.operation == 'add_product' ? 'opening' : _dateKey(b.receivedAt);
         batches[key] = ExpectedInvBatch({
           'received_at': key,
-          'qty_remaining': b.qtyRemaining,
-          'qty_original': b.qtyOriginal,
+          'qty_remaining': b.qtyRemaining.round(),
+          'qty_original': b.qtyOriginal.round(),
           'cost_kobo': b.costKobo,
         });
       }

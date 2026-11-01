@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
@@ -1185,7 +1186,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       subtitle: product.subtitle,
       categoryName: categoryName,
       photoPath: product.imagePath,
-      stockLabel: currentStock.toString(),
+      stockLabel: formatQty(currentStock),
       unit: unitLabel(product.unit, crates: crates),
       state: isOut
           ? InventoryStockState.out
