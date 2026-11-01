@@ -18,6 +18,7 @@ import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/sync/widgets/sync_download_card.dart';
 import 'package:reebaplus_pos/features/sync/widgets/sync_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
@@ -132,6 +133,20 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
     _db = ref.read(databaseProvider);
     unawaited(_probeProfile());
     unawaited(_loadDeferredTables());
+    // The "Catching up" list is rewritten by every pull. Reload it when a pull
+    // finishes or fails, not only when the screen opens (#643).
+    _sync.pullStatus.addListener(_onPullStatus);
+  }
+
+  PullStage? _lastPullStage;
+
+  void _onPullStatus() {
+    final stage = _sync.pullStatus.value.stage;
+    if (stage == _lastPullStage) return;
+    _lastPullStage = stage;
+    if (stage == PullStage.completed || stage == PullStage.failed) {
+      unawaited(_loadDeferredTables());
+    }
   }
 
   Future<void> _loadDeferredTables() async {
@@ -163,11 +178,21 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
     setState(() => _retryingDeferred = true);
     final sync = ref.read(supabaseSyncServiceProvider);
     try {
+      final runsBefore = sync.pullRunCount;
       await sync.syncAll(businessId);
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Re-sync complete.')));
+      // pullChanges returns quietly when a download is already running, so
+      // "complete" is only true if a download actually started for this tap.
+      final ran = sync.pullRunCount != runsBefore;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            ran
+                ? 'Re-sync complete.'
+                : 'A download is already running. It will finish on its own.',
+          ),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -181,6 +206,7 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
 
   @override
   void dispose() {
+    _sync.pullStatus.removeListener(_onPullStatus);
     _serviceKeyCtl.dispose();
     _projectUrlCtl.dispose();
     super.dispose();
@@ -314,6 +340,10 @@ class _SyncIssuesScreenState extends ConsumerState<SyncIssuesScreen> {
                   context.getRSize(16) + context.deviceBottomPadding,
                 ),
                 children: [
+                  section('Download'),
+                  headerGap,
+                  SyncDownloadCard(businessId: businessId),
+                  sectionGap,
                   section('Health'),
                   headerGap,
                   _healthCard(
