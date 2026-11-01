@@ -150,6 +150,7 @@ abstract final class AppIcons {
   static const IconData undo = Symbols.replay;
   static const IconData update = Symbols.update;
   static const IconData visibility = Symbols.visibility;
+  static const IconData visibilityOff = Symbols.visibility_off;
   static const IconData zoomOut = Symbols.zoom_out;
 
   // --- People ---

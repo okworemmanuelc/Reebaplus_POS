@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
@@ -62,6 +63,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   // Total SKUs card expand state (§11.5 — Cashier/Stock keeper).
   bool _skusExpanded = false;
 
+  /// Eye toggle: masks every money figure on Home (so nobody looking over the
+  /// owner's shoulder sees today's takings). Device-local, remembered across
+  /// launches; figures are shown by default.
+  static const _hideFiguresKey = 'home_hide_figures';
+  static const _maskedFigure = '••••••';
+  bool _hideFigures = false;
+
+  /// Money as shown on Home: the formatted amount, or a mask while hidden.
+  String _money(double amount) =>
+      _hideFigures ? _maskedFigure : formatCurrency(amount);
+
+  Future<void> _loadHideFigures() async {
+    final prefs = await SharedPreferences.getInstance();
+    final hide = prefs.getBool(_hideFiguresKey) ?? false;
+    if (mounted && hide != _hideFigures) setState(() => _hideFigures = hide);
+  }
+
+  Future<void> _toggleHideFigures() async {
+    final hide = !_hideFigures;
+    setState(() => _hideFigures = hide);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_hideFiguresKey, hide);
+  }
+
   // DB-backed data
   List<OrderWithItems> _allOrdersWithItems = [];
   List<ExpenseWithCategory> _allExpenses = [];
@@ -83,6 +108,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _loadHideFigures();
     Future.microtask(() => _initializeData());
   }
 
@@ -531,9 +557,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       key: HomeKeys.periodHeader,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SectionHeader(
-          title: 'Performance Overview',
-          subtitle: 'Analytics for the selected period',
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            const Expanded(
+              child: SectionHeader(
+                title: 'Performance Overview',
+                subtitle: 'Analytics for the selected period',
+              ),
+            ),
+            IconButton(
+              key: HomeKeys.hideFigures,
+              tooltip: _hideFigures ? 'Show figures' : 'Hide figures',
+              onPressed: _toggleHideFigures,
+              icon: Icon(
+                _hideFigures ? AppIcons.visibilityOff : AppIcons.visibility,
+              ),
+            ),
+          ],
         ),
         if (withPills) ...[
           SizedBox(height: context.getRSize(12)),
@@ -758,7 +799,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           key: HomeKeys.sales,
           density: density,
           title: 'Total Sales',
-          value: formatCurrency(sales),
+          value: _money(sales),
           subtitle:
               'Generated from ${formatPeriodLabel(_selectedPeriod)} transactions',
           icon: AppIcons.naira,
@@ -775,7 +816,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           key: HomeKeys.profit,
           density: density,
           title: 'Net Profit',
-          value: profit != null ? formatCurrency(profit) : '—',
+          value: profit != null ? _money(profit) : '—',
           subtitle: profit != null
               ? 'Revenue minus cost of goods & expenses'
               : 'Add buying prices to '
@@ -823,7 +864,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           key: HomeKeys.expenses,
           density: density,
           title: 'Total Expenses',
-          value: formatCurrency(expenses),
+          value: _money(expenses),
           subtitle: 'Including operations & staff',
           icon: AppIcons.bill,
           tone: IconTileTone.danger,
@@ -847,7 +888,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           key: HomeKeys.stockValue,
           density: density,
           title: 'Stock Value',
-          value: formatCurrency(_totalStockValue),
+          value: _money(_totalStockValue),
           subtitle: 'Estimated inventory worth',
           icon: AppIcons.inventory,
           tone: IconTileTone.info,
@@ -861,8 +902,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       cards.add(
         HomeCreditsCard(
           key: HomeKeys.credits,
-          credit: formatCurrency(credit),
-          debt: formatCurrency(debt),
+          credit: _money(credit),
+          debt: _money(debt),
           compact: cell.columns > 1,
           dense: density == StatCardDensity.compact,
           onTap: () {
@@ -962,7 +1003,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return (
       name: user?.name ?? 'Unknown Staff',
       color: Color(int.parse(colorHex.replaceFirst('#', '0xFF'))),
-      amount: formatCurrency(entry.value),
+      amount: _money(entry.value),
     );
   }
 }

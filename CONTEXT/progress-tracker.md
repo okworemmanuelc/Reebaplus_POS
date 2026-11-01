@@ -7,6 +7,9 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Home eye toggle, auto-lock off by default, POS 3 columns (2026-11-01, ready for review)
+Branch `feat/home-hide-figures-lock-off-pos-3col`. (1) Home: eye button in the Performance Overview header hides every money figure (device-local `home_hide_figures`). (2) Auto-lock: unset `auto_lock_interval_seconds` now means off in `AutoLockWrapper` and the Security screen (was 5 min); a saved timer is unchanged. The 12-hour shift logout is untouched. (3) POS: the grid-column fallback is 3 (was 2), so a medium phone (380–600dp) opens on three columns; small phones stay capped at 2, and a saved choice wins. No schema, sync or money change, so no pos-parity issue.
+
 ### Any-business narrative, not drinks-only (2026-11-01)
 Branch `chore/generic-business-narrative`. Reebaplus is for any kind of business. `pubspec.yaml` description, `CONTEXT.md` heading, web title/manifest and the desktop runner names (`drink_pos_app` / `com.example.drinkPosApp` → `reebaplus_pos` / "Reebaplus POS" / `com.reebaplus.pos` on Linux, `com.okwor.reebapluspos` on macOS) no longer say drinks. Android/iOS store IDs untouched. Receive Checkout crate hints say "products with crates" / "N bottles on this delivery". Crate code comments that describe drinks stay (crates are drinks-only by design). Desktop installs (macOS/Windows/Linux, dev only) get a new data folder, so they sign in again. Local folder rename `drinkPosApp` → `reebaplus-pos` is for the owner to run by hand. No Drift/cloud change (no `pos-parity` issue).
 ### Issue #629: Empties in parts, S4 of PRD #620 (2026-11-01, merged)
