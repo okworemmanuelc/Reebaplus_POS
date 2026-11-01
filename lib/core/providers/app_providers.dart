@@ -85,6 +85,12 @@ final storeExplicitlyChosenProvider = mirrorNotifier<bool>(
   (ref) => ref.watch(navigationProvider).storeExplicitlyChosen,
 );
 
+// #653: true while the remembered store is still being put back at session
+// start. MainLayout holds its silent first-store default until it drops.
+final storeRestorePhaseProvider = mirrorNotifier<StoreRestorePhase>(
+  (ref) => ref.watch(navigationProvider).storeRestorePhase,
+);
+
 // ── Secure Storage ─────────────────────────────────────────────────────────
 final secureStorageProvider = Provider<SecureStorageService>(
   (_) => SecureStorageService(),

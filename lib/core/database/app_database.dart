@@ -21,6 +21,7 @@ import 'package:reebaplus_pos/core/services/backup_exclusion_service.dart';
 import 'package:reebaplus_pos/core/services/first_load_marker_service.dart';
 import 'package:reebaplus_pos/core/services/local_photo_files.dart';
 import 'package:reebaplus_pos/core/services/sync_cursor_reset_service.dart';
+import 'package:reebaplus_pos/shared/services/active_store_memory.dart';
 export 'daos.dart';
 
 part 'app_database.g.dart';
@@ -7297,6 +7298,11 @@ class AppDatabase extends _$AppDatabase {
     try {
       await SyncCursorResetService.clearForBusiness(businessId);
     } catch (_) {}
+    // The remembered active store (#653) is per business + user: drop every
+    // user's pick for THIS business only.
+    try {
+      await ActiveStoreMemory.clearForBusiness(businessId);
+    } catch (_) {}
 
     // Same on disk (#343): X's product photo copies, its logo copy and its
     // not-yet-uploaded photo entries live outside Drift. Only X's — the
@@ -7351,6 +7357,13 @@ class AppDatabase extends _$AppDatabase {
     // exactly like a brand-new device. Best-effort: never abort the wipe.
     try {
       await SyncCursorResetService.clearAll();
+    } catch (_) {}
+
+    // Same wipe-trap: the remembered active store (#653) lives in
+    // SharedPreferences. One user per device, so the next sign-in must not
+    // inherit the last user's store. Best-effort: never abort the wipe.
+    try {
+      await ActiveStoreMemory.clearAll();
     } catch (_) {}
 
     // Same wipe-trap, on disk (#340): product photo copies, the logo copy and

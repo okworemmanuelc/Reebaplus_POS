@@ -768,6 +768,10 @@ class AuthService extends ValueNotifier<UserData?> {
     try {
       // Side-effects first — navigationService fully ready before any rebuild
       _nav.applyUserStoreLock(user.storeId);
+      // Put back the store this user last picked (#653). Synchronous part
+      // raises the pending flag BEFORE MainLayout mounts, so its silent
+      // first-store default waits for the saved pick instead of flashing.
+      _nav.beginStoreRestore(businessId: user.businessId, userId: user.id);
       // Open the session on the neutral landing tab (Home). The role row has
       // not resolved from local SQLite at this point, so the role's real
       // landing — Cashier on the till, everyone else on Home — is applied by
@@ -1213,6 +1217,7 @@ class AuthService extends ValueNotifier<UserData?> {
     // Clear nav state BEFORE nulling value. lockedStoreId listeners
     // (e.g. PosController._subscribeToProducts) fire synchronously; if
     // value is already null, requireBusinessId throws.
+    _nav.forgetSavedStore(); // #653: logout forgets the remembered store
     _nav.clearStoreLock();
     _nav.resetNavigation();
     _supabase.auth
@@ -1230,8 +1235,10 @@ class AuthService extends ValueNotifier<UserData?> {
   /// avoids verifyLocalSessionStillActive treating us as a remote kick
   /// on the next resume (it early-returns when value == null).
   void lockApp() {
-    // See logout() — same ordering rule.
-    _nav.clearStoreLock();
+    // The picked store survives a lock (#653), so the store lock is NOT
+    // cleared here. The unlock path (setCurrentUser) re-applies it from the
+    // remembered pick. Ordering rule from logout() no longer applies: no
+    // lockedStoreId listener fires at lock.
     _nav.resetNavigation();
     value = null;
     bypassNextBiometric = true;
@@ -1266,6 +1273,7 @@ class AuthService extends ValueNotifier<UserData?> {
     //    At this point _hasDeviceUser is already false → routes to WelcomeScreen.
     //    Order matters: clear nav first so store-listeners fire while
     //    the businessId resolver still returns a valid id (see logout()).
+    _nav.forgetSavedStore(); // #653
     _nav.clearStoreLock();
     _nav.resetNavigation();
     value = null;
