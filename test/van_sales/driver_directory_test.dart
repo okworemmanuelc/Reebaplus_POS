@@ -39,6 +39,7 @@ UserBusinessData _membership(
   userId: userId,
   roleId: roleId,
   status: status,
+  isHidden: false,
   createdAt: DateTime(2026, 1, 1),
   lastUpdatedAt: DateTime(2026, 1, 1),
 );

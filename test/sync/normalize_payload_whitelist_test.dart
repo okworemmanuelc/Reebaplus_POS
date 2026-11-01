@@ -26,6 +26,24 @@ void main() {
       expect(scrubbed['role'], 'ceo');
     });
 
+    test('user_businesses: cloud-authoritative is_hidden never pushes (#622)',
+        () {
+      final scrubbed = SupabaseSyncService.scrubForTesting('user_businesses', {
+        'id': 'm1',
+        'business_id': 'biz',
+        'user_id': 'u1',
+        'role_id': 'r1',
+        'status': 'active',
+        'last_login_at': null,
+        'created_at': '2026-11-01T00:00:00Z',
+        'last_updated_at': '2026-11-01T00:00:00Z',
+        'is_hidden': true,
+      });
+      expect(scrubbed.containsKey('is_hidden'), isFalse);
+      expect(scrubbed['role_id'], 'r1');
+      expect(scrubbed['status'], 'active');
+    });
+
     test('sessions: token / ip_address / user_agent dropped', () {
       final scrubbed = SupabaseSyncService.scrubForTesting('sessions', {
         'id': 'sess-1',
