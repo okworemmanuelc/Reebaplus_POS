@@ -184,3 +184,22 @@ const Color fixedPurpleLight = Color(0xFF7C3AED);
 const Color fixedPurpleTintLight = Color(0xFFF3EEFF);
 const Color fixedPurpleDark = Color(0xFFA78BFA);
 const Color fixedPurpleTintDark = Color(0xFF241B3D);
+// Expense red (#652): the owner's Expenses mockups, identical in every design
+// system. Gradient #DC2626 → #991B1B, red ink #B91C1C, error ink #7F1D1D.
+const Color fixedExpenseRed = Color(0xFFDC2626);
+const Color fixedExpenseRedDeep = Color(0xFF991B1B);
+const Color fixedExpenseInkLight = Color(0xFFB91C1C);
+const Color fixedExpenseInkDark = Color(0xFFF87171);
+const Color fixedExpenseBannerInkLight = Color(0xFF7F1D1D);
+const Color fixedExpenseBannerInkDark = Color(0xFFFCA5A5);
+const Color fixedExpensePageFadeLight = Color(0xFFFCF0F0);
+// Expense status pills (#652 mockup): Waiting / Approved / Rejected.
+const Color fixedExpenseWaitingFillLight = Color(0xFFFFEFD2);
+const Color fixedExpenseWaitingInkLight = Color(0xFF92400E);
+const Color fixedExpenseWaitingInkDark = Color(0xFFFCD34D);
+const Color fixedExpenseApprovedFillLight = Color(0xFFDEF8E4);
+const Color fixedExpenseApprovedInkLight = Color(0xFF166534);
+const Color fixedExpenseApprovedInkDark = Color(0xFF86EFAC);
+const Color fixedExpenseRejectedFillLight = Color(0xFFF1F5F9);
+const Color fixedExpenseRejectedInkLight = Color(0xFF475569);
+const Color fixedExpenseRejectedInkDark = Color(0xFFCBD5E1);
