@@ -32,6 +32,7 @@ import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 
 import '../helpers/screen_harness.dart';
 import 'cart_fixture.dart';
+import 'checkout_fixture.dart';
 
 /// Records the one `addOrder` call Confirm Payment makes; writes nothing.
 class _RecordingOrderService extends OrderService {
@@ -53,10 +54,15 @@ class _RecordingOrderService extends OrderService {
     String paymentSubType = 'cash',
     int walletBalanceKobo = 0,
     Map<String, int> crateDepositPaidByManufacturer = const {},
+    Map<String, double> cratesReturnedByManufacturer = const {},
     String? onlineOrderId,
   }) async {
     calls.add({
       if (onlineOrderId != null) 'onlineOrderId': onlineOrderId,
+      if (cratesReturnedByManufacturer.isNotEmpty)
+        'cratesReturnedByManufacturer': Map<String, double>.from(
+          cratesReturnedByManufacturer,
+        ),
       'customerId': customerId,
       'lines': cart.length,
       'totalAmountKobo': totalAmountKobo,
@@ -628,6 +634,209 @@ void main() {
     expect(orders.calls.single['paymentType'], 'Cash');
     expect(orders.calls.single['discountKobo'], 50000);
     await finish(tester);
+  });
+
+  group('Empties Exchange (#649)', () {
+    String starId() => env.manufacturers[0].id;
+    String heroId() => env.manufacturers[1].id;
+
+    Finder emptiesField(String manufacturerId) => inCheckout(
+      find.descendant(
+        of: find.byKey(CheckoutKeys.emptiesReturned(manufacturerId)),
+        matching: find.byType(TextField),
+      ),
+    );
+
+    Future<void> enterEmpties(
+      WidgetTester tester,
+      String manufacturerId,
+      String text,
+    ) async {
+      final field = emptiesField(manufacturerId);
+      await tester.ensureVisible(field);
+      await tester.pump();
+      await tester.enterText(field, text);
+      await tester.pump();
+    }
+
+    Finder note() => inCheckout(find.byKey(CheckoutKeys.emptiesReturnedNote));
+
+    testWidgets('every brand gets a blank number field above Confirm', (
+      tester,
+    ) async {
+      await openCheckout(tester, customer: regular);
+      for (final id in [starId(), heroId()]) {
+        final field = tester.widget<TextField>(emptiesField(id));
+        expect(field.controller!.text, isEmpty, reason: 'never pre-filled');
+        expect(field.keyboardType.index, TextInputType.number.index);
+        expect(field.keyboardType.decimal, isTrue, reason: 'quarter crates');
+        expect(field.keyboardType.signed, isNot(isTrue));
+        expect(
+          tester.getBottomLeft(emptiesField(id)).dy,
+          lessThan(tester.getTopLeft(find.byKey(CheckoutKeys.confirm)).dy),
+          reason: 'counted before the receipt prints on Confirm',
+        );
+      }
+      expect(inCheckout(find.text('1 crate in this sale')), findsOneWidget);
+      expect(inCheckout(find.text('2 crates in this sale')), findsOneWidget);
+      expect(note(), findsNothing);
+      await finish(tester);
+    });
+
+    testWidgets('all back: no deposit, note, Confirm sends the counts', (
+      tester,
+    ) async {
+      await openCheckout(tester, customer: regular);
+      await enterEmpties(tester, starId(), '2');
+      await enterEmpties(tester, heroId(), '1');
+
+      expect(
+        tester.widget<Text>(note()).data,
+        'All crates back. This sale completes now.',
+      );
+      expect(inCheckout(find.byKey(CheckoutKeys.crateDeposit)), findsNothing);
+      expect(inCheckout(find.byKey(CheckoutKeys.cratesTaken)), findsNothing);
+      expect(inCheckout(find.byKey(CheckoutKeys.crateValueMissing)), findsNothing);
+
+      await enterAmountPaid(tester, '32500');
+      await tapButton(tester, 'Confirm Payment');
+
+      expect(orders.calls.single['totalAmountKobo'], 3250000);
+      expect(orders.calls.single['crateDepositPaidKobo'], 0);
+      expect(orders.calls.single['cratesReturnedByManufacturer'], {
+        starId(): 2.0,
+        heroId(): 1.0,
+      });
+      await finish(tester);
+    });
+
+    testWidgets('some back: the deposit shrinks and the payable moves live', (
+      tester,
+    ) async {
+      await openCheckout(tester, customer: regular);
+      final starRow = inCheckout(
+        find.text('2 crates · Full ${formatCurrency(2000)} · No deposit'),
+      );
+      await tester.ensureVisible(starRow);
+      await tester.pump();
+      await tester.tap(starRow);
+      await settle(tester);
+      await tester.tap(find.text('Use full (${formatCurrency(2000)})'));
+      await tester.pump();
+      await tester.tap(
+        find.descendant(
+          of: find.byType(BottomSheet),
+          matching: find.widgetWithText(AppButton, 'Save'),
+        ),
+      );
+      await settle(tester);
+      expect(inCheckout(find.text(formatCurrency(34500))), findsWidgets);
+
+      // 1.5 of Star's 2 back: the ₦2,000 deposit clamps to the ₦500 now full.
+      await enterEmpties(tester, starId(), '1.5');
+      expect(
+        tester.widget<Text>(note()).data,
+        '1.5 crates still to come back. This sale goes to Pending.',
+      );
+      expect(
+        inCheckout(find.text('0.5 crates · Full ${formatCurrency(500)} · Full')),
+        findsOneWidget,
+      );
+      expect(inCheckout(find.text(formatCurrency(33000))), findsWidgets);
+
+      // All of Star back: its deposit goes, and clearing the field keeps it 0.
+      await enterEmpties(tester, starId(), '2');
+      expect(inCheckout(find.text(formatCurrency(32500))), findsWidgets);
+      await enterEmpties(tester, starId(), '');
+      expect(note(), findsNothing);
+      expect(
+        inCheckout(
+          find.text('2 crates · Full ${formatCurrency(2000)} · No deposit'),
+        ),
+        findsOneWidget,
+      );
+
+      await enterEmpties(tester, heroId(), '1');
+      await enterAmountPaid(tester, '32500');
+      await settle(tester); // the caret's scroll ignores taps until it stops
+      await tapButton(tester, 'Confirm Payment');
+      expect(orders.calls.single['crateDepositPaidKobo'], 0);
+      expect(orders.calls.single['cratesReturnedByManufacturer'], {
+        heroId(): 1.0,
+      });
+      await finish(tester);
+    });
+
+    testWidgets('a count off the quarter step is refused', (tester) async {
+      await openCheckout(tester, customer: regular);
+      await enterEmpties(tester, starId(), '0.3');
+      expect(note(), findsNothing);
+      await enterAmountPaid(tester, '32500');
+      await tapButton(tester, 'Confirm Payment');
+      expect(orders.calls, isEmpty);
+      expect(
+        find.text('Crate counts go in quarters: 0, 0.25, 0.5, 0.75, 1 …'),
+        findsOneWidget,
+      );
+      await finish(tester);
+    });
+
+    testWidgets('more than this sale holds is refused', (tester) async {
+      await openCheckout(tester, customer: regular);
+      await enterEmpties(tester, starId(), '3');
+      expect(note(), findsNothing);
+      await enterAmountPaid(tester, '32500');
+      await tapButton(tester, 'Confirm Payment');
+      expect(orders.calls, isEmpty);
+      expect(
+        find.text('Only 2 crates of Nigerian Breweries are in this sale.'),
+        findsOneWidget,
+      );
+      await finish(tester);
+    });
+
+    testWidgets('walk-ins can use it too', (tester) async {
+      await openCheckout(tester);
+      await enterEmpties(tester, starId(), '2');
+      await enterEmpties(tester, heroId(), '1');
+      await tapButton(tester, 'Confirm Payment');
+      expect(orders.calls.single['customerId'], isNull);
+      expect(orders.calls.single['cratesReturnedByManufacturer'], {
+        starId(): 2.0,
+        heroId(): 1.0,
+      });
+      await finish(tester);
+    });
+
+    testWidgets('no field without the Record Crate Return gate', (tester) async {
+      await pumpCheckout(tester, env: env, crates: true, grantedKeys: const {});
+      expect(
+        inCheckout(find.byKey(CheckoutKeys.emptiesReturnedSection)),
+        findsNothing,
+      );
+      expect(inCheckout(find.byKey(CheckoutKeys.cratesTaken)), findsOneWidget);
+      await disposeScreen(tester);
+    });
+
+    testWidgets('the keyboard never covers the focused count', (tester) async {
+      const keyboard = 300.0;
+      await pumpCheckout(
+        tester,
+        env: env,
+        crates: true,
+        viewInsets: const EdgeInsets.only(bottom: keyboard),
+      );
+      for (final id in ['mfr-hero', 'mfr-nb']) {
+        await tester.showKeyboard(emptiesField(id));
+        await settleCheckout(tester);
+        expect(
+          tester.getBottomLeft(emptiesField(id)).dy,
+          lessThanOrEqualTo(844 - keyboard),
+        );
+      }
+      FocusManager.instance.primaryFocus?.unfocus();
+      await disposeScreen(tester);
+    });
   });
 }
 

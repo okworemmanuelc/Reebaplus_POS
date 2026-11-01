@@ -732,7 +732,9 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
   /// #550 (ADR 0032) — withdraws a REJECTED reversal's never-uploaded crate
   /// ledger rows ([ids], the held `crate_ledger` upserts the cloud refused with
   /// the claim) and moves the customer's local-only crate cache back with them.
-  /// The inverse of [reverseIssuedByCustomer]'s cancel-path writes. Business
+  /// The inverse of [reverseIssuedByCustomer]'s cancel-path writes, and of
+  /// [reverseExchangeEmpties]': an exchange compensation row has no customer,
+  /// so it moves the pool scalar and store cache back instead (#649). Business
   /// scoped; a no-op on an empty list.
   Future<void> withdrawRejectedReversalRows(List<String> ids) async {
     if (ids.isEmpty) return;
@@ -744,7 +746,17 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     for (final r in rows) {
       final customerId = r.customerId;
       final manufacturerId = r.manufacturerId;
-      if (customerId == null || manufacturerId == null) continue;
+      if (manufacturerId == null) continue;
+      if (customerId == null) {
+        if (r.reason == kCheckoutExchangeReversalReason) {
+          await _movePoolProjection(
+            manufacturerId,
+            storeId: r.storeId,
+            delta: -r.quantityDelta,
+          );
+        }
+        continue;
+      }
       await customUpdate(
         'UPDATE customer_crate_balances SET balance = balance - ? '
         'WHERE business_id = ? AND customer_id = ? AND manufacturer_id = ?',
@@ -887,6 +899,145 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
         orderId: orderId,
       );
     });
+  }
+
+  /// **Empties Exchange** (#649, ADR 0033): credit the pool with the [quantity]
+  /// crates handed over at Checkout. Same movement as Confirm's credit, with its
+  /// own deterministic id ([kCheckoutExchangeReason]) so a later Confirm of a
+  /// part-exchanged sale cannot collide on the primary key.
+  ///
+  /// Writes no `manufacturers` row to the outbox: the scalar is off the push set
+  /// (#159), so nothing about the brand changed for the cloud, and a row held
+  /// behind the sale could swallow a real manufacturer edit that coalesced into
+  /// it. No own transaction: the caller ([OrdersDao.createOrder]) is inside one.
+  Future<void> addExchangeEmpties({
+    required String manufacturerId,
+    required double quantity,
+    required String storeId,
+    required String orderId,
+    required String performedBy,
+  }) async {
+    if (quantity <= 0) return;
+    await _movePoolProjection(
+      manufacturerId,
+      storeId: storeId,
+      delta: quantity,
+    );
+    await _appendPoolLedgerRow(
+      manufacturerId: manufacturerId,
+      storeId: storeId,
+      quantityDelta: quantity,
+      movementType: kCrateMovementAdjusted,
+      performedBy: performedBy,
+      orderId: orderId,
+      reason: kCheckoutExchangeReason,
+      idSeed: kCheckoutExchangeReason,
+    );
+  }
+
+  /// The crates still credited to the pool by [orderId]'s Empties Exchange, per
+  /// brand: exchange rows net of their reversals. Business scoped.
+  Future<Map<String, double>> exchangeEmptiesForOrder(String orderId) async {
+    final byBrand = <String, double>{};
+    for (final row in await _exchangeRows(orderId)) {
+      final brand = row.manufacturerId!;
+      byBrand[brand] = (byBrand[brand] ?? 0) + row.quantityDelta;
+    }
+    byBrand.removeWhere((_, crates) => crates <= 0);
+    return byBrand;
+  }
+
+  /// Undoes [orderId]'s Empties Exchange: a compensating negative row per brand
+  /// and store, with the scalar and store cache moved back. Modelled on
+  /// [_reverseIssuedByCustomer], and like it [enqueue] tells a Pending refund
+  /// (true, the cloud accepted the sale) from a rejected sale (false, the cloud
+  /// never saw it). The row keeps a fresh id: a reversal that loses the
+  /// first-reversal race is withdrawn, so it must not share an id with the
+  /// winner's. Netting against earlier reversals keeps a second run a no-op. No
+  /// own transaction: the caller is inside one. A no-op for a sale with no
+  /// exchange.
+  Future<void> reverseExchangeEmpties({
+    required String orderId,
+    required String staffId,
+    required bool enqueue,
+  }) async {
+    final net = <(String, String?), double>{};
+    for (final row in await _exchangeRows(orderId)) {
+      final key = (row.manufacturerId!, row.storeId);
+      net[key] = (net[key] ?? 0) + row.quantityDelta;
+    }
+    final now = DateTime.now();
+    for (final entry in net.entries) {
+      if (entry.value <= 0) continue;
+      final (manufacturerId, storeId) = entry.key;
+      final compRow = CrateLedgerCompanion.insert(
+        id: Value(UuidV7.generate()),
+        businessId: requireBusinessId(),
+        manufacturerId: Value(manufacturerId),
+        storeId: Value(storeId),
+        quantityDelta: -entry.value,
+        movementType: kCrateMovementAdjusted,
+        referenceOrderId: Value(orderId),
+        performedBy: Value(staffId),
+        reason: const Value(kCheckoutExchangeReversalReason),
+        lastUpdatedAt: Value(now),
+      );
+      await into(crateLedger).insert(compRow);
+      await _movePoolProjection(
+        manufacturerId,
+        storeId: storeId,
+        delta: -entry.value,
+      );
+      if (enqueue) {
+        await db.syncDao.enqueueUpsert('crate_ledger', compRow);
+      }
+    }
+  }
+
+  /// Every exchange row and exchange reversal row of [orderId].
+  Future<List<CrateLedgerData>> _exchangeRows(String orderId) =>
+      (select(crateLedger)..where(
+            (l) =>
+                whereBusiness(l) &
+                l.referenceOrderId.equals(orderId) &
+                l.customerId.isNull() &
+                l.manufacturerId.isNotNull() &
+                l.reason.isIn(const [
+                  kCheckoutExchangeReason,
+                  kCheckoutExchangeReversalReason,
+                ]),
+          ))
+          .get();
+
+  /// Moves the local-only pool projections by [delta], exactly and unclamped so
+  /// a withdrawn reversal lands back where it started. On a phone that pulled
+  /// the sale these projections never saw the credit and may dip below zero;
+  /// nothing reads them (ADR 0020), so that is harmless.
+  Future<void> _movePoolProjection(
+    String manufacturerId, {
+    required String? storeId,
+    required double delta,
+  }) async {
+    // last_updated_at stays put: nothing here reaches the outbox, so bumping it
+    // would put this phone ahead of the cloud and make the next pull drop a
+    // peer's real edit of this brand (timestamp LWW, invariant #12).
+    await customUpdate(
+      'UPDATE manufacturers SET empty_crate_stock = empty_crate_stock + ? '
+      'WHERE id = ? AND business_id = ?',
+      variables: [
+        Variable(delta),
+        Variable(manufacturerId),
+        Variable(requireBusinessId()),
+      ],
+      updates: {manufacturers},
+    );
+    if (storeId != null) {
+      await db.storeCrateBalancesDao.applyDelta(
+        storeId: storeId,
+        manufacturerId: manufacturerId,
+        delta: delta,
+      );
+    }
   }
 
   /// Debit the physical pool because STORED empties were damaged/lost (§17.2,
@@ -2760,6 +2911,9 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
   /// DETERMINISTIC one derived from `(order, manufacturer, movement)` — see
   /// [addEmptiesToPool] for why (#188). Without it the id stays a fresh
   /// [UuidV7.generate], which is correct for an order-less pool movement.
+  /// [idSeed] replaces the movement type in that seed for a second kind of row
+  /// on the same (order, manufacturer): the Empties Exchange shares `adjusted`
+  /// with Confirm's credit and would otherwise collide on the primary key.
   ///
   /// [storeId] is deliberately NOT part of that seed. It is the CONFIRMING
   /// DEVICE's active store, not a fact about the order, so two tills settling
@@ -2778,13 +2932,14 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     String? orderId,
     int? ratePerCrateKobo,
     String? reason,
+    String? idSeed,
   }) async {
     final ledgerComp = CrateLedgerCompanion.insert(
       id: Value(
         orderId == null
             ? UuidV7.generate()
             : UuidV7.deterministic(
-                'crate_pool:$orderId:$manufacturerId:$movementType',
+                'crate_pool:$orderId:$manufacturerId:${idSeed ?? movementType}',
               ),
       ),
       businessId: requireBusinessId(),

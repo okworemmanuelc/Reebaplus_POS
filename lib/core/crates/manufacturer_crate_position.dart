@@ -15,6 +15,7 @@
 /// plain values and returns immutable data structures.
 library;
 
+import 'package:reebaplus_pos/core/crates/crate_exchange.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
 
 export 'package:reebaplus_pos/core/crates/crate_shortage.dart'
@@ -359,6 +360,10 @@ String labelForCrateDamageReason(String reason) {
   switch (reason) {
     case 'rotten_wood':
       return 'Rotten wood';
+    case kCheckoutExchangeReason:
+      return 'Returned at checkout';
+    case kCheckoutExchangeReversalReason:
+      return 'Returned at checkout, sale refunded';
     default:
       if (reason.isEmpty) return reason;
       final spaced = reason.replaceAll('_', ' ');
