@@ -12,11 +12,6 @@ final class DebtLimitOk extends DebtLimitResult {
   const DebtLimitOk();
 }
 
-/// The sale would leave the customer in debt and they have no limit set.
-final class DebtLimitNotSet extends DebtLimitResult {
-  const DebtLimitNotSet();
-}
-
 /// The sale would take the customer past their limit by [overByKobo].
 final class DebtLimitExceeded extends DebtLimitResult {
   const DebtLimitExceeded({required this.limitKobo, required this.overByKobo});
@@ -29,10 +24,13 @@ final class DebtLimitExceeded extends DebtLimitResult {
 /// [balanceKobo] is the spendable balance before the sale (negative = debt).
 /// Only a sale that ADDS debt is gated: a fully paid or overpaid sale never is.
 ///
+/// A [limitKobo] of 0 (or none) means NO limit: credit is unlimited (owner rule
+/// 2026-11-01, #621). Only a positive limit caps the debt.
+///
 /// [excludeOwnAmount] is Pay on delivery (#432): this order's own amount is
 /// left out, so only the debt the customer ALREADY had is checked, exactly as
-/// usual. A new customer with no limit can then be served, while prior debt
-/// over the limit (or with no limit set) still blocks.
+/// usual. A new customer can then be served, while prior debt over a positive
+/// limit still blocks.
 DebtLimitResult checkDebtLimit({
   required int balanceKobo,
   required int paidKobo,
@@ -48,7 +46,7 @@ DebtLimitResult checkDebtLimit({
     projectedKobo = balanceKobo + paidKobo - totalKobo;
   }
   if (projectedKobo >= 0) return const DebtLimitOk();
-  if (limitKobo <= 0) return const DebtLimitNotSet();
+  if (limitKobo <= 0) return const DebtLimitOk();
   if (projectedKobo < -limitKobo) {
     return DebtLimitExceeded(
       limitKobo: limitKobo,

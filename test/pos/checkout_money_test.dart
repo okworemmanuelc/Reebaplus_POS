@@ -534,7 +534,7 @@ void main() {
   });
 
   testWidgets('a new customer with no debt limit can be served Pay on '
-      'delivery, but not an ordinary credit sale (#432)', (tester) async {
+      'delivery (#432)', (tester) async {
     await openCheckout(tester, customer: newOnline, onlineOrderId: 'online-1');
     await tapPayOnDelivery(tester);
     expect(inCheckout(find.byKey(CheckoutKeys.debtLimit)), findsNothing);
@@ -543,8 +543,8 @@ void main() {
     await finish(tester);
   });
 
-  testWidgets('the usual credit sale still needs a debt limit (#432 '
-      'unchanged rule)', (tester) async {
+  testWidgets('a customer with no debt limit can book an ordinary credit '
+      'sale, uncapped (#621)', (tester) async {
     await openCheckout(tester, customer: newOnline);
     final card = inCheckout(find.text('Register as Credit Sale'));
     await tester.ensureVisible(card);
@@ -552,7 +552,8 @@ void main() {
     await tester.tap(card);
     await tester.pump();
     await tapButton(tester, 'Confirm Payment');
-    expect(orders.calls, isEmpty);
+    expect(orders.calls, hasLength(1));
+    expect(inCheckout(find.byKey(CheckoutKeys.debtLimit)), findsNothing);
     await finish(tester);
   });
 
@@ -589,8 +590,8 @@ void main() {
     await finish(tester);
   });
 
-  testWidgets('prior debt with no limit set still blocks Pay on delivery '
-      '(#432)', (tester) async {
+  testWidgets('prior debt with no limit set is fine for Pay on delivery '
+      '(unlimited credit, #621)', (tester) async {
     await openCheckout(
       tester,
       customer: newOnline,
@@ -599,7 +600,7 @@ void main() {
     );
     await tapPayOnDelivery(tester);
     await tapButton(tester, 'Confirm Payment');
-    expect(orders.calls, isEmpty);
+    expect(orders.calls, hasLength(1));
     await finish(tester);
   });
 

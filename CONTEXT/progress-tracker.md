@@ -7,6 +7,10 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #621: No credit limit unless one is set (2026-11-01, ready for review)
+- `checkDebtLimit`: a limit of 0/none = unlimited credit; a positive limit still caps. `DebtLimitNotSet` removed, checkout "no limit set" messages removed, customer limit sheet says "Leave empty for no limit".
+- Cloud migration 0237 re-issues `checkout_order` (same 9-arg signature) with the gate `v_limit > 0 AND projected < -v_limit`. NOT deployed (supervisor deploys); pos-parity issue in reebaplus-web to be filed by the supervisor.
+
 ### Issue #608: Play Console recommendations (2026-10-31, ready for review)
 
 Edge-to-edge on Android 10–14 too: `MainActivity` calls `enableEdgeToEdge()` after `super.onCreate`, and `main.dart` sets `SystemUiMode.edgeToEdge`, because without it Flutter re-applies its old flags on resume and undoes it on API 29. Android 15+ was already edge-to-edge (targetSdk 36), so no new inset bugs are possible. Deleted the dead `com.reebaplus.reebaplus_pos.MainActivity`. AGP 8.11.1 → 8.13.2 + `android.r8.optimizedResourceShrinking=true`. Bitmap-downsampling warning = third-party code the app never reaches (no change). AGP 9 = #609 (on hold until Flutter 3.47+ built-in Kotlin). No Drift/cloud change.
