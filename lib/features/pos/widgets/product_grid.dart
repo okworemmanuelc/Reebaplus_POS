@@ -115,7 +115,7 @@ class ProductGrid extends StatelessWidget {
     required this.onProductTap,
     required this.controller,
     this.isListView = false,
-    this.gridColumns = 2,
+    this.gridColumns = 3,
   });
 
   /// Column count for [availableWidth] (the grid's own width: the screen minus

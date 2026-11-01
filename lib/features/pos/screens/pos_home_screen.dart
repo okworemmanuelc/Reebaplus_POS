@@ -83,7 +83,11 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
   bool _isListView = false;
   // #384: 2 columns on an upright phone by default (the mockup); a saved
   // view-selector choice still wins.
-  int _gridColumns = 2;
+  /// Grid columns until the user picks a layout in the view selector: 3, so a
+  /// medium phone (380–600dp) opens on three columns. [ProductGrid.columnsFor]
+  /// still caps a small phone (<380dp) at 2.
+  static const _defaultGridColumns = 3;
+  int _gridColumns = _defaultGridColumns;
   bool _showPosHint = false;
 
   @override
@@ -127,7 +131,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
     if (mounted) {
       setState(() {
         _isListView = prefs.getBool('pos_is_list_view') ?? false;
-        _gridColumns = prefs.getInt('pos_grid_columns') ?? 2;
+        _gridColumns = prefs.getInt('pos_grid_columns') ?? _defaultGridColumns;
       });
     }
   }

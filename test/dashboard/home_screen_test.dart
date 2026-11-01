@@ -9,6 +9,7 @@ import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
@@ -1519,6 +1520,45 @@ void main() {
         await disposeScreen(tester);
       });
     }
+  });
+
+  group('hide figures (eye toggle)', () {
+    testWidgets('the eye masks every money figure and remembers it', (
+      tester,
+    ) async {
+      await seedSales();
+      await pumpHome(
+        tester,
+        size: const Size(1280, 800),
+        padding: EdgeInsets.zero,
+      );
+      Finder masked(Key card) => find.descendant(
+        of: find.byKey(card),
+        matching: find.textContaining('••••••'),
+      );
+      expect(masked(HomeKeys.sales), findsNothing);
+
+      await tester.tap(find.byKey(HomeKeys.hideFigures));
+      await tester.pump();
+      for (final k in [
+        HomeKeys.sales,
+        HomeKeys.profit,
+        HomeKeys.expenses,
+        HomeKeys.stockValue,
+      ]) {
+        expect(masked(k), findsOneWidget, reason: '$k');
+      }
+      // Counts are not money: Pending Orders still shows its number.
+      expect(masked(HomeKeys.pending), findsNothing);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool('home_hide_figures'), isTrue);
+
+      await tester.tap(find.byKey(HomeKeys.hideFigures));
+      await tester.pump();
+      expect(masked(HomeKeys.sales), findsNothing);
+      expect(prefs.getBool('home_hide_figures'), isFalse);
+      await disposeScreen(tester);
+    });
   });
 }
 

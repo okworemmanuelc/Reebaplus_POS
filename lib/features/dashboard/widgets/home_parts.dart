@@ -18,6 +18,7 @@ import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 abstract final class HomeKeys {
   static const topBar = Key('home-top-bar');
   static const periodHeader = Key('home-period-header');
+  static const hideFigures = Key('home-hide-figures');
   static const periodPill = Key('home-period-pill');
   static const reportsPill = Key('home-reports-pill');
   static const reportsDot = Key('home-reports-dot');
