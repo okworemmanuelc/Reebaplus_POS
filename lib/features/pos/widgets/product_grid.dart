@@ -57,17 +57,14 @@ double posTileExtent(BuildContext context) {
   final scaler = MediaQuery.textScalerOf(context);
   double line(double base) => scaler.scale(context.getRFontSize(base)) * 1.35;
   return context.getRSize(10) * 2 + // tile padding
-      // art: smaller on a short screen, so a full row fits under the band
-      context.getRSize(posShortHeight(context) ? 0 : 60) +
-      context.getRSize(10) + // art → name
+      // no art on a short screen, so a full row fits under the band
+      (posShortHeight(context) ? 0 : context.getRSize(60 + 10)) +
       line(15) * 2 + // name, up to two lines
       line(12) * posTileSubtitleLines(context) + // size · unit
       context.getRSize(8) +
       line(16) + // price, on its own line
       context.getRSize(4) +
-      line(12) + // stock pill, below the price
-      // breathing room; a short sideways phone has none to spare
-      (posShortHeight(context) ? 0 : context.getRSize(6)) +
+      line(12) + context.getRSize(6) + // stock pill, below the price
       4; // the in-cart border
 }
 
@@ -338,7 +335,10 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
         final bool atStockLimit =
             !isOutOfStock &&
             cartQty >=
-                Qty.sellable(stock, allowParts: product.allowFractionalSales);
+                Qty.sellable(
+                  stock,
+                  allowParts: product.allowFractionalSales,
+                );
         final VoidCallback? onTap = isOutOfStock
             ? null
             : (atStockLimit
@@ -369,6 +369,7 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
           name: product.name,
           subtitle: subtitle,
           subtitleMaxLines: posTileSubtitleLines(context),
+          showArt: !posShortHeight(context),
           priceLabel: formatCurrency(price),
           stockLabel: formatQty(stock),
           stockLevel: level,

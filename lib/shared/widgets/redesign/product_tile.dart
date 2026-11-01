@@ -46,6 +46,7 @@ class ProductTile extends StatelessWidget {
     this.onLongPress,
     this.tappableWhenOut = false,
     this.subtitleMaxLines = 1,
+    this.showArt = true,
   });
 
   final String name;
@@ -53,6 +54,10 @@ class ProductTile extends StatelessWidget {
 
   /// Lines the [subtitle] may take (POS passes 2 so the unit is never cut off).
   final int subtitleMaxLines;
+
+  /// False leaves the art out (POS on a short sideways phone, where only a
+  /// sliver of it would fit).
+  final bool showArt;
 
   /// Formatted by the caller (e.g. `formatCurrency`); null shows no price.
   final String? priceLabel;
@@ -135,8 +140,10 @@ class ProductTile extends StatelessWidget {
         children: [
           // The art takes whatever height the text leaves (ui-context
           // "Responsive Grid & Card Layouts").
-          Expanded(child: art),
-          SizedBox(height: context.getRSize(10)),
+          if (showArt) ...[
+            Expanded(child: art),
+            SizedBox(height: context.getRSize(10)),
+          ],
           Text(
             name,
             maxLines: 2,
