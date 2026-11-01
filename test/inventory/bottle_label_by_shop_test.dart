@@ -2,7 +2,8 @@
 // empty crates (`businessTracksCrates`: a crate business type AND
 // `tracks_empty_crates`). A pharmacy, a supermarket, or a bar that switched
 // crate counting off sells a "Bottle" of something and must read "Bottle":
-// on the Inventory row and on the receipt. Sample data only.
+// on the Inventory row's unit label. The unit is never put in front of the
+// product name, on the row or on the receipt. Sample data only.
 
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
@@ -89,10 +90,11 @@ void main() {
             .toList();
         expect(bottleRows, hasLength(3));
         for (final row in bottleRows) {
+          // The unit shows in its own label, never in front of the name.
           expect(row.unit, expected);
-          expect(row.name, startsWith('$expected '));
+          expect(row.name, isNot(startsWith('Bottle')));
         }
-        expect(bottleRows.map((r) => r.name), contains('$expected Star Lager'));
+        expect(bottleRows.map((r) => r.name), contains('Star Lager'));
         if (!shop.crate) {
           expect(find.textContaining('Bottle Crate'), findsNothing);
         }
@@ -100,7 +102,7 @@ void main() {
       });
     });
 
-    group('${shop.label}: a Bottle reads "$expected" on the receipt', () {
+    group('${shop.label}: the receipt shows just the product name', () {
       late ScreenTestEnvironment env;
 
       setUp(() async {
@@ -129,19 +131,15 @@ void main() {
         expect(
           find.descendant(
             of: sheet,
-            matching: find.textContaining('$expected Star Lager'),
+            matching: find.text('Star Lager'),
           ),
           findsOneWidget,
         );
-        if (!shop.crate) {
-          expect(
-            find.descendant(
-              of: sheet,
-              matching: find.textContaining('Bottle Crate'),
-            ),
-            findsNothing,
-          );
-        }
+        // The receipt line is the product name alone — no unit word.
+        expect(
+          find.descendant(of: sheet, matching: find.textContaining('Bottle')),
+          findsNothing,
+        );
         await tester.pump(const Duration(seconds: 5));
         await disposeScreen(tester);
       });

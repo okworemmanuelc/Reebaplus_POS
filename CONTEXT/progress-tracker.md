@@ -7,6 +7,10 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Product name alone, no unit or size (2026-11-01, branch `fix/product-name-no-unit`)
+
+`productDisplayName(name)` takes only the name: "Heineken", not "Bottle Heineken" or "Heineken (B)", on Inventory rows, the cart, Add Product suggestions and every receipt (screen, paper, printed text). Sizes are typed into the name; the form already saves no size, so only older products hold one, and it still shows on the POS/Receive tile subtitles, scan sheets and the Manufacturer screen. The unit keeps its own label. App-only: no table, status or money change. Leftover: `tracksCrates` on `ReceiptWidget`, `PaperReceipt` and `buildReceiptLines` is now unused.
+
 ### POS: List or Grid only, 3 columns on phones (2026-11-01, ready for review)
 Branch `feat/pos-list-grid-only`. The view selector offers only List View and Grid View; the saved column count (`pos_grid_columns`) is gone. `ProductGrid.columnsFor(width)` = as many 170dp columns as fit, never under 3: every upright phone gets 3, tablets, wide screens and sideways phones fill their width. Tiles under 100dp (`kPosTileDesignWidth`, small phones) are laid out at 100dp and scaled down whole, keeping the #641 tile layout. No schema, sync or money change, so no pos-parity issue. Known: `receive_checkout_*` goldens (6) already fail on main, unrelated.
 

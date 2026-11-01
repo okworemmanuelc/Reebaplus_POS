@@ -1137,11 +1137,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
           productId: item['id'] as String?,
           name: item['name'] as String,
         ),
-        name: productDisplayName(
-          item['name'] as String,
-          item['size'] as String?,
-          crates: crates,
-        ),
+        name: productDisplayName(item['name'] as String),
         icon: visual.icon,
         tileTint: visual.tint,
         tileIconColor: visual.iconColor,

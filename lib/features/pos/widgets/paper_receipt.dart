@@ -308,12 +308,7 @@ class PaperReceipt extends StatelessWidget {
     final qty = ReceiptFormat.num(item['qty']);
     final price = ReceiptFormat.num(item['price']);
     final line = ReceiptFormat.lineAmount(price, qty);
-    final label = productDisplayName(
-      item['name'].toString(),
-      item['size'] as String?,
-      unit: item['unit'] as String?,
-      crates: tracksCrates,
-    );
+    final label = productDisplayName(item['name'].toString());
     final q = ReceiptFormat.qty(qty);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

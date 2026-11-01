@@ -270,12 +270,7 @@ class ReceiptWidget extends StatelessWidget {
             final qty = _num(item['qty']);
             final price = _num(item['price']);
             final lineTotal = ReceiptFormat.lineAmount(price, qty);
-            final label = productDisplayName(
-              item['name'] as String,
-              item['size'] as String?,
-              unit: item['unit'] as String?,
-              crates: tracksCrates,
-            );
+            final label = productDisplayName(item['name'] as String);
             return Container(
               padding: EdgeInsets.symmetric(vertical: context.getRSize(8)),
               decoration: const BoxDecoration(
