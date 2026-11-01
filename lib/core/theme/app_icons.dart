@@ -24,6 +24,7 @@ abstract final class AppIcons {
   static const IconData location = Symbols.location_on;
   static const IconData menu = Symbols.menu;
   static const IconData moreVertical = Symbols.more_vert;
+  static const IconData moreHorizontal = Symbols.more_horiz;
 
   // --- Commerce ---
   static const IconData balance = Symbols.scale;
@@ -195,6 +196,8 @@ abstract final class AppIcons {
   static const IconData list = Symbols.format_list_bulleted;
   static const IconData lockClock = Symbols.lock_clock;
   static const IconData maintenance = Symbols.build;
+  static const IconData labour = Symbols.engineering;
+  static const IconData electricity = Symbols.bolt;
   static const IconData map = Symbols.map;
   static const IconData notification = Symbols.notifications;
   static const IconData notificationOff = Symbols.notifications_off;

@@ -6,8 +6,6 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/providers/first_run_surface_state.dart';
 import 'package:reebaplus_pos/features/expenses/screens/expenses_screen.dart';
-import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
-import 'package:reebaplus_pos/shared/widgets/tabbed_sliver_scaffold.dart';
 
 import '../helpers/screen_harness.dart';
 import '../helpers/viewports.dart';
@@ -22,14 +20,13 @@ import '../helpers/viewports.dart';
 /// overflow-only assertion passes a blank screen.
 ///
 /// Acceptance criteria covered here:
-///   1. Built on the shared [TabbedSliverScaffold] from #243.
-///   2. No tab body holds a fixed-height band above a flexible remainder.
+///   1. One scroll view (since #652; was the shared tabbed scaffold).
+///   2. No body holds a fixed-height band above a flexible remainder.
 ///   3. Pumped at the smallest supported portrait phone (320x568), the shortest
 ///      supported landscape phone (800x360), and a comfortable portrait control.
 ///   4. Every test asserts **both** no overflow *and* one complete expense row
 ///      laid out and hit-testable.
 ///   5. Both an empty and a populated data state.
-///   6. Tab swiping and per-tab scroll retention survive the restructure.
 ///   7. Unconditional: no orientation or short-viewport branch anywhere.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -50,17 +47,8 @@ void main() {
     description: 'expense row',
   );
 
-  /// The first tab's own scroll view — the one scrollable surface.
-  ///
-  /// Scoped through [TabSliverBody] on purpose: a `NestedScrollView` builds its
-  /// outer viewport as a `CustomScrollView` too, so an unscoped `.first` grabs
-  /// the header scroller and every gesture lands on the wrong surface.
-  Finder tabSurface() => find
-      .descendant(
-        of: find.byType(TabSliverBody).first,
-        matching: find.byType(CustomScrollView),
-      )
-      .first;
+  /// The screen's one scroll view (#652).
+  Finder scrollSurface() => find.byType(CustomScrollView).first;
 
   /// Drift's stream plumbing resolves in real async time; the screen paints its
   /// list only after those settle. `pumpAndSettle` alone deadlocks against the
@@ -106,7 +94,6 @@ void main() {
               description: 'Expense $i',
               paymentMethod: const Value('cash'),
               status: Value(status),
-              // Inside "This Month", the screen's default period.
               expenseDate: Value(now.subtract(Duration(minutes: i))),
             ),
           );
@@ -164,7 +151,7 @@ void main() {
         await expectContentRowVisible(
           tester,
           expenseRows(),
-          scrollable: tabSurface(),
+          scrollable: scrollSurface(),
           reason: 'Expenses showed no complete expense row at $name',
         );
 
@@ -201,162 +188,17 @@ void main() {
 
         // The empty message may sit below the scroll-away header on a short
         // viewport; one scroll must reach it.
-        await tester.drag(tabSurface(), const Offset(0, -400));
+        await tester.drag(scrollSurface(), const Offset(0, -400));
         await tester.pump(const Duration(milliseconds: 250));
 
         expect(
           find.text('No expenses found'),
           findsOneWidget,
-          reason: 'An empty period must still show its message at $name',
+          reason: 'An empty list must still show its message at $name',
         );
 
         await teardownScreen(tester);
       });
-    });
-  });
-
-  group('Expenses keeps the behaviour the restructure could have cost', () {
-    setUp(() async {
-      env = await setupScreenTestEnvironment();
-      await seedExpenses(env, count: 30);
-    });
-
-    testWidgets('each tab remembers its scroll position across tab switches', (
-      tester,
-    ) async {
-      await pumpScreen(
-        tester,
-        env: env,
-        size: pixel7Portrait,
-        screen: const ExpensesScreen(),
-        grantedKeys: expenseGrants,
-        overrides: [
-          firstRunSurfaceStateProvider.overrideWithValue(
-            FirstRunSurfaceState.hasContent,
-          ),
-        ],
-        settle: false,
-      );
-      await settleScreen(tester);
-
-      ScrollPosition expensesPosition() => tester
-          .state<ScrollableState>(
-            find
-                .descendant(of: tabSurface(), matching: find.byType(Scrollable))
-                .first,
-          )
-          .position;
-
-      await tester.drag(tabSurface(), const Offset(0, -800));
-      await tester.pumpAndSettle();
-      final scrolledTo = expensesPosition().pixels;
-      expect(
-        scrolledTo,
-        greaterThan(0),
-        reason: 'The Expenses tab must scroll',
-      );
-
-      // Target the Tab itself: "Expenses" is also the app bar's title, so a
-      // bare text finder is ambiguous and can tap the heading instead.
-      await tester.tap(find.widgetWithText(Tab, 'Stats'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(Tab, 'Expenses'));
-      await tester.pumpAndSettle();
-
-      expect(
-        expensesPosition().pixels,
-        closeTo(scrolledTo, 1.0),
-        reason: "Switching away and back must not lose the reader's place",
-      );
-
-      await teardownScreen(tester);
-    });
-
-    testWidgets('swiping sideways still moves between tabs', (tester) async {
-      await pumpScreen(
-        tester,
-        env: env,
-        size: pixel7Portrait,
-        screen: const ExpensesScreen(),
-        grantedKeys: expenseGrants,
-        overrides: [
-          firstRunSurfaceStateProvider.overrideWithValue(
-            FirstRunSurfaceState.hasContent,
-          ),
-        ],
-        settle: false,
-      );
-      await settleScreen(tester);
-
-      final pager = tester.state<ScrollableState>(
-        find
-            .descendant(
-              of: find.byType(TabBarView),
-              matching: find.byType(Scrollable),
-            )
-            .first,
-      );
-      final onePage = pager.position.viewportDimension;
-
-      final swipe = await tester.startGesture(tester.getCenter(tabSurface()));
-      for (var step = 0; step < 8; step++) {
-        await swipe.moveBy(Offset(-onePage * 0.08, 0));
-        await tester.pump(const Duration(milliseconds: 16));
-      }
-      await swipe.up();
-      await tester.pumpAndSettle();
-
-      expect(
-        pager.position.pixels,
-        closeTo(onePage, 1.0),
-        reason: 'A sideways swipe must snap the pager to the Stats tab',
-      );
-
-      await teardownScreen(tester);
-    });
-
-    testWidgets('the period selector keeps a full tap target at 800x360', (
-      tester,
-    ) async {
-      await pumpScreen(
-        tester,
-        env: env,
-        size: androidCompactLandscape,
-        screen: const ExpensesScreen(),
-        grantedKeys: expenseGrants,
-        overrides: [
-          firstRunSurfaceStateProvider.overrideWithValue(
-            FirstRunSurfaceState.hasContent,
-          ),
-        ],
-        settle: false,
-      );
-      await settleScreen(tester);
-
-      // The header scrolls away, so the selector may start off screen; it must
-      // still exist at its full height rather than have been shrunk to fit.
-      final selector = find.text('This Month', skipOffstage: false);
-      expect(
-        selector,
-        findsWidgets,
-        reason: 'The period selector must survive sideways',
-      );
-
-      // Measured by layout, not hit-testing, so it holds while the header has
-      // scrolled out of view.
-      final dropdown = find
-          .ancestor(
-            of: selector.first,
-            matching: find.byType(AppDropdown<String>, skipOffstage: false),
-          )
-          .first;
-      expect(
-        tester.getSize(dropdown).height,
-        greaterThanOrEqualTo(kMinInteractiveDimension),
-        reason: 'The period selector must not shrink below a full tap target',
-      );
-
-      await teardownScreen(tester);
     });
   });
 }

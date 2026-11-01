@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
+import 'package:reebaplus_pos/core/theme/expense_colors.dart';
 
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -662,12 +663,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final f =
         Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light;
     return switch (action) {
-      // Same icon and red as the Total Expenses card: money going out.
+      // The expense red (#652), the same in every design system.
       QuickAction.addExpense => (
         key: HomeKeys.quickAddExpense,
         icon: AppIcons.bill,
-        color: f.danger,
-        tint: f.dangerTint,
+        color: AppExpenseColors.of(context).ink,
+        tint: AppExpenseColors.of(context).tint,
         label: 'Add Expense',
         onTap: () => AddExpenseScreen.show(context),
       ),
@@ -871,13 +872,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           pillLabel: expenses > 0 ? 'Recorded' : 'None',
           pillTone: homeTrendTone(isPositive: false),
           onTap: () {
-            // Home and Expenses share the canonical chip set (§30.11), so the
-            // selected period passes straight through.
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => ExpensesScreen(initialPeriod: _selectedPeriod),
-              ),
-            );
+            // Expenses lists every expense (#652); it has no period picker.
+            Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const ExpensesScreen()));
           },
         ),
       );

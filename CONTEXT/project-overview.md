@@ -85,7 +85,7 @@ security prerequisites, including the separate #467 and #468 fixes.
 ### Orders, Expenses & Suppliers
 
 - Orders in Pending / Completed / Cancelled tabs, with refunds restricted to Manager and CEO, and an Approve All floating action button for Manager and CEO on the Pending Orders screen.
-- Expenses with a pending-approval flow, searchable categories, and per-store monthly budgets.
+- Expenses with a pending-approval flow, a fixed category grid (Fuel, Transport, Labour, Salary, Electricity, Repairs, Rent, Food, Other), an optional "Paid to", and per-store monthly budgets (#652). No payment method or receipt upload on the form; no Stats tab.
 - Supplier Accounts with a real per-supplier ledger of invoice totals and payments.
 
 ### Home quick actions
@@ -117,7 +117,7 @@ security prerequisites, including the separate #467 and #468 fixes.
 - Inventory and Product Details and Daily Stock Count.
 - Customers with credit balances, debt limits, Add Credit, and cash/crate refunds.
 - Orders (Pending / Completed / Cancelled) with Manager/CEO refunds.
-- Expenses with a pending-approval flow, categories, and per-store monthly budgets.
+- Expenses with a pending-approval flow, a fixed category grid, and per-store monthly budgets.
 - Supplier Accounts with a per-supplier invoice/payment ledger.
 - Activity Logs, role-aware Reports (Daily Reconciliation, Supplier Accounts, Profit, Approvals), and Notifications.
 - Offline-first cloud sync, multi-store data structures with one active-store picker, staff multi-store assignment, and the stock-transfer UI.

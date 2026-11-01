@@ -1,10 +1,11 @@
-// Visual goldens for Expenses and Add Expense (#412, PRD #346 Wave 2 B). No
-// mockup: built from the shared parts and the Wave 1 / batch A patterns.
+// Visual goldens for Expenses and Add Expense (#412; remade from the owner's
+// mockups in #652).
 //
 // - `expenses_*`: the list at 390x844 (gesture nav), 844x390 with a 24dp
 //   status bar and 3-button navigation on the right, 800x1280 and 1280x800,
-//   light + dark. Dates are fixed (a Custom period), never "now".
+//   light + dark. Dates are fixed in March 2026, never "now".
 // - `add_expense_*`: the Edit Expense form (fixed date), same sizes.
+// - `add_expense_new_*`: the blank Add Expense form, same sizes.
 //
 // Sample data only. Regenerate with:
 //
@@ -36,9 +37,6 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late ScreenTestEnvironment env;
   late ExpenseData editing;
-
-  final period =
-      'Custom:${DateTime(2026, 3, 1).toIso8601String()}:${DateTime(2026, 3, 31).toIso8601String()}';
 
   setUp(() async {
     env = await setupScreenTestEnvironment(
@@ -156,8 +154,11 @@ void main() {
       ('800x1280', Size(800, 1280), FakeViewPadding()),
       ('1280x800', Size(1280, 800), FakeViewPadding()),
     ]) {
-      for (final form in [false, true]) {
-        final name = form ? 'add_expense' : 'expenses';
+      for (final (name, form, blank) in const [
+        ('expenses', false, false),
+        ('add_expense', true, false),
+        ('add_expense_new', true, true),
+      ]) {
         testWidgets('$name $sizeName $themeName', (tester) async {
           setInsets(tester, insets);
           await pumpScreen(
@@ -171,8 +172,8 @@ void main() {
               insets.bottom,
             ),
             screen: form
-                ? AddExpenseScreen(editing: editing)
-                : ExpensesScreen(initialPeriod: period),
+                ? AddExpenseScreen(editing: blank ? null : editing)
+                : const ExpensesScreen(),
             bottomNavHeight: (!form && size.width >= 600)
                 ? kBottomNavBodyHeight
                 : 0,
