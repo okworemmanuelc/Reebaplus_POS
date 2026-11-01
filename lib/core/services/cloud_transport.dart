@@ -27,11 +27,17 @@ class TableQuery {
   final DateTime? since;
   final int pageSize;
 
+  /// Called by the adapter after each page lands, with that page's row count,
+  /// so the engine can report live "rows fetched so far" progress (#643). Never
+  /// carries row contents. Optional; a fetch without it is unchanged.
+  final void Function(int rowsInPage)? onPage;
+
   const TableQuery(
     this.table,
     this.businessId,
     this.since, {
     required this.pageSize,
+    this.onPage,
   });
 }
 

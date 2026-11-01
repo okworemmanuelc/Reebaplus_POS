@@ -86,6 +86,16 @@ class PullStatus {
   final int rowsDone;
   final String? failedReason;
 
+  /// The table most recently reported by a fetch page (#643). With parallel
+  /// fetching this is "the one that last moved", which is truthful enough for
+  /// a live "Fetching ..." line. Null before the first page lands.
+  final String? currentTable;
+
+  /// Rows fetched from the cloud so far in this pull, summed across tables
+  /// (before they are saved). Distinct from [rowsDone], which counts rows saved
+  /// to the phone out of [rowsTotal].
+  final int rowsFetched;
+
   const PullStatus({
     required this.stage,
     this.tablesDone = 0,
@@ -93,6 +103,8 @@ class PullStatus {
     this.rowsTotal = 0,
     this.rowsDone = 0,
     this.failedReason,
+    this.currentTable,
+    this.rowsFetched = 0,
   });
 
   static const idle = PullStatus(stage: PullStage.idle);
@@ -108,6 +120,8 @@ class PullStatus {
     int? rowsTotal,
     int? rowsDone,
     String? failedReason,
+    String? currentTable,
+    int? rowsFetched,
   }) => PullStatus(
     stage: stage ?? this.stage,
     tablesDone: tablesDone ?? this.tablesDone,
@@ -115,6 +129,8 @@ class PullStatus {
     rowsTotal: rowsTotal ?? this.rowsTotal,
     rowsDone: rowsDone ?? this.rowsDone,
     failedReason: failedReason ?? this.failedReason,
+    currentTable: currentTable ?? this.currentTable,
+    rowsFetched: rowsFetched ?? this.rowsFetched,
   );
 }
 
@@ -2587,6 +2603,19 @@ class SupabaseSyncService {
     );
   }
 
+  /// True while a full/incremental pull ([pullChanges]) is in flight. The Sync
+  /// Issues screen reads it so a manual retry can say "a download is already
+  /// running" instead of claiming it re-synced (#643).
+  bool get isPullRunning => _fullPullRunning;
+
+  /// How many pulls have actually started. A caller that fires [pullChanges]
+  /// compares before/after: unchanged means the call was a no-op because a
+  /// download was already running (#643 retry honesty).
+  int get pullRunCount => _pullRunCount;
+  int _pullRunCount = 0;
+
+  /// Guarded entry: one pull at a time. The flag is set immediately before the
+  /// `try` (no await between) so nothing thrown inside can leave it stuck true.
   Future<void> pullChanges(String businessId) async {
     if (_fullPullRunning) {
       debugPrint(
@@ -2595,7 +2624,17 @@ class SupabaseSyncService {
       return;
     }
     _fullPullRunning = true;
+    _pullRunCount++;
+    try {
+      await _pullChangesGuarded(businessId);
+    } finally {
+      _fullPullRunning = false;
+    }
+  }
+
+  Future<void> _pullChangesGuarded(String businessId) async {
     _currentBusinessId = businessId;
+    _fetchedPerTable.clear();
     pullStatus.value = const PullStatus(stage: PullStage.background);
 
     // One-shot backfill: clear stale cursors BEFORE reading this tenant's, so
@@ -2731,9 +2770,35 @@ class SupabaseSyncService {
         stage: PullStage.failed,
         failedReason: e.toString(),
       );
+      // #643: leave a record of a failed download, once per failure streak.
+      // The 2s/5s/30s retries that follow keep incrementing `fails`; only the
+      // first failure of a streak (reset to 0 by a clean pull) is logged, so a
+      // synced table isn't spammed. Callers swallow pull errors, so it must be
+      // logged here.
+      if (fails == 1) {
+        await _logPullFailure(businessId, e);
+      }
       rethrow;
-    } finally {
-      _fullPullRunning = false;
+    }
+  }
+
+  /// Writes one `error_logs` row for a failed download. The message holds only
+  /// the exception type and (for [PartialPullException]) the failing TABLE
+  /// names — never row contents, shop or customer data. Never throws.
+  Future<void> _logPullFailure(String businessId, Object error) async {
+    try {
+      final detail = error is PartialPullException
+          ? 'PartialPullException: ${error.failedTables.length} table(s) '
+                'failed: ${(error.failedTables.toList()..sort()).join(", ")}'
+          : error.runtimeType.toString();
+      await _db.errorLogDao.logError(
+        errorType: 'sync.pull_failed',
+        message: 'Download from the cloud failed. $detail',
+        context: 'pullChanges',
+        businessId: businessId,
+      );
+    } catch (e) {
+      debugPrint('[SyncService] pull-failure log skipped: $e');
     }
   }
 
@@ -3431,9 +3496,53 @@ class SupabaseSyncService {
     String businessId,
     DateTime? since, {
     int pageSize = _pullPageSizeWifi,
-  }) => _transport.fetchTable(
-    TableQuery(table, businessId, since, pageSize: pageSize),
-  );
+  }) async {
+    // A (re)start of this table's fetch discards what an earlier attempt counted
+    // for it, so a retry never double-counts rows.
+    _fetchedPerTable[table] = 0;
+    final rows = await _transport.fetchTable(
+      TableQuery(
+        table,
+        businessId,
+        since,
+        pageSize: pageSize,
+        onPage: (n) {
+          _fetchedPerTable[table] = (_fetchedPerTable[table] ?? 0) + n;
+          _publishFetchProgress(table);
+        },
+      ),
+    );
+    // Flush the final count unthrottled, so a table that finished inside the
+    // throttle window is still reflected.
+    _publishFetchProgress(table, force: true);
+    return rows;
+  }
+
+  /// Rows fetched so far per table in the current pull (#643).
+  final Map<String, int> _fetchedPerTable = {};
+  DateTime? _lastFetchProgressAt;
+  static const _fetchProgressThrottle = Duration(milliseconds: 250);
+
+  /// Live per-page progress for the Sync Issues download card. Only reports
+  /// during a background pull, and is throttled so a fast link doesn't rebuild
+  /// the UI on every page.
+  void _publishFetchProgress(String table, {bool force = false}) {
+    if (pullStatus.value.stage != PullStage.background) return;
+    final total = _fetchedPerTable.values.fold<int>(0, (a, b) => a + b);
+    if (total == 0 || total == pullStatus.value.rowsFetched && !force) return;
+    final now = DateTime.now();
+    final last = _lastFetchProgressAt;
+    if (!force &&
+        last != null &&
+        now.difference(last) < _fetchProgressThrottle) {
+      return;
+    }
+    _lastFetchProgressAt = now;
+    pullStatus.value = pullStatus.value.copyWith(
+      currentTable: table,
+      rowsFetched: total,
+    );
+  }
 
   /// Cheap single-row refresh of the `businesses` row from the cloud, applied
   /// locally through the normal restore path (LWW guard included). Used by the
@@ -4005,14 +4114,9 @@ class SupabaseSyncService {
             // tombstone now confirms the deletion, wipe + sign out and skip the
             // pull (it would only fail with permission-denied).
             if (await _wipeIfBusinessDeleted(businessId)) return;
-            final prefs = await SharedPreferences.getInstance();
-            final key = '$_lastSyncPrefix$businessId';
-            final lastSyncStr = prefs.getString(key);
-            DateTime? since;
-            if (lastSyncStr != null) {
-              since = DateTime.tryParse(lastSyncStr);
-            }
-            await pullInitialData(businessId, since: since);
+            // #643: through the guarded path, so a network flip can't start a
+            // second download beside one already running (it returns at once).
+            await pullChanges(businessId);
           } catch (e) {
             debugPrint('[SyncService] Connectivity pull failed: $e');
           }
