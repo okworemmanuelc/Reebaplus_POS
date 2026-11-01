@@ -133,8 +133,8 @@ void main() {
     expect(find.textContaining('Walk-in Customer'), findsNothing);
   });
 
-  // #487: "Bottle Crate" only on a receipt from a shop that counts empty
-  // crates; every other shop shows its Bottle product as "Bottle".
+  // A receipt line is the product name alone: the unit ("Bottle", or
+  // "Bottle Crate" in a shop that counts crates) is never put in front.
   Widget bottleReceipt({required bool tracksCrates}) => MaterialApp(
     home: Scaffold(
       body: SingleChildScrollView(
@@ -153,20 +153,14 @@ void main() {
     ),
   );
 
-  testWidgets('a shop that does not count crates shows "Bottle"', (
-    tester,
-  ) async {
-    await tester.pumpWidget(bottleReceipt(tracksCrates: false));
-    expect(find.text('Bottle Cough Syrup'), findsOneWidget);
-    expect(find.textContaining('Bottle Crate'), findsNothing);
-  });
-
-  testWidgets('a shop that counts crates shows "Bottle Crate"', (
-    tester,
-  ) async {
-    await tester.pumpWidget(bottleReceipt(tracksCrates: true));
-    expect(find.text('Bottle Crate Cough Syrup'), findsOneWidget);
-  });
+  for (final tracksCrates in [false, true]) {
+    testWidgets('the receipt shows just the product name '
+        '(tracksCrates: $tracksCrates)', (tester) async {
+      await tester.pumpWidget(bottleReceipt(tracksCrates: tracksCrates));
+      expect(find.text('Cough Syrup'), findsOneWidget);
+      expect(find.textContaining('Bottle'), findsNothing);
+    });
+  }
 
   Widget hostWith({
     String? customerName,

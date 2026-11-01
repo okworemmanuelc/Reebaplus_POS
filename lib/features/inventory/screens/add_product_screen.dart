@@ -1756,12 +1756,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
           children: [
             for (final p in _productSuggestions)
               InventorySuggestionTile(
-                label: productDisplayName(
-                  p.name,
-                  p.size,
-                  unit: p.unit,
-                  crates: _isCrateBusiness,
-                ),
+                label: productDisplayName(p.name),
                 icon: AppIcons.inventory,
                 trailing: p.isAvailable
                     ? null

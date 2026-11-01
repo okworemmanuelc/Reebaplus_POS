@@ -7,6 +7,10 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Product name alone, no unit or size (2026-11-01, branch `fix/product-name-no-unit`)
+
+`productDisplayName(name)` takes only the name: "Heineken", not "Bottle Heineken" or "Heineken (B)", on Inventory rows, the cart, Add Product suggestions and every receipt (screen, paper, printed text). Sizes are typed into the name; the form already saves no size, so only older products hold one, and it still shows on the POS/Receive tile subtitles, scan sheets and the Manufacturer screen. The unit keeps its own label. App-only: no table, status or money change. Leftover: `tracksCrates` on `ReceiptWidget`, `PaperReceipt` and `buildReceiptLines` is now unused.
+
 ### Issue #623: Legacy-POS import tool (2026-11-01, ready for review; NOT run on any database)
 
 `tool/legacy_import/` builds `import.sql`, `checks.sql` and `report.md` from an export, next to the export and never in the repo. No Drift or cloud change, so no pos-parity issue. Needs #627 on the target (the SQL checks the column types and stops otherwise). Trigger decisions and the FIFO design are in `tool/legacy_import/README.md`. Key decision: deliveries write no `cost_batches` of their own, a deliberate departure from the issue. `pos_recost_pairs` replays history after every sale push, so history gets layers that reproduce each line's cost exactly, and the opening layers stay whole for new sales. Next: real login ids, then the dev dry run. Part of #619.

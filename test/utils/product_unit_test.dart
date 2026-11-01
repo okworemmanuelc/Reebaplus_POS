@@ -97,45 +97,13 @@ void main() {
     });
   });
 
-  group('productDisplayName shows the label, not the stored unit', () {
-    test('a crate shop: Bottle Goldberg reads Bottle Crate Goldberg', () {
-      expect(
-        productDisplayName('Goldberg', null, unit: 'Bottle', crates: true),
-        'Bottle Crate Goldberg',
-      );
-      expect(
-        productDisplayName('Goldberg', 'big', unit: 'Bottle', crates: true),
-        'Bottle Crate Goldberg (B)',
-      );
+  group('productDisplayName never shows the unit or size', () {
+    test('Bottle Heineken reads just Heineken', () {
+      expect(productDisplayName('Heineken'), 'Heineken');
     });
 
-    test('any other shop: Bottle Cough Syrup stays Bottle Cough Syrup', () {
-      expect(
-        productDisplayName('Cough Syrup', null, unit: 'Bottle', crates: false),
-        'Bottle Cough Syrup',
-      );
-      expect(
-        productDisplayName('Palm Oil', 'big', unit: 'Bottle', crates: false),
-        'Bottle Palm Oil (B)',
-      );
-    });
-
-    test('other units are unchanged, in either shop', () {
-      for (final crates in [true, false]) {
-        expect(
-          productDisplayName('Goldberg', null, unit: 'Can', crates: crates),
-          'Can Goldberg',
-        );
-        expect(
-          productDisplayName(
-            'Goldberg',
-            'medium',
-            unit: 'Crate',
-            crates: crates,
-          ),
-          'Crate Goldberg (M)',
-        );
-      }
+    test('a size typed into the name stays as typed', () {
+      expect(productDisplayName('Goldberg 60cl'), 'Goldberg 60cl');
     });
   });
 
@@ -193,8 +161,8 @@ void main() {
 
   test('productDisplayName name-cases names saved before #507', () {
     expect(
-      productDisplayName('STAR lager 60CL', 'big', unit: 'Can', crates: false),
-      'Can Star Lager 60CL (B)',
+      productDisplayName('STAR lager 60CL'),
+      'Star Lager 60CL',
     );
   });
 }

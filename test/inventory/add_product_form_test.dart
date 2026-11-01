@@ -411,9 +411,9 @@ void main() {
         find.text('Already in your inventory. Tap one to open it.'),
         findsOneWidget,
       );
-      await tester.ensureVisible(find.text('Bottle Crate Gulder'));
+      await tester.ensureVisible(find.text('Gulder'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Bottle Crate Gulder'));
+      await tester.tap(find.text('Gulder'));
       await settleDetails(tester);
       expect(find.byType(ProductDetailScreen), findsOneWidget);
       expect(
@@ -432,10 +432,10 @@ void main() {
 
       // An archived product says so, and still opens.
       await type(tester, AddProductKeys.name, 'Star');
-      await tester.ensureVisible(find.text('Bottle Crate Star Lager'));
+      await tester.ensureVisible(find.text('Star Lager'));
       await tester.pumpAndSettle();
       final archived = find.ancestor(
-        of: find.text('Bottle Crate Star Lager'),
+        of: find.text('Star Lager'),
         matching: find.byType(InkWell),
       );
       expect(
@@ -443,9 +443,9 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Archived'), findsOneWidget);
-      await tester.ensureVisible(find.text('Bottle Crate Star Lager'));
+      await tester.ensureVisible(find.text('Star Lager'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Bottle Crate Star Lager'));
+      await tester.tap(find.text('Star Lager'));
       await settleDetails(tester);
       expect(find.byType(ProductDetailScreen), findsOneWidget);
       await finish(tester);

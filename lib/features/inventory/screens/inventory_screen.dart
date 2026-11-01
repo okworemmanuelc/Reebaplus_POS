@@ -1176,12 +1176,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       // (PRD #239): a starved list renders at zero height, shows nothing, and
       // reports no overflow, so "no red band" alone cannot catch it.
       key: inventoryProductRowKey(product.id),
-      name: productDisplayName(
-        product.name,
-        product.size,
-        unit: product.unit,
-        crates: crates,
-      ),
+      name: productDisplayName(product.name),
       subtitle: product.subtitle,
       categoryName: categoryName,
       photoPath: product.imagePath,
