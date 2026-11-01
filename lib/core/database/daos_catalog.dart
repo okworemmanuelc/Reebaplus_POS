@@ -97,7 +97,7 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
   /// outbox rows). With the flag, it's one row.
   Future<String> insertProductWithInitialStock(
     ProductsCompanion companion, {
-    int? initialStock,
+    double? initialStock,
     String? storeId,
     String? performedBy,
   }) async {
@@ -199,7 +199,7 @@ class CatalogDao extends DatabaseAccessor<AppDatabase>
         };
         await db.syncDao.enqueue(
           'domain:pos_create_product_v2',
-          jsonEncode(payload),
+          encodeSyncPayload(payload),
         );
 
         // Epic 2 / #42: opening Cost Batch, enqueued AFTER the product-create

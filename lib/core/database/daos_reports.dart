@@ -41,7 +41,7 @@ class DailyClosingFigures {
   final int stockCogsKobo;
   final int stockExpectedClosingKobo;
   final int itemsSold;
-  final int shortageUnits;
+  final double shortageUnits;
 }
 
 /// Persists + reads the `daily_closings` snapshots (#174, PRD #155, ADR 0021 §2,

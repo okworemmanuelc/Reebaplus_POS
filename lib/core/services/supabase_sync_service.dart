@@ -1929,7 +1929,7 @@ class SupabaseSyncService {
           final storeId = raw['store_id'] as String?;
           final quantity = raw['quantity'];
           final luaStr = raw['last_updated_at'] as String?;
-          if (productId == null || storeId == null || quantity is! int) {
+          if (productId == null || storeId == null || quantity is! num) {
             continue;
           }
           final lua = luaStr != null ? DateTime.tryParse(luaStr) : null;
@@ -1939,7 +1939,8 @@ class SupabaseSyncService {
               ))
               .write(
                 InventoryCompanion(
-                  quantity: Value(quantity),
+                  // 5, 5.0 and 0.5 all arrive here (#627).
+                  quantity: Value(quantity.toDouble()),
                   lastUpdatedAt: Value(lua ?? DateTime.now()),
                 ),
               );
@@ -2221,7 +2222,7 @@ class SupabaseSyncService {
         // manufacturer-stock row carries only manufacturer_id.
         final manufacturerId = balanceRow['manufacturer_id'] as String?;
         final businessIdStr = balanceRow['business_id'] as String?;
-        if (balance is int &&
+        if (balance is num &&
             parsed != null &&
             manufacturerId != null &&
             businessIdStr != null) {
@@ -2235,7 +2236,7 @@ class SupabaseSyncService {
                 ))
                 .write(
                   CustomerCrateBalancesCompanion(
-                    balance: Value(balance),
+                    balance: Value(balance.toDouble()),
                     lastUpdatedAt: Value(parsed),
                   ),
                 );
@@ -2247,7 +2248,7 @@ class SupabaseSyncService {
                 ))
                 .write(
                   ManufacturerCrateBalancesCompanion(
-                    balance: Value(balance),
+                    balance: Value(balance.toDouble()),
                     lastUpdatedAt: Value(parsed),
                   ),
                 );
@@ -2284,7 +2285,7 @@ class SupabaseSyncService {
           if (bizId != null &&
               storeId != null &&
               mfrId != null &&
-              bal is int &&
+              bal is num &&
               lua != null) {
             final parsed = DateTime.tryParse(lua);
             if (parsed != null) {
@@ -2296,7 +2297,7 @@ class SupabaseSyncService {
                   ))
                   .write(
                     StoreCrateBalancesCompanion(
-                      balance: Value(bal),
+                      balance: Value(bal.toDouble()),
                       lastUpdatedAt: Value(parsed),
                     ),
                   );

@@ -13,7 +13,7 @@ library;
 /// `id`); this function consumes the list in the order given.
 class FifoBatch {
   /// Units still on the shelf from this batch — the most that can be drawn.
-  final int qtyRemaining;
+  final double qtyRemaining;
 
   /// Per-unit cost in kobo. `0` marks an **uncosted** batch: units drawn from
   /// it contribute 0 to COGS (they are still drawn — the batch is decremented —
@@ -27,7 +27,8 @@ class FifoBatch {
 /// batch queue. Every list is index-aligned with its input (lines with
 /// [lineCogsKobo]/[lineShortfall], batches with [batchConsumption]).
 class FifoDrawResult {
-  /// COGS (total kobo) for each requested line, in input order. Sums the
+  /// COGS (total kobo, whole kobo — each line is rounded once, half up, the
+  /// same rule as SQL `fifo_assign`) for each requested line, in input order. Sums the
   /// per-unit cost of every batch slice the line consumed — including a partial
   /// split that spans two or more batches. Units the queue could **not** cover
   /// (see [lineShortfall]) contribute 0 here; the caller decides how to cost a
@@ -36,11 +37,11 @@ class FifoDrawResult {
 
   /// Units the queue ran out of stock for, per line, in input order. `0` on the
   /// happy path (the queue fully covers the sale).
-  final List<int> lineShortfall;
+  final List<double> lineShortfall;
 
   /// Units drawn from each input batch, in input order. The caller subtracts
   /// these from each batch's `qty_remaining`.
-  final List<int> batchConsumption;
+  final List<double> batchConsumption;
 
   const FifoDrawResult({
     required this.lineCogsKobo,
@@ -59,11 +60,11 @@ class FifoDrawResult {
 /// uncovered units in [FifoDrawResult.lineShortfall].
 FifoDrawResult fifoDrawDown(
   List<FifoBatch> batches,
-  List<int> lineQuantities,
+  List<double> lineQuantities,
 ) {
-  final consumption = List<int>.filled(batches.length, 0);
+  final consumption = List<double>.filled(batches.length, 0);
   final lineCogs = List<int>.filled(lineQuantities.length, 0);
-  final lineShort = List<int>.filled(lineQuantities.length, 0);
+  final lineShort = List<double>.filled(lineQuantities.length, 0);
 
   var batchIdx = 0;
   // Units still available in the batch currently at the front of the queue.
@@ -72,7 +73,7 @@ FifoDrawResult fifoDrawDown(
   for (var li = 0; li < lineQuantities.length; li++) {
     var need = lineQuantities[li];
     if (need < 0) need = 0; // defensive; sale quantities are always positive
-    var cogs = 0;
+    var cogs = 0.0; // fractional kobo until the line is rounded once
 
     while (need > 0 && batchIdx < batches.length) {
       if (availInBatch <= 0) {
@@ -88,7 +89,7 @@ FifoDrawResult fifoDrawDown(
       need -= take;
     }
 
-    lineCogs[li] = cogs;
+    lineCogs[li] = cogs.round();
     lineShort[li] = need; // whatever the queue could not cover
   }
 

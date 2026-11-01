@@ -27,8 +27,8 @@ class CrateStatusFigure {
   /// User-facing label (e.g. 'In the warehouse').
   final String label;
 
-  /// Quantity of crates in this status.
-  final int count;
+  /// Quantity of crates in this status (quarter steps, #627).
+  final double count;
 
   /// Monetary value in minor units (kobo).
   final int moneyKobo;
@@ -136,7 +136,7 @@ class ManufacturerCratePosition {
         );
 
   /// Total crates owned or with customers across the brand.
-  int get totalCrates =>
+  double get totalCrates =>
       inWarehouse.count +
       fullCratesInStock.count +
       withCustomersOnDeposit.count +
@@ -193,13 +193,13 @@ class ManufacturerCratePosition {
 ManufacturerCratePosition computeManufacturerCratePosition({
   required String manufacturerId,
   required int crateValueKobo,
-  int warehouseCrates = 0,
-  int fullCrates = 0,
-  int customerOnDepositCrates = 0,
+  double warehouseCrates = 0,
+  double fullCrates = 0,
+  double customerOnDepositCrates = 0,
   int customerOnDepositKobo = 0,
-  int customerNoDepositCrates = 0,
-  int shortCrates = 0,
-  int damagedCrates = 0,
+  double customerNoDepositCrates = 0,
+  double shortCrates = 0,
+  double damagedCrates = 0,
   int? damagedLossKobo,
 }) {
   final rate = crateValueKobo > 0 ? crateValueKobo : 0;
@@ -209,12 +209,12 @@ ManufacturerCratePosition computeManufacturerCratePosition({
     inWarehouse: CrateStatusFigure(
       label: 'In the warehouse',
       count: warehouseCrates,
-      moneyKobo: warehouseCrates * rate,
+      moneyKobo: (warehouseCrates * rate).round(),
     ),
     fullCratesInStock: CrateStatusFigure(
       label: 'Full crates in stock',
       count: fullCrates,
-      moneyKobo: fullCrates * rate,
+      moneyKobo: (fullCrates * rate).round(),
     ),
     withCustomersOnDeposit: CrateStatusFigure(
       label: 'With customers, on deposit',
@@ -224,18 +224,18 @@ ManufacturerCratePosition computeManufacturerCratePosition({
     withCustomersNoDeposit: CrateStatusFigure(
       label: 'With customers, no deposit',
       count: customerNoDepositCrates,
-      moneyKobo: customerNoDepositCrates * rate,
+      moneyKobo: (customerNoDepositCrates * rate).round(),
     ),
     short: CrateStatusFigure(
       label: 'Short',
       count: shortCrates,
-      moneyKobo: shortCrates * rate,
+      moneyKobo: (shortCrates * rate).round(),
       hasMoney: shortCrates > 0,
     ),
     damaged: CrateStatusFigure(
       label: 'Damaged',
       count: damagedCrates,
-      moneyKobo: damagedLossKobo ?? (damagedCrates * rate),
+      moneyKobo: damagedLossKobo ?? (damagedCrates * rate).round(),
     ),
   );
 }
@@ -369,7 +369,7 @@ class CrateMovementHistoryEntry {
   final String id;
   final String movementType;
   final String movementLabel;
-  final int quantityDelta;
+  final double quantityDelta;
   final DateTime createdAt;
   final String? performedByName;
   final String? storeName;

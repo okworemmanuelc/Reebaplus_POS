@@ -327,7 +327,7 @@ final supplierCrateDebtValueKoboProvider =
 /// One supplier's cumulative crates received from / returned (sent back) to
 /// them — running totals, not the net balance.
 final supplierCrateMovementTotalsProvider =
-    businessScopedStreamAutoDisposeFamily<({int received, int returned}),
+    businessScopedStreamAutoDisposeFamily<({double received, double returned}),
         String>(
   (ref, db, businessId, id) => db.supplierCrateLedgerDao.watchMovementTotals(id),
   whenAbsent: (received: 0, returned: 0),

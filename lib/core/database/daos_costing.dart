@@ -8,7 +8,7 @@ class SaleCostLine {
   final int index;
   final String productId;
   final String storeId;
-  final int quantity;
+  final double quantity;
 
   const SaleCostLine({
     required this.index,
@@ -43,7 +43,7 @@ class CostBackfillOffer {
 
   /// Total units across [lineIds] — the "you sold N units" figure for the
   /// prompt copy.
-  final int unitsUncosted;
+  final double unitsUncosted;
 
   const CostBackfillOffer({
     required this.productId,
@@ -131,7 +131,7 @@ class CostBatchesDao extends DatabaseAccessor<AppDatabase>
   Future<void> recordInflowBatch({
     required String productId,
     required String storeId,
-    required int quantity,
+    required double quantity,
     required int costKobo,
     DateTime? receivedAt,
     String? id,
@@ -267,7 +267,7 @@ class CostBatchesDao extends DatabaseAccessor<AppDatabase>
   Future<int> drawDownOutflow(
     String productId,
     String storeId,
-    int quantity,
+    double quantity,
   ) async {
     if (quantity <= 0) return 0;
 
@@ -315,7 +315,7 @@ class CostBatchesDao extends DatabaseAccessor<AppDatabase>
   Future<int> peekOutflowCostKobo(
     String productId,
     String storeId,
-    int quantity,
+    double quantity,
   ) async {
     if (quantity <= 0) return 0;
     final batchRows = await queueFor(productId, storeId);
@@ -466,7 +466,7 @@ class CostBatchesDao extends DatabaseAccessor<AppDatabase>
     final rows = await (query..where(predicate)).get();
 
     final ids = <String>[];
-    var units = 0;
+    var units = 0.0;
     for (final row in rows) {
       final item = row.readTable(orderItems);
       ids.add(item.id);
