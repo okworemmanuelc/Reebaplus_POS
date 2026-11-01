@@ -18,6 +18,21 @@ void main() {
       );
     });
 
+    test('active with a past paid-until date → inactive (Free)', () {
+      expect(
+        computeSubscriptionAccess('active', null, now, currentPeriodEnd: past),
+        SubscriptionAccess.inactive,
+      );
+      expect(
+        computeSubscriptionAccess('active', null, now, currentPeriodEnd: now),
+        SubscriptionAccess.inactive,
+      );
+      expect(
+        computeSubscriptionAccess('active', past, now, currentPeriodEnd: future),
+        SubscriptionAccess.active,
+      );
+    });
+
     test('inactive → inactive', () {
       expect(
         computeSubscriptionAccess('inactive', future, now),

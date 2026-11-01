@@ -17,7 +17,9 @@ enum SubscriptionAccess { active, trialActive, trialExpired, inactive, grace }
 /// Maps the stored `subscription_status` + `trial_ends_at` to an effective
 /// [SubscriptionAccess] using `now` (the device clock — works offline).
 ///
-/// - `active`   → [SubscriptionAccess.active]
+/// - `active`   → [SubscriptionAccess.active] while [currentPeriodEnd] is null
+///                or ahead; past it ⇒ inactive (same rule as `effectivePlan`,
+///                so the PRO tag never contradicts the Free limits)
 /// - `trial`    → before `trialEndsAt` ⇒ trialActive; at/after ⇒ trialExpired;
 ///                null `trialEndsAt` ⇒ grace (don't lock without a deadline)
 /// - `inactive` → [SubscriptionAccess.inactive]
@@ -25,11 +27,14 @@ enum SubscriptionAccess { active, trialActive, trialExpired, inactive, grace }
 SubscriptionAccess computeSubscriptionAccess(
   String? status,
   DateTime? trialEndsAt,
-  DateTime now,
-) {
+  DateTime now, {
+  DateTime? currentPeriodEnd,
+}) {
   switch (status) {
     case 'active':
-      return SubscriptionAccess.active;
+      return currentPeriodEnd == null || currentPeriodEnd.isAfter(now)
+          ? SubscriptionAccess.active
+          : SubscriptionAccess.inactive;
     case 'inactive':
       return SubscriptionAccess.inactive;
     case 'trial':
