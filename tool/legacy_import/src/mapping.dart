@@ -258,3 +258,83 @@ OffGridResult reconcileOffGridMovements(Iterable<MovementQty> movements) {
 /// always UTC+1), matching `AT TIME ZONE 'Africa/Lagos'` in the checks.
 String lagosDay(DateTime at) =>
     at.toUtc().add(const Duration(hours: 1)).toIso8601String().substring(0, 10);
+
+/// A held crate deposit's wallet leg. Old and new both count money held for the
+/// customer as positive, so unlike the ledgers this does NOT flip.
+WalletLeg depositLegFor({required String oldType, required int oldAmountKobo}) {
+  final referenceType = switch (oldType) {
+    'DEPOSITED' || 'ADJUSTMENT' => 'crate_deposit',
+    'REFUNDED' => 'crate_deposit_refunded',
+    'FORFEITED' => 'crate_deposit_forfeited',
+    _ => throw ArgumentError.value(oldType, 'oldType', 'unknown deposit type'),
+  };
+  return WalletLeg(
+    type: ledgerType(oldAmountKobo),
+    amountKobo: oldAmountKobo.abs(),
+    signedKobo: oldAmountKobo,
+    referenceType: referenceType,
+    isCashIn: false,
+  );
+}
+
+/// What a `stock_transactions` row hangs off (exactly one, per its CHECK).
+enum MovementLink { order, transfer, adjustment }
+
+class MovementPlan {
+  final String movementType;
+  final MovementLink link;
+
+  /// The `stock_adjustments.reason`, for an [MovementLink.adjustment].
+  final String? reason;
+
+  const MovementPlan({
+    required this.movementType,
+    required this.link,
+    this.reason,
+  });
+}
+
+/// Old stock movement → new shape. Receipts use the app's own reason, which the
+/// recon's receipt classifier keys on; a cancelled delivery's reversal must NOT
+/// read like a receipt. [vanLabel] is set for movements of a van trip.
+MovementPlan movementPlanFor({
+  required String oldType,
+  required double qty,
+  required bool hasSale,
+  required bool hasDelivery,
+  required String? note,
+  required String? vanLabel,
+}) {
+  MovementPlan adjustment(String reason) => MovementPlan(
+    movementType: 'adjustment',
+    link: MovementLink.adjustment,
+    reason: reason,
+  );
+
+  // Cancels and edits were ADJUSTMENT rows pointing at the sale; the app writes
+  // those as `return` / `sale` rows on the order.
+  if (oldType == 'SALE' || (oldType == 'ADJUSTMENT' && hasSale)) {
+    return MovementPlan(
+      movementType: qty > 0 ? 'return' : 'sale',
+      link: MovementLink.order,
+    );
+  }
+  return switch (oldType) {
+    'TRANSFER_OUT' => const MovementPlan(
+      movementType: 'transfer_out',
+      link: MovementLink.transfer,
+    ),
+    'TRANSFER_IN' => const MovementPlan(
+      movementType: 'transfer_in',
+      link: MovementLink.transfer,
+    ),
+    'RESTOCK' => adjustment('Stock received'),
+    'VAN_LOAD_OUT' => adjustment('Van load-out – $vanLabel'),
+    'VAN_RETURN' => adjustment('Van return – $vanLabel'),
+    'ADJUSTMENT' when hasDelivery => adjustment('Cancelled delivery'),
+    'ADJUSTMENT' when vanLabel != null => adjustment(
+      note ?? 'Van adjustment – $vanLabel',
+    ),
+    _ => adjustment(note ?? 'Adjustment (old app)'),
+  };
+}

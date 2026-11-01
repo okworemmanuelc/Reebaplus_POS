@@ -106,10 +106,7 @@ void main() {
     });
 
     test('runs follow replay order, not input order', () {
-      final layers = build([
-        line('l2', 2, 1, 200),
-        line('l1', 1, 1, 100),
-      ]);
+      final layers = build([line('l2', 2, 1, 200), line('l1', 1, 1, 100)]);
 
       expect(layers.map((l) => l.costKobo), [100, 200]);
     });

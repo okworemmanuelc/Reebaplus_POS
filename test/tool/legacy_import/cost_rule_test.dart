@@ -19,8 +19,8 @@ void main() {
     isCancelled: cancelled,
   );
 
-  LineCost cost(CostRule rule, DateTime soldAt, {int sale = 500}) => rule
-      .costFor(productId: 'p1', soldAt: soldAt, saleUnitKobo: sale);
+  LineCost cost(CostRule rule, DateTime soldAt, {int sale = 500}) =>
+      rule.costFor(productId: 'p1', soldAt: soldAt, saleUnitKobo: sale);
 
   group('CostRule', () {
     test('A: the most recent delivery on or before the sale', () {

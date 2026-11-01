@@ -233,7 +233,10 @@ void main() {
 
   group('productUnit', () {
     test('returnable glass is a Bottle whatever the name says', () {
-      expect(productUnit(isReturnable: true, name: 'Test Lager 60cl'), 'Bottle');
+      expect(
+        productUnit(isReturnable: true, name: 'Test Lager 60cl'),
+        'Bottle',
+      );
     });
 
     test('PET and cans map to their packs', () {
@@ -307,13 +310,17 @@ void main() {
   });
 
   group('reconcileOffGridMovements', () {
-    MovementQty movement(String id, double qty, int minute, [String key = 'g']) =>
-        MovementQty(
-          id: id,
-          groupKey: key,
-          createdAt: DateTime.utc(2026, 1, 1, 0, minute),
-          qty: qty,
-        );
+    MovementQty movement(
+      String id,
+      double qty,
+      int minute, [
+      String key = 'g',
+    ]) => MovementQty(
+      id: id,
+      groupKey: key,
+      createdAt: DateTime.utc(2026, 1, 1, 0, minute),
+      qty: qty,
+    );
 
     test('on-grid movements are left alone', () {
       final result = reconcileOffGridMovements([movement('m1', -0.5, 1)]);
@@ -357,6 +364,101 @@ void main() {
       ]);
 
       expect(result.unresolved, hasLength(2));
+    });
+  });
+
+  group('depositLegFor', () {
+    test('money held stays positive: it does not flip', () {
+      final leg = depositLegFor(oldType: 'DEPOSITED', oldAmountKobo: 6000);
+
+      expect(leg.signedKobo, 6000);
+      expect(leg.type, 'credit');
+      expect(leg.referenceType, 'crate_deposit');
+      expect(leg.isCashIn, isFalse);
+    });
+
+    test('money leaving keeps the reference types the balance excludes', () {
+      final refunded = depositLegFor(oldType: 'REFUNDED', oldAmountKobo: -100);
+      final forfeited = depositLegFor(oldType: 'FORFEITED', oldAmountKobo: -50);
+
+      expect(refunded.signedKobo, -100);
+      expect(refunded.type, 'debit');
+      expect(refunded.referenceType, 'crate_deposit_refunded');
+      expect(forfeited.referenceType, 'crate_deposit_forfeited');
+    });
+  });
+
+  group('movementPlanFor', () {
+    MovementPlan plan(
+      String oldType, {
+      double qty = -1,
+      bool hasSale = false,
+      bool hasDelivery = false,
+      String? note,
+      String? vanLabel,
+    }) => movementPlanFor(
+      oldType: oldType,
+      qty: qty,
+      hasSale: hasSale,
+      hasDelivery: hasDelivery,
+      note: note,
+      vanLabel: vanLabel,
+    );
+
+    test('a sale hangs off its order', () {
+      final result = plan('SALE', hasSale: true);
+
+      expect(result.movementType, 'sale');
+      expect(result.link, MovementLink.order);
+    });
+
+    test('a sale adjustment follows the sale by direction', () {
+      expect(plan('ADJUSTMENT', qty: 2, hasSale: true).movementType, 'return');
+      expect(plan('ADJUSTMENT', qty: -2, hasSale: true).movementType, 'sale');
+      expect(plan('ADJUSTMENT', hasSale: true).link, MovementLink.order);
+    });
+
+    test('transfers keep their direction', () {
+      expect(plan('TRANSFER_OUT').movementType, 'transfer_out');
+      expect(plan('TRANSFER_IN').movementType, 'transfer_in');
+      expect(plan('TRANSFER_IN').link, MovementLink.transfer);
+    });
+
+    test('a restock is a receipt by the app\'s own reason', () {
+      final result = plan('RESTOCK', qty: 5);
+
+      expect(result.reason, 'Stock received');
+      expect(result.movementType, 'adjustment');
+      expect(result.link, MovementLink.adjustment);
+    });
+
+    test('a cancelled delivery reversal does not read like a receipt', () {
+      final reason = plan('ADJUSTMENT', hasDelivery: true).reason!;
+
+      expect(reason, 'Cancelled delivery');
+      expect(reason.toLowerCase(), isNot(contains('received')));
+    });
+
+    test('van movements are adjustments naming the trip', () {
+      expect(
+        plan('VAN_LOAD_OUT', vanLabel: 'Van 1, 2026-01-02').reason,
+        'Van load-out – Van 1, 2026-01-02',
+      );
+      expect(
+        plan('VAN_RETURN', vanLabel: 'Van 1, 2026-01-02').reason,
+        'Van return – Van 1, 2026-01-02',
+      );
+    });
+
+    test('a plain adjustment keeps its note', () {
+      expect(
+        plan('ADJUSTMENT', note: 'Damage in store').reason,
+        'Damage in store',
+      );
+    });
+
+    test('a plain adjustment with no note still has a reason', () {
+      expect(plan('ADJUSTMENT').reason, 'Adjustment (old app)');
     });
   });
 
