@@ -7,7 +7,6 @@ import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/csv_export.dart';
-import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/recon_data.dart';
 import 'package:reebaplus_pos/features/dashboard/reports_attention.dart';
@@ -19,6 +18,7 @@ import 'package:reebaplus_pos/features/dashboard/widgets/report_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 
 /// Daily Reconciliation entry list (§25.9). Store-scoped via the §12.1 picker and
 /// groupable by Day / Week / Month / Year — one tappable card per bucket that has
@@ -53,7 +53,7 @@ class _DailyReconciliationListScreenState
   Future<void> _exportCsv(List<ReconBucket> buckets, String scope) async {
     final rows = <List<String>>[
       for (final b in buckets)
-        [b.label, '${b.itemsSold}', b.hasShortage ? 'Yes' : 'No'],
+        [b.label, formatQty(b.itemsSold), b.hasShortage ? 'Yes' : 'No'],
     ];
     final scopeName = scope.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_');
     final periodName = _customRange != null
@@ -312,7 +312,7 @@ class _DailyReconciliationListScreenState
                         ),
                         SizedBox(height: context.getRSize(4)),
                         Text(
-                          '${fmtNumber(b.itemsSold)} items sold',
+                          '${formatQtyGrouped(b.itemsSold)} items sold',
                           style: context
                               .regularStyle(13)
                               .copyWith(color: muted),

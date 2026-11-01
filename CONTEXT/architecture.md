@@ -166,7 +166,18 @@ trailing zeros, never a vulgar-fraction character) and `lineTotalKobo(unitKobo,
 qty)` = unit price x quantity rounded half up to whole kobo; the SQL twin is
 `public.line_total_kobo`. Money is never computed as `qty * price` inline. The
 v98 Drift step rebuilds nothing: SQLite's INTEGER affinity already keeps 0.5 as a
-REAL. Screens still enter whole numbers until S3-S5 of #620.
+REAL.
+
+**Selling in parts (#628, Drift v99, cloud 0241).** Every product sells in quarter
+steps unless `products.allow_fractional_sales` is off (default true). `CartService`
+is the one gate: `addItem` / `updateQty` snap a line onto its step and cap it at
+`Qty.sellable(stock)` (whole units only when the switch is off). Cart, checkout and
+receipts total a line through `CartService.lineGrossKobo` / `lineTotalKobo`, summed
+in kobo, so the goods figure equals the server's recomputed gross. `0241` is the
+release switch: phones keep existing products whole until its value arrives by
+pull, so it deploys only after the minimum app version is raised (#620 decision
+12). Online-order lines are forced whole on the till. Receiving, adjustments,
+transfers, counts and empties take parts in S4-S5.
 
 **Online category reference (#472).** Public, service-written
 `marketplace_categories` is bundled as `core/data/marketplace_categories.dart`,

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/scanner/scanner_providers.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 
 /// The scanner's running "‹N› items in cart" pill (#319), live from the cart:
 /// units (sum of line quantities), not lines and not money.
@@ -35,8 +36,5 @@ class ScanCartCount extends ConsumerWidget {
 /// "3 items in cart", "1 item in cart", "1.5 items in cart" — no trailing
 /// `.0` on whole quantities.
 String scanCartCountLabel(double units) {
-  final n = units == units.truncateToDouble()
-      ? units.toInt().toString()
-      : units.toString();
-  return '$n ${units == 1 ? 'item' : 'items'} in cart';
+  return '${formatQty(units)} ${units == 1 ? 'item' : 'items'} in cart';
 }

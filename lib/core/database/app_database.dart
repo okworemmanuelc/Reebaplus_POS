@@ -796,8 +796,11 @@ class Products extends Table {
   IntColumn get emptyCrateValueKobo =>
       integer().withDefault(const Constant(0))();
   BoolColumn get trackEmpties => boolean().withDefault(const Constant(false))();
+  // On by default (#620 decision 4): every product sells in parts unless its
+  // switch is turned off. An upgraded install keeps the old DEFAULT 0 in its
+  // table definition, so every insert sets this explicitly.
   BoolColumn get allowFractionalSales =>
-      boolean().withDefault(const Constant(false))();
+      boolean().withDefault(const Constant(true))();
   // Optional product barcode (schema v18). Surfaced in the UI only for
   // Pharmacy / Supermarket businesses — that UI lands with the barcode
   // scanner work (pivot step 30); the column ships now with the price drop.
@@ -1096,7 +1099,7 @@ class DailyClosings extends Table {
   IntColumn get stockCogsKobo => integer().withDefault(const Constant(0))();
   IntColumn get stockExpectedClosingKobo =>
       integer().withDefault(const Constant(0))();
-  IntColumn get itemsSold => integer().withDefault(const Constant(0))();
+  RealColumn get itemsSold => real().withDefault(const Constant(0.0))();
   RealColumn get shortageUnits => real().withDefault(const Constant(0.0))();
   // Who reviewed (froze) the day, and when (review time).
   TextColumn get reviewedBy => text().nullable().references(Users, #id)();
@@ -6909,6 +6912,18 @@ class AppDatabase extends _$AppDatabase {
         // tables). Drift reads either storage class back as a double. Fresh
         // installs declare the columns REAL — same behaviour.
       }
+
+      // ── v99 — #628: selling in parts ────────────────────────────────────
+      //
+      // Mirrors supabase/migrations/0241_selling_in_parts.sql. Nothing to run:
+      //  * `daily_closings.items_sold` became a RealColumn, with no rebuild for
+      //    the reason given at v98;
+      //  * `products.allow_fractional_sales` defaults to true for fresh
+      //    installs. Existing rows are NOT flipped here on purpose. Cloud 0241
+      //    sets every product to true and bumps `last_updated_at`, so the value
+      //    arrives by pull, and until it does the product stays whole numbers.
+      //    That makes 0241 the single switch for "any shop can sell parts"
+      //    (#620 decision 12).
 
       if (from < 100) {
         // ── v100 — #629: empties in parts (crate_count IntColumn → Real) ──

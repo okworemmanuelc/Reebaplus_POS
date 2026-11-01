@@ -1768,7 +1768,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     String reason,
     String staffId, {
     bool forceLocalReversal = false,
-    Map<String, int> damagedQtyByLine = const {},
+    Map<String, double> damagedQtyByLine = const {},
     String damageReasonKey = 'other',
   }) async {
     // DO NOT ENABLE UNTIL #121 (the oversell-orphan go-live gate), and not
@@ -2075,13 +2075,10 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         await db.inventoryDao.adjustStock(
           productId,
           line.storeId,
-          -damaged.toDouble(),
+          -damaged,
           'damage:$damageReasonKey',
           staffId,
-          outflowValueKobo: lineTotalKobo(
-            line.buyingPriceKobo,
-            damaged.toDouble(),
-          ),
+          outflowValueKobo: lineTotalKobo(line.buyingPriceKobo, damaged),
         );
       }
 
@@ -2156,7 +2153,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     required String reason,
     required String staffId,
     String damageReasonKey = 'other',
-    Map<String, int> damagedQtyByLine = const {},
+    Map<String, double> damagedQtyByLine = const {},
   }) {
     return db.transaction(() async {
       final order = await findById(orderId);
@@ -2171,10 +2168,11 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
             ..where((i) => i.orderId.equals(orderId) & whereBusiness(i)))
           .get();
       final byId = {for (final l in lines) l.id: l};
-      var damagedUnits = 0;
+      var damagedUnits = 0.0;
       for (final e in damagedQtyByLine.entries) {
         final line = byId[e.key];
         if (e.value < 0 ||
+            !Qty.isQuarterStep(e.value) ||
             line == null ||
             e.value > line.quantity ||
             (e.value > 0 && line.productId == null)) {
@@ -3576,5 +3574,5 @@ class ReturnOutcome {
   final String orderNumber;
   final String? storeId;
   final int refundKobo;
-  final int damagedUnits;
+  final double damagedUnits;
 }

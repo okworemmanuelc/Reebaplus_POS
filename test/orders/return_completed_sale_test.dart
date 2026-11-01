@@ -146,7 +146,7 @@ void main() {
 
   Future<void> doReturn(
     String id, {
-    Map<String, int> damaged = const {},
+    Map<String, double> damaged = const {},
     String key = 'broken',
     GateContext gate = _granted,
   }) =>
@@ -269,7 +269,7 @@ void main() {
       final id = await sell([line(productId, 3)]);
       final item = (await itemsOf(id)).single;
       final queue = await queueCount();
-      for (final bad in [4, -1]) {
+      for (final bad in [4.0, -1.0, 0.3]) {
         await expectLater(
           doReturn(id, damaged: {item.id: bad}),
           throwsA(isA<ReturnRefusedException>()),

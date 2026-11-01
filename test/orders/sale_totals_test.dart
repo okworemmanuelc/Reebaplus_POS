@@ -106,9 +106,4 @@ void main() {
     expect(l.crates, 3);
     expect(l.fullDepositKobo, 0);
   });
-
-  test('saleLineTotal truncates price × qty (display behaviour kept)', () {
-    expect(saleLineTotal(price: 250, qty: 3), 750);
-    expect(saleLineTotal(price: 99.99, qty: 2), 199);
-  });
 }

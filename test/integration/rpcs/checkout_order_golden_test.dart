@@ -3,6 +3,7 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../golden/golden_scenario.dart';
@@ -222,7 +223,7 @@ void main() {
           'business_id': businessId,
           'product_id': productIdByKey[inv.productKey],
           'store_id': store,
-          'quantity': inv.quantity,
+          'quantity': Qty.toJson(inv.quantity),
         });
       }
       // batchId → (productKey, receivedAt) for the remainder assertion.
@@ -235,8 +236,8 @@ void main() {
           'business_id': businessId,
           'product_id': productIdByKey[b.productKey],
           'store_id': store,
-          'qty_remaining': b.qty,
-          'qty_original': b.qty,
+          'qty_remaining': Qty.toJson(b.qty),
+          'qty_original': Qty.toJson(b.qty),
           'cost_kobo': b.costKobo,
           'received_at': b.receivedAtUtc.toIso8601String(),
         });
@@ -285,7 +286,10 @@ void main() {
       // computed from the charged price; the catalogue price rides along on the
       // item so the server can snapshot the deviation.
       final gross = scenario.checkout.items
-          .fold<int>(0, (s, l) => s + scenario.chargedKobo(l) * l.quantity);
+          .fold<int>(
+            0,
+            (s, l) => s + lineTotalKobo(scenario.chargedKobo(l), l.quantity),
+          );
       final net = gross - scenario.checkout.discountKobo;
       // Walk-in cash/transfer pays the net; a credit/wallet sale passes exactly
       // what the fixture tendered (the RPC clamps + routes it).
@@ -300,7 +304,7 @@ void main() {
           for (final l in scenario.checkout.items)
             {
               'product_id': productIdByKey[l.productKey],
-              'quantity': l.quantity,
+              'quantity': Qty.toJson(l.quantity),
               'unit_price_kobo': scenario.chargedKobo(l),
               // Sent on EVERY line, exactly as the mobile cart carries a
               // `catalogPriceKobo` on every item. That is what puts the
@@ -476,7 +480,7 @@ void main() {
         }
       }
 
-      final batchRemaining = <String, int>{};
+      final batchRemaining = <String, double>{};
       for (final (id, productKey, receivedAt) in seededBatches) {
         final row = await admin
             .from('cost_batches')
@@ -484,10 +488,10 @@ void main() {
             .eq('id', id)
             .single();
         batchRemaining['$productKey|$receivedAt'] =
-            (row['qty_remaining'] as num).toInt();
+            (row['qty_remaining'] as num).toDouble();
       }
 
-      final inventoryAfter = <String, int>{};
+      final inventoryAfter = <String, double>{};
       final scalarCost = <String, int>{};
       for (final entry in productIdByKey.entries) {
         final invRow = await admin
@@ -497,7 +501,7 @@ void main() {
             .eq('store_id', store)
             .maybeSingle();
         if (invRow != null) {
-          inventoryAfter[entry.key] = (invRow['quantity'] as num).toInt();
+          inventoryAfter[entry.key] = (invRow['quantity'] as num).toDouble();
         }
         final prodRow = await admin
             .from('products')
@@ -522,7 +526,7 @@ void main() {
           for (final i in itemRows)
             ActualItem(
               productKey: keyByProductId[i['product_id']]!,
-              quantity: (i['quantity'] as num).toInt(),
+              quantity: (i['quantity'] as num).toDouble(),
               unitPriceKobo: (i['unit_price_kobo'] as num).toInt(),
               totalKobo: (i['total_kobo'] as num).toInt(),
               buyingPriceKobo: (i['buying_price_kobo'] as num).toInt(),

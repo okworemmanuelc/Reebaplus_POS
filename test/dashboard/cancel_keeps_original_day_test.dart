@@ -125,7 +125,7 @@ ReconData _recon(List<OrderWithItems> orders, int from, int toInclusive) =>
       ),
     );
 
-Map<String, int> _figures(ReconData d) => {
+Map<String, num> _figures(ReconData d) => {
   'totalRevenueKobo': d.totalRevenueKobo,
   'totalSalesKobo': d.totalSalesKobo,
   'costedRevenueKobo': d.costedRevenueKobo,

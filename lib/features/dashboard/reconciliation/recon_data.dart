@@ -127,7 +127,7 @@ class ReconBucket {
   final DateTime endExclusive;
   final ReconGrouping grouping;
   final String label;
-  final int itemsSold;
+  final double itemsSold;
   final bool hasShortage;
 }
 
@@ -197,7 +197,7 @@ List<ReconBucket> buildReconBuckets(
           endExclusive: a.end,
           grouping: grouping,
           label: grouping.labelFor(a.start),
-          itemsSold: a.itemsSold.round(), // display stays whole until S3 (#620)
+          itemsSold: a.itemsSold,
           hasShortage: a.hasShortage,
         ),
       )
@@ -424,9 +424,9 @@ class ReconData {
   /// exclusive formula overstated the liability by (1+r).
   final VatBasis vatBasis;
 
-  final int itemsSold;
+  final double itemsSold;
   final int skus;
-  final int uncostedItems;
+  final double uncostedItems;
   final int refundsKobo;
   // ── Cash-flow summary (ADR 0014, business-wide) ──────────────────────────
   // Derived cash MOVEMENT for the period from tender-tagged flows (`method ==
@@ -544,7 +544,7 @@ class ReconData {
   final int bestStaffKobo;
   final int expensesKobo;
   final int expensesCount;
-  final int damageUnits;
+  final double damageUnits;
   final int damageCostKobo;
   final int damageRetailKobo;
   /// §17.2 crate-aware: refundable crate deposit forfeited by damages flagged
@@ -616,7 +616,7 @@ class ReconData {
   /// (in_transit transfers, at the cost that rode each transfer). An asset that
   /// used to vanish between dispatch and receipt — now counted in Business worth.
   final int inTransitValueKobo;
-  final int uncostedInventoryItems;
+  final double uncostedInventoryItems;
   final int surplusCostKobo;
 
   // ── Stock flow-equation card (ADR 0014, at current cost) ─────────────────
@@ -766,7 +766,7 @@ class ReconData {
   /// [ReconVanRollup].
   final ReconVanRollup van;
 
-  final List<({String name, int qty})> topItems;
+  final List<({String name, double qty})> topItems;
   final List<({String manufacturerName, int count, int valueKobo})> manufacturerEmpties;
 
   /// The configured VAT rate as a display percentage ("7.5"), for card labels.
@@ -1168,8 +1168,8 @@ ReconData reconDataFrom(ReconInputs input) {
   var costedRevenueKobo = 0;
   var cogsKobo = 0;
   var discountsKobo = 0;
-  // Quantities accumulate exactly (quarters) and are rounded for the whole-
-  // number report fields at the end; money goes through lineTotalKobo (#627).
+  // Quantities accumulate exactly (quarters); money goes through
+  // lineTotalKobo (#627).
   var itemsSoldQty = 0.0;
   var uncostedItemsQty = 0.0;
   // #176 — split Total Sales into the goods actually paid now vs left on credit,
@@ -1258,7 +1258,7 @@ ReconData reconDataFrom(ReconInputs input) {
   // quantities; those never rank as a "top item".
   final topItemsList = byProduct.entries
       .where((e) => e.value.qty > 0)
-      .map((e) => (name: e.value.name, qty: e.value.qty.round()))
+      .map((e) => (name: e.value.name, qty: e.value.qty))
       .toList()
     ..sort((a, b) => b.qty.compareTo(a.qty));
   final topItems = topItemsList.take(3).toList();
@@ -1904,11 +1904,11 @@ ReconData reconDataFrom(ReconInputs input) {
     vatRateBps: vat.rateBps,
     vatKobo: vatKobo,
     vatBasis: vat.basis,
-    // Whole-number report fields: rounded here, widened with the screens in
-    // S3-S5 (#620). Money above is already exact.
-    itemsSold: itemsSoldQty.round(),
+    // Quantities keep their parts (#628). Shortage / surplus stay rounded until
+    // stock counts take parts (#630).
+    itemsSold: itemsSoldQty,
     skus: skuSet.length,
-    uncostedItems: uncostedItemsQty.round(),
+    uncostedItems: uncostedItemsQty,
     refundsKobo: refundsKobo,
     cashSalesKobo: cashSalesKobo,
     cashDebtsCollectedKobo: cashDebtsCollectedKobo,
@@ -1925,7 +1925,7 @@ ReconData reconDataFrom(ReconInputs input) {
     bestStaffKobo: bestStaffKobo,
     expensesKobo: expensesKobo,
     expensesCount: expensesCount,
-    damageUnits: damageUnitsQty.round(),
+    damageUnits: damageUnitsQty,
     damageCostKobo: damageCostKobo,
     damageRetailKobo: damageRetailKobo,
     crateDamageDepositKobo: crateDamageDepositKobo,
@@ -1952,7 +1952,7 @@ ReconData reconDataFrom(ReconInputs input) {
     supplierPayableKobo: supplierPayableKobo,
     inventoryOnHandKobo: inventoryOnHandKobo,
     inTransitValueKobo: inTransitValueKobo,
-    uncostedInventoryItems: uncostedInventoryQty.round(),
+    uncostedInventoryItems: uncostedInventoryQty,
     surplusCostKobo: surplusCostKobo,
     stockOpeningKobo: stockOpeningKobo,
     stockReceivedKobo: stockReceivedKobo,
