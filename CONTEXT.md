@@ -155,8 +155,9 @@ not tied to the `completed` status).
 **Checkout**:
 The lifecycle operation that settles a sale and recognizes revenue: books wallet
 legs, deducts inventory, issues crates, writes the Order. The Order is born
-`pending` only for a **Crate-bearing sale**; every other sale is born `completed`
-(`completedAt` = the checkout instant, no confirmer). The economic act.
+`pending` only for a **Crate-bearing sale** with crates still to come back after
+any **Empties Exchange**; every other sale is born `completed` (`completedAt` =
+the checkout instant, no confirmer). The economic act.
 _Avoid_: settle, record-sale (as user-facing verbs), "complete the sale".
 
 **Sale totals**:
@@ -173,12 +174,24 @@ A Sale made by a business that tracks empties (`isCrateBusiness(type)` and
 Decided at Checkout from the business and the cart's products by
 `isCrateBearingSale` (`lib/core/crates/crate_bearing_sale.dart`, §13.4 / rule #13,
 PRD #337) — the same rule the Empty-Crates sheet uses to decide whether to open.
-Only these sales wait in Pending for the empties to be counted back.
+Only these sales can wait in Pending for the empties to be counted back; one
+whose crates are all covered by an **Empties Exchange** does not.
+
+**Empties Exchange**:
+Empties handed over at **Checkout**, per brand (ADR 0033, #649):
+`outstanding = crates in this sale − empties returned`. Netted inside the sale:
+the returned crates credit the Empties Pool (walk-ins too), and only the
+outstanding ones reach the order's crate line, the `issued` row and the deposit.
+Every brand at 0 and the Order is born `completed`; any brand above 0 and it is
+born `pending`. Cannot exceed this sale's crates per brand: old empties go through
+Record Crate Return. Blank means 0. Rule: `crate_exchange.dart`.
+_Avoid_: swap, trade-in; "return" alone (a **Return** is a reversed sale).
 
 **Confirm**:
 The ceremonial lifecycle operation flipping an Order `pending`→`completed`,
-stamping `completedAt` and recording goods receipt + returned empties. Creates
-**no** revenue.
+stamping `completedAt` and recording goods receipt + returned empties. Counts
+only the crates still outstanding after any **Empties Exchange**. Creates **no**
+revenue.
 _Avoid_: complete (as a synonym for Checkout), finalize.
 
 **Cancel**:
