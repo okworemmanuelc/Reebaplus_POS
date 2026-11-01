@@ -1,11 +1,11 @@
 {
-    "name": "drink_pos_app",
-    "short_name": "drink_pos_app",
+    "name": "Reebaplus POS",
+    "short_name": "Reebaplus POS",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#BEBFC1",
     "theme_color": "#BEBFC1",
-    "description": "A new Flutter project.",
+    "description": "Offline-first point of sale and back office for any kind of business.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

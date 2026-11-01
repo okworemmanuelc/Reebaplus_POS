@@ -592,7 +592,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
         SizedBox(height: context.getRSize(6)),
         Text(
           supplierRequired
-              ? 'Needed for drinks with crates, so the crates are '
+              ? 'Needed for products with crates, so the crates are '
                     'recorded against someone.'
               : 'No supplier? It is saved as a cash purchase: '
                     'stock goes up, nothing is recorded as owed.',
@@ -697,7 +697,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
         _fieldLabel('CRATES WITH THIS DELIVERY'),
         Text(
           'Count the crates and type them in. Crate sizes differ, so '
-          'the number cannot be worked out from the drinks '
+          'the number cannot be worked out from the bottles '
           'delivered. Leave a box at 0 if nothing moved.',
           style: context.regularStyle(12).copyWith(color: subtext),
         ),
@@ -797,7 +797,7 @@ class _ReceiveCheckoutScreenState extends ConsumerState<ReceiveCheckoutScreen> {
                     ),
                     Text(
                       '${formatQty(group.unitsDelivered)} '
-                      '${group.unitsDelivered == 1 ? 'drink' : 'drinks'} on '
+                      '${group.unitsDelivered == 1 ? 'bottle' : 'bottles'} on '
                       'this delivery',
                       style: context.regularStyle(12).copyWith(color: subtext),
                     ),

@@ -343,7 +343,7 @@ void main() {
       await tester.ensureVisible(find.text('CRATES WITH THIS DELIVERY'));
       await tester.pump();
       expect(find.text('Nigerian Breweries'), findsOneWidget);
-      expect(find.text('12 drinks on this delivery'), findsOneWidget);
+      expect(find.text('12 bottles on this delivery'), findsOneWidget);
       expect(find.text('Full crates in'), findsOneWidget);
       expect(find.text('Empty crates back'), findsOneWidget);
       await disposeScreen(tester);

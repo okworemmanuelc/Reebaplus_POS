@@ -1,6 +1,6 @@
-# drinkPosApp — Domain Context
+# Reebaplus POS — Domain Context
 
-A drink-POS platform with two clients over one Supabase backend. The **mobile app**
+A point-of-sale platform for any kind of business, with two clients over one Supabase backend. The **mobile app**
 is local-first: the on-device Drift database is the source of truth, and a sync
 engine reconciles it with the Supabase cloud so it works fully offline and converges
 when connectivity returns. The **web app** is online-first: it reads and writes the

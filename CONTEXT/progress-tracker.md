@@ -7,6 +7,8 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Any-business narrative, not drinks-only (2026-11-01)
+Branch `chore/generic-business-narrative`. Reebaplus is for any kind of business. `pubspec.yaml` description, `CONTEXT.md` heading, web title/manifest and the desktop runner names (`drink_pos_app` / `com.example.drinkPosApp` → `reebaplus_pos` / "Reebaplus POS" / `com.reebaplus.pos` on Linux, `com.okwor.reebapluspos` on macOS) no longer say drinks. Android/iOS store IDs untouched. Receive Checkout crate hints say "products with crates" / "N bottles on this delivery". Crate code comments that describe drinks stay (crates are drinks-only by design). Desktop installs (macOS/Windows/Linux, dev only) get a new data folder, so they sign in again. Local folder rename `drinkPosApp` → `reebaplus-pos` is for the owner to run by hand. No Drift/cloud change (no `pos-parity` issue).
 ### Issue #628: Selling in parts (2026-11-01, ready for review)
 - Slice S3 of PRD #620. Till, scan and cart all reach the Edit Quantity sheet: ±0.5 chips when the product's switch is on, 0.25 / 0.75 typed, whole numbers only when off, and an off-grid value blocks the sheet. `CartService` enforces the same rule and takes real stock (`maxStock` is a double).
 - Line money goes through `lineTotalKobo` from cart to receipts (cart totals sum kobo, not naira doubles). `order_commands` no longer truncates. Cancel and return carry parts, including a damaged part on a return.
