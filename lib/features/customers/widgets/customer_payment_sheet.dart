@@ -15,6 +15,7 @@ import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/customers/data/customer_list_view.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
@@ -161,22 +162,10 @@ class _CustomerPaymentSheetState extends ConsumerState<CustomerPaymentSheet> {
     super.dispose();
   }
 
-  List<Customer> _matches(List<Customer> all) {
-    final q = _query.trim().toLowerCase();
-    final qDigits = q.replaceAll(RegExp(r'\D'), '');
-    return [
-      for (final c in all)
-        if (!c.isWalkIn &&
-            (q.isEmpty ||
-                c.name.toLowerCase().contains(q) ||
-                (c.phone ?? '').toLowerCase().contains(q) ||
-                (qDigits.isNotEmpty &&
-                    (c.phone ?? '')
-                        .replaceAll(RegExp(r'\D'), '')
-                        .contains(qDigits))))
-          c,
-    ];
-  }
+  List<Customer> _matches(List<Customer> all) => [
+    for (final c in all)
+      if (!c.isWalkIn && customerMatchesQuery(c, _query)) c,
+  ];
 
   void _pick(Customer c) => setState(() {
     _picked = c;
