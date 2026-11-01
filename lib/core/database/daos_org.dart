@@ -174,7 +174,8 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
                 (t) =>
                     whereBusiness(t) &
                     t.roleId.equals(ceoRole.id) &
-                    t.status.equals('active'),
+                    t.status.equals('active') &
+                    t.isHidden.not(),
               )
               ..limit(1))
             .getSingleOrNull();
@@ -183,7 +184,8 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
 
   /// Active user ids whose role slug is in [slugs] for the current business.
   /// Routes §26.4 notifications to a role audience (e.g. Close Day's "day
-  /// closed" fires to CEO + Manager). Empty if none resolve locally.
+  /// closed" fires to CEO + Manager). Empty if none resolve locally. Hidden
+  /// members (#622 support login) are never an audience.
   Future<List<String>> getUserIdsForRoleSlugs(List<String> slugs) async {
     if (slugs.isEmpty) return const [];
     final query =
@@ -192,6 +194,7 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
         ])..where(
           whereBusiness(userBusinesses) &
               userBusinesses.status.equals('active') &
+              userBusinesses.isHidden.not() &
               roles.slug.isIn(slugs),
         );
     final rows = await query.get();
@@ -203,9 +206,18 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
   /// Keeps `active` and `suspended` (both surface in Staff Management — suspended
   /// greyed out); `removed` staff no longer appear in any active staff list,
   /// though their users row is retained as an attribution stub for history.
+  ///
+  /// Hidden members (#622, the Reebaplus support login) are excluded, so every
+  /// staff list, picker, filter and count built on this stream omits them. Their
+  /// `users` row still syncs, so history keeps resolving their name.
   Stream<List<UserBusinessData>> watchForCurrentBusiness() {
     return (select(userBusinesses)
-          ..where((t) => whereBusiness(t) & t.status.equals('removed').not())
+          ..where(
+            (t) =>
+                whereBusiness(t) &
+                t.status.equals('removed').not() &
+                t.isHidden.not(),
+          )
           ..orderBy([(t) => OrderingTerm.asc(t.status)]))
         .watch();
   }
@@ -226,7 +238,8 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
           ])
           ..where(
             userBusinesses.businessId.equals(businessId) &
-                userBusinesses.status.equals('active'),
+                userBusinesses.status.equals('active') &
+                userBusinesses.isHidden.not(),
           )
           ..orderBy([OrderingTerm.asc(users.name.lower())]);
     return query.watch().map(
@@ -252,6 +265,7 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
       ..where(
         userBusinesses.businessId.equals(businessId) &
             userBusinesses.status.equals('active') &
+            userBusinesses.isHidden.not() &
             users.pinHash.isNotNull(),
       );
     final row = await query.getSingle();
@@ -310,12 +324,25 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
+  /// #622: the shop can't change or remove the hidden support member from the
+  /// app (the console can). The cloud guard trigger enforces it too; this stops
+  /// the local row drifting from the cloud before the next pull.
+  Future<void> _assertNotHidden(String membershipId) async {
+    final row = await (select(
+      userBusinesses,
+    )..where((t) => t.id.equals(membershipId))).getSingleOrNull();
+    if (row != null && row.isHidden) {
+      throw StateError('Hidden members can only be changed from the console.');
+    }
+  }
+
   /// Suspend or reactivate a membership. [status] is `'active'` or
   /// `'suspended'` — the two non-terminal states. The terminal `'removed'`
   /// state is NEVER set through this outbox path; it is server-authoritative
   /// (see [markRemovedLocal] / `remove_staff_member`). Enqueues the updated
   /// row for sync.
   Future<void> setStatus(String membershipId, String status) async {
+    await _assertNotHidden(membershipId);
     await (update(
       userBusinesses,
     )..where((t) => t.id.equals(membershipId))).write(
@@ -333,6 +360,7 @@ class UserBusinessesDao extends DatabaseAccessor<AppDatabase>
 
   /// Change the role on a membership. Enqueues the updated row for sync.
   Future<void> setRole(String membershipId, String roleId) async {
+    await _assertNotHidden(membershipId);
     await (update(
       userBusinesses,
     )..where((t) => t.id.equals(membershipId))).write(

@@ -766,7 +766,21 @@ final List<SyncedTable> kSyncRegistry = [
       (db) => db.userBusinesses,
       UserBusinessData.fromJson,
       resilient: true,
+      // Before 0238 deploys the cloud row has no is_hidden: not hidden.
+      defaults: {'isHidden': false},
     ),
+    // #622: `is_hidden` is cloud-authoritative (0238 guard) — pulled, never
+    // pushed. Every other column pushes as before.
+    pushColumns: {
+      'id',
+      'business_id',
+      'user_id',
+      'role_id',
+      'status',
+      'last_login_at',
+      'created_at',
+      'last_updated_at',
+    },
   ),
   SyncedTable(
     name: 'user_stores',

@@ -48805,6 +48805,21 @@ class $UserBusinessesTable extends UserBusinesses
         requiredDuringInsert: false,
         defaultValue: currentDateAndTime,
       );
+  static const VerificationMeta _isHiddenMeta = const VerificationMeta(
+    'isHidden',
+  );
+  @override
+  late final GeneratedColumn<bool> isHidden = GeneratedColumn<bool>(
+    'is_hidden',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_hidden" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -48815,6 +48830,7 @@ class $UserBusinessesTable extends UserBusinesses
     lastLoginAt,
     createdAt,
     lastUpdatedAt,
+    isHidden,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -48885,6 +48901,12 @@ class $UserBusinessesTable extends UserBusinesses
         ),
       );
     }
+    if (data.containsKey('is_hidden')) {
+      context.handle(
+        _isHiddenMeta,
+        isHidden.isAcceptableOrUnknown(data['is_hidden']!, _isHiddenMeta),
+      );
+    }
     return context;
   }
 
@@ -48926,6 +48948,10 @@ class $UserBusinessesTable extends UserBusinesses
         DriftSqlType.dateTime,
         data['${effectivePrefix}last_updated_at'],
       )!,
+      isHidden: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_hidden'],
+      )!,
     );
   }
 
@@ -48945,6 +48971,7 @@ class UserBusinessData extends DataClass
   final DateTime? lastLoginAt;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
+  final bool isHidden;
   const UserBusinessData({
     required this.id,
     required this.businessId,
@@ -48954,6 +48981,7 @@ class UserBusinessData extends DataClass
     this.lastLoginAt,
     required this.createdAt,
     required this.lastUpdatedAt,
+    required this.isHidden,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -48968,6 +48996,7 @@ class UserBusinessData extends DataClass
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    map['is_hidden'] = Variable<bool>(isHidden);
     return map;
   }
 
@@ -48983,6 +49012,7 @@ class UserBusinessData extends DataClass
           : Value(lastLoginAt),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
+      isHidden: Value(isHidden),
     );
   }
 
@@ -49000,6 +49030,7 @@ class UserBusinessData extends DataClass
       lastLoginAt: serializer.fromJson<DateTime?>(json['lastLoginAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+      isHidden: serializer.fromJson<bool>(json['isHidden']),
     );
   }
   @override
@@ -49014,6 +49045,7 @@ class UserBusinessData extends DataClass
       'lastLoginAt': serializer.toJson<DateTime?>(lastLoginAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+      'isHidden': serializer.toJson<bool>(isHidden),
     };
   }
 
@@ -49026,6 +49058,7 @@ class UserBusinessData extends DataClass
     Value<DateTime?> lastLoginAt = const Value.absent(),
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
+    bool? isHidden,
   }) => UserBusinessData(
     id: id ?? this.id,
     businessId: businessId ?? this.businessId,
@@ -49035,6 +49068,7 @@ class UserBusinessData extends DataClass
     lastLoginAt: lastLoginAt.present ? lastLoginAt.value : this.lastLoginAt,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+    isHidden: isHidden ?? this.isHidden,
   );
   UserBusinessData copyWithCompanion(UserBusinessesCompanion data) {
     return UserBusinessData(
@@ -49052,6 +49086,7 @@ class UserBusinessData extends DataClass
       lastUpdatedAt: data.lastUpdatedAt.present
           ? data.lastUpdatedAt.value
           : this.lastUpdatedAt,
+      isHidden: data.isHidden.present ? data.isHidden.value : this.isHidden,
     );
   }
 
@@ -49065,7 +49100,8 @@ class UserBusinessData extends DataClass
           ..write('status: $status, ')
           ..write('lastLoginAt: $lastLoginAt, ')
           ..write('createdAt: $createdAt, ')
-          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('isHidden: $isHidden')
           ..write(')'))
         .toString();
   }
@@ -49080,6 +49116,7 @@ class UserBusinessData extends DataClass
     lastLoginAt,
     createdAt,
     lastUpdatedAt,
+    isHidden,
   );
   @override
   bool operator ==(Object other) =>
@@ -49092,7 +49129,8 @@ class UserBusinessData extends DataClass
           other.status == this.status &&
           other.lastLoginAt == this.lastLoginAt &&
           other.createdAt == this.createdAt &&
-          other.lastUpdatedAt == this.lastUpdatedAt);
+          other.lastUpdatedAt == this.lastUpdatedAt &&
+          other.isHidden == this.isHidden);
 }
 
 class UserBusinessesCompanion extends UpdateCompanion<UserBusinessData> {
@@ -49104,6 +49142,7 @@ class UserBusinessesCompanion extends UpdateCompanion<UserBusinessData> {
   final Value<DateTime?> lastLoginAt;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
+  final Value<bool> isHidden;
   final Value<int> rowid;
   const UserBusinessesCompanion({
     this.id = const Value.absent(),
@@ -49114,6 +49153,7 @@ class UserBusinessesCompanion extends UpdateCompanion<UserBusinessData> {
     this.lastLoginAt = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
+    this.isHidden = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   UserBusinessesCompanion.insert({
@@ -49125,6 +49165,7 @@ class UserBusinessesCompanion extends UpdateCompanion<UserBusinessData> {
     this.lastLoginAt = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
+    this.isHidden = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : businessId = Value(businessId),
        userId = Value(userId),
@@ -49138,6 +49179,7 @@ class UserBusinessesCompanion extends UpdateCompanion<UserBusinessData> {
     Expression<DateTime>? lastLoginAt,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
+    Expression<bool>? isHidden,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -49149,6 +49191,7 @@ class UserBusinessesCompanion extends UpdateCompanion<UserBusinessData> {
       if (lastLoginAt != null) 'last_login_at': lastLoginAt,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (isHidden != null) 'is_hidden': isHidden,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -49162,6 +49205,7 @@ class UserBusinessesCompanion extends UpdateCompanion<UserBusinessData> {
     Value<DateTime?>? lastLoginAt,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
+    Value<bool>? isHidden,
     Value<int>? rowid,
   }) {
     return UserBusinessesCompanion(
@@ -49173,6 +49217,7 @@ class UserBusinessesCompanion extends UpdateCompanion<UserBusinessData> {
       lastLoginAt: lastLoginAt ?? this.lastLoginAt,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      isHidden: isHidden ?? this.isHidden,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -49204,6 +49249,9 @@ class UserBusinessesCompanion extends UpdateCompanion<UserBusinessData> {
     if (lastUpdatedAt.present) {
       map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
     }
+    if (isHidden.present) {
+      map['is_hidden'] = Variable<bool>(isHidden.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -49221,6 +49269,7 @@ class UserBusinessesCompanion extends UpdateCompanion<UserBusinessData> {
           ..write('lastLoginAt: $lastLoginAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('isHidden: $isHidden, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -115579,6 +115628,7 @@ typedef $$UserBusinessesTableCreateCompanionBuilder =
       Value<DateTime?> lastLoginAt,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
+      Value<bool> isHidden,
       Value<int> rowid,
     });
 typedef $$UserBusinessesTableUpdateCompanionBuilder =
@@ -115591,6 +115641,7 @@ typedef $$UserBusinessesTableUpdateCompanionBuilder =
       Value<DateTime?> lastLoginAt,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
+      Value<bool> isHidden,
       Value<int> rowid,
     });
 
@@ -115690,6 +115741,11 @@ class $$UserBusinessesTableFilterComposer
 
   ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
     column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isHidden => $composableBuilder(
+    column: $table.isHidden,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -115797,6 +115853,11 @@ class $$UserBusinessesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get isHidden => $composableBuilder(
+    column: $table.isHidden,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$BusinessesTableOrderingComposer get businessId {
     final $$BusinessesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -115894,6 +115955,9 @@ class $$UserBusinessesTableAnnotationComposer
     column: $table.lastUpdatedAt,
     builder: (column) => column,
   );
+
+  GeneratedColumn<bool> get isHidden =>
+      $composableBuilder(column: $table.isHidden, builder: (column) => column);
 
   $$BusinessesTableAnnotationComposer get businessId {
     final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
@@ -116003,6 +116067,7 @@ class $$UserBusinessesTableTableManager
                 Value<DateTime?> lastLoginAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<bool> isHidden = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => UserBusinessesCompanion(
                 id: id,
@@ -116013,6 +116078,7 @@ class $$UserBusinessesTableTableManager
                 lastLoginAt: lastLoginAt,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
+                isHidden: isHidden,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -116025,6 +116091,7 @@ class $$UserBusinessesTableTableManager
                 Value<DateTime?> lastLoginAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<bool> isHidden = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => UserBusinessesCompanion.insert(
                 id: id,
@@ -116035,6 +116102,7 @@ class $$UserBusinessesTableTableManager
                 lastLoginAt: lastLoginAt,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
+                isHidden: isHidden,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
