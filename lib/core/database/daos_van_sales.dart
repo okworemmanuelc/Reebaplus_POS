@@ -855,7 +855,7 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
       final peeked = await db.costBatchesDao.peekOutflowCostKobo(
         line.productId,
         sourceStoreId,
-        line.quantity,
+        line.quantity.toDouble(),
       );
       if (peeked <= 0) continue; // uncosted — a different disclosure
       final perUnit = (peeked / line.quantity).round();
@@ -1112,7 +1112,7 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
       await db.inventoryDao.adjustStock(
         line.productId,
         sourceStoreId,
-        -line.quantity,
+        -line.quantity.toDouble(),
         'Van load — dispatched to van',
         performedBy,
         movementType: 'transfer_out',
@@ -1121,7 +1121,7 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
       await db.inventoryDao.adjustStock(
         line.productId,
         vanStoreId,
-        line.quantity,
+        line.quantity.toDouble(),
         'Van load — received on van',
         performedBy,
         movementType: 'transfer_in',
@@ -1134,7 +1134,7 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
       final drawnKobo = await db.costBatchesDao.drawDownOutflow(
         line.productId,
         sourceStoreId,
-        line.quantity,
+        line.quantity.toDouble(),
       );
       final unitCostKobo = (drawnKobo / line.quantity).round();
       if (unitCostKobo == 0) uncosted.add(line.productId);
@@ -1548,7 +1548,7 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
           await db.inventoryDao.adjustStock(
             line.productId,
             trip.vanStoreId,
-            -line.quantity,
+            -line.quantity.toDouble(),
             'Van return — off the van',
             performedBy,
             movementType: 'transfer_out',
@@ -1562,7 +1562,7 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
           await db.inventoryDao.adjustStock(
             line.productId,
             trip.sourceStoreId,
-            line.quantity,
+            line.quantity.toDouble(),
             'Van return — back in stock',
             performedBy,
             movementType: 'transfer_in',
@@ -1577,7 +1577,7 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
             await db.costBatchesDao.recordInflowBatch(
               productId: line.productId,
               storeId: trip.sourceStoreId,
-              quantity: seg.quantity,
+              quantity: seg.quantity.toDouble(),
               costKobo: seg.unitCostKobo,
               receivedAt: now,
             );
@@ -1605,7 +1605,7 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
           await db.inventoryDao.adjustStock(
             line.productId,
             trip.vanStoreId,
-            -line.quantity,
+            -line.quantity.toDouble(),
             kVanReturnDamageReason,
             performedBy,
             trackCost: false,
@@ -2026,7 +2026,7 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
       for (final i in items)
         VanPositionSaleLine(
           productId: i.productId!,
-          quantity: i.quantity,
+          quantity: i.quantity.round(), // van lines stay whole (#627)
           rungValueKobo: i.totalKobo,
         ),
     ];
@@ -2299,7 +2299,7 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
         await db.inventoryDao.adjustStock(
           line.productId,
           trip.vanStoreId,
-          -remove,
+          -remove.toDouble(),
           kVanCloseShortageReason,
           performedBy,
           trackCost: false,
