@@ -24,13 +24,22 @@ void main() {
       expect(check(balance: -999999, paid: 100000, limit: 0),
           isA<DebtLimitOk>());
     });
-    test('new debt with no limit is refused', () {
-      expect(check(balance: 0, limit: 0), isA<DebtLimitNotSet>());
+    test('no limit (0) means unlimited credit, however large the debt', () {
+      expect(check(balance: 0, limit: 0), isA<DebtLimitOk>());
+      expect(check(balance: -99999999, total: 99999999, limit: 0),
+          isA<DebtLimitOk>());
     });
     test('new debt over the limit is refused by the amount over', () {
       final r = check(balance: -50000, limit: 120000);
       expect(r, isA<DebtLimitExceeded>());
       expect((r as DebtLimitExceeded).overByKobo, 30000);
+    });
+    test('a positive limit still caps: exactly at the limit passes, 1 over fails',
+        () {
+      expect(check(balance: 0, total: 100000, limit: 100000),
+          isA<DebtLimitOk>());
+      expect(check(balance: 0, total: 100001, limit: 100000),
+          isA<DebtLimitExceeded>());
     });
     test('new debt within the limit passes', () {
       expect(check(balance: 0, limit: 100000), isA<DebtLimitOk>());
@@ -53,8 +62,9 @@ void main() {
       expect(r, isA<DebtLimitExceeded>());
       expect((r as DebtLimitExceeded).overByKobo, 50000);
     });
-    test('prior debt with no limit set still blocks', () {
-      expect(check(balance: -1, limit: 0, pod: true), isA<DebtLimitNotSet>());
+    test('prior debt with no limit (0) is fine — unlimited credit', () {
+      expect(check(balance: -99999999, limit: 0, pod: true),
+          isA<DebtLimitOk>());
     });
   });
 }

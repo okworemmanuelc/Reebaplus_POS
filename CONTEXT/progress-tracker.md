@@ -7,9 +7,13 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
-### Issue #622: Hidden support CEO (2026-11-01, ready for review)
+### Issue #622: Hidden support CEO (2026-11-01, merged)
 
-A Reebaplus support login can sit in a shop as a full-rights CEO yet never appear in the staff list, pickers, counts, plan staff limit or notification audiences; its own actions still show its name. `user_businesses.is_hidden` (cloud **0238 NOT deployed**, Drift v97), set only by the server/console. Details in `BUILD_LOG.md` (2026-11-01). Part of #619. pos-parity issue in reebaplus-web: supervisor files it; console must show it as "Support".
+A Reebaplus support login can sit in a shop as a full-rights CEO yet never appear in the staff list, pickers, counts, plan staff limit or notification audiences; its own actions still show its name. `user_businesses.is_hidden` (cloud 0238 deployed 2026-11-01, Drift v97), set only by the server/console. Details in `BUILD_LOG.md` (2026-11-01). Part of #619. pos-parity issue in reebaplus-web: supervisor files it; console must show it as "Support".
+
+### Issue #621: No credit limit unless one is set (2026-11-01, merged, PR #624)
+- `checkDebtLimit`: a limit of 0/none = unlimited credit; a positive limit still caps. `DebtLimitNotSet` removed, checkout "no limit set" messages removed, customer limit sheet says "Leave empty for no limit".
+- Cloud migration 0237 re-issues `checkout_order` (same 9-arg signature) with the gate `v_limit > 0 AND projected < -v_limit`. deployed 2026-11-01; pos-parity reebaplus-web#206; pos-parity issue in reebaplus-web to be filed by the supervisor.
 
 ### Issue #608: Play Console recommendations (2026-10-31, ready for review)
 

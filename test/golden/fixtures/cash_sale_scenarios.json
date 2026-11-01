@@ -396,6 +396,36 @@
       }
     },
     {
+      "name": "no credit limit (#621): a customer with limit 0 books a credit sale, uncapped",
+      "_note": "Owner rule 2026-11-01 (migration 0237): debt_limit_kobo 0 / none = unlimited credit. Same sale as the capped scenario above, but the 300000 debt is accepted.",
+      "customer": { "opening_balance_kobo": 0, "debt_limit_kobo": 0 },
+      "products": [
+        { "key": "P1", "name": "Star 60cl", "unit_price_kobo": 100000, "scalar_cost_kobo": 50000 }
+      ],
+      "inventory": [{ "product": "P1", "quantity": 100 }],
+      "batches": [{ "product": "P1", "qty": 20, "cost_kobo": 50000, "received_at": "2026-01-01" }],
+      "checkout": {
+        "payment_method": "credit",
+        "discount_kobo": 0,
+        "amount_paid_kobo": 0,
+        "items": [{ "product": "P1", "quantity": 3 }]
+      },
+      "expected": {
+        "order": {
+          "status": "completed", "payment_type": "credit",
+          "total_amount_kobo": 300000, "discount_kobo": 0,
+          "net_amount_kobo": 300000, "amount_paid_kobo": 0,
+          "completed_at_null": false
+        },
+        "items": [{ "product": "P1", "quantity": 3, "unit_price_kobo": 100000, "total_kobo": 300000, "buying_price_kobo": 50000 }],
+        "batches_remaining": [{ "product": "P1", "received_at": "2026-01-01", "qty_remaining": 17 }],
+        "inventory_after": [{ "product": "P1", "quantity": 97 }],
+        "product_scalar_cost": [{ "product": "P1", "buying_price_kobo": 50000 }],
+        "wallet_legs": [{ "reference_type": "order_payment", "signed_amount_kobo": -300000 }],
+        "customer_balance_after_kobo": -300000
+      }
+    },
+    {
       "name": "credit (Slice 3): Register-as-Credit-Sale with partial cash posts a debit + a cash credit leg",
       "customer": { "opening_balance_kobo": 0, "debt_limit_kobo": 500000 },
       "products": [

@@ -601,7 +601,8 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
       context,
       (ctx) => CustomerSheetFrame(
         title: 'Set Debt Limit',
-        subtitle: 'Maximum credit allowed for $_name',
+        subtitle:
+            'Maximum credit allowed for $_name. Leave empty for no limit.',
         children: [
           Form(
             key: formKey,
@@ -620,7 +621,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                   validator: (v) {
                     final n = parseCurrency(v ?? '');
                     if (n < 0) {
-                      return 'Enter a valid amount (0 to remove limit)';
+                      return 'Enter a valid amount (empty or 0 for no limit)';
                     }
                     return null;
                   },
@@ -644,7 +645,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                       messenger.showSnackBar(
                         SnackBar(
                           content: Text(
-                            'Debt limit set to ${formatCurrency(amount)}',
+                            amount > 0
+                                ? 'Debt limit set to ${formatCurrency(amount)}'
+                                : 'Debt limit removed — no limit',
                           ),
                           backgroundColor: _fixed.green,
                         ),
