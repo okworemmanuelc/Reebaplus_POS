@@ -56,49 +56,46 @@ void main() {
   }
 
   Finder productTiles() => find.byWidgetPredicate(
-        (w) =>
-            w.key is ValueKey<String> &&
-            (w.key! as ValueKey<String>)
-                .value
-                .startsWith(kPosProductTileKeyPrefix),
-        description: 'pos product tile',
-      );
+    (w) =>
+        w.key is ValueKey<String> &&
+        (w.key! as ValueKey<String>).value.startsWith(kPosProductTileKeyPrefix),
+    description: 'pos product tile',
+  );
 
-  /// Width → expected columns, with the `pos_grid_columns` preference at 2.
+  /// Width → expected columns.
   ///
-  /// Under 380dp a phone is capped at 2; over 600dp the grid takes
-  /// `(width / 180).floor()`; in between the preference governs. The width is
-  /// the grid's own, so at 600dp+ the app frame's side rail (#352, ~73dp with
-  /// its divider) comes off first.
+  /// As many 170dp columns as fit, never fewer than 3. The width is the grid's
+  /// own, so at 600dp+ the app frame's side rail (#352, ~73dp with its divider)
+  /// comes off first.
   const widthToColumns = <String, (Size, int)>{
-    'pixel7Portrait (412dp wide, preference governs)': (pixel7Portrait, 2),
-    'pixel7Landscape (915dp − 73dp rail = 842dp, 842/180 = 4)': (
+    'small phone (320dp wide)': (Size(320, 640), 3),
+    'pixel7Portrait (412dp wide)': (pixel7Portrait, 3),
+    'pixel7Landscape (915dp − 73dp rail = 842dp, 842/170 = 4)': (
       pixel7Landscape,
       4,
     ),
-    'androidCompactLandscape (800dp − 73dp rail = 727dp, 727/180 = 4)': (
+    'androidCompactLandscape (800dp − 73dp rail = 727dp, 727/170 = 4)': (
       androidCompactLandscape,
       4,
     ),
-    'se1Landscape (568dp wide, under 600 so preference governs)': (
-      Size(568, 320),
-      2,
-    ),
+    'se1Landscape (568dp wide, 568/170 = 3)': (Size(568, 320), 3),
   };
 
   group('POS product grid density', () {
     widthToColumns.forEach((name, expectation) {
       final (size, expectedColumns) = expectation;
 
-      testWidgets('$name lays out $expectedColumns columns of real tiles',
-          (tester) async {
+      testWidgets('$name lays out $expectedColumns columns of real tiles', (
+        tester,
+      ) async {
         await pumpPosHome(
           tester,
           env: env,
           size: size,
           overrides: [
-            firstRunSurfaceStateProvider
-                .overrideWithValue(FirstRunSurfaceState.hasContent),
+            firstRunSurfaceStateProvider.overrideWithValue(
+              FirstRunSurfaceState.hasContent,
+            ),
           ],
         );
 
@@ -120,17 +117,20 @@ void main() {
       });
     });
 
-    testWidgets('columnsFor caps a narrow phone at two columns', (tester) async {
-      // The width branches, without pumping a screen. 320dp is the smallest
-      // supported portrait phone and must never take a 3-column preference.
-      expect(ProductGrid.columnsFor(320, 3), equals(2));
-      expect(ProductGrid.columnsFor(360, 4), equals(2));
-      // Between 380 and 600 the user's preference is respected as-is.
-      expect(ProductGrid.columnsFor(412, 3), equals(3));
-      // Above 600 the width wins when it asks for more than the preference.
-      expect(ProductGrid.columnsFor(800, 2), equals(4));
-      // ...but never fewer: a high preference is not reduced.
-      expect(ProductGrid.columnsFor(800, 6), equals(6));
+    testWidgets('columnsFor: three on phones, width fills beyond that', (
+      tester,
+    ) async {
+      for (final width in [320.0, 360.0, 412.0, 568.0]) {
+        expect(ProductGrid.columnsFor(width), equals(3), reason: '$width');
+      }
+      expect(ProductGrid.columnsFor(800), equals(4));
+      expect(ProductGrid.columnsFor(1280), equals(7));
+    });
+
+    test('only a small phone scales its tile down', () {
+      expect(posTileScale(91), closeTo(0.91, 0.001));
+      expect(posTileScale(100), equals(1));
+      expect(posTileScale(170), equals(1));
     });
   });
 }

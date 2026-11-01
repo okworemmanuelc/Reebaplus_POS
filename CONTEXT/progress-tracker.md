@@ -7,6 +7,9 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### POS: List or Grid only, 3 columns on phones (2026-11-01, ready for review)
+Branch `feat/pos-list-grid-only`. The view selector offers only List View and Grid View; the saved column count (`pos_grid_columns`) is gone. `ProductGrid.columnsFor(width)` = as many 170dp columns as fit, never under 3: every upright phone gets 3, tablets, wide screens and sideways phones fill their width. Tiles under 100dp (`kPosTileDesignWidth`, small phones) are laid out at 100dp and scaled down whole, keeping the #641 tile layout. No schema, sync or money change, so no pos-parity issue. Known: `receive_checkout_*` goldens (6) already fail on main, unrelated.
+
 ### Issue #641: POS tile price on its own line (2026-11-01)
 Branch `fix/641-pos-tile-price-line`. `ProductTile` with a `priceLabel` puts the price on its own full-width line (Bold 16, FittedBox only as a 7-figure safety net) with the stock pill below it; tiles without a price (Receive, Request Stock) are unchanged. `posTileSubtitle` is now size · unit (description dropped from the tile); the line may wrap to 2 (`subtitleMaxLines`, 1 on a short sideways phone via `posTileSubtitleLines`). `posTileExtent` = price line + 4 + pill line + 6 + extra subtitle line; on a short screen the tile leaves the art out (`showArt: false`) so a full row still fits. POS goldens regenerated; Receive/Request unchanged. Tests: `test/pos/pos_tile_price_line_test.dart`.
 

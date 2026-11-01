@@ -529,15 +529,14 @@ void main() {
   });
 
   group('columns from the grid\'s real width', () {
-    testWidgets('upright phone 390×844: 2', (tester) async {
+    testWidgets('upright phone 390×844: 3', (tester) async {
       await pumpPosHome(
         tester,
         env: env,
         size: const Size(390, 844),
         overrides: [hasContent],
-        posGridColumns: 2,
       );
-      expect(renderedColumns(tester), 2);
+      expect(renderedColumns(tester), 3);
       await disposePosHome(tester);
     });
 
