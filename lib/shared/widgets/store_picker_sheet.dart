@@ -20,15 +20,15 @@ import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 /// surface read. The single exception it inherits for free: a driver
 /// (`Gates.vanSell`) assigned to a van sees that van, and only that van.
 ///
-/// [confirmSelection] (used by the POS "select a store" gate) asks the user to
-/// confirm a concrete store before it becomes active, so a stray tap can't
-/// abruptly switch the store POS sells from. Cancelling leaves the sheet open.
+/// Every real switch asks "Switch to <store>?" first, so a stray tap can't
+/// abruptly change the store. Cancelling leaves the sheet open. Tapping the
+/// store that's already in force just closes the sheet — except on the POS
+/// gate, where a silently defaulted store still has to be explicitly chosen.
 Future<void> showStorePickerSheet(
   BuildContext context,
   WidgetRef ref, {
   VoidCallback? onSelected,
   bool isDismissible = true,
-  bool confirmSelection = false,
 }) {
   final selectable = ref.read(selectableStoresProvider);
   final canViewAll = ref.read(canViewAllStoresProvider);
@@ -100,7 +100,11 @@ Future<void> showStorePickerSheet(
                   final selected = o.id == activeId;
                   return InkWell(
                     onTap: () async {
-                      if (confirmSelection && o.id != null) {
+                      final alreadyInForce =
+                          o.id == activeId &&
+                          (o.id == null ||
+                              ref.read(storeExplicitlyChosenProvider).value);
+                      if (!alreadyInForce) {
                         final ok = await _confirmStoreSwitch(sheetCtx, o.name);
                         if (!ok || !sheetCtx.mounted) return;
                       }
@@ -171,18 +175,12 @@ Future<void> showStorePickerSheet(
   );
 }
 
-/// Confirm dialog for [showStorePickerSheet]'s `confirmSelection` mode.
-/// Resolves true only when the user taps "Use this store".
+/// Resolves true only when the user taps "Confirm".
 Future<bool> _confirmStoreSwitch(BuildContext context, String storeName) async {
   final ok = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: Text('Sell from $storeName?'),
-      content: Text(
-        'Sales, stock and receipts on this screen will use $storeName until '
-        'you change the store.',
-        style: const TextStyle(fontSize: 14),
-      ),
+      title: Text('Switch to $storeName?'),
       actions: [
         AppButton(
           text: 'Cancel',
@@ -191,7 +189,7 @@ Future<bool> _confirmStoreSwitch(BuildContext context, String storeName) async {
           onPressed: () => Navigator.pop(ctx, false),
         ),
         AppButton(
-          text: 'Use this store',
+          text: 'Confirm',
           isFullWidth: false,
           onPressed: () => Navigator.pop(ctx, true),
         ),

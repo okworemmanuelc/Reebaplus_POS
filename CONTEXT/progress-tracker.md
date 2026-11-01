@@ -7,8 +7,8 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
-### POS store pick needs confirming (2026-11-01, ready for review)
-Branch `feat/pos-store-confirm`. On the POS "Select Store" sheet (multi-store businesses), tapping a store now opens a "Sell from <store>?" dialog; only "Use this store" switches, Cancel keeps the sheet open. New `confirmSelection` flag on `showStorePickerSheet`, on only for the POS gate (the drawer picker still switches in one tap; "All Stores" never asks). No schema, sync or money change, so no pos-parity issue.
+### Store switch needs confirming (2026-11-01, ready for review)
+Branch `feat/pos-store-confirm`. `showStorePickerSheet`, used by both the POS gate and the side menu, now asks "Switch to <store>?" (Confirm / Cancel) before any switch, All Stores included. Cancel keeps the sheet open. Tapping the store already in force just closes the sheet, except a silently defaulted store, which POS still needs explicitly chosen. No schema, sync or money change, so no pos-parity issue.
 
 ### Home eye toggle, auto-lock off by default, POS 3 columns (2026-11-01, ready for review)
 Branch `feat/home-hide-figures-lock-off-pos-3col`. (1) Home: eye button in the Performance Overview header hides every money figure (device-local `home_hide_figures`). (2) Auto-lock: unset `auto_lock_interval_seconds` now means off in `AutoLockWrapper` and the Security screen (was 5 min); a saved timer is unchanged. The 12-hour shift logout is untouched. (3) POS: the grid-column fallback is 3 (was 2), so a medium phone (380–600dp) opens on three columns; small phones stay capped at 2, and a saved choice wins. No schema, sync or money change, so no pos-parity issue.
