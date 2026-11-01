@@ -76,7 +76,6 @@ void main() {
             .overrideWithValue(FirstRunSurfaceState.hasContent),
       ],
       sharedPreferences: const {
-        'pos_grid_columns': 2,
         'pos_is_list_view': false,
         'hint_pos_gestures': 2,
       },

@@ -231,6 +231,31 @@ void main() {
     expect(beerIcon.icon, AppIcons.beerMug);
   });
 
+  for (final (width, pillOnArt) in [(100.0, true), (180.0, false)]) {
+    testWidgets(
+      'ProductTile ${width}dp wide: stock pill on the art = $pillOnArt',
+      (tester) async {
+        await pump(
+          tester,
+          (_) => SizedBox(
+            height: 260,
+            width: width,
+            child: const ProductTile(
+              name: 'Star Lager',
+              priceLabel: '₦185,000',
+              stockLabel: '38',
+              categoryName: 'Beer',
+            ),
+          ),
+        );
+        expect(tester.takeException(), isNull);
+        final pillBottom = tester.getBottomLeft(find.text('38')).dy;
+        final nameTop = tester.getTopLeft(find.text('Star Lager')).dy;
+        expect(pillBottom < nameTop, pillOnArt);
+      },
+    );
+  }
+
   testWidgets('ProductTile: tappableWhenOut keeps an out-of-stock tile live '
       '(#394)', (tester) async {
     var taps = 0;

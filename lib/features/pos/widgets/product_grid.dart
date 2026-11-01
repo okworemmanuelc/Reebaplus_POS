@@ -39,10 +39,22 @@ ValueKey<String> posProductTileKey(String productId) =>
 /// rule since before the redesign; unchanged by #384).
 const int kPosLowStockAt = 5;
 
+/// The grid never shows fewer columns than this: every upright phone, however
+/// small, sells from three columns.
+const int kPosMinColumns = 3;
+
 /// The narrowest a grid column gets on a tablet or wide screen before the grid
 /// drops a column (#384: 4 columns at 800dp upright beside the rail, and 4
 /// beside the fixed cart panel at 1280dp, as the mockups draw).
 const double kPosTileMinWidth = 170;
+
+/// The width a tile is laid out at when its column is narrower: a small phone
+/// shows this same tile scaled down, so the design holds instead of squeezing.
+const double kPosTileDesignWidth = 100;
+
+/// How much a tile in a [tileWidth] column is scaled down; 1 = not at all.
+double posTileScale(double tileWidth) =>
+    min(1, tileWidth / kPosTileDesignWidth);
 
 /// The height of one grid tile: padding, a fixed art area and room for a
 /// two-line name, the size · pack line and the price row, all grown with the
@@ -68,14 +80,11 @@ double posTileExtent(BuildContext context) {
 /// Stock's tiles (#380), and the size word stays so nothing is lost. [crates]
 /// is `businessTracksCrates` for the active business (see [unitLabel]).
 String? posTileSubtitle(ProductData product, {required bool crates}) {
-  final parts = [
-    product.subtitle,
-    product.size,
-    unitLabel(product.unit, crates: crates),
-  ]
-      .where((s) => s != null && s.trim().isNotEmpty && s != 'null')
-      .map((s) => s!.trim())
-      .toList();
+  final parts =
+      [product.subtitle, product.size, unitLabel(product.unit, crates: crates)]
+          .where((s) => s != null && s.trim().isNotEmpty && s != 'null')
+          .map((s) => s!.trim())
+          .toList();
   return parts.isEmpty ? null : parts.join(' · ');
 }
 
@@ -107,7 +116,6 @@ class ProductGrid extends StatelessWidget {
   final Function(ProductDataWithStock) onProductTap;
   final PosController controller;
   final bool isListView;
-  final int gridColumns;
 
   const ProductGrid({
     super.key,
@@ -115,26 +123,14 @@ class ProductGrid extends StatelessWidget {
     required this.onProductTap,
     required this.controller,
     this.isListView = false,
-    this.gridColumns = 3,
   });
 
   /// Column count for [availableWidth] (the grid's own width: the screen minus
-  /// the side rail and a fixed cart panel). Under 380dp a phone is capped at 2;
-  /// from 380 to 600 the view selector's preference governs; over 600 the
-  /// width wins when it fits more [kPosTileMinWidth] columns than the
-  /// preference, never fewer.
-  static int columnsFor(double availableWidth, int gridColumns) {
-    int effectiveColumns = gridColumns;
-    if (availableWidth < 380) {
-      // Small phone: maximum 2 columns
-      if (effectiveColumns > 2) effectiveColumns = 2;
-    } else if (availableWidth > 600) {
-      // Tablet/Desktop: dynamically increase contents per row
-      final dynamicColumns = (availableWidth / kPosTileMinWidth).floor();
-      effectiveColumns = max(effectiveColumns, dynamicColumns);
-    }
-    return effectiveColumns;
-  }
+  /// the side rail and a fixed cart panel): as many [kPosTileMinWidth] columns
+  /// as fit, never fewer than [kPosMinColumns]. Tablets, wide screens and
+  /// sideways phones fill their width; upright phones get three.
+  static int columnsFor(double availableWidth) =>
+      max(kPosMinColumns, (availableWidth / kPosTileMinWidth).floor());
 
   @override
   Widget build(BuildContext context) {
@@ -207,27 +203,39 @@ class ProductGrid extends StatelessWidget {
       padding: EdgeInsets.fromLTRB(gutter, context.getRSize(8), gutter, gutter),
       sliver: SliverLayoutBuilder(
         builder: (context, constraints) {
-          final effectiveColumns = columnsFor(
-            constraints.crossAxisExtent + gutter * 2,
-            gridColumns,
-          );
+          final columns = columnsFor(constraints.crossAxisExtent + gutter * 2);
+          final tileWidth =
+              (constraints.crossAxisExtent - gap * (columns - 1)) / columns;
+          final scale = posTileScale(tileWidth);
+          final tileHeight = posTileExtent(context);
           return SliverGrid.builder(
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: effectiveColumns,
-              mainAxisExtent: posTileExtent(context),
+              crossAxisCount: columns,
+              mainAxisExtent: tileHeight * scale,
               crossAxisSpacing: gap,
               mainAxisSpacing: gap,
             ),
             itemCount: products.length,
             itemBuilder: (context, index) {
               final item = products[index];
-              return _ProductCard(
-                key: posProductTileKey(item.product.id),
+              final card = _ProductCard(
                 item: item,
                 categoryName: categoryNames[item.product.categoryId],
                 onTap: () => onProductTap(item),
                 controller: controller,
                 isListView: false,
+              );
+              return KeyedSubtree(
+                key: posProductTileKey(item.product.id),
+                child: scale < 1
+                    ? FittedBox(
+                        child: SizedBox(
+                          width: kPosTileDesignWidth,
+                          height: tileHeight,
+                          child: card,
+                        ),
+                      )
+                    : card,
               );
             },
           );
@@ -334,10 +342,7 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
         final bool atStockLimit =
             !isOutOfStock &&
             cartQty >=
-                Qty.sellable(
-                  stock,
-                  allowParts: product.allowFractionalSales,
-                );
+                Qty.sellable(stock, allowParts: product.allowFractionalSales);
         final VoidCallback? onTap = isOutOfStock
             ? null
             : (atStockLimit

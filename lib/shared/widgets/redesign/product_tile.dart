@@ -11,6 +11,10 @@ import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/category_visual.dart';
 
+/// Under this width a [ProductTile] with a price moves its stock pill onto the
+/// art: beside the price it would leave the price too little room to read.
+const double kProductTileNarrowWidth = 130;
+
 /// How much stock a [ProductTile] reports; picks the stock pill's colour.
 enum StockLevel { ok, low, out }
 
@@ -26,7 +30,8 @@ enum StockLevel { ok, low, out }
 ///
 /// Below: the name, a muted [subtitle] ("60cl · Crate of 12"), the price in
 /// primary and a stock pill with a dot. Without a [priceLabel] (#380: Request
-/// Stock, where nothing is sold) the stock pill sits alone at the start. [inCartQty] > 0 draws the primary
+/// Stock, where nothing is sold) the stock pill sits alone at the start. A tile
+/// under [kProductTileNarrowWidth] carries the pill on the art. [inCartQty] > 0 draws the primary
 /// border and the count badge. Out of stock dims the tile and ignores taps,
 /// unless [tappableWhenOut] (#394: Receive Stock restocks empty products).
 /// The whole tile is one tap target.
@@ -118,7 +123,37 @@ class ProductTile extends StatelessWidget {
       ),
     );
 
-    final card = Container(
+    final pill = Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: context.getRSize(8),
+        vertical: context.getRSize(3),
+      ),
+      decoration: ShapeDecoration(
+        color: pillFill,
+        shape: const StadiumBorder(),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: context.getRSize(7),
+            height: context.getRSize(7),
+            decoration: BoxDecoration(color: pillDot, shape: BoxShape.circle),
+          ),
+          SizedBox(width: context.getRSize(4)),
+          Text(
+            stockLabel,
+            maxLines: 1,
+            softWrap: false,
+            style: context
+                .boldStyle(12)
+                .copyWith(color: t.colorScheme.onSurface),
+          ),
+        ],
+      ),
+    );
+
+    Widget buildCard(bool pillOnArt) => Container(
       decoration: AppDecorations.card(context).copyWith(
         border: Border.all(
           color: inCart ? t.colorScheme.primary : t.dividerColor,
@@ -131,7 +166,21 @@ class ProductTile extends StatelessWidget {
         children: [
           // The art takes whatever height the text leaves (ui-context
           // "Responsive Grid & Card Layouts").
-          Expanded(child: art),
+          Expanded(
+            child: pillOnArt
+                ? Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      art,
+                      Positioned(
+                        left: context.getRSize(4),
+                        bottom: context.getRSize(4),
+                        child: pill,
+                      ),
+                    ],
+                  )
+                : art,
+          ),
           SizedBox(height: context.getRSize(10)),
           Text(
             name,
@@ -167,41 +216,16 @@ class ProductTile extends StatelessWidget {
                 ),
                 SizedBox(width: context.getRSize(6)),
               ],
-              Container(
-                padding: EdgeInsets.symmetric(
-                  horizontal: context.getRSize(8),
-                  vertical: context.getRSize(3),
-                ),
-                decoration: ShapeDecoration(
-                  color: pillFill,
-                  shape: const StadiumBorder(),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: context.getRSize(7),
-                      height: context.getRSize(7),
-                      decoration: BoxDecoration(
-                        color: pillDot,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    SizedBox(width: context.getRSize(4)),
-                    Text(
-                      stockLabel,
-                      maxLines: 1,
-                      softWrap: false,
-                      style: context
-                          .boldStyle(12)
-                          .copyWith(color: t.colorScheme.onSurface),
-                    ),
-                  ],
-                ),
-              ),
+              if (!pillOnArt) pill,
             ],
           ),
         ],
+      ),
+    );
+
+    final card = LayoutBuilder(
+      builder: (context, constraints) => buildCard(
+        priceLabel != null && constraints.maxWidth < kProductTileNarrowWidth,
       ),
     );
 

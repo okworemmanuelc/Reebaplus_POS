@@ -4,13 +4,11 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 
 class ViewSelectorSheet extends StatelessWidget {
   final bool currentIsList;
-  final int currentColumns;
-  final void Function(bool isList, int columns) onSelect;
+  final void Function(bool isList) onSelect;
 
   const ViewSelectorSheet({
     super.key,
     required this.currentIsList,
-    required this.currentColumns,
     required this.onSelect,
   });
 
@@ -18,7 +16,6 @@ class ViewSelectorSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final surfaceCol = Theme.of(context).colorScheme.surface;
     final textCol = Theme.of(context).colorScheme.onSurface;
-    final screenWidth = context.screenWidth;
 
     return Container(
       decoration: BoxDecoration(
@@ -61,37 +58,16 @@ class ViewSelectorSheet extends StatelessWidget {
             icon: AppIcons.list,
             label: 'List View',
             isSelected: currentIsList,
-            onTap: () => onSelect(true, currentColumns),
+            onTap: () => onSelect(true),
           ),
-          if (context.isTablet || context.isDesktop) ...[
-            SizedBox(height: context.getRSize(12)),
-            _buildOption(
-              context: context,
-              icon: AppIcons.table,
-              label: 'Grid View',
-              isSelected: !currentIsList,
-              onTap: () => onSelect(false, currentColumns),
-            ),
-          ] else ...[
-            SizedBox(height: context.getRSize(12)),
-            _buildOption(
-              context: context,
-              icon: AppIcons.grid,
-              label: '2 Columns Grid',
-              isSelected: !currentIsList && currentColumns == 2,
-              onTap: () => onSelect(false, 2),
-            ),
-            if (screenWidth >= 380) ...[
-              SizedBox(height: context.getRSize(12)),
-              _buildOption(
-                context: context,
-                icon: AppIcons.table,
-                label: '3 Columns Grid',
-                isSelected: !currentIsList && currentColumns == 3,
-                onTap: () => onSelect(false, 3),
-              ),
-            ],
-          ],
+          SizedBox(height: context.getRSize(12)),
+          _buildOption(
+            context: context,
+            icon: AppIcons.grid,
+            label: 'Grid View',
+            isSelected: !currentIsList,
+            onTap: () => onSelect(false),
+          ),
         ],
       ),
     );
@@ -117,9 +93,7 @@ class ViewSelectorSheet extends StatelessWidget {
           vertical: context.getRSize(16),
         ),
         decoration: BoxDecoration(
-          color: isSelected
-              ? primaryCol.withValues(alpha: 0.1)
-              : surfaceCol,
+          color: isSelected ? primaryCol.withValues(alpha: 0.1) : surfaceCol,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isSelected
@@ -133,9 +107,7 @@ class ViewSelectorSheet extends StatelessWidget {
             Icon(
               icon,
               size: context.getRSize(20),
-              color: isSelected
-                  ? primaryCol
-                  : textCol.withValues(alpha: 0.6),
+              color: isSelected ? primaryCol : textCol.withValues(alpha: 0.6),
             ),
             SizedBox(width: context.getRSize(16)),
             Expanded(

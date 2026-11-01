@@ -7,6 +7,9 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### POS: List or Grid only, 3 columns on phones (2026-11-01, ready for review)
+Branch `feat/pos-list-grid-only`. The view selector offers only List View and Grid View; the saved column count (`pos_grid_columns`) is gone. `ProductGrid.columnsFor(width)` = as many 170dp columns as fit, never under 3: every upright phone gets 3, tablets, wide screens and sideways phones fill their width. Tiles under 100dp (`kPosTileDesignWidth`, small phones) are laid out at 100dp and scaled down whole. A priced `ProductTile` under 130dp carries its stock pill on the art so the price stays readable; this also reaches Receive Stock's narrow tiles. No schema, sync or money change, so no pos-parity issue. Known: `receive_checkout_*` goldens (6) already fail on main, unrelated.
+
 ### Store switch needs confirming (2026-11-01, merged, PR #642)
 Branch `feat/pos-store-confirm`. `showStorePickerSheet`, used by both the POS gate and the side menu, now asks "Switch to <store>?" (Confirm / Cancel) before any switch, All Stores included. Cancel keeps the sheet open. Tapping the store already in force just closes the sheet, except a silently defaulted store, which POS still needs explicitly chosen. No schema, sync or money change, so no pos-parity issue.
 

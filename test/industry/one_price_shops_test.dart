@@ -72,7 +72,6 @@ void main() {
       businessName: 'Stallion Global',
       businessType: 'Beverage distributor',
       sharedPreferences: const {
-        'pos_grid_columns': 2,
         'pos_is_list_view': false,
         'hint_pos_gestures': 2,
       },
