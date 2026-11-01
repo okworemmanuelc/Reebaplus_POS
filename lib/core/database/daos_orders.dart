@@ -1427,7 +1427,8 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   /// §13.4 Ring 5 — settle a MONEY-TRACK brand's deposit when its crates come
   /// back at Confirm. The brand's held deposit (`paidKobo`, posted as one
   /// `crate_deposit` credit at the sale) is fully resolved here:
-  ///   • forfeit = deposit value of the crates KEPT ((taken − returned) × rate),
+  ///   • forfeit = deposit value of the crates KEPT ((taken − returned) × rate,
+  ///     whole kobo via [lineTotalKobo] — quarter crates, #629),
   ///     capped at what was paid → a `crate_deposit_forfeited` debit. That debit
   ///     is the ONLY record of the kept deposit; reports sum it as income
   ///     (forfeit = reports-only, user decision 2026-06-05). No new income row.
@@ -1450,8 +1451,8 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     required String customerId,
     required String manufacturerId,
     required String orderId,
-    required int takenCrates,
-    required int returnedCrates,
+    required double takenCrates,
+    required double returnedCrates,
     required int rateKobo,
     required int paidKobo,
     required bool refundAsCash,
@@ -1459,11 +1460,13 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   }) async {
     if (paidKobo <= 0) return; // not money-track — nothing to settle
     final kept = takenCrates - returnedCrates < 0
-        ? 0
+        ? 0.0
         : (takenCrates - returnedCrates > takenCrates
               ? takenCrates
               : takenCrates - returnedCrates);
-    final forfeitValue = kept * rateKobo;
+    // Proportional (#629): half a crate kept forfeits half the rate, rounded
+    // half up to the whole kobo.
+    final forfeitValue = lineTotalKobo(rateKobo, kept);
     final forfeitRecorded = forfeitValue < paidKobo ? forfeitValue : paidKobo;
     final refundAmount = paidKobo - forfeitRecorded;
     final extraDebt = forfeitValue > paidKobo ? forfeitValue - paidKobo : 0;

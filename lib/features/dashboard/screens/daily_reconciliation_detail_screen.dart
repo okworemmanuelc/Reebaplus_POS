@@ -541,7 +541,9 @@ class _DailyReconciliationDetailScreenState
           'Top items',
           d.topItems.isEmpty
               ? '—'
-              : d.topItems.map((e) => '${e.name} (×${formatQty(e.qty)})').join('\n'),
+              : d.topItems
+                    .map((e) => '${e.name} (×${formatQty(e.qty)})')
+                    .join('\n'),
         ),
       ],
       badges: badges,
@@ -1380,7 +1382,7 @@ class _DailyReconciliationDetailScreenState
               context,
               theme,
               m.manufacturerName,
-              '${fmtNumber(m.count)} crate(s) · ${formatCurrency(m.valueKobo / 100.0)}',
+              '${formatQtyGrouped(m.count)} crate(s) · ${formatCurrency(m.valueKobo / 100.0)}',
             ),
           _divider(theme),
           _line(
@@ -1522,7 +1524,7 @@ class _DailyReconciliationDetailScreenState
             context,
             theme,
             '${s.manufacturerName} — '
-            '${s.openCrates} crate'
+            '${formatQty(s.openCrates)} crate'
             '${s.openCrates == 1 ? '' : 's'} missing',
             formatCurrency(s.openValueKobo / 100.0),
             danger: true,
@@ -2143,7 +2145,7 @@ class _DailyReconciliationDetailScreenState
           'Pay on delivery not yet collected',
           money(d.payOnDeliveryUncollectedKobo),
         ],
-      if (d.showCrates) ['Empty crates held (units)', '${d.crateUnits}'],
+      if (d.showCrates) ['Empty crates held (units)', formatQty(d.crateUnits)],
     ];
     final name = isCeo ? 'business_statement' : 'store_reconciliation';
     try {

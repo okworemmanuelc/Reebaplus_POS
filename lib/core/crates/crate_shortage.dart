@@ -13,6 +13,7 @@
 library;
 
 import 'package:reebaplus_pos/core/crates/crate_ledger_movement_types.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 
 /// One event the shortage fold reads.
 sealed class CrateShortageEvent {
@@ -43,8 +44,8 @@ class CrateCountMovement extends CrateShortageEvent {
   /// `'count'` or `'opening_count'`.
   final String movementType;
 
-  /// `counted − expected`, as recorded on the movement.
-  final int quantityDelta;
+  /// `counted − expected`, as recorded on the movement. Quarter steps (#629).
+  final double quantityDelta;
 }
 
 /// A `count_shortage` row from `crate_shortfall_writeoffs`: positive is a
@@ -58,8 +59,9 @@ class CrateShortageWriteOffEvent extends CrateShortageEvent {
     required super.createdAt,
   });
 
-  /// + crates accepted as lost; − crates a reversal brought back.
-  final int crateCount;
+  /// + crates accepted as lost; − crates a reversal brought back. Quarter
+  /// steps (#629).
+  final double crateCount;
 
   /// The crate value snapshotted on the row.
   final int ratePerCrateKobo;
@@ -72,8 +74,11 @@ class CrateWriteOffLayer {
     required this.ratePerCrateKobo,
   });
 
-  final int crates;
+  final double crates;
   final int ratePerCrateKobo;
+
+  /// What these crates are worth at their snapshotted rate, whole kobo.
+  int get valueKobo => lineTotalKobo(ratePerCrateKobo, crates);
 
   @override
   bool operator ==(Object other) =>
@@ -103,18 +108,18 @@ class CrateShortageState {
   );
 
   /// Crates found missing that nobody has written off yet — the warning.
-  final int openCrates;
+  final double openCrates;
 
   /// Crates a later count found after they had been written off, and so may
   /// be reversed. Never more than [writtenOffCrates].
-  final int reversibleCrates;
+  final double reversibleCrates;
 
   /// Written-off crates not yet reversed, oldest first.
   final List<CrateWriteOffLayer> outstandingWriteOffs;
 
   /// Crates written off and not reversed.
-  int get writtenOffCrates =>
-      outstandingWriteOffs.fold(0, (sum, l) => sum + l.crates);
+  double get writtenOffCrates =>
+      outstandingWriteOffs.fold(0.0, (sum, l) => sum + l.crates);
 }
 
 /// Folds ONE store's events, already in time order.
@@ -134,16 +139,16 @@ class CrateShortageState {
 CrateShortageState foldCrateShortageStateForStore(
   Iterable<CrateShortageEvent> events,
 ) {
-  var open = 0;
-  var reversible = 0;
+  var open = 0.0;
+  var reversible = 0.0;
   final layers = <CrateWriteOffLayer>[];
-  int writtenOff() => layers.fold(0, (sum, l) => sum + l.crates);
+  double writtenOff() => layers.fold(0.0, (sum, l) => sum + l.crates);
 
   for (final e in events) {
     switch (e) {
       case CrateCountMovement(:final movementType, :final quantityDelta):
         if (movementType == kCrateMovementOpeningCount) {
-          open = 0;
+          open = 0.0;
         } else if (movementType == kCrateMovementCount) {
           if (quantityDelta < 0) {
             final gap = -quantityDelta;
@@ -187,7 +192,7 @@ CrateShortageState foldCrateShortageStateForStore(
                   ratePerCrateKobo: top.ratePerCrateKobo,
                 ),
               );
-              left = 0;
+              left = 0.0;
             } else {
               left -= top.crates;
             }
@@ -203,7 +208,7 @@ CrateShortageState foldCrateShortageStateForStore(
 }
 
 /// The open shortage of ONE store's events, already in time order.
-int foldCrateShortageForStore(Iterable<CrateShortageEvent> events) =>
+double foldCrateShortageForStore(Iterable<CrateShortageEvent> events) =>
     foldCrateShortageStateForStore(events).openCrates;
 
 /// Folds events per store, returning `storeId → state`. Events are sorted by
@@ -238,7 +243,7 @@ Map<String, CrateShortageState> foldCrateShortageStatesPerStore(
 }
 
 /// Open shortage per store (`storeId → openCrates`).
-Map<String, int> foldCrateShortagePerStore(
+Map<String, double> foldCrateShortagePerStore(
   Iterable<CrateShortageEvent> events,
 ) => {
   for (final e in foldCrateShortageStatesPerStore(events).entries)
@@ -247,8 +252,8 @@ Map<String, int> foldCrateShortagePerStore(
 
 /// The business total: the sum of each store's open shortage. A surplus at one
 /// store never offsets a shortage at another.
-int foldTotalCrateShortage(Iterable<CrateShortageEvent> events) =>
-    foldCrateShortagePerStore(events).values.fold(0, (a, b) => a + b);
+double foldTotalCrateShortage(Iterable<CrateShortageEvent> events) =>
+    foldCrateShortagePerStore(events).values.fold(0.0, (a, b) => a + b);
 
 /// The compensating rows for reversing [crates] written-off crates: the newest
 /// write-offs first, each at its own snapshotted rate, so a reversal gives back
@@ -257,13 +262,13 @@ int foldTotalCrateShortage(Iterable<CrateShortageEvent> events) =>
 /// Empty when [crates] is not positive or exceeds [CrateShortageState.reversibleCrates].
 List<CrateWriteOffLayer> planCrateWriteOffReversal(
   CrateShortageState state,
-  int crates,
+  double crates,
 ) {
   if (crates <= 0 || crates > state.reversibleCrates) return const [];
   final plan = <CrateWriteOffLayer>[];
   var left = crates;
   for (final layer in state.outstandingWriteOffs.reversed) {
-    if (left == 0) break;
+    if (left <= 0) break;
     final take = layer.crates < left ? layer.crates : left;
     plan.add(
       CrateWriteOffLayer(crates: take, ratePerCrateKobo: layer.ratePerCrateKobo),
@@ -299,14 +304,15 @@ class CrateShortageBrand {
   final DateTime? lastWrittenOffAt;
   final String? lastWrittenOffBy;
 
-  int get openCrates =>
-      byStore.values.fold(0, (sum, s) => sum + s.openCrates);
+  double get openCrates =>
+      byStore.values.fold(0.0, (sum, s) => sum + s.openCrates);
 
-  int get reversibleCrates =>
-      byStore.values.fold(0, (sum, s) => sum + s.reversibleCrates);
+  double get reversibleCrates =>
+      byStore.values.fold(0.0, (sum, s) => sum + s.reversibleCrates);
 
-  /// [openCrates] at today's crate value. A warning, not a booked loss.
-  int get openValueKobo => openCrates * ratePerCrateKobo;
+  /// [openCrates] at today's crate value, whole kobo (half a crate is half
+  /// the rate, rounded half up). A warning, not a booked loss.
+  int get openValueKobo => lineTotalKobo(ratePerCrateKobo, openCrates);
 
   /// Stores with an open shortage, in no particular order.
   List<String> get storesWithOpenShortage => [
@@ -342,7 +348,7 @@ class CrateShortageRollup {
     return open;
   }
 
-  int get openCrates => brands.fold(0, (sum, b) => sum + b.openCrates);
+  double get openCrates => brands.fold(0.0, (sum, b) => sum + b.openCrates);
 
   int get openValueKobo => brands.fold(0, (sum, b) => sum + b.openValueKobo);
 
@@ -356,4 +362,4 @@ class CrateShortageRollup {
   }
 }
 
-int _max0(int v) => v > 0 ? v : 0;
+double _max0(double v) => v > 0 ? v : 0.0;

@@ -16,6 +16,6 @@ library;
 /// Crate Shortage in the view the tab shows (the locked store, or All Stores).
 bool showsOnEmptyCrates({
   required bool hasTrackedBottleProduct,
-  required int emptyCount,
-  required int shortCount,
+  required double emptyCount,
+  required double shortCount,
 }) => hasTrackedBottleProduct || emptyCount != 0 || shortCount != 0;

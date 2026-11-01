@@ -273,8 +273,8 @@ void main() {
         crateReturns: [
           CrateReturnLine(
             manufacturerId: mfrId,
-            takenCrates: crates,
-            returnedCrates: crates,
+            takenCrates: crates.toDouble(),
+            returnedCrates: crates.toDouble(),
             rateKobo: rateKobo,
             paidKobo: depositKobo,
           ),

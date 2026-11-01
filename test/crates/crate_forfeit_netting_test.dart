@@ -131,7 +131,7 @@ void main() {
       customerId: customerId,
       manufacturerId: starId,
       orderId: orderId,
-      takenCrates: crates,
+      takenCrates: crates.toDouble(),
       returnedCrates: 0,
       rateKobo: rate,
       paidKobo: paid,
@@ -216,7 +216,7 @@ void main() {
         7,
       );
       // Nothing kept, nothing lost — and a negative can never book a GAIN.
-      for (final kept in [0, -4]) {
+      for (final kept in [0.0, -4.0]) {
         expect(
           crateForfeitShortfallCrates(
             arrangement: CrateMoneyArrangement.perDelivery,

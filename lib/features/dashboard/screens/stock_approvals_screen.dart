@@ -476,7 +476,8 @@ class _ApprovalCardState extends ConsumerState<_ApprovalCard> {
   Widget build(BuildContext context) {
     final r = widget.request;
     final isRemove = r.quantityDiff < 0;
-    final qtyLabel = '${isRemove ? '−' : '+'}${formatQty(r.quantityDiff.abs())}';
+    final qtyLabel =
+        '${isRemove ? '−' : '+'}${formatQty(r.quantityDiff.abs())}';
     final totalCostLabel = _totalCostLabel;
 
     return _ApprovalShell(
@@ -773,7 +774,7 @@ class _CrateDepositApprovalCardState
       children: [
         _DetailRow('Recorded by', widget.requesterName),
         _DetailRow('Store', widget.storeName),
-        _DetailRow('Crates', '${r.crateCount}'),
+        _DetailRow('Crates', formatQty(r.crateCount)),
         _DetailRow('Rate per crate', formatCurrency(r.ratePerCrateKobo / 100)),
         _DetailRow('When', _fullStamp(r.createdAt)),
         SizedBox(height: context.getRSize(8)),

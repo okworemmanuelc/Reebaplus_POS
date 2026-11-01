@@ -159,8 +159,8 @@ void main() {
     dateReceived: DateTime(2026, 7, 30),
     staffId: stockKeeperId,
     lines: [lineFor(manufacturerId)],
-    fullCratesReceivedByManufacturer: {manufacturerId: crates},
-    emptiesReturnedByManufacturer: {manufacturerId: empties},
+    fullCratesReceivedByManufacturer: {manufacturerId: crates.toDouble()},
+    emptiesReturnedByManufacturer: {manufacturerId: empties.toDouble()},
   );
 
   /// Confirm every still-pending money leg, at the amount asked for unless
@@ -857,7 +857,7 @@ void main() {
           supplierId: supplierA,
           manufacturerId: moneyBrand,
           storeId: storeId,
-          crateCount: crates,
+          crateCount: crates.toDouble(),
           performedBy: stockKeeperId,
         );
         final p = await (d.select(

@@ -372,8 +372,8 @@ void main() {
     );
 
     Future<void> receive({
-      Map<String, int> fullCratesIn = const {},
-      Map<String, int> emptiesBack = const {},
+      Map<String, double> fullCratesIn = const {},
+      Map<String, double> emptiesBack = const {},
       List<ReceiveCartLine> lines = const [bottleLine],
     }) =>
         service.confirmReceipt(

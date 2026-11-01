@@ -483,7 +483,8 @@ class SupplierCrateDepositRequests extends Table {
   TextColumn get kind => text()();
 
   /// Crates this money leg covers. Always >= 0; the direction is [kind]'s.
-  IntColumn get crateCount => integer().withDefault(const Constant(0))();
+  /// Quarter steps (#629): half a crate is 0.5.
+  RealColumn get crateCount => real().withDefault(const Constant(0.0))();
 
   /// `manufacturers.deposit_amount_kobo` SNAPSHOTTED when the request was
   /// raised (ADR 0023 rule 2 — the single canonical rate). Snapshotted so a
@@ -584,7 +585,8 @@ class SupplierCrateDeposits extends Table {
 
   /// Crates this movement covers, signed the same way. 0 on the standing-float
   /// movements and on a standalone money settlement that carries no goods.
-  IntColumn get crateCount => integer().withDefault(const Constant(0))();
+  /// Quarter steps (#629).
+  RealColumn get crateCount => real().withDefault(const Constant(0.0))();
 
   /// The per-crate rate this movement was valued at, snapshotted. A later rate
   /// edit must not restate money that has already moved.
@@ -668,7 +670,8 @@ class CrateShortfallWriteoffs extends Table {
   /// future reversal path ships as code only — widening a CHECK on an
   /// append-only money ledger costs a table rebuild on every device, and v71 /
   /// #212 are the precedents for declaring the whole range up front.
-  IntColumn get crateCount => integer()();
+  /// Quarter steps (#629): half a crate is 0.5.
+  RealColumn get crateCount => real()();
 
   /// `manufacturers.deposit_amount_kobo` SNAPSHOTTED at the moment the decision
   /// was taken. The loss booked is `crate_count × rate_per_crate_kobo` forever
@@ -3153,7 +3156,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 99;
+  int get schemaVersion => 100;
 
   /// The v90 (#473) listing columns, pinned to their defaults in every older
   /// products rebuild: TableMigration copies from the CURRENT schema, so a
@@ -6921,6 +6924,18 @@ class AppDatabase extends _$AppDatabase {
       //    arrives by pull, and until it does the product stays whole numbers.
       //    That makes 0241 the single switch for "any shop can sell parts"
       //    (#620 decision 12).
+
+      if (from < 100) {
+        // ── v100 — #629: empties in parts (crate_count IntColumn → Real) ──
+        //
+        // Mirrors supabase/migrations/0242_empties_in_parts.sql:
+        // crate_shortfall_writeoffs, supplier_crate_deposits and
+        // supplier_crate_deposit_requests `.crate_count` became RealColumns.
+        // Same no-rebuild reasoning as v98: INTEGER affinity keeps 0.5 as a
+        // REAL and 5 as an INTEGER, and Drift reads both back as a double. Two
+        // of the three are append-only ledgers, so a rebuild would also fight
+        // their immutable / no-delete triggers.
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');

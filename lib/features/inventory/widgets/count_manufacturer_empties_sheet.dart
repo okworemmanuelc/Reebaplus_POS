@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
+import 'package:reebaplus_pos/shared/utils/quantity_input.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/crates/crate_count_store.dart';
@@ -149,10 +149,11 @@ class _CountManufacturerEmptiesSheetState
       return;
     }
 
-    final counted = int.tryParse(rawText);
-    if (counted == null || counted < 0) {
+    final counted = Qty.parse(rawText);
+    if (counted == null) {
       setState(
-        () => _errorMessage = 'Please enter a valid non-negative number.',
+        () => _errorMessage =
+            'Please enter a count in quarters (0, 0.5, 12.25 …).',
       );
       return;
     }
@@ -177,7 +178,7 @@ class _CountManufacturerEmptiesSheetState
         manufacturerId: widget.manufacturer.id,
         storeId: storeId,
         performedBy: performedBy,
-        countedEmpties: counted.toDouble(),
+        countedEmpties: counted,
       );
 
       if (mounted) {
@@ -197,22 +198,23 @@ class _CountManufacturerEmptiesSheetState
     final theme = Theme.of(context);
     final selectableStores = ref.watch(selectableStoresProvider);
     final rawText = _countCtrl.text.trim();
-    final counted = int.tryParse(rawText);
-    final isCountInvalid =
-        rawText.isNotEmpty && (counted == null || counted < 0);
+    final counted = Qty.parse(rawText);
+    final isCountInvalid = rawText.isNotEmpty && counted == null;
 
     final crateValueNaira = widget.manufacturer.depositAmountKobo / 100;
 
     String? differenceLine;
-    if (_expectedEmpties != null && counted != null && counted >= 0) {
+    if (_expectedEmpties != null && counted != null) {
       final diff = counted - _expectedEmpties!;
       if (diff < 0) {
         final gap = formatQty(-diff);
-        final warningValueNaira = -diff * crateValueNaira;
+        final warningValueNaira =
+            lineTotalKobo(widget.manufacturer.depositAmountKobo, -diff) / 100;
         differenceLine =
             'This is what will be recorded: $gap crates short (${formatCurrency(warningValueNaira)} warning value)';
       } else if (diff > 0) {
-        differenceLine = 'This is what will be recorded: ${formatQty(diff)} crates surplus';
+        differenceLine =
+            'This is what will be recorded: ${formatQty(diff)} crates surplus';
       } else {
         differenceLine = 'This is what will be recorded: No difference';
       }
@@ -265,8 +267,9 @@ class _CountManufacturerEmptiesSheetState
           controller: _countCtrl,
           labelText: 'Counted empties',
           hintText: 'Enter physical count',
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          // Quarter steps (#629): half a crate is 0.5.
+          keyboardType: stockQtyKeyboard(allowParts: true),
+          inputFormatters: stockQtyFormatters(allowParts: true),
           onChanged: (_) => setState(() => _errorMessage = null),
         ),
 

@@ -160,7 +160,7 @@ CrateDepositHolding _holding({
       CrateDepositMovement(
         movementType: kCrateDepositMovementPlacement,
         signedAmountKobo: amountKobo,
-        crateCount: crates,
+        crateCount: crates.toDouble(),
       ),
     ],
     pending: [
@@ -170,7 +170,7 @@ CrateDepositHolding _holding({
           requestedAmountKobo: pendingKobo,
         ),
     ],
-    cratesOwed: cratesOwed,
+    cratesOwed: cratesOwed.toDouble(),
   ),
 );
 

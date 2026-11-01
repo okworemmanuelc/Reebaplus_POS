@@ -8563,13 +8563,13 @@ class $SupplierCrateDepositRequestsTable extends SupplierCrateDepositRequests
     'crateCount',
   );
   @override
-  late final GeneratedColumn<int> crateCount = GeneratedColumn<int>(
+  late final GeneratedColumn<double> crateCount = GeneratedColumn<double>(
     'crate_count',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.double,
     requiredDuringInsert: false,
-    defaultValue: const Constant(0),
+    defaultValue: const Constant(0.0),
   );
   static const VerificationMeta _ratePerCrateKoboMeta = const VerificationMeta(
     'ratePerCrateKobo',
@@ -8970,7 +8970,7 @@ class $SupplierCrateDepositRequestsTable extends SupplierCrateDepositRequests
         data['${effectivePrefix}kind'],
       )!,
       crateCount: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
+        DriftSqlType.double,
         data['${effectivePrefix}crate_count'],
       )!,
       ratePerCrateKobo: attachedDatabase.typeMapping.read(
@@ -9054,7 +9054,8 @@ class SupplierCrateDepositRequestData extends DataClass
   final String kind;
 
   /// Crates this money leg covers. Always >= 0; the direction is [kind]'s.
-  final int crateCount;
+  /// Quarter steps (#629): half a crate is 0.5.
+  final double crateCount;
 
   /// `manufacturers.deposit_amount_kobo` SNAPSHOTTED when the request was
   /// raised (ADR 0023 rule 2 — the single canonical rate). Snapshotted so a
@@ -9125,7 +9126,7 @@ class SupplierCrateDepositRequestData extends DataClass
     map['manufacturer_id'] = Variable<String>(manufacturerId);
     map['store_id'] = Variable<String>(storeId);
     map['kind'] = Variable<String>(kind);
-    map['crate_count'] = Variable<int>(crateCount);
+    map['crate_count'] = Variable<double>(crateCount);
     map['rate_per_crate_kobo'] = Variable<int>(ratePerCrateKobo);
     map['requested_amount_kobo'] = Variable<int>(requestedAmountKobo);
     if (!nullToAbsent || settledAmountKobo != null) {
@@ -9211,7 +9212,7 @@ class SupplierCrateDepositRequestData extends DataClass
       manufacturerId: serializer.fromJson<String>(json['manufacturerId']),
       storeId: serializer.fromJson<String>(json['storeId']),
       kind: serializer.fromJson<String>(json['kind']),
-      crateCount: serializer.fromJson<int>(json['crateCount']),
+      crateCount: serializer.fromJson<double>(json['crateCount']),
       ratePerCrateKobo: serializer.fromJson<int>(json['ratePerCrateKobo']),
       requestedAmountKobo: serializer.fromJson<int>(
         json['requestedAmountKobo'],
@@ -9242,7 +9243,7 @@ class SupplierCrateDepositRequestData extends DataClass
       'manufacturerId': serializer.toJson<String>(manufacturerId),
       'storeId': serializer.toJson<String>(storeId),
       'kind': serializer.toJson<String>(kind),
-      'crateCount': serializer.toJson<int>(crateCount),
+      'crateCount': serializer.toJson<double>(crateCount),
       'ratePerCrateKobo': serializer.toJson<int>(ratePerCrateKobo),
       'requestedAmountKobo': serializer.toJson<int>(requestedAmountKobo),
       'settledAmountKobo': serializer.toJson<int?>(settledAmountKobo),
@@ -9269,7 +9270,7 @@ class SupplierCrateDepositRequestData extends DataClass
     String? manufacturerId,
     String? storeId,
     String? kind,
-    int? crateCount,
+    double? crateCount,
     int? ratePerCrateKobo,
     int? requestedAmountKobo,
     Value<int?> settledAmountKobo = const Value.absent(),
@@ -9452,7 +9453,7 @@ class SupplierCrateDepositRequestsCompanion
   final Value<String> manufacturerId;
   final Value<String> storeId;
   final Value<String> kind;
-  final Value<int> crateCount;
+  final Value<double> crateCount;
   final Value<int> ratePerCrateKobo;
   final Value<int> requestedAmountKobo;
   final Value<int?> settledAmountKobo;
@@ -9528,7 +9529,7 @@ class SupplierCrateDepositRequestsCompanion
     Expression<String>? manufacturerId,
     Expression<String>? storeId,
     Expression<String>? kind,
-    Expression<int>? crateCount,
+    Expression<double>? crateCount,
     Expression<int>? ratePerCrateKobo,
     Expression<int>? requestedAmountKobo,
     Expression<int>? settledAmountKobo,
@@ -9580,7 +9581,7 @@ class SupplierCrateDepositRequestsCompanion
     Value<String>? manufacturerId,
     Value<String>? storeId,
     Value<String>? kind,
-    Value<int>? crateCount,
+    Value<double>? crateCount,
     Value<int>? ratePerCrateKobo,
     Value<int>? requestedAmountKobo,
     Value<int?>? settledAmountKobo,
@@ -9646,7 +9647,7 @@ class SupplierCrateDepositRequestsCompanion
       map['kind'] = Variable<String>(kind.value);
     }
     if (crateCount.present) {
-      map['crate_count'] = Variable<int>(crateCount.value);
+      map['crate_count'] = Variable<double>(crateCount.value);
     }
     if (ratePerCrateKobo.present) {
       map['rate_per_crate_kobo'] = Variable<int>(ratePerCrateKobo.value);
@@ -9830,13 +9831,13 @@ class $SupplierCrateDepositsTable extends SupplierCrateDeposits
     'crateCount',
   );
   @override
-  late final GeneratedColumn<int> crateCount = GeneratedColumn<int>(
+  late final GeneratedColumn<double> crateCount = GeneratedColumn<double>(
     'crate_count',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.double,
     requiredDuringInsert: false,
-    defaultValue: const Constant(0),
+    defaultValue: const Constant(0.0),
   );
   static const VerificationMeta _ratePerCrateKoboMeta = const VerificationMeta(
     'ratePerCrateKobo',
@@ -10115,7 +10116,7 @@ class $SupplierCrateDepositsTable extends SupplierCrateDeposits
         data['${effectivePrefix}signed_amount_kobo'],
       )!,
       crateCount: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
+        DriftSqlType.double,
         data['${effectivePrefix}crate_count'],
       )!,
       ratePerCrateKobo: attachedDatabase.typeMapping.read(
@@ -10176,7 +10177,8 @@ class SupplierCrateDepositData extends DataClass
 
   /// Crates this movement covers, signed the same way. 0 on the standing-float
   /// movements and on a standalone money settlement that carries no goods.
-  final int crateCount;
+  /// Quarter steps (#629).
+  final double crateCount;
 
   /// The per-crate rate this movement was valued at, snapshotted. A later rate
   /// edit must not restate money that has already moved.
@@ -10222,7 +10224,7 @@ class SupplierCrateDepositData extends DataClass
     }
     map['movement_type'] = Variable<String>(movementType);
     map['signed_amount_kobo'] = Variable<int>(signedAmountKobo);
-    map['crate_count'] = Variable<int>(crateCount);
+    map['crate_count'] = Variable<double>(crateCount);
     map['rate_per_crate_kobo'] = Variable<int>(ratePerCrateKobo);
     if (!nullToAbsent || requestId != null) {
       map['request_id'] = Variable<String>(requestId);
@@ -10282,7 +10284,7 @@ class SupplierCrateDepositData extends DataClass
       storeId: serializer.fromJson<String?>(json['storeId']),
       movementType: serializer.fromJson<String>(json['movementType']),
       signedAmountKobo: serializer.fromJson<int>(json['signedAmountKobo']),
-      crateCount: serializer.fromJson<int>(json['crateCount']),
+      crateCount: serializer.fromJson<double>(json['crateCount']),
       ratePerCrateKobo: serializer.fromJson<int>(json['ratePerCrateKobo']),
       requestId: serializer.fromJson<String?>(json['requestId']),
       supplierCrateLedgerId: serializer.fromJson<String?>(
@@ -10305,7 +10307,7 @@ class SupplierCrateDepositData extends DataClass
       'storeId': serializer.toJson<String?>(storeId),
       'movementType': serializer.toJson<String>(movementType),
       'signedAmountKobo': serializer.toJson<int>(signedAmountKobo),
-      'crateCount': serializer.toJson<int>(crateCount),
+      'crateCount': serializer.toJson<double>(crateCount),
       'ratePerCrateKobo': serializer.toJson<int>(ratePerCrateKobo),
       'requestId': serializer.toJson<String?>(requestId),
       'supplierCrateLedgerId': serializer.toJson<String?>(
@@ -10326,7 +10328,7 @@ class SupplierCrateDepositData extends DataClass
     Value<String?> storeId = const Value.absent(),
     String? movementType,
     int? signedAmountKobo,
-    int? crateCount,
+    double? crateCount,
     int? ratePerCrateKobo,
     Value<String?> requestId = const Value.absent(),
     Value<String?> supplierCrateLedgerId = const Value.absent(),
@@ -10465,7 +10467,7 @@ class SupplierCrateDepositsCompanion
   final Value<String?> storeId;
   final Value<String> movementType;
   final Value<int> signedAmountKobo;
-  final Value<int> crateCount;
+  final Value<double> crateCount;
   final Value<int> ratePerCrateKobo;
   final Value<String?> requestId;
   final Value<String?> supplierCrateLedgerId;
@@ -10522,7 +10524,7 @@ class SupplierCrateDepositsCompanion
     Expression<String>? storeId,
     Expression<String>? movementType,
     Expression<int>? signedAmountKobo,
-    Expression<int>? crateCount,
+    Expression<double>? crateCount,
     Expression<int>? ratePerCrateKobo,
     Expression<String>? requestId,
     Expression<String>? supplierCrateLedgerId,
@@ -10561,7 +10563,7 @@ class SupplierCrateDepositsCompanion
     Value<String?>? storeId,
     Value<String>? movementType,
     Value<int>? signedAmountKobo,
-    Value<int>? crateCount,
+    Value<double>? crateCount,
     Value<int>? ratePerCrateKobo,
     Value<String?>? requestId,
     Value<String?>? supplierCrateLedgerId,
@@ -10617,7 +10619,7 @@ class SupplierCrateDepositsCompanion
       map['signed_amount_kobo'] = Variable<int>(signedAmountKobo.value);
     }
     if (crateCount.present) {
-      map['crate_count'] = Variable<int>(crateCount.value);
+      map['crate_count'] = Variable<double>(crateCount.value);
     }
     if (ratePerCrateKobo.present) {
       map['rate_per_crate_kobo'] = Variable<int>(ratePerCrateKobo.value);
@@ -10734,11 +10736,11 @@ class $CrateShortfallWriteoffsTable extends CrateShortfallWriteoffs
     'crateCount',
   );
   @override
-  late final GeneratedColumn<int> crateCount = GeneratedColumn<int>(
+  late final GeneratedColumn<double> crateCount = GeneratedColumn<double>(
     'crate_count',
     aliasedName,
     false,
-    type: DriftSqlType.int,
+    type: DriftSqlType.double,
     requiredDuringInsert: true,
   );
   static const VerificationMeta _ratePerCrateKoboMeta = const VerificationMeta(
@@ -10947,7 +10949,7 @@ class $CrateShortfallWriteoffsTable extends CrateShortfallWriteoffs
         data['${effectivePrefix}store_id'],
       ),
       crateCount: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
+        DriftSqlType.double,
         data['${effectivePrefix}crate_count'],
       )!,
       ratePerCrateKobo: attachedDatabase.typeMapping.read(
@@ -11002,7 +11004,8 @@ class CrateShortfallWriteoffData extends DataClass
   /// future reversal path ships as code only — widening a CHECK on an
   /// append-only money ledger costs a table rebuild on every device, and v71 /
   /// #212 are the precedents for declaring the whole range up front.
-  final int crateCount;
+  /// Quarter steps (#629): half a crate is 0.5.
+  final double crateCount;
 
   /// `manufacturers.deposit_amount_kobo` SNAPSHOTTED at the moment the decision
   /// was taken. The loss booked is `crate_count × rate_per_crate_kobo` forever
@@ -11065,7 +11068,7 @@ class CrateShortfallWriteoffData extends DataClass
     if (!nullToAbsent || storeId != null) {
       map['store_id'] = Variable<String>(storeId);
     }
-    map['crate_count'] = Variable<int>(crateCount);
+    map['crate_count'] = Variable<double>(crateCount);
     map['rate_per_crate_kobo'] = Variable<int>(ratePerCrateKobo);
     if (!nullToAbsent || note != null) {
       map['note'] = Variable<String>(note);
@@ -11109,7 +11112,7 @@ class CrateShortfallWriteoffData extends DataClass
       businessId: serializer.fromJson<String>(json['businessId']),
       manufacturerId: serializer.fromJson<String>(json['manufacturerId']),
       storeId: serializer.fromJson<String?>(json['storeId']),
-      crateCount: serializer.fromJson<int>(json['crateCount']),
+      crateCount: serializer.fromJson<double>(json['crateCount']),
       ratePerCrateKobo: serializer.fromJson<int>(json['ratePerCrateKobo']),
       note: serializer.fromJson<String?>(json['note']),
       source: serializer.fromJson<String>(json['source']),
@@ -11126,7 +11129,7 @@ class CrateShortfallWriteoffData extends DataClass
       'businessId': serializer.toJson<String>(businessId),
       'manufacturerId': serializer.toJson<String>(manufacturerId),
       'storeId': serializer.toJson<String?>(storeId),
-      'crateCount': serializer.toJson<int>(crateCount),
+      'crateCount': serializer.toJson<double>(crateCount),
       'ratePerCrateKobo': serializer.toJson<int>(ratePerCrateKobo),
       'note': serializer.toJson<String?>(note),
       'source': serializer.toJson<String>(source),
@@ -11141,7 +11144,7 @@ class CrateShortfallWriteoffData extends DataClass
     String? businessId,
     String? manufacturerId,
     Value<String?> storeId = const Value.absent(),
-    int? crateCount,
+    double? crateCount,
     int? ratePerCrateKobo,
     Value<String?> note = const Value.absent(),
     String? source,
@@ -11246,7 +11249,7 @@ class CrateShortfallWriteoffsCompanion
   final Value<String> businessId;
   final Value<String> manufacturerId;
   final Value<String?> storeId;
-  final Value<int> crateCount;
+  final Value<double> crateCount;
   final Value<int> ratePerCrateKobo;
   final Value<String?> note;
   final Value<String> source;
@@ -11273,7 +11276,7 @@ class CrateShortfallWriteoffsCompanion
     required String businessId,
     required String manufacturerId,
     this.storeId = const Value.absent(),
-    required int crateCount,
+    required double crateCount,
     this.ratePerCrateKobo = const Value.absent(),
     this.note = const Value.absent(),
     this.source = const Value.absent(),
@@ -11289,7 +11292,7 @@ class CrateShortfallWriteoffsCompanion
     Expression<String>? businessId,
     Expression<String>? manufacturerId,
     Expression<String>? storeId,
-    Expression<int>? crateCount,
+    Expression<double>? crateCount,
     Expression<int>? ratePerCrateKobo,
     Expression<String>? note,
     Expression<String>? source,
@@ -11319,7 +11322,7 @@ class CrateShortfallWriteoffsCompanion
     Value<String>? businessId,
     Value<String>? manufacturerId,
     Value<String?>? storeId,
-    Value<int>? crateCount,
+    Value<double>? crateCount,
     Value<int>? ratePerCrateKobo,
     Value<String?>? note,
     Value<String>? source,
@@ -11360,7 +11363,7 @@ class CrateShortfallWriteoffsCompanion
       map['store_id'] = Variable<String>(storeId.value);
     }
     if (crateCount.present) {
-      map['crate_count'] = Variable<int>(crateCount.value);
+      map['crate_count'] = Variable<double>(crateCount.value);
     }
     if (ratePerCrateKobo.present) {
       map['rate_per_crate_kobo'] = Variable<int>(ratePerCrateKobo.value);
@@ -72446,7 +72449,7 @@ typedef $$SupplierCrateDepositRequestsTableCreateCompanionBuilder =
       required String manufacturerId,
       required String storeId,
       required String kind,
-      Value<int> crateCount,
+      Value<double> crateCount,
       Value<int> ratePerCrateKobo,
       Value<int> requestedAmountKobo,
       Value<int?> settledAmountKobo,
@@ -72471,7 +72474,7 @@ typedef $$SupplierCrateDepositRequestsTableUpdateCompanionBuilder =
       Value<String> manufacturerId,
       Value<String> storeId,
       Value<String> kind,
-      Value<int> crateCount,
+      Value<double> crateCount,
       Value<int> ratePerCrateKobo,
       Value<int> requestedAmountKobo,
       Value<int?> settledAmountKobo,
@@ -72702,7 +72705,7 @@ class $$SupplierCrateDepositRequestsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get crateCount => $composableBuilder(
+  ColumnFilters<double> get crateCount => $composableBuilder(
     column: $table.crateCount,
     builder: (column) => ColumnFilters(column),
   );
@@ -72969,7 +72972,7 @@ class $$SupplierCrateDepositRequestsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get crateCount => $composableBuilder(
+  ColumnOrderings<double> get crateCount => $composableBuilder(
     column: $table.crateCount,
     builder: (column) => ColumnOrderings(column),
   );
@@ -73207,7 +73210,7 @@ class $$SupplierCrateDepositRequestsTableAnnotationComposer
   GeneratedColumn<String> get kind =>
       $composableBuilder(column: $table.kind, builder: (column) => column);
 
-  GeneratedColumn<int> get crateCount => $composableBuilder(
+  GeneratedColumn<double> get crateCount => $composableBuilder(
     column: $table.crateCount,
     builder: (column) => column,
   );
@@ -73503,7 +73506,7 @@ class $$SupplierCrateDepositRequestsTableTableManager
                 Value<String> manufacturerId = const Value.absent(),
                 Value<String> storeId = const Value.absent(),
                 Value<String> kind = const Value.absent(),
-                Value<int> crateCount = const Value.absent(),
+                Value<double> crateCount = const Value.absent(),
                 Value<int> ratePerCrateKobo = const Value.absent(),
                 Value<int> requestedAmountKobo = const Value.absent(),
                 Value<int?> settledAmountKobo = const Value.absent(),
@@ -73551,7 +73554,7 @@ class $$SupplierCrateDepositRequestsTableTableManager
                 required String manufacturerId,
                 required String storeId,
                 required String kind,
-                Value<int> crateCount = const Value.absent(),
+                Value<double> crateCount = const Value.absent(),
                 Value<int> ratePerCrateKobo = const Value.absent(),
                 Value<int> requestedAmountKobo = const Value.absent(),
                 Value<int?> settledAmountKobo = const Value.absent(),
@@ -73806,7 +73809,7 @@ typedef $$SupplierCrateDepositsTableCreateCompanionBuilder =
       Value<String?> storeId,
       required String movementType,
       required int signedAmountKobo,
-      Value<int> crateCount,
+      Value<double> crateCount,
       Value<int> ratePerCrateKobo,
       Value<String?> requestId,
       Value<String?> supplierCrateLedgerId,
@@ -73825,7 +73828,7 @@ typedef $$SupplierCrateDepositsTableUpdateCompanionBuilder =
       Value<String?> storeId,
       Value<String> movementType,
       Value<int> signedAmountKobo,
-      Value<int> crateCount,
+      Value<double> crateCount,
       Value<int> ratePerCrateKobo,
       Value<String?> requestId,
       Value<String?> supplierCrateLedgerId,
@@ -74051,7 +74054,7 @@ class $$SupplierCrateDepositsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get crateCount => $composableBuilder(
+  ColumnFilters<double> get crateCount => $composableBuilder(
     column: $table.crateCount,
     builder: (column) => ColumnFilters(column),
   );
@@ -74288,7 +74291,7 @@ class $$SupplierCrateDepositsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get crateCount => $composableBuilder(
+  ColumnOrderings<double> get crateCount => $composableBuilder(
     column: $table.crateCount,
     builder: (column) => ColumnOrderings(column),
   );
@@ -74499,7 +74502,7 @@ class $$SupplierCrateDepositsTableAnnotationComposer
     builder: (column) => column,
   );
 
-  GeneratedColumn<int> get crateCount => $composableBuilder(
+  GeneratedColumn<double> get crateCount => $composableBuilder(
     column: $table.crateCount,
     builder: (column) => column,
   );
@@ -74765,7 +74768,7 @@ class $$SupplierCrateDepositsTableTableManager
                 Value<String?> storeId = const Value.absent(),
                 Value<String> movementType = const Value.absent(),
                 Value<int> signedAmountKobo = const Value.absent(),
-                Value<int> crateCount = const Value.absent(),
+                Value<double> crateCount = const Value.absent(),
                 Value<int> ratePerCrateKobo = const Value.absent(),
                 Value<String?> requestId = const Value.absent(),
                 Value<String?> supplierCrateLedgerId = const Value.absent(),
@@ -74801,7 +74804,7 @@ class $$SupplierCrateDepositsTableTableManager
                 Value<String?> storeId = const Value.absent(),
                 required String movementType,
                 required int signedAmountKobo,
-                Value<int> crateCount = const Value.absent(),
+                Value<double> crateCount = const Value.absent(),
                 Value<int> ratePerCrateKobo = const Value.absent(),
                 Value<String?> requestId = const Value.absent(),
                 Value<String?> supplierCrateLedgerId = const Value.absent(),
@@ -75037,7 +75040,7 @@ typedef $$CrateShortfallWriteoffsTableCreateCompanionBuilder =
       required String businessId,
       required String manufacturerId,
       Value<String?> storeId,
-      required int crateCount,
+      required double crateCount,
       Value<int> ratePerCrateKobo,
       Value<String?> note,
       Value<String> source,
@@ -75052,7 +75055,7 @@ typedef $$CrateShortfallWriteoffsTableUpdateCompanionBuilder =
       Value<String> businessId,
       Value<String> manufacturerId,
       Value<String?> storeId,
-      Value<int> crateCount,
+      Value<double> crateCount,
       Value<int> ratePerCrateKobo,
       Value<String?> note,
       Value<String> source,
@@ -75174,7 +75177,7 @@ class $$CrateShortfallWriteoffsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<int> get crateCount => $composableBuilder(
+  ColumnFilters<double> get crateCount => $composableBuilder(
     column: $table.crateCount,
     builder: (column) => ColumnFilters(column),
   );
@@ -75311,7 +75314,7 @@ class $$CrateShortfallWriteoffsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<int> get crateCount => $composableBuilder(
+  ColumnOrderings<double> get crateCount => $composableBuilder(
     column: $table.crateCount,
     builder: (column) => ColumnOrderings(column),
   );
@@ -75446,7 +75449,7 @@ class $$CrateShortfallWriteoffsTableAnnotationComposer
   GeneratedColumn<String> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
 
-  GeneratedColumn<int> get crateCount => $composableBuilder(
+  GeneratedColumn<double> get crateCount => $composableBuilder(
     column: $table.crateCount,
     builder: (column) => column,
   );
@@ -75614,7 +75617,7 @@ class $$CrateShortfallWriteoffsTableTableManager
                 Value<String> businessId = const Value.absent(),
                 Value<String> manufacturerId = const Value.absent(),
                 Value<String?> storeId = const Value.absent(),
-                Value<int> crateCount = const Value.absent(),
+                Value<double> crateCount = const Value.absent(),
                 Value<int> ratePerCrateKobo = const Value.absent(),
                 Value<String?> note = const Value.absent(),
                 Value<String> source = const Value.absent(),
@@ -75642,7 +75645,7 @@ class $$CrateShortfallWriteoffsTableTableManager
                 required String businessId,
                 required String manufacturerId,
                 Value<String?> storeId = const Value.absent(),
-                required int crateCount,
+                required double crateCount,
                 Value<int> ratePerCrateKobo = const Value.absent(),
                 Value<String?> note = const Value.absent(),
                 Value<String> source = const Value.absent(),

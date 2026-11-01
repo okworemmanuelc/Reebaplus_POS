@@ -291,7 +291,7 @@ class OrderCommands {
         if (line.manufacturerId.isEmpty) continue;
         await _db.inventoryDao.addEmptyCrates(
           line.manufacturerId,
-          line.returnedCrates.toDouble(),
+          line.returnedCrates,
           storeId: storeId,
           orderId: orderId,
         );
@@ -323,7 +323,7 @@ class OrderCommands {
       if (line.returnedCrates > 0) {
         await _db.inventoryDao.addEmptyCrates(
           line.manufacturerId,
-          line.returnedCrates.toDouble(),
+          line.returnedCrates,
           storeId: storeId,
           orderId: orderId,
         );
@@ -353,7 +353,7 @@ class OrderCommands {
         await _db.cratePoolDao.recordCrateReturnByCustomer(
           customerId: customerId,
           manufacturerId: line.manufacturerId,
-          quantity: line.returnedCrates.toDouble(),
+          quantity: line.returnedCrates,
           performedBy: staffId,
           orderId: orderId,
           ledgerId: OrdersDao.settlementLegId(

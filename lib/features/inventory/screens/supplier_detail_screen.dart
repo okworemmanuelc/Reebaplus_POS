@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
+import 'package:reebaplus_pos/shared/utils/quantity_input.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:intl/intl.dart';
 
@@ -820,7 +820,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
                           // this supplier's crate debt carries no money.
                           if (p.position.unbackedCrates > 0)
                             Text(
-                              '${p.position.unbackedCrates} crate'
+                              '${formatQty(p.position.unbackedCrates)} crate'
                               '${p.position.unbackedCrates == 1 ? '' : 's'} '
                               'with no deposit paid',
                               style: context
@@ -1249,7 +1249,9 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
   ) {
     final bal = entry.balance;
     final isOwe = bal > 0;
-    final label = isOwe ? '${formatQty(bal.abs())} owed' : '${formatQty(bal.abs())} credit';
+    final label = isOwe
+        ? '${formatQty(bal.abs())} owed'
+        : '${formatQty(bal.abs())} credit';
     return Padding(
       padding: EdgeInsets.only(bottom: context.getRSize(10)),
       child: Container(
@@ -1421,10 +1423,15 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
                     labelText: isReturn
                         ? 'Crates returned to supplier'
                         : 'Crates received from supplier',
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    // Quarter steps (#629): half a crate is 0.5.
+                    keyboardType: stockQtyKeyboard(allowParts: true),
+                    inputFormatters: stockQtyFormatters(allowParts: true),
                     validator: (v) {
-                      final n = int.tryParse((v ?? '').trim()) ?? 0;
+                      final raw = (v ?? '').trim();
+                      if (raw.isNotEmpty && Qty.parse(raw) == null) {
+                        return 'Crates go in quarters: 0.25, 0.5, 0.75, 1 …';
+                      }
+                      final n = Qty.parse(raw) ?? 0;
                       if (n > 0) return null;
                       // A settlement can carry no crates at all — the day a
                       // supplier simply pays back a balance. It then needs the
@@ -1569,7 +1576,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
   }) async {
     if (!(formKey.currentState?.validate() ?? false)) return;
     final mfrId = manufacturerId!;
-    final qty = int.tryParse(qtyText.trim()) ?? 0;
+    final qty = Qty.parse(qtyText) ?? 0;
     final depositKobo = _typedKobo(depositText);
     final mfrName = manufacturers.firstWhere((m) => m.id == mfrId).name;
     final messenger = ScaffoldMessenger.of(context);
@@ -1603,7 +1610,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
             content: Text(
               qty == 0
                   ? 'Settlement recorded — the refund is waiting for a manager'
-                  : '$qty $mfrName crate${qty == 1 ? '' : 's'} returned to '
+                  : '${formatQty(qty)} $mfrName crate${qty == 1 ? '' : 's'} returned to '
                         '${supplier.name} — the refund is waiting for a manager',
             ),
           ),
@@ -1616,7 +1623,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
           supplierName: supplier.name,
           manufacturerId: mfrId,
           manufacturerName: mfrName,
-          quantity: qty.toDouble(),
+          quantity: qty,
           staffId: staffId,
           storeId: storeId,
           depositRefundedKobo: depositKobo,
@@ -1627,7 +1634,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
           supplierName: supplier.name,
           manufacturerId: mfrId,
           manufacturerName: mfrName,
-          quantity: qty.toDouble(),
+          quantity: qty,
           staffId: staffId,
           storeId: storeId,
           depositPaidKobo: depositKobo,
@@ -1637,8 +1644,8 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
         SnackBar(
           content: Text(
             isReturn
-                ? '$qty $mfrName crate${qty == 1 ? '' : 's'} returned to ${supplier.name}'
-                : '$qty $mfrName crate${qty == 1 ? '' : 's'} received from ${supplier.name}',
+                ? '${formatQty(qty)} $mfrName crate${qty == 1 ? '' : 's'} returned to ${supplier.name}'
+                : '${formatQty(qty)} $mfrName crate${qty == 1 ? '' : 's'} received from ${supplier.name}',
           ),
         ),
       );

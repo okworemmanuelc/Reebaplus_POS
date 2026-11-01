@@ -176,6 +176,20 @@ rules live in `lib/shared/utils/quantity_input.dart` (`parseStockQty`,
 switch is off), and `adjustStock` rejects an off-quarter delta. The sale path
 (S3) and crates (S4) enter parts separately.
 
+**Empties in parts (#629, Drift v100, cloud 0242).** Crates follow the same
+quarter steps on every brand, whatever a product's parts switch says: selling 0.5
+crate of a tracked bottle issues 0.5 crate, and every empties input (Confirm
+Returns, customer crate return, supplier crate movements, receipt empties,
+transfer empties, empties count, damaged / bought empties, write-off and reversal
+sheets) takes quarters through `stockQtyFormatters(allowParts: true)` + `Qty.parse`.
+Every crate money figure is proportional and whole-kobo through `lineTotalKobo`
+(`rate x crates`): the checkout deposit (`SaleCrateLine.fullDepositKobo`), the
+forfeit at Confirm, supplier deposit requests, write-off and shortage values,
+and the deposit position seam. `crate_count` on `crate_shortfall_writeoffs`,
+`supplier_crate_deposits` and `supplier_crate_deposit_requests` is a Real /
+quarter double. The crate-tracking rule itself (unit `bottle` + `track_empties`,
+per manufacturer) is unchanged.
+
 **Selling in parts (#628, Drift v99, cloud 0241).** Every product sells in quarter
 steps unless `products.allow_fractional_sales` is off (default true). `CartService`
 is the one gate: `addItem` / `updateQty` snap a line onto its step and cap it at

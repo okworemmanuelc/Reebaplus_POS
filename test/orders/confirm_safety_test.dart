@@ -465,8 +465,8 @@ void main() {
     List<CrateReturnLine> fullReturn({bool moneyTrack = true}) => [
           CrateReturnLine(
             manufacturerId: mfrId,
-            takenCrates: crates,
-            returnedCrates: crates,
+            takenCrates: crates.toDouble(),
+            returnedCrates: crates.toDouble(),
             rateKobo: rateKobo,
             paidKobo: moneyTrack ? depositKobo : 0,
           ),

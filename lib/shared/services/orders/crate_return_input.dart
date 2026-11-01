@@ -6,10 +6,11 @@ class CrateReturnLine {
   final String manufacturerId;
 
   /// Crates the customer took at the sale (`order_crate_lines.cratesTaken`).
-  final int takenCrates;
+  /// Quarter steps (#629): half a crate sold issues 0.5.
+  final double takenCrates;
 
-  /// Crates counted back at Confirm.
-  final int returnedCrates;
+  /// Crates counted back at Confirm. Quarter steps (#629).
+  final double returnedCrates;
 
   /// Deposit rate per crate (snapshot from the sale).
   final int rateKobo;

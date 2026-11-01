@@ -156,8 +156,8 @@ void main() {
     dateReceived: DateTime(2026, 7, 30),
     staffId: stockKeeperId,
     lines: [lineFor(manufacturerId)],
-    fullCratesReceivedByManufacturer: {manufacturerId: crates},
-    emptiesReturnedByManufacturer: {manufacturerId: empties},
+    fullCratesReceivedByManufacturer: {manufacturerId: crates.toDouble()},
+    emptiesReturnedByManufacturer: {manufacturerId: empties.toDouble()},
   );
 
   Future<List<PaymentTransactionData>> payments() =>
@@ -324,7 +324,7 @@ void main() {
         ),
         ratePerCrateKobo: manufacturer.depositAmountKobo,
         cratesOwed: 20,
-        emptiesOnHand: (pool[floatBrand] ?? 0).round(),
+        emptiesOnHand: pool[floatBrand] ?? 0,
       );
 
       expect(position.shortfallCrates, 7);

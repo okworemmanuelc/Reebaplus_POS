@@ -579,7 +579,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         InventoryFigureCard(
           key: const ValueKey('inventory-summary-crates'),
           label: 'Total Crates',
-          value: '${totalCrates.toInt()}',
+          value: formatQty(totalCrates),
           icon: AppIcons.beerMug,
           tone: IconTileTone.green,
           selected: _currentTab == _tabKeys.indexOf('crates'),
@@ -926,8 +926,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     return allMfrs.map((mfr) {
       return ManufacturerCrateStats(
         manufacturer: mfr,
-        totalBottles: (fullByMfr[mfr] ?? 0).round(),
-        emptyCrates: (emptyByMfr[mfr] ?? 0).round(),
+        totalBottles: fullByMfr[mfr] ?? 0,
+        emptyCrates: emptyByMfr[mfr] ?? 0,
         totalValueKobo: 0,
       );
     }).toList()..sort((a, b) => a.manufacturer.compareTo(b.manufacturer));
@@ -1232,11 +1232,11 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
 
     final shortagesByMfr =
         ref.watch(crateShortagesByManufacturerProvider).valueOrNull ??
-        const <String, int>{};
+        const <String, double>{};
 
     final stats = _computeCrateStats(fullByMfr, emptyByMfr);
-    // Whole until the empties UI learns parts (S4, #620).
-    int emptyForMfr(ManufacturerData mfr) => (emptyByMfr[mfr.id] ?? 0).round();
+    // Quarter steps (#629): half a crate shows as 0.5.
+    double emptyForMfr(ManufacturerData mfr) => emptyByMfr[mfr.id] ?? 0;
 
     final trackedMfrIds =
         ref.watch(crateTrackedManufacturerIdsProvider).valueOrNull ??
@@ -1251,8 +1251,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
           mfr,
     ];
 
-    final totalEmpty = emptyByMfr.values.fold<double>(0, (s, v) => s + v).round();
-    final totalFull = stats.fold<int>(0, (s, e) => s + e.fullCratesEquiv);
+    final totalEmpty = emptyByMfr.values.fold<double>(0, (s, v) => s + v);
+    final totalFull = stats.fold<double>(0, (s, e) => s + e.fullCratesEquiv);
     final gap = context.getRSize(12);
 
     return [
@@ -1268,7 +1268,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                   Expanded(
                     child: InventoryFigureCard(
                       label: 'Empty In Stock',
-                      value: totalEmpty.toString(),
+                      value: formatQty(totalEmpty),
                       icon: AppIcons.beerMug,
                       tone: IconTileTone.warning,
                     ),
@@ -1277,7 +1277,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                   Expanded(
                     child: InventoryFigureCard(
                       label: 'Full (Crate)',
-                      value: totalFull.toString(),
+                      value: formatQty(totalFull),
                       icon: AppIcons.wineBottle,
                       tone: IconTileTone.info,
                     ),
@@ -1343,8 +1343,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     BuildContext context,
     ManufacturerData mfr,
     ManufacturerCrateStats stat, {
-    required int emptyCount,
-    int shortCount = 0,
+    required double emptyCount,
+    double shortCount = 0,
   }) {
     final t = Theme.of(context);
     final f = t.extension<AppFixedColors>() ?? AppFixedColors.light;
@@ -1405,7 +1405,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                       TagPill(
                         key: ValueKey('mfr_shortage_badge_${mfr.id}'),
                         // Wording unchanged (the badge test reads it).
-                        label: '⚠ $shortCount short',
+                        label: '⚠ ${formatQty(shortCount)} short',
                         tone: TagPillTone.warning,
                       ),
                     ],
@@ -1429,19 +1429,19 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
                     _mfrSimpleStat(
                       context,
                       'Full',
-                      stat.fullCratesEquiv.toString(),
+                      formatQty(stat.fullCratesEquiv),
                       t.colorScheme.primary,
                     ),
                     _mfrSimpleStat(
                       context,
                       'Empty',
-                      emptyCount.toString(),
+                      formatQty(emptyCount),
                       f.warning,
                     ),
                     _mfrSimpleStat(
                       context,
                       'Total',
-                      totalAssets.toString(),
+                      formatQty(totalAssets),
                       f.green,
                     ),
                   ],
