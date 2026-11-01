@@ -147,7 +147,7 @@ class _ManufacturerSettingsSliversState
     if (valueChanged) {
       // The preview reads before it writes. A failed read must say so rather
       // than escape this callback and leave the owner staring at a dead Save.
-      final int debtCrates;
+      final double debtCrates;
       final int unsetLines;
       try {
         debtCrates = await db.cratePoolDao.supplierCrateDebtCratesFor(mfr.id);

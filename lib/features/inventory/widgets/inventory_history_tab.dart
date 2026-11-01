@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/database/daos.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -160,7 +161,11 @@ class _InventoryHistoryTabState extends ConsumerState<InventoryHistoryTab> {
   }
 
   // ── Summary cards ────────────────────────────────────────────────────────
-  Widget _buildSummaryRow(BuildContext context, int totalIn, int totalOut) {
+  Widget _buildSummaryRow(
+    BuildContext context,
+    double totalIn,
+    double totalOut,
+  ) {
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -168,7 +173,7 @@ class _InventoryHistoryTabState extends ConsumerState<InventoryHistoryTab> {
           Expanded(
             child: InventoryFigureCard(
               label: 'Stock In',
-              value: '+${fmtNumber(totalIn)} units',
+              value: '+${formatQty(totalIn)} units',
               icon: AppIcons.arrowDown,
               tone: IconTileTone.green,
             ),
@@ -177,7 +182,7 @@ class _InventoryHistoryTabState extends ConsumerState<InventoryHistoryTab> {
           Expanded(
             child: InventoryFigureCard(
               label: 'Stock Out',
-              value: '-${fmtNumber(totalOut)} units',
+              value: '-${formatQty(totalOut)} units',
               icon: AppIcons.arrowUp,
               tone: IconTileTone.danger,
             ),
@@ -312,7 +317,7 @@ class _InventoryHistoryTabState extends ConsumerState<InventoryHistoryTab> {
           Expanded(
             flex: 2,
             child: Text(
-              '$sign${tx.quantityDelta}',
+              '$sign${formatQty(tx.quantityDelta)}',
               textAlign: TextAlign.center,
               style: context
                   .boldStyle(12)

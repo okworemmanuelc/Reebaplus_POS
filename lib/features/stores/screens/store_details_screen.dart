@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/features/subscription/read_only_store_gate.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
@@ -100,7 +101,7 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
     final hasFullAccess = canViewAll || assignedIds.contains(widget.store.id);
     final canRequest = Gates.requestStoreTransfer.allows(ref);
 
-    final totalStock = _inventory.fold<int>(0, (sum, p) => sum + p.totalStock);
+    final totalStock = _inventory.fold<double>(0, (sum, p) => sum + p.totalStock);
     final totalValue = _inventory.fold<double>(
       0.0,
       (sum, p) => sum + (p.totalStock * (p.product.retailerPriceKobo / 100.0)),
@@ -276,7 +277,7 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
           title: 'Store Value',
           value: formatCurrency(totalValue),
           subtitle: 'Total Units',
-          pillLabel: totalStock.toString(),
+          pillLabel: formatQty(totalStock),
           pillTone: TagPillTone.info,
         );
         Widget tiles(double width) {
@@ -436,7 +437,7 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
                             ),
                             SizedBox(width: context.getRSize(8)),
                             TagPill(
-                              label: '${item.totalStock} units',
+                              label: '${formatQty(item.totalStock)} units',
                               tone: isLow
                                   ? TagPillTone.danger
                                   : TagPillTone.green,

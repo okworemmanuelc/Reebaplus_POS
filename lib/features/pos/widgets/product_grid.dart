@@ -275,7 +275,7 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
     final accepted = await EditItemModal.showForProduct(
       context,
       product: widget.item.product,
-      maxStock: widget.item.totalStock,
+      maxStock: widget.item.totalStock.floor(),
       tier: widget.controller.selectedGroup,
     );
     if (!mounted || accepted == null) return;

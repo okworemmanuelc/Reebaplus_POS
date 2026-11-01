@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:intl/intl.dart';
 
@@ -1111,7 +1112,7 @@ class _SaleRow extends StatelessWidget {
     final subtext = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
     final order = sale.order;
     final counted = orderCountsAsSale(order.status);
-    final units = sale.items.fold<int>(0, (sum, l) => sum + l.item.quantity);
+    final units = sale.items.fold<double>(0, (sum, l) => sum + l.item.quantity);
 
     return GlassyCard(
       margin: EdgeInsets.only(bottom: context.getRSize(12)),
@@ -1157,7 +1158,7 @@ class _SaleRow extends StatelessWidget {
                     SizedBox(height: context.getRSize(4)),
                     Text(
                       '${DateFormat('d MMM y, HH:mm').format(order.createdAt)}'
-                      ' • $units ${units == 1 ? 'item' : 'items'}'
+                      ' • ${formatQty(units)} ${units == 1 ? 'item' : 'items'}'
                       '${counted ? '' : ' • ${order.status}'}',
                       style: TextStyle(
                         fontSize: context.getRFontSize(12),

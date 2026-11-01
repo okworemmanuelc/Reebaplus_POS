@@ -112,7 +112,7 @@ class StoreTransferHub extends ConsumerWidget {
                 p.unit?.toLowerCase() == 'bottle' &&
                 p.trackEmpties;
             final availableEmpties = manufacturerId != null
-                ? (emptiesMap[manufacturerId] ?? 0)
+                ? (emptiesMap[manufacturerId] ?? 0).floor()
                 : 0;
             return _TransferActionCard(
               transfer: t,
@@ -120,7 +120,7 @@ class StoreTransferHub extends ConsumerWidget {
               productName: productNames[t.productId] ?? 'Product',
               counterpartyStore: storeNames[t.toLocationId] ?? 'a store',
               byUser: users[t.initiatedBy]?.name,
-              availableHere: hereStock[t.productId] ?? 0,
+              availableHere: (hereStock[t.productId] ?? 0).floor(),
               manufacturerId: manufacturerId,
               isCrateEligible: isCrateEligible,
               availableEmpties: availableEmpties,
@@ -405,8 +405,8 @@ class _TransferActionCardState extends ConsumerState<_TransferActionCard> {
           .dispatchTransfer(
             transferId: widget.transfer.id,
             dispatchedBy: uid,
-            quantity: qty,
-            emptyCratesToSend: empties,
+            quantity: qty.toDouble(),
+            emptyCratesToSend: empties.toDouble(),
           ),
       empties > 0
           ? 'Dispatched $qty unit(s) + $empties empty crate(s) to ${widget.counterpartyStore}.'
@@ -448,7 +448,7 @@ class _TransferActionCardState extends ConsumerState<_TransferActionCard> {
     return showDialog<({int quantity, int empties})>(
       context: context,
       builder: (_) => _DispatchDialog(
-        requested: widget.transfer.quantity,
+        requested: widget.transfer.quantity.round(), // whole until S5 (#620)
         availableHere: widget.availableHere,
         showEmptiesField: showEmptiesField,
         availableEmpties: widget.availableEmpties,

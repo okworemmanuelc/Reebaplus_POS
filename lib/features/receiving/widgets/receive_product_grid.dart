@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
@@ -186,7 +187,7 @@ class _ReceiveProductTileState extends ConsumerState<_ReceiveProductTile> {
         product,
         crates: businessTracksCrates(ref.watch(currentBusinessProvider)),
       ),
-      stockLabel: isOutOfStock ? 'No stock' : 'Current: $totalStock',
+      stockLabel: isOutOfStock ? 'No stock' : 'Current: ${formatQty(totalStock)}',
       stockLevel: isOutOfStock ? StockLevel.out : StockLevel.ok,
       categoryName: widget.categoryName,
       photoPath: product.imagePath,

@@ -1811,13 +1811,13 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                             ref.read(lockedStoreProvider).value;
                         await db.inventoryDao.addEmptyCrates(
                           mfrId,
-                          qty,
+                          qty.toDouble(),
                           storeId: creditStoreId,
                         );
                         await db.cratePoolDao.recordCrateReturnByCustomer(
                           customerId: id,
                           manufacturerId: mfrId,
-                          quantity: qty,
+                          quantity: qty.toDouble(),
                           performedBy: staffId,
                         );
                         // §7.8 — audit the manual crate return (who/when/brand/

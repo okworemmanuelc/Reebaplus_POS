@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/crates/crate_count_store.dart';
@@ -67,7 +68,7 @@ class _CountManufacturerEmptiesSheetState
     extends ConsumerState<CountManufacturerEmptiesSheet> {
   final TextEditingController _countCtrl = TextEditingController();
   String? _selectedStoreId;
-  int? _expectedEmpties;
+  double? _expectedEmpties;
   bool _isLoadingExpected = false;
   String? _errorMessage;
   bool _mustPickStore = false;
@@ -176,7 +177,7 @@ class _CountManufacturerEmptiesSheetState
         manufacturerId: widget.manufacturer.id,
         storeId: storeId,
         performedBy: performedBy,
-        countedEmpties: counted,
+        countedEmpties: counted.toDouble(),
       );
 
       if (mounted) {
@@ -206,12 +207,12 @@ class _CountManufacturerEmptiesSheetState
     if (_expectedEmpties != null && counted != null && counted >= 0) {
       final diff = counted - _expectedEmpties!;
       if (diff < 0) {
-        final gap = -diff;
-        final warningValueNaira = gap * crateValueNaira;
+        final gap = formatQty(-diff);
+        final warningValueNaira = -diff * crateValueNaira;
         differenceLine =
             'This is what will be recorded: $gap crates short (${formatCurrency(warningValueNaira)} warning value)';
       } else if (diff > 0) {
-        differenceLine = 'This is what will be recorded: $diff crates surplus';
+        differenceLine = 'This is what will be recorded: ${formatQty(diff)} crates surplus';
       } else {
         differenceLine = 'This is what will be recorded: No difference';
       }
@@ -252,7 +253,7 @@ class _CountManufacturerEmptiesSheetState
           value: _isLoadingExpected
               ? '...'
               : (_expectedEmpties != null
-                    ? '$_expectedEmpties crates'
+                    ? '${formatQty(_expectedEmpties!)} crates'
                     : 'Select store'),
           valueKey: const ValueKey(kCountEmptiesExpectedTextKey),
         ),

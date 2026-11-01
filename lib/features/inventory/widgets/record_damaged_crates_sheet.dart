@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/crates/crate_count_store.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
@@ -66,7 +67,7 @@ class _RecordDamagedCratesSheetState
   late final List<StoreData> _stores;
   late final bool _mustPickStore;
   String? _storeId;
-  int? _warehouseCount;
+  double? _warehouseCount;
   bool _isLoadingWarehouse = false;
   String _reason = 'broken';
   bool _saving = false;
@@ -145,7 +146,7 @@ class _RecordDamagedCratesSheetState
     final n = int.tryParse(raw);
     if (n == null || n <= 0) return 'Enter a number greater than 0';
     if (_warehouseCount != null && n > _warehouseCount!) {
-      return 'Only $_warehouseCount empty crate${_warehouseCount == 1 ? '' : 's'} in warehouse';
+      return 'Only ${formatQty(_warehouseCount!)} empty crate${_warehouseCount == 1 ? '' : 's'} in warehouse';
     }
     return null;
   }
@@ -223,7 +224,7 @@ class _RecordDamagedCratesSheetState
         setState(() => _saving = false);
         AppNotification.showError(
           context,
-          'Only $currentWarehouse empty crate${currentWarehouse == 1 ? '' : 's'} in warehouse',
+          'Only ${formatQty(currentWarehouse)} empty crate${currentWarehouse == 1 ? '' : 's'} in warehouse',
         );
       }
       return;
@@ -232,7 +233,7 @@ class _RecordDamagedCratesSheetState
     try {
       await db.cratePoolDao.recordDamage(
         widget.manufacturer.id,
-        quantity,
+        quantity.toDouble(),
         storeId: _storeId,
         performedBy: performedBy,
         ratePerCrateKobo: widget.manufacturer.depositAmountKobo,
@@ -324,7 +325,7 @@ class _RecordDamagedCratesSheetState
                 key: const ValueKey(kRecordDamagedQuantityFieldKey),
                 controller: _quantityCtrl,
                 labelText: _warehouseCount != null
-                    ? 'Number of damaged empties ($_warehouseCount in warehouse)'
+                    ? 'Number of damaged empties (${formatQty(_warehouseCount!)} in warehouse)'
                     : 'Number of damaged empties',
                 hintText: 'e.g. 5',
                 keyboardType: TextInputType.number,

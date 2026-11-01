@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
@@ -64,7 +65,7 @@ class _ProductSalesCardState extends State<ProductSalesCard> {
     final muted = _muted(context);
     final all = widget.days;
     final window = all == null ? const <ProductDaySales>[] : _window(all);
-    final units = window.fold<int>(0, (a, d) => a + d.units);
+    final units = window.fold<double>(0, (a, d) => a + d.units);
     final revenue = window.fold<int>(0, (a, d) => a + d.revenueKobo);
     final profit = window.fold<int>(0, (a, d) => a + d.profitKobo);
     final uncosted = window.any((d) => d.hasUncosted);
@@ -90,7 +91,7 @@ class _ProductSalesCardState extends State<ProductSalesCard> {
             textBaseline: TextBaseline.alphabetic,
             children: [
               Text(
-                all == null ? '—' : '$units',
+                all == null ? '—' : formatQty(units),
                 style: context
                     .extraBoldStyle(30)
                     .copyWith(color: t.colorScheme.onSurface),
@@ -262,7 +263,7 @@ class _DayBars extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     final muted = _muted(context);
-    final maxUnits = days.fold<int>(0, (a, d) => d.units > a ? d.units : a);
+    final maxUnits = days.fold<double>(0, (a, d) => d.units > a ? d.units : a);
     final chartH = context.getRSize(110);
     final gap = month ? 2.0 : 8.0;
     String label(int i) {
@@ -289,7 +290,7 @@ class _DayBars extends StatelessWidget {
                       children: [
                         if (i == days.length - 1)
                           Text(
-                            '${days[i].units}',
+                            formatQty(days[i].units),
                             maxLines: 1,
                             style: context
                                 .semiBoldStyle(12)

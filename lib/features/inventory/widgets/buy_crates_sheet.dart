@@ -142,7 +142,7 @@ class _BuyCratesSheetState extends ConsumerState<BuyCratesSheet> {
             manufacturerId: widget.manufacturer.id,
             storeId: _storeId!,
             performedBy: userId,
-            quantity: _quantity!,
+            quantity: _quantity!.toDouble(),
             pricePerCrateKobo: _pricePerCrateKobo!,
           );
     } catch (_) {

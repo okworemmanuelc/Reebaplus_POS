@@ -184,7 +184,7 @@ ScanMatchOutcome resolveProduct({
 /// it.
 int _storeStockOf(String productId, List<ProductDataWithStock> storeProducts) {
   for (final entry in storeProducts) {
-    if (entry.product.id == productId) return entry.totalStock;
+    if (entry.product.id == productId) return entry.totalStock.floor();
   }
   return 0;
 }

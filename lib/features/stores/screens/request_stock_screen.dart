@@ -198,7 +198,7 @@ class _RequestStockScreenState extends ConsumerState<RequestStockScreen> {
       context,
       productName: item.product.name,
       sourceStoreName: _sourceStore?.name ?? '',
-      available: item.totalStock,
+      available: item.totalStock.floor(),
       initialQuantity: current > 0 ? current : 1,
     );
     if (!mounted || qty == null) return;
@@ -294,7 +294,7 @@ class _RequestStockScreenState extends ConsumerState<RequestStockScreen> {
             toStoreId: dst.id,
             lines: [
               for (final i in items)
-                (productId: i.product.id, quantity: i.quantity),
+                (productId: i.product.id, quantity: i.quantity.toDouble()),
             ],
             requestedBy: currentUser.id,
           );

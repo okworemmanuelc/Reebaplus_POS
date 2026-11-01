@@ -1027,7 +1027,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         ),
         // Receive Stock routes the opening quantity to its delivery list
         // below instead of into a store.
-        initialStock: widget.receiveMode ? null : intent.initialStock,
+        initialStock: widget.receiveMode ? null : intent.initialStock?.toDouble(),
         storeId: intent.storeId,
         performedBy: auth.currentUser?.id,
       );
