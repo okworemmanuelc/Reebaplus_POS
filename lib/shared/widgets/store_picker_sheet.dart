@@ -1,3 +1,4 @@
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
@@ -130,7 +131,7 @@ Future<void> showStorePickerSheet(
                                 if (o.id != null && inventoryCounts[o.id] != null) ...[
                                   SizedBox(height: context.getRSize(2)),
                                   Text(
-                                    '${inventoryCounts[o.id]!.skuCount} SKUs (${inventoryCounts[o.id]!.totalQuantity} items)',
+                                    '${inventoryCounts[o.id]!.skuCount} SKUs (${formatQty(inventoryCounts[o.id]!.totalQuantity)} items)',
                                     style: TextStyle(
                                       fontSize: context.getRFontSize(12),
                                       color: subtextColor,

@@ -12,11 +12,6 @@ library;
 /// kobo world.
 int koboFromNaira(double naira) => (naira * 100).round();
 
-/// A cart line's displayed total (naira, whole units): `price × qty`,
-/// TRUNCATED toward zero — carried over from Checkout's line row as-is.
-int saleLineTotal({required double price, required double qty}) =>
-    (price * qty).toInt();
-
 /// One crate brand in the cart: how many crates and the deposit rate per crate.
 class SaleCrateLine {
   const SaleCrateLine({

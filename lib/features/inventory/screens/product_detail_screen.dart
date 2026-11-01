@@ -46,6 +46,7 @@ import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/core/utils/product_unit.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ProductDetailScreen — full-screen product information view (#487 PR 3)
@@ -390,18 +391,18 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     final stores = ref.watch(allStoresProvider).valueOrNull ?? const [];
     final stockMap =
         ref.watch(productStockByStoreProvider(widget.item.id)).valueOrNull ??
-        const <String, int>{};
+        const <String, double>{};
     final rows = [
       for (final s in stores)
         StoreStockRow(
           storeId: s.id,
           name: s.name,
-          quantity: (stockMap[s.id] ?? 0).round(), // whole until S3 (#620)
+          quantity: stockMap[s.id] ?? 0,
         ),
     ];
     final total = stores.isEmpty
-        ? widget.item.totalStock.toInt()
-        : rows.fold<int>(0, (a, r) => a + r.quantity);
+        ? widget.item.totalStock
+        : rows.fold<double>(0, (a, r) => a + r.quantity);
 
     final hero = _buildHero(context, total);
     final description = ProductDescriptionCard(
@@ -477,7 +478,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   // CARDS
   // ═══════════════════════════════════════════════════════════════════════════
 
-  Widget _buildHero(BuildContext context, int total) {
+  Widget _buildHero(BuildContext context, double total) {
     final p = _productData;
     final level = stockLevelOf(total, _alertAt);
     final categories = ref.watch(allCategoriesProvider).valueOrNull ?? const [];
@@ -515,7 +516,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       categoryName: categoryName,
       stockLabel: level == StockLevel.out
           ? 'Out of stock'
-          : '$total ${unitCountNoun(_unit, total, crates: _crates)} in stock',
+          : '${formatQty(total)} ${unitCountNoun(_unit, total, crates: _crates)} in stock',
       stockLevel: level,
       imagePath: _imagePath,
       // The same category picture as the POS and Receive Stock tiles.
@@ -565,7 +566,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     final stock = ref
             .watch(productStockByStoreProvider(widget.item.id))
             .valueOrNull ??
-        const <String, int>{};
+        const <String, double>{};
     final inStockOnline = stores.any(
       (s) =>
           s.kind == kStoreKindStore &&
@@ -839,7 +840,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   Widget _buildTarget(BuildContext context) {
     return ProductSalesTargetCard(
       figures: SalesTargetFigures(
-        sold: _monthUnits.round(), // whole until S3 (#620)
+        sold: _monthUnits,
         target: _productData?.monthlyTargetUnits ?? 0,
         now: _now,
       ),

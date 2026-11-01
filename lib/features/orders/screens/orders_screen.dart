@@ -1129,7 +1129,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
           ReturnLineInput(
             lineId: l.item.id,
             name: l.displayName,
-            quantity: l.item.quantity.round(), // whole until S3 (#620)
+            quantity: l.item.quantity,
             canBeDamaged: l.item.productId != null,
           ),
       ],

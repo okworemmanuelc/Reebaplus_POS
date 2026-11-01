@@ -45,7 +45,7 @@ DailyClosingFigures _figures({
       netCashMovementKobo: netCashMovementKobo,
       stockCogsKobo: 200000,
       stockExpectedClosingKobo: stockExpectedClosingKobo,
-      itemsSold: itemsSold,
+      itemsSold: itemsSold.toDouble(),
       shortageUnits: 0,
     );
 

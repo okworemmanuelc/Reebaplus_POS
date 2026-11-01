@@ -314,7 +314,7 @@ void main() {
         of: find.byKey(EditItemKeys.quantity),
         matching: find.byType(TextField),
       );
-      expect(tester.widget<TextField>(qty).controller!.text, '2.0');
+      expect(tester.widget<TextField>(qty).controller!.text, '2');
       await tester.tap(find.byKey(EditItemKeys.plus));
       await tester.pump();
       expect(tester.widget<TextField>(qty).controller!.text, '3');

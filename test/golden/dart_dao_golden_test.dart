@@ -5,6 +5,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/utils/order_number.dart';
 
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import '../helpers/dispatch_test_utils.dart';
 import 'golden_scenario.dart';
 
@@ -147,7 +148,7 @@ void main() {
                 businessId: businessId,
                 productId: productIdByKey[inv.productKey]!,
                 storeId: storeId,
-                quantity: Value(inv.quantity.toDouble()),
+                quantity: Value(inv.quantity),
               ),
             );
       }
@@ -161,8 +162,8 @@ void main() {
                 businessId: businessId,
                 productId: productIdByKey[b.productKey]!,
                 storeId: storeId,
-                qtyRemaining: b.qty.toDouble(),
-                qtyOriginal: b.qty.toDouble(),
+                qtyRemaining: b.qty,
+                qtyOriginal: b.qty,
                 costKobo: Value(b.costKobo),
                 receivedAt: Value(b.receivedAtUtc),
               ),
@@ -184,14 +185,14 @@ void main() {
         // line records the catalogue price only when the two differ — the same
         // rule OrderCommands._buildOrderItems applies on the real checkout.
         final charged = scenario.chargedKobo(line);
-        final total = charged * line.quantity;
+        final total = lineTotalKobo(charged, line.quantity);
         gross += total;
         items.add(OrderItemsCompanion.insert(
           businessId: businessId,
           orderId: orderId,
           productId: Value(productIdByKey[line.productKey]!),
           storeId: storeId,
-          quantity: line.quantity.toDouble(),
+          quantity: line.quantity,
           unitPriceKobo: charged,
           totalKobo: total,
           cataloguePriceKobo: Value(catalogueSnapshotKobo(
@@ -360,27 +361,27 @@ void main() {
       }
 
       /// productKey → on-hand in this store.
-      Future<Map<String, int>> readInventory() async {
-        final out = <String, int>{};
+      Future<Map<String, double>> readInventory() async {
+        final out = <String, double>{};
         for (final entry in productIdByKey.entries) {
           final invRow = await (db.select(db.inventory)
                 ..where((i) =>
                     i.productId.equals(entry.value) & i.storeId.equals(storeId)))
               .getSingleOrNull();
-          if (invRow != null) out[entry.key] = invRow.quantity.round(); // goldens are whole-number
+          if (invRow != null) out[entry.key] = invRow.quantity;
         }
         return out;
       }
 
       /// key "productKey|receivedAt" → the SEEDED batch's qty_remaining. Batches
       /// the run appended (a cancel's restore) are deliberately not in here.
-      Future<Map<String, int>> readSeededBatchRemaining() async {
-        final out = <String, int>{};
+      Future<Map<String, double>> readSeededBatchRemaining() async {
+        final out = <String, double>{};
         for (final (id, productKey, receivedAt) in seededBatches) {
           final row = await (db.select(db.costBatches)
                 ..where((b) => b.id.equals(id)))
               .getSingle();
-          out['$productKey|$receivedAt'] = row.qtyRemaining.round();
+          out['$productKey|$receivedAt'] = row.qtyRemaining;
         }
         return out;
       }
@@ -451,7 +452,7 @@ void main() {
           for (final i in orderItems)
             ActualItem(
               productKey: keyByProductId[i.productId]!,
-              quantity: i.quantity.round(),
+              quantity: i.quantity,
               unitPriceKobo: i.unitPriceKobo,
               totalKobo: i.totalKobo,
               buyingPriceKobo: i.buyingPriceKobo,
@@ -537,7 +538,7 @@ void main() {
           if (!seededBatchIds.contains(b.id))
             ActualRestoredLayer(
               productKey: keyByProductId[b.productId]!,
-              qty: b.qtyRemaining.round(),
+              qty: b.qtyRemaining,
               costKobo: b.costKobo,
             ),
       ];

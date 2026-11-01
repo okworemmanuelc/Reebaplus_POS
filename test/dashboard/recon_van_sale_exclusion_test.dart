@@ -156,7 +156,7 @@ OrderWithItems _sale({
 
 /// The whole surface a leaked road sale could disturb: the day-close headline
 /// figures plus the cash card and the asset lines.
-Map<String, int> _figures(ReconData d) => {
+Map<String, num> _figures(ReconData d) => {
   'totalRevenueKobo': d.totalRevenueKobo,
   'totalSalesKobo': d.totalSalesKobo,
   'costedRevenueKobo': d.costedRevenueKobo,

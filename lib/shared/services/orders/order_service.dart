@@ -112,7 +112,7 @@ class OrderService {
     required String staffId,
     required GateContext gateContext,
     String damageReasonKey = 'other',
-    Map<String, int> damagedQtyByLine = const {},
+    Map<String, double> damagedQtyByLine = const {},
   }) {
     return _commands.returnCompletedSale(
       orderId: orderId,

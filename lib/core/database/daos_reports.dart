@@ -40,7 +40,7 @@ class DailyClosingFigures {
   final int netCashMovementKobo;
   final int stockCogsKobo;
   final int stockExpectedClosingKobo;
-  final int itemsSold;
+  final double itemsSold;
   final double shortageUnits;
 }
 

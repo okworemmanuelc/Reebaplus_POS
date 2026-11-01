@@ -55,9 +55,10 @@ DailyClosingFigures dailyClosingFiguresFrom(ReconData d) => DailyClosingFigures(
 /// — so the card shows the badge; an unchanged figure shows none.
 class ReconFigureDelta {
   const ReconFigureDelta({required this.reviewed, required this.current});
-  final int reviewed;
-  final int current;
-  int get delta => current - reviewed;
+  // `num`: money figures are whole kobo, unit counts can be parts (#628).
+  final num reviewed;
+  final num current;
+  num get delta => current - reviewed;
   bool get changed => delta != 0;
 }
 
