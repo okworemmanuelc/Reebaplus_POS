@@ -7,6 +7,10 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Plan limits: brief notice, not a standing banner (2026-11-01)
+- Removed the permanent "N shops read-only / staff paused / plan ended — Upgrade" banner. Only a failed Play payment (grace/hold) keeps a standing banner.
+- Adding a shop/staff over the limit, or changing a read-only shop, now shows a 3-second notice with **Upgrade** (`showPlanLimitNotice` / `showUpgradeNotice` in `plan_limit_widgets.dart`) instead of a pop-up.
+
 ### Home eye toggle, auto-lock off by default, POS 3 columns (2026-11-01, ready for review)
 Branch `feat/home-hide-figures-lock-off-pos-3col`. (1) Home: eye button in the Performance Overview header hides every money figure (device-local `home_hide_figures`). (2) Auto-lock: unset `auto_lock_interval_seconds` now means off in `AutoLockWrapper` and the Security screen (was 5 min); a saved timer is unchanged. The 12-hour shift logout is untouched. (3) POS: the grid-column fallback is 3 (was 2), so a medium phone (380–600dp) opens on three columns; small phones stay capped at 2, and a saved choice wins. No schema, sync or money change, so no pos-parity issue.
 
