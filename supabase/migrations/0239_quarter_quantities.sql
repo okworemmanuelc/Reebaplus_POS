@@ -17,7 +17,8 @@
 -- NOT converted (stay whole numbers while switched off, owner decision 11):
 -- every van_* table and every online_order_* table.
 --
--- Old-client safety (verified on PostgreSQL 17 / PostgREST row_to_json):
+-- Old-client safety (verified 2026-11-01 on the production PostgreSQL 17 with
+-- to_json / row_to_json, the encoders PostgREST uses for its JSON bodies):
 --   select 5::float8            -> 5      (not 5.0)
 --   to_json(5::float8)          -> 5
 --   to_json(0.25::float8)       -> 0.25
@@ -34,6 +35,10 @@
 -- Functions whose PARAMETER type changes are DROPped first (CREATE OR REPLACE
 -- with a new parameter type would leave an overload next to the old one) and
 -- re-GRANTed exactly as before.
+--
+-- LOCKING: each ALTER COLUMN TYPE rewrites its table under ACCESS EXCLUSIVE
+-- (order_items, stock_transactions, inventory, crate_ledger are the big ones).
+-- Deploy in a quiet window.
 --
 -- DEPLOY GATE: do NOT deploy until the supervisor decides the release order
 -- (new app on Play -> minimum version raised -> cloud). Part C also rewrites
@@ -4008,5 +4013,8 @@ REVOKE ALL ON FUNCTION public.console_adjust_inventory(uuid, uuid, uuid, uuid, d
 REVOKE ALL ON FUNCTION public.console_create_product(uuid, uuid, text, text, text, text, text, bigint, bigint, bigint, uuid, uuid, uuid, integer, timestamp with time zone, uuid, double precision) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.pos_stock_transfer(uuid, uuid, uuid, uuid, uuid, uuid, uuid, double precision) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.add_product(uuid, uuid, uuid, text, uuid, text, text, bigint, bigint, bigint, double precision, boolean, uuid, integer) FROM PUBLIC, anon;
+
+-- PostgREST caches column types; ask it to reload after the DDL.
+NOTIFY pgrst, 'reload schema';
 
 COMMIT;

@@ -7,6 +7,12 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #627: Quantity foundation, quarter quantities (2026-11-01, ready for review)
+- Slice S2 of PRD #620. 22 quantity columns become `double precision` (cloud 0239, NOT deployed) / `RealColumn` (Drift v98, no table rebuild) with a quarter-step CHECK each; van and online-order tables untouched. Shared `lib/shared/utils/quantity.dart` (`Qty`, `formatQty`, `lineTotalKobo`) + SQL twins `qty_is_quarter` / `line_total_kobo`.
+- 24 SQL functions recreated with double quantity types (list in the PR body); whole-number behaviour unchanged. Pushes send whole doubles as integers; pulls accept 5 / 5.0 / 0.5.
+- No UI for entering parts: screens bridge to int with `.round()` / `.floor()` and say so in a comment; S3-S5 widen them. `order_commands.dart` qty `.toInt()` untouched (S3).
+- Open: supervisor deploys 0239 (dev first, quiet window: table rewrites), files the `pos-parity` issue, keeps the release-order gate (#620 decision 12).
+
 ### Issue #626: Must-update switch (2026-11-01, ready for review)
 - `ForceUpdateWrapper` compares the `PackageInfo` build number with server `app_config.min_android_build` (launch + resume, 1-min debounce); below = full-screen Update Required with a Play Store button. Offline/error/non-Android never block; the child renders immediately (no spinner gate). Tests: below/equal/above/offline/error/non-Android.
 - Cloud migration 0240 (`app_config`, seed 0) NOT deployed (supervisor deploys); console control = pos-parity issue in reebaplus-web (supervisor files).
