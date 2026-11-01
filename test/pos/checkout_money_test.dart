@@ -81,6 +81,15 @@ class _NoPrinter extends PrinterService {
   Future<bool> requestPermissions() async => false;
 }
 
+/// A device that HAS a printer set up, which fails to print (#614).
+class _BrokenPrinter extends PrinterService {
+  @override
+  Future<bool> hasPrinterSetUp() async => true;
+
+  @override
+  Future<bool> requestPermissions() async => false;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -132,6 +141,7 @@ void main() {
     Customer? customer,
     int creditKobo = 0,
     String? onlineOrderId,
+    PrinterService? printer,
   }) async {
     final starId = env.manufacturers[0].id;
     final heroId = env.manufacturers[1].id;
@@ -199,7 +209,7 @@ void main() {
           FirstRunSurfaceState.hasContent,
         ),
         orderServiceProvider.overrideWithValue(orders),
-        printerServiceProvider.overrideWithValue(_NoPrinter()),
+        printerServiceProvider.overrideWithValue(printer ?? _NoPrinter()),
         creditBalancesKoboProvider.overrideWith(
           (ref) => Stream.value({'cust-1': creditKobo}),
         ),
@@ -346,6 +356,38 @@ void main() {
     });
     // On to the receipt.
     expect(inCheckout(find.text('Receipt Options')), findsOneWidget);
+    await finish(tester);
+  });
+
+  testWidgets('no printer set up: the sale finishes with no print error',
+      (tester) async {
+    await openCheckout(tester, customer: regular, creditKobo: 0);
+    await enterAmountPaid(tester, '32500');
+    await tapButton(tester, 'Confirm Payment');
+    await tester.pump();
+    expect(orders.calls, hasLength(1));
+    expect(find.text('Bluetooth permissions denied'), findsNothing);
+    expect(find.text("Couldn't print — check the printer"), findsNothing);
+    await finish(tester);
+  });
+
+  testWidgets('a set-up printer that fails shows Couldn\'t print + Retry',
+      (tester) async {
+    await openCheckout(
+      tester,
+      customer: regular,
+      creditKobo: 0,
+      printer: _BrokenPrinter(),
+    );
+    await enterAmountPaid(tester, '32500');
+    await tapButton(tester, 'Confirm Payment');
+    await tester.pump();
+    await tester.pump();
+    expect(orders.calls, hasLength(1));
+    expect(find.text("Couldn't print — check the printer"), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
+    // The notice stays 8s, longer than finish() waits.
+    await tester.pump(const Duration(seconds: 9));
     await finish(tester);
   });
 
