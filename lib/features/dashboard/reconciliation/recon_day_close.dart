@@ -242,7 +242,7 @@ ReconClosingComparison reconClosingComparison(
     current: live.itemsSold,
   ),
   shortageUnits: ReconFigureDelta(
-    reviewed: snapshot.shortageUnits.round(),
+    reviewed: snapshot.shortageUnits,
     current: live.shortageUnits,
   ),
 );

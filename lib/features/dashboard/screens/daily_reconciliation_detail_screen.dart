@@ -957,14 +957,14 @@ class _DailyReconciliationDetailScreenState
         context,
         theme,
         'Short',
-        '${fmtNumber(d.shortageCount)} products · ${fmtNumber(d.shortageUnits)} units',
+        '${fmtNumber(d.shortageCount)} products · ${formatQty(d.shortageUnits)} units',
         danger: hasShortage,
       ),
       _line(
         context,
         theme,
         'Surplus',
-        '${fmtNumber(d.surplusCount)} products · ${fmtNumber(d.surplusUnits)} units',
+        '${fmtNumber(d.surplusCount)} products · ${formatQty(d.surplusUnits)} units',
       ),
       if (d.shortages.isNotEmpty) ...[
         const SizedBox(height: 6),
@@ -997,7 +997,7 @@ class _DailyReconciliationDetailScreenState
             context,
             theme,
             'Stock shortages',
-            '${fmtNumber(d.shortageUnits)} unit(s) · ${formatCurrency(d.shortageRetailKobo / 100.0)}',
+            '${formatQty(d.shortageUnits)} unit(s) · ${formatCurrency(d.shortageRetailKobo / 100.0)}',
             danger: hasShortage,
           ),
           _line(
@@ -2130,9 +2130,9 @@ class _DailyReconciliationDetailScreenState
         ['Stock variance (counted − expected)', money(d.stockVarianceKobo)],
         // Integrity check — mirrors _integrityCard.
         ['Count-reconciled profit', money(d.integrityAdjustedProfitKobo)],
-        ['Stock shortages (units)', '${d.shortageUnits}'],
+        ['Stock shortages (units)', formatQty(d.shortageUnits)],
       ] else ...[
-        ['Stock shortages (units)', '${d.shortageUnits}'],
+        ['Stock shortages (units)', formatQty(d.shortageUnits)],
         [
           'Sellable value unaccounted',
           money(d.shortageRetailKobo + d.damageRetailKobo),

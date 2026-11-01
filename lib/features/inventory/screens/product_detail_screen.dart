@@ -2,6 +2,8 @@ import 'dart:math' as math;
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
+import 'package:reebaplus_pos/shared/utils/quantity_input.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/features/subscription/read_only_store_gate.dart';
@@ -46,7 +48,6 @@ import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/core/utils/product_unit.dart';
 import 'package:reebaplus_pos/core/theme/colors.dart';
-import 'package:reebaplus_pos/shared/utils/quantity.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ProductDetailScreen — full-screen product information view (#487 PR 3)
@@ -1191,7 +1192,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         onSave:
             ({
               required bool isRemove,
-              required int qty,
+              required double qty,
               required StoreData store,
               String? reason,
               required String notes,
@@ -1215,7 +1216,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                 crates: businessTracksCrates(ref.read(currentBusinessProvider)),
               );
               final summary =
-                  '$actorName ${isRemove ? 'removed' : 'added'} $qty '
+                  '$actorName ${isRemove ? 'removed' : 'added'} ${formatQty(qty)} '
                   '${unitWord != null ? '$unitWord(s) ' : ''}of ${product.name} '
                   '(${store.name})'
                   '${isRemove ? ' — ${reason!}' : ''}';
@@ -1233,7 +1234,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                   await db.stockAdjustmentRequestsDao.requestStockAdjustment(
                     productId: product.id,
                     storeId: store.id,
-                    quantityDiff: delta.toDouble(),
+                    quantityDiff: delta,
                     reason: note,
                     summary: summary,
                     requestedBy: auth.currentUser?.id,
@@ -1249,7 +1250,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                 await db.inventoryDao.adjustStock(
                   product.id,
                   store.id,
-                  delta.toDouble(),
+                  delta,
                   note,
                   auth.currentUser?.id,
                   inflowUnitCostKobo: unitCostKobo,
@@ -1503,7 +1504,7 @@ class _UpdateStockSheet extends ConsumerStatefulWidget {
   // a removal, and null on an add where the user stated nothing.
   final Future<String?> Function({
     required bool isRemove,
-    required int qty,
+    required double qty,
     required StoreData store,
     String? reason,
     required String notes,
@@ -1595,9 +1596,19 @@ class _UpdateStockSheetState extends ConsumerState<_UpdateStockSheet> {
   }
 
   Future<void> _doSave() async {
-    final qty = int.tryParse(_qtyCtrl.text.trim()) ?? 0;
-    if (qty <= 0) {
-      AppNotification.showError(context, 'Quantity must be greater than 0.');
+    final allowParts = widget.product.allowFractionalSales;
+    final qty = parseStockQty(
+      _qtyCtrl.text,
+      allowParts: allowParts,
+      allowZero: false,
+    );
+    if (qty == null) {
+      AppNotification.showError(
+        context,
+        _qtyCtrl.text.trim().isEmpty || Qty.parse(_qtyCtrl.text) == 0
+            ? 'Quantity must be greater than 0.'
+            : stockQtyError(_qtyCtrl.text, allowParts: allowParts),
+      );
       return;
     }
     if (_isRemove && _reason == null) {
@@ -1755,7 +1766,12 @@ class _UpdateStockSheetState extends ConsumerState<_UpdateStockSheet> {
               controller: _qtyCtrl,
               labelText: 'Quantity *',
               hintText: '0',
-              keyboardType: TextInputType.number,
+              keyboardType: stockQtyKeyboard(
+                allowParts: widget.product.allowFractionalSales,
+              ),
+              inputFormatters: stockQtyFormatters(
+                allowParts: widget.product.allowFractionalSales,
+              ),
             ),
             // #197 (US 22): what the goods cost. Add mode only — a removal is
             // valued by drawing this store's FIFO queue (#7a), which the person

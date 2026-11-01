@@ -460,7 +460,7 @@ class _ApprovalCardState extends ConsumerState<_ApprovalCard> {
   String? get _totalCostLabel {
     final kobo = widget.request.unitCostKobo;
     if (kobo == null) return null;
-    return formatCurrency(kobo * widget.request.quantityDiff / 100.0);
+    return formatCurrency(lineTotalKobo(kobo, widget.request.quantityDiff) / 100.0);
   }
 
   // Surface the common "not enough stock to remove" case in plain English.

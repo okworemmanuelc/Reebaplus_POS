@@ -177,7 +177,8 @@ class _ReceiveProductTileState extends ConsumerState<_ReceiveProductTile> {
     final cartQty = ref.watch(
       receiveCartProvider.select(
         (lines) =>
-            lines.where((l) => l.productId == product.id).firstOrNull?.qty ?? 0,
+            lines.where((l) => l.productId == product.id).firstOrNull?.qty ??
+            0.0,
       ),
     );
     final isOutOfStock = totalStock <= 0;
@@ -191,7 +192,8 @@ class _ReceiveProductTileState extends ConsumerState<_ReceiveProductTile> {
       stockLevel: isOutOfStock ? StockLevel.out : StockLevel.ok,
       categoryName: widget.categoryName,
       photoPath: product.imagePath,
-      inCartQty: cartQty,
+      inCartQty: cartQty.ceil(),
+      inCartLabel: cartQty > 0 ? formatQty(cartQty) : null,
       tappableWhenOut: true,
       onTap: _add,
     );

@@ -1066,7 +1066,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       if (widget.receiveMode) {
         ref
             .read(receiveCartProvider.notifier)
-            .addOrIncrement(newProduct, amount: intent.initialStock);
+            .addOrIncrement(newProduct, amount: intent.initialStock.toDouble());
         if (mounted) {
           AppNotification.showSuccess(
             context,

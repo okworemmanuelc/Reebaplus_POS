@@ -289,6 +289,12 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     bool trackCost = true,
   }) async {
     if (delta == 0) return;
+    // The cloud CHECK is a multiple of 0.25; fail here with words, not 23514.
+    if (!Qty.isQuarterStep(delta)) {
+      throw ArgumentError(
+        'Stock can only change in quarter steps (got ${formatQty(delta)}).',
+      );
+    }
     await transaction(() async {
       // v2 path: emit a single `domain:pos_inventory_delta_v2` envelope.
       // The server mints stock_adjustments + stock_transactions rows
@@ -747,6 +753,39 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
     return db.cratePoolDao
         .watchEmptiesPoolByManufacturer()
         .map((m) => m.values.fold<double>(0, (sum, v) => sum + v));
+  }
+
+  /// Throws [ArgumentError] unless [quantity] is a stock quantity [productId]
+  /// can take (#630): positive, on a quarter step, and a whole number when the
+  /// product's parts switch (`allow_fractional_sales`) is off. This is the write
+  /// boundary for every typed stock quantity (adjust requests, transfers); the
+  /// screens filter the same rule first. Pass [allowZero] for a count, where 0
+  /// is a real answer. Not for a count's *difference* (that may be a part on a
+  /// whole-only product whose stock was already in parts), only for what a
+  /// person typed.
+  Future<void> assertQuantityAllowed(
+    String productId,
+    double quantity, {
+    bool allowZero = false,
+  }) async {
+    if (Qty.validate(quantity, allowZero: allowZero) == null) {
+      throw ArgumentError(
+        allowZero
+            ? 'Quantity must be 0 or more, in quarter steps.'
+            : 'Quantity must be positive, in quarter steps.',
+      );
+    }
+    if (Qty.isWhole(quantity)) return;
+    final product =
+        await (select(products)
+              ..where((t) => t.id.equals(productId) & whereBusiness(t)))
+            .getSingleOrNull();
+    if (product != null && !product.allowFractionalSales) {
+      throw ArgumentError(
+        '${product.name} is sold in whole numbers only '
+        '(${formatQty(quantity)} is not allowed).',
+      );
+    }
   }
 
   Future<List<ProductStockWithStore>> getProductsStockPerStore({
@@ -1439,7 +1478,8 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
   ///
   /// Contract:
   /// - Both stores must belong to this business and differ.
-  /// - [quantity] must be a positive integer.
+  /// - [quantity] must be positive, in quarter steps (whole numbers when the
+  ///   product's parts switch is off, #630).
   /// - The source inventory is decremented immediately at dispatch. If the
   ///   source has insufficient stock the server rejects the `transfer_out`
   ///   movement and this method throws [InsufficientStockException].
@@ -1458,9 +1498,7 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
     if (fromStoreId == toStoreId) {
       throw ArgumentError('Source and destination stores must differ.');
     }
-    if (quantity <= 0) {
-      throw ArgumentError('Quantity must be positive.');
-    }
+    await db.inventoryDao.assertQuantityAllowed(productId, quantity);
 
     final transferId = UuidV7.generate();
     final now = DateTime.now();
@@ -1796,9 +1834,7 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
     if (fromStoreId == toStoreId) {
       throw ArgumentError('Source and destination stores must differ.');
     }
-    if (quantity <= 0) {
-      throw ArgumentError('Quantity must be positive.');
-    }
+    await db.inventoryDao.assertQuantityAllowed(productId, quantity);
 
     final now = DateTime.now();
     late final String transferId;
@@ -1861,9 +1897,10 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
     }
     final seen = <String>{};
     for (final line in lines) {
-      if (line.quantity <= 0) {
-        throw ArgumentError('Quantity must be positive.');
-      }
+      await db.inventoryDao.assertQuantityAllowed(
+        line.productId,
+        line.quantity,
+      );
       if (!seen.add(line.productId)) {
         throw ArgumentError('Product ${line.productId} is listed twice.');
       }
@@ -2026,6 +2063,15 @@ class StockTransferDao extends DatabaseAccessor<AppDatabase>
       toStoreId = transfer.toLocationId;
       productId = transfer.productId;
       dispatchedQty = quantity ?? transfer.quantity;
+      // A holder may dispatch a different amount than was asked for (#630: in
+      // quarter steps, whole when the product's parts switch is off). An
+      // unchanged request quantity was checked when it was raised.
+      if (quantity != null) {
+        await db.inventoryDao.assertQuantityAllowed(
+          transfer.productId,
+          quantity,
+        );
+      }
       final now = DateTime.now();
 
       // 1. Decrement source inventory (transfer_out). Guards negative stock.
@@ -2409,6 +2455,7 @@ class StockAdjustmentRequestsDao extends DatabaseAccessor<AppDatabase>
     required String? requestedBy,
     int? unitCostKobo,
   }) async {
+    await db.inventoryDao.assertQuantityAllowed(productId, quantityDiff.abs());
     final row = StockAdjustmentRequestsCompanion.insert(
       id: Value(UuidV7.generate()),
       businessId: requireBusinessId(),
@@ -2478,6 +2525,14 @@ class StockAdjustmentRequestsDao extends DatabaseAccessor<AppDatabase>
                 ..where((t) => t.id.equals(requestId) & whereBusiness(t)))
               .getSingleOrNull();
       if (req == null || req.status != 'pending') return;
+
+      // The product's parts switch may have been turned off since the request
+      // was raised (#630): then the approval fails and the request stays
+      // pending, rather than putting a part into a whole-only product.
+      await db.inventoryDao.assertQuantityAllowed(
+        req.productId,
+        req.quantityDiff.abs(),
+      );
 
       // Apply the actual stock movement (atomic via pos_inventory_delta_v2).
       // #197: the cost the request captured is what the increase's FIFO batch is

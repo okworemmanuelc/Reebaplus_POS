@@ -561,9 +561,9 @@ class ReconData {
   final bool hasStockCount;
   final int productsCounted;
   final int shortageCount;
-  final int shortageUnits;
+  final double shortageUnits;
   final int surplusCount;
-  final int surplusUnits;
+  final double surplusUnits;
 
   /// The winning sessions' shortage at the write-time FIFO cost (#182), summed
   /// per session by [countSessionShortage] from the `stock_adjustments` rows
@@ -1932,9 +1932,9 @@ ReconData reconDataFrom(ReconInputs input) {
     hasStockCount: hasStockCount,
     productsCounted: productsCounted,
     shortageCount: shortageCount,
-    shortageUnits: shortageUnitsQty.round(),
+    shortageUnits: shortageUnitsQty,
     surplusCount: surplusCount,
-    surplusUnits: surplusUnitsQty.round(),
+    surplusUnits: surplusUnitsQty,
     shortageCostKobo: shortageCostKobo,
     shortageRetailKobo: shortageRetailKobo,
     shortages: shortages,

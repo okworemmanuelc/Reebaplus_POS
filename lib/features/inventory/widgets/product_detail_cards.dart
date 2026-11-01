@@ -2,6 +2,7 @@ import 'dart:math' as dm;
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:flutter/services.dart';
 
 import 'package:reebaplus_pos/core/listings/listing_content.dart';
@@ -18,7 +19,6 @@ import 'package:reebaplus_pos/features/inventory/widgets/product_detail_figures.
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
-import 'package:reebaplus_pos/shared/utils/quantity.dart';
 
 // The cards of the redesigned Product Details (#487 PR 3). Plain data in,
 // theme-only styling, no database: the screen reads and writes, these draw.
