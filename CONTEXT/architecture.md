@@ -166,7 +166,15 @@ trailing zeros, never a vulgar-fraction character) and `lineTotalKobo(unitKobo,
 qty)` = unit price x quantity rounded half up to whole kobo; the SQL twin is
 `public.line_total_kobo`. Money is never computed as `qty * price` inline. The
 v98 Drift step rebuilds nothing: SQLite's INTEGER affinity already keeps 0.5 as a
-REAL. Screens still enter whole numbers until S3-S5 of #620.
+REAL. Stock screens take quarters since S5 (#630): Receive Stock, stock
+adjustments and their approval requests, branch transfers and stock requests,
+stock counts and damages. Each respects the product's parts switch
+(`allow_fractional_sales`: off means whole numbers only). The typed-quantity
+rules live in `lib/shared/utils/quantity_input.dart` (`parseStockQty`,
+`stockQtyError`, `stockQtyFormatters`); the write boundary is
+`InventoryDao.assertQuantityAllowed` (positive, quarter step, whole when the
+switch is off), and `adjustStock` rejects an off-quarter delta. The sale path
+(S3) and crates (S4) enter parts separately.
 
 **Online category reference (#472).** Public, service-written
 `marketplace_categories` is bundled as `core/data/marketplace_categories.dart`,
