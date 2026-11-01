@@ -11,8 +11,8 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_plan_providers.dart';
+import 'package:reebaplus_pos/features/subscription/widgets/plan_limit_widgets.dart';
 
 const String kReadOnlyStoreMessage =
     'This store is read-only on your plan. Upgrade to Premium to make changes.';
@@ -35,6 +35,6 @@ bool blockIfReadOnlyStore(
   if (!isReadOnlyStore(ref.read(readOnlyStoreIdsProvider), storeId)) {
     return false;
   }
-  AppNotification.showError(context, kReadOnlyStoreMessage);
+  showUpgradeNotice(context, kReadOnlyStoreMessage);
   return true;
 }

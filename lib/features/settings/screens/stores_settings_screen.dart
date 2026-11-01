@@ -164,7 +164,7 @@ class _StoresSettingsScreenState extends ConsumerState<StoresSettingsScreen> {
         ? checkAddVan(limits)
         : checkAddStore(limits, currentStores: usage.stores);
     if (blocked != null) {
-      await showPlanLimitDialog(context, blocked, plan: plan);
+      showPlanLimitNotice(context, blocked, plan: plan);
       return;
     }
     // The sheet owns its controllers and hands the values back through `pop`,
@@ -201,7 +201,7 @@ class _StoresSettingsScreenState extends ConsumerState<StoresSettingsScreen> {
       if (!mounted) return;
       final limit = planLimitKindOf(e);
       if (limit != null) {
-        await showPlanLimitDialog(context, limit, plan: plan);
+        showPlanLimitNotice(context, limit, plan: plan);
         return;
       }
       AppNotification.showError(
