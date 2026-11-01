@@ -591,7 +591,7 @@ class ReconData {
   /// Rule #8 — there is no cash balance to explain).
   final int payOnDeliveryUncollectedKobo;
   final bool showCrates;
-  final int crateUnits;
+  final double crateUnits;
   final int crateDepositKobo;
 
   /// §13.4 / #163 — crate-deposit money the business is still HOLDING for
@@ -767,7 +767,7 @@ class ReconData {
   final ReconVanRollup van;
 
   final List<({String name, double qty})> topItems;
-  final List<({String manufacturerName, int count, int valueKobo})> manufacturerEmpties;
+  final List<({String manufacturerName, double count, int valueKobo})> manufacturerEmpties;
 
   /// The configured VAT rate as a display percentage ("7.5"), for card labels.
   String get vatRateLabel =>
@@ -1692,9 +1692,9 @@ ReconData reconDataFrom(ReconInputs input) {
 
   // ── Empty crates held (Bar / Beer Distributor only; point-in-time) ───────
   final showCrates = input.showCrates;
-  var crateUnits = 0;
+  var crateUnits = 0.0;
   var crateDepositKobo = 0;
-  final manufacturerEmpties = <({String manufacturerName, int count, int valueKobo})>[];
+  final manufacturerEmpties = <({String manufacturerName, double count, int valueKobo})>[];
   if (showCrates) {
     final depositById = {
       for (final m in manufacturers) m.id: m.depositAmountKobo,
@@ -1704,12 +1704,12 @@ ReconData reconDataFrom(ReconInputs input) {
     };
     crateCounts.forEach((mfrId, count) {
       if (count > 0) {
-        crateUnits += count.round(); // whole until S4 (#620)
+        crateUnits += count; // quarter steps (#629)
         final value = lineTotalKobo(depositById[mfrId] ?? 0, count);
         crateDepositKobo += value;
         manufacturerEmpties.add((
           manufacturerName: mfrNameById[mfrId] ?? 'Unknown',
-          count: count.round(),
+          count: count,
           valueKobo: value,
         ));
       }

@@ -813,8 +813,8 @@ class ProductStockWithStore {
 
 class ManufacturerCrateStats {
   final String manufacturer;
-  final int totalBottles;
-  final int emptyCrates;
+  final double totalBottles;
+  final double emptyCrates;
   final int totalValueKobo;
 
   ManufacturerCrateStats({
@@ -824,8 +824,8 @@ class ManufacturerCrateStats {
     required this.totalValueKobo,
   });
 
-  int get fullCratesEquiv => totalBottles;
-  int get totalCrateAssets => totalBottles + emptyCrates;
+  double get fullCratesEquiv => totalBottles;
+  double get totalCrateAssets => totalBottles + emptyCrates;
 }
 
 @DriftAccessor(tables: [StockTransactions, Products, Users, Stores, Inventory])

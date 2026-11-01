@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
@@ -62,9 +61,8 @@ bool allCrateCountsFilled(Iterable<String> rawCounts) =>
 /// #629 — whether every filled crate-count field is a valid quarter-step count
 /// (`0`, `0.5`, `1.25` …). A typed `0.3` would otherwise read as 0 returned.
 /// Blank fields are [allCrateCountsFilled]'s business. Visible for testing.
-bool allCrateCountsValid(Iterable<String> rawCounts) => rawCounts.every(
-  (t) => t.trim().isEmpty || Qty.parse(t) != null,
-);
+bool allCrateCountsValid(Iterable<String> rawCounts) =>
+    rawCounts.every((t) => t.trim().isEmpty || Qty.parse(t) != null);
 
 class CrateReturnModal extends ConsumerStatefulWidget {
   final OrderWithItems orderWithItems;
@@ -612,9 +610,7 @@ class _ManufacturerReturnTile extends StatelessWidget {
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
-              inputFormatters: [
-                CurrencyInputFormatter(grouping: false),
-              ],
+              inputFormatters: [CurrencyInputFormatter(grouping: false)],
               textAlign: TextAlign.center,
             ),
           ),

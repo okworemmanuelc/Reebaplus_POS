@@ -857,7 +857,7 @@ void main() {
           supplierId: supplierA,
           manufacturerId: moneyBrand,
           storeId: storeId,
-          crateCount: crates,
+          crateCount: crates.toDouble(),
           performedBy: stockKeeperId,
         );
         final p = await (d.select(

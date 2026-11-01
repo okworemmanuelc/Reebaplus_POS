@@ -731,7 +731,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
     return _crateRowBody(
       name,
-      '${crates.toStringAsFixed(crates == crates.roundToDouble() ? 0 : 1)} '
+      '${formatQty(crates)} '
       'crate${crates == 1 ? '' : 's'} taken',
     );
   }
@@ -753,7 +753,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         onTap: () => _editBrandDeposit(mfrId, name, fullKobo),
         child: _crateRowBody(
           name,
-          '${crates.toStringAsFixed(crates == crates.roundToDouble() ? 0 : 1)} '
+          '${formatQty(crates)} '
           'crate${crates == 1 ? '' : 's'} · Full ${formatCurrency(fullKobo / 100.0)} · $tag',
           trailing: [
             SizedBox(width: context.getRSize(8)),
@@ -1601,9 +1601,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         cratesOwedByManufacturer: extras.cratesOwedByManufacturer,
         crateDepositFull: extras.crateDepositFull,
         businessName: ref.read(currentBusinessNameProvider),
-        tracksCrates: businessTracksCrates(
-          ref.read(currentBusinessProvider),
-        ),
+        tracksCrates: businessTracksCrates(ref.read(currentBusinessProvider)),
         manufacturerNames: _manufacturerNames,
         paperSize: paperSize,
       );
@@ -1947,8 +1945,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         ),
         SizedBox(height: context.getRSize(6)),
         _previewHint(hint),
-        if (_overDebtLimit)
-          _debtLimitWarning(),
+        if (_overDebtLimit) _debtLimitWarning(),
       ],
     );
   }
@@ -1992,8 +1989,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                     'as debt.'
               : 'The order is charged to the credit balance.',
         ),
-        if (_overDebtLimit)
-          _debtLimitWarning(),
+        if (_overDebtLimit) _debtLimitWarning(),
       ],
     );
   }

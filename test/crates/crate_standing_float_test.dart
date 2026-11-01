@@ -324,7 +324,7 @@ void main() {
         ),
         ratePerCrateKobo: manufacturer.depositAmountKobo,
         cratesOwed: 20,
-        emptiesOnHand: (pool[floatBrand] ?? 0).round(),
+        emptiesOnHand: pool[floatBrand] ?? 0,
       );
 
       expect(position.shortfallCrates, 7);

@@ -71,7 +71,7 @@ void main() {
         countedEmpties: counted.toDouble(),
       );
 
-  Future<int> openAt(String? storeId) =>
+  Future<double> openAt(String? storeId) =>
       db.cratePoolDao.watchCrateShortageByManufacturer(brand, storeId: storeId).first;
 
   Future<List<CrateShortfallWriteoffData>> writeOffRows() =>

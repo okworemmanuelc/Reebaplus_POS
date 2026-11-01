@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/crates/crate_count_store.dart';
@@ -88,10 +88,8 @@ class _BuyCratesSheetState extends ConsumerState<BuyCratesSheet> {
     super.dispose();
   }
 
-  int? get _quantity {
-    final n = int.tryParse(_quantityCtrl.text.trim());
-    return n != null && n > 0 ? n : null;
-  }
+  /// Positive quarter-step count (#629), or null.
+  double? get _quantity => Qty.parse(_quantityCtrl.text, allowZero: false);
 
   int? get _pricePerCrateKobo {
     if (_priceCtrl.text.trim().isEmpty) return null;
@@ -142,7 +140,7 @@ class _BuyCratesSheetState extends ConsumerState<BuyCratesSheet> {
             manufacturerId: widget.manufacturer.id,
             storeId: _storeId!,
             performedBy: userId,
-            quantity: _quantity!.toDouble(),
+            quantity: _quantity!,
             pricePerCrateKobo: _pricePerCrateKobo!,
           );
     } catch (_) {
@@ -158,7 +156,7 @@ class _BuyCratesSheetState extends ConsumerState<BuyCratesSheet> {
     if (!mounted) return;
     AppNotification.showSuccess(
       context,
-      '${_quantity!} crates of ${widget.manufacturer.name} added',
+      '${formatQty(_quantity!)} crates of ${widget.manufacturer.name} added',
     );
     Navigator.pop(context);
   }
@@ -172,10 +170,10 @@ class _BuyCratesSheetState extends ConsumerState<BuyCratesSheet> {
     if (quantity == null || price == null) {
       return 'Enter how many crates and the price paid per crate.';
     }
-    final total = formatCurrency(quantity * price / 100);
+    final total = formatCurrency(lineTotalKobo(price, quantity) / 100);
     final each = formatCurrency(price / 100);
-    return '+$quantity crates into $store\'s warehouse. '
-        'Paid $total ($quantity × $each). '
+    return '+${formatQty(quantity)} crates into $store\'s warehouse. '
+        'Paid $total (${formatQty(quantity)} × $each). '
         'This does not change profit.';
   }
 
@@ -217,8 +215,11 @@ class _BuyCratesSheetState extends ConsumerState<BuyCratesSheet> {
                 controller: _quantityCtrl,
                 labelText: 'Number of crates',
                 hintText: 'e.g. 10',
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                // Quarter steps (#629): half a crate is 0.5.
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                inputFormatters: [CurrencyInputFormatter(grouping: false)],
                 textInputAction: TextInputAction.next,
                 validator: _validateQuantity,
                 onChanged: (_) => setState(() {}),
