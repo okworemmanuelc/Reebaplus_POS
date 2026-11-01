@@ -1507,6 +1507,7 @@ final currentBusinessSubscriptionProvider = Provider<SubscriptionAccess>((ref) {
     business.subscriptionStatus,
     business.trialEndsAt,
     DateTime.now(),
+    currentPeriodEnd: business.currentPeriodEnd,
   );
 });
 
