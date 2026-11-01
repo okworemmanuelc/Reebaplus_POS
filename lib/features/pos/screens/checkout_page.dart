@@ -1264,7 +1264,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         // receipt…" banner, auto-connects to the saved/paired printer, and
         // falls back to the picker) and must not block the confirm handler.
         // widget.cart is a snapshot, so it survives the cart.clear() above.
-        unawaited(_printReceipt());
+        unawaited(_printReceipt(auto: true));
       }
     } catch (e, st) {
       // §33.4: the most critical action in the app — record the crash for
@@ -1549,7 +1549,14 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     }
   }
 
-  Future<void> _printReceipt() async {
+  /// [auto] is the print fired by Confirm Payment (#614): it skips quietly on a
+  /// device with no printer set up, and on failure shows "Couldn't print" with
+  /// Retry instead of opening the printer picker. A manual tap (reprint or
+  /// Retry) keeps the picker so the cashier can choose a printer.
+  Future<void> _printReceipt({bool auto = false}) async {
+    if (!mounted) return;
+    final printer = ref.read(printerServiceProvider);
+    if (auto && !await printer.hasPrinterSetUp()) return;
     if (!mounted) return;
     // Show the persistent blue "Printing receipt…" banner immediately — on
     // auto-print right after Confirm Payment and on a manual reprint tap. It
@@ -1557,13 +1564,15 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     // below, so this checkout receipt never stamps REPRINTED.
     setState(() => _isPrinting = true);
     try {
-      final printer = ref.read(printerServiceProvider);
-
-      // Request Bluetooth permissions first.
+      // Request Bluetooth permissions first (true when a USB printer is ready).
       final granted = await printer.requestPermissions();
       if (!mounted) return;
       if (!granted) {
-        AppNotification.showError(context, 'Bluetooth permissions denied');
+        if (auto) {
+          _showPrintFailed();
+        } else {
+          AppNotification.showError(context, 'Bluetooth permissions denied');
+        }
         return;
       }
 
@@ -1624,14 +1633,35 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         }
       }
 
+      if (auto) {
+        _showPrintFailed();
+        return;
+      }
       _showPrinterPicker(printer, buildBytes);
     } catch (e) {
       if (mounted) {
-        AppNotification.showError(context, 'Print error: $e');
+        if (auto) {
+          _showPrintFailed();
+        } else {
+          AppNotification.showError(context, 'Print error: $e');
+        }
       }
     } finally {
       if (mounted) setState(() => _isPrinting = false);
     }
+  }
+
+  /// The auto-print failure notice (#614). The sale is already saved; Retry
+  /// runs a manual print, which offers the printer picker if it fails again.
+  void _showPrintFailed() {
+    AppNotification.showAction(
+      context,
+      "Couldn't print — check the printer",
+      actionLabel: 'Retry',
+      onAction: () => unawaited(_printReceipt()),
+      type: AppNotificationType.error,
+      duration: const Duration(seconds: 8),
+    );
   }
 
   void _showPrinterPicker(

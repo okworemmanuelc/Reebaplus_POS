@@ -239,6 +239,28 @@ void main() {
     });
   });
 
+  group('hasPrinterSetUp (#614 auto-print)', () {
+    test('nothing plugged in and no Bluetooth printer used -> false', () async {
+      final service = _FakePrinterService(usb: FakeUsbPrinterChannel());
+      expect(await service.hasPrinterSetUp(), isFalse);
+    });
+
+    test('a USB printer plugged in -> true', () async {
+      final service = _FakePrinterService(
+        usb: FakeUsbPrinterChannel(printers: [fakeUsbPrinter()]),
+      );
+      expect(await service.hasPrinterSetUp(), isTrue);
+    });
+
+    test('a Bluetooth printer used before -> true', () async {
+      SharedPreferences.setMockInitialValues(
+        {'last_printer_mac': '00:11:22:33:44:55'},
+      );
+      final service = _FakePrinterService(usb: FakeUsbPrinterChannel());
+      expect(await service.hasPrinterSetUp(), isTrue);
+    });
+  });
+
   group('USB first, Bluetooth backup (#614)', () {
     const btMac = '00:11:22:33:44:55';
     final body = [0x1B, 0x40, 0x41, 0x42];

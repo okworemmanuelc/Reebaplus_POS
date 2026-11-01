@@ -220,6 +220,19 @@ class PrinterService {
     return usb?.id ?? await lastConnectedMac();
   }
 
+  /// Whether this device has a printer to print on: a USB printer plugged in,
+  /// or a Bluetooth printer it has connected to before. Auto-print after a
+  /// sale skips quietly when false (#614), so phones without a printer never
+  /// see a print error.
+  Future<bool> hasPrinterSetUp() async {
+    try {
+      if ((await _usb.list()).any((p) => p.id.isNotEmpty)) return true;
+    } catch (e) {
+      AppLogger.error('Listing USB printers failed: $e');
+    }
+    return await lastConnectedMac() != null;
+  }
+
   // ── USB (#614) ────────────────────────────────────────────────────────
 
   /// Every USB printer plugged in right now. Each one seen for the first time
