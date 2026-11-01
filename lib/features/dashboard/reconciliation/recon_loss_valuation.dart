@@ -6,8 +6,8 @@ part of 'recon_data.dart';
 /// restate a past loss. A legacy quantity-only row (written before #170) has no
 /// snapshot, so it falls back to [units] × [currentCostKobo] (today's rate) —
 /// the deliberately-labelled fallback. `null` current cost counts as 0.
-int lossValueKobo(int? snapshotValueKobo, int units, int? currentCostKobo) =>
-    snapshotValueKobo ?? (units * (currentCostKobo ?? 0));
+int lossValueKobo(int? snapshotValueKobo, double units, int? currentCostKobo) =>
+    snapshotValueKobo ?? lineTotalKobo(currentCostKobo ?? 0, units);
 
 /// Value an already-selected set of count-shortage rows from the #170
 /// write-time snapshot (#182) — the deferral #170 left open (audit #30).

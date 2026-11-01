@@ -14,6 +14,7 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/vat_settings.dart';
 import 'package:reebaplus_pos/core/stores/van_store.dart';
 import 'package:reebaplus_pos/core/inventory_reasons.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/report_revenue.dart';
 
 // Re-exports keep every existing `recon_data.dart` import working (#574).
@@ -134,7 +135,7 @@ class _BucketAccum {
   _BucketAccum(this.start, this.end);
   final DateTime start;
   final DateTime end;
-  int itemsSold = 0;
+  double itemsSold = 0;
   bool hasShortage = false;
 }
 
@@ -196,7 +197,7 @@ List<ReconBucket> buildReconBuckets(
           endExclusive: a.end,
           grouping: grouping,
           label: grouping.labelFor(a.start),
-          itemsSold: a.itemsSold,
+          itemsSold: a.itemsSold.round(), // display stays whole until S3 (#620)
           hasShortage: a.hasShortage,
         ),
       )
@@ -1067,7 +1068,7 @@ class ReconInputs {
 
   final Map<String, int> creditBalancesKobo;
   final List<ManufacturerData> manufacturers;
-  final Map<String, int> emptyCrateCounts;
+  final Map<String, double> emptyCrateCounts;
 
   /// §17.2 crate-aware: `damaged` crate_ledger rows — the stored-empty fate, a
   /// crate-only loss that writes no stock_adjustment.
@@ -1167,15 +1168,17 @@ ReconData reconDataFrom(ReconInputs input) {
   var costedRevenueKobo = 0;
   var cogsKobo = 0;
   var discountsKobo = 0;
-  var itemsSold = 0;
-  var uncostedItems = 0;
+  // Quantities accumulate exactly (quarters) and are rounded for the whole-
+  // number report fields at the end; money goes through lineTotalKobo (#627).
+  var itemsSoldQty = 0.0;
+  var uncostedItemsQty = 0.0;
   // #176 — split Total Sales into the goods actually paid now vs left on credit,
   // so the sales card stops over-expecting the drawer by the credit amount.
   var salesPaidNowKobo = 0;
   var salesOnCreditKobo = 0;
   final skuSet = <String>{};
   final byStaff = <String?, int>{};
-  final byProduct = <String, ({String name, int qty})>{};
+  final byProduct = <String, ({String name, double qty})>{};
   // #549 — recognized at checkout ('pending'), not at Confirm ('completed'). A
   // CANCELLED sale still counts on its creation day and ALSO books a negative
   // entry of the same amounts on its cancel day ([saleDayEntries]), so a return
@@ -1195,16 +1198,17 @@ ReconData reconDataFrom(ReconInputs input) {
     var orderRevenue = 0;
     for (final i in o.items) {
       if (!inScope(i.item.storeId)) continue;
-      final lineRev = i.item.quantity * i.item.unitPriceKobo;
+      final lineRev = lineTotalKobo(i.item.unitPriceKobo, i.item.quantity);
       totalRevenueKobo += sign * lineRev;
       orderRevenue += sign * lineRev;
-      itemsSold += sign * i.item.quantity;
+      itemsSoldQty += sign * i.item.quantity;
       final product = i.product;
       if (product == null || i.item.buyingPriceKobo <= 0) {
-        uncostedItems += sign * i.item.quantity;
+        uncostedItemsQty += sign * i.item.quantity;
       } else {
         costedRevenueKobo += sign * lineRev;
-        cogsKobo += sign * i.item.quantity * i.item.buyingPriceKobo;
+        cogsKobo +=
+            sign * lineTotalKobo(i.item.buyingPriceKobo, i.item.quantity);
         skuSet.add(product.id);
       }
       // Rank top items by units sold across every identifiable product —
@@ -1254,7 +1258,7 @@ ReconData reconDataFrom(ReconInputs input) {
   // quantities; those never rank as a "top item".
   final topItemsList = byProduct.entries
       .where((e) => e.value.qty > 0)
-      .map((e) => (name: e.value.name, qty: e.value.qty))
+      .map((e) => (name: e.value.name, qty: e.value.qty.round()))
       .toList()
     ..sort((a, b) => b.qty.compareTo(a.qty));
   final topItems = topItemsList.take(3).toList();
@@ -1273,12 +1277,13 @@ ReconData reconDataFrom(ReconInputs input) {
 
   // ── Inventory on hand at cost (point-in-time) ────────────────────────────
   var inventoryOnHandKobo = 0;
-  var uncostedInventoryItems = 0;
+  var uncostedInventoryQty = 0.0;
   for (final p in productsWS) {
     if (p.product.buyingPriceKobo <= 0) {
-      uncostedInventoryItems += p.totalStock;
+      uncostedInventoryQty += p.totalStock;
     } else {
-      inventoryOnHandKobo += p.totalStock * p.product.buyingPriceKobo;
+      inventoryOnHandKobo +=
+          lineTotalKobo(p.product.buyingPriceKobo, p.totalStock);
     }
   }
 
@@ -1316,21 +1321,22 @@ ReconData reconDataFrom(ReconInputs input) {
   final currentUnits = {
     for (final p in productsWS) p.product.id: p.totalStock,
   };
-  final afterEndUnits = <String, int>{}; // deltas at/after period end (rewind)
-  final periodDelta = <String, int>{}; // net delta within the period
-  final receivedUnits = <String, int>{};
-  final soldUnits = <String, int>{};
-  final damagedUnits = <String, int>{};
-  final expiredUnits = <String, int>{};
+  final afterEndUnits = <String, double>{}; // deltas at/after period end (rewind)
+  final periodDelta = <String, double>{}; // net delta within the period
+  final receivedUnits = <String, double>{};
+  final soldUnits = <String, double>{};
+  final damagedUnits = <String, double>{};
+  final expiredUnits = <String, double>{};
   // #176 — the former single "other movements" residual, split by cause so an
   // unlabeled residual can't hide a loss: store transfers, daily-count
   // reconciliations, and product-delete write-offs each get their own bucket,
   // with `otherDelta` keeping only genuinely unclassified movement.
-  final transfersDelta = <String, int>{};
-  final countAdjDelta = <String, int>{};
-  final deletionsDelta = <String, int>{};
-  final otherDelta = <String, int>{}; // signed residual within the period
-  void add(Map<String, int> m, String k, int v) => m[k] = (m[k] ?? 0) + v;
+  final transfersDelta = <String, double>{};
+  final countAdjDelta = <String, double>{};
+  final deletionsDelta = <String, double>{};
+  final otherDelta = <String, double>{}; // signed residual within the period
+  void add(Map<String, double> m, String k, double v) =>
+      m[k] = (m[k] ?? 0.0) + v;
   for (final t in stockTxns) {
     if (t.voidedAt != null || !inScope(t.locationId)) continue;
     final pid = t.productId;
@@ -1403,17 +1409,17 @@ ReconData reconDataFrom(ReconInputs input) {
     if (cost <= 0) continue; // uncosted units carry no value (P&L footnote)
     final closing = (currentUnits[pid] ?? 0) - (afterEndUnits[pid] ?? 0);
     final opening = closing - (periodDelta[pid] ?? 0);
-    stockOpeningKobo += opening * cost;
-    stockExpectedClosingKobo += closing * cost;
-    stockReceivedKobo += (receivedUnits[pid] ?? 0) * cost;
-    stockCogsKobo += (soldUnits[pid] ?? 0) * cost;
-    stockDamagesKobo += (damagedUnits[pid] ?? 0) * cost;
-    stockExpiredKobo += (expiredUnits[pid] ?? 0) * cost;
-    stockTransfersKobo += (transfersDelta[pid] ?? 0) * cost;
+    stockOpeningKobo += (opening * cost).round();
+    stockExpectedClosingKobo += (closing * cost).round();
+    stockReceivedKobo += ((receivedUnits[pid] ?? 0) * cost).round();
+    stockCogsKobo += ((soldUnits[pid] ?? 0) * cost).round();
+    stockDamagesKobo += ((damagedUnits[pid] ?? 0) * cost).round();
+    stockExpiredKobo += ((expiredUnits[pid] ?? 0) * cost).round();
+    stockTransfersKobo += ((transfersDelta[pid] ?? 0) * cost).round();
     // #200 — stays at CURRENT cost on purpose; see [stockCountAdjustmentsKobo].
-    stockCountAdjustmentsKobo += (countAdjDelta[pid] ?? 0) * cost;
-    stockDeletionsKobo += (deletionsDelta[pid] ?? 0) * cost;
-    stockOtherMovementsKobo += (otherDelta[pid] ?? 0) * cost;
+    stockCountAdjustmentsKobo += ((countAdjDelta[pid] ?? 0) * cost).round();
+    stockDeletionsKobo += ((deletionsDelta[pid] ?? 0) * cost).round();
+    stockOtherMovementsKobo += ((otherDelta[pid] ?? 0) * cost).round();
   }
 
   // ── Expenses (approved, in span, in scope) ───────────────────────────────
@@ -1449,7 +1455,7 @@ ReconData reconDataFrom(ReconInputs input) {
   // the per-crate refundable deposit (1 tracked bottle unit = 1 crate). The
   // deposit rate is per-manufacturer (Manufacturers.depositAmountKobo).
   final depositByMfr = {for (final m in manufacturers) m.id: m.depositAmountKobo};
-  var damageUnits = 0;
+  var damageUnitsQty = 0.0;
   var damageCostKobo = 0;
   var damageRetailKobo = 0;
   var crateDamageDepositKobo = 0;
@@ -1462,13 +1468,13 @@ ReconData reconDataFrom(ReconInputs input) {
   for (final a in damageRows) {
     final units = -a.quantityDiff;
     final p = productById[a.productId];
-    damageUnits += units;
+    damageUnitsQty += units;
     // #170 #7a: value the loss at the FIFO cost SNAPSHOTTED when the damage was
     // recorded (`value_kobo`), so a later cost-price edit can't rewrite a past
     // loss. Legacy quantity-only rows (no snapshot, written before #170) keep
     // the current-cost fallback — the deliberately-labelled behaviour.
     damageCostKobo += lossValueKobo(a.valueKobo, units, p?.buyingPriceKobo);
-    damageRetailKobo += units * (p?.retailerPriceKobo ?? 0);
+    damageRetailKobo += lineTotalKobo(p?.retailerPriceKobo ?? 0, units);
     // #299: the crate shell's loss is valued once from the crate leg's snapshot
     // (full_crate_damage in crateDamages below). The stock adjustment carries the
     // drink loss only, replacing the +cratelost today's-rate valuation path.
@@ -1485,7 +1491,7 @@ ReconData reconDataFrom(ReconInputs input) {
     final lostEmpties = -c.quantityDelta;
     if (lostEmpties <= 0) continue;
     final rate = c.ratePerCrateKobo ?? (depositByMfr[c.manufacturerId] ?? 0);
-    crateDamageDepositKobo += lostEmpties * rate;
+    crateDamageDepositKobo += lineTotalKobo(rate, lostEmpties);
   }
 
   // ── Stock audit + shortage value (latest count per store/date in span) ───
@@ -1513,9 +1519,9 @@ ReconData reconDataFrom(ReconInputs input) {
   var hasStockCount = false;
   var productsCounted = 0;
   var shortageCount = 0;
-  var shortageUnits = 0;
+  var shortageUnitsQty = 0.0;
   var surplusCount = 0;
-  var surplusUnits = 0;
+  var surplusUnitsQty = 0.0;
   var surplusCostKobo = 0;
   var shortageRetailKobo = 0;
   // #182 — the shortage loss is valued at the FIFO cost SNAPSHOTTED when the
@@ -1533,9 +1539,9 @@ ReconData reconDataFrom(ReconInputs input) {
     hasStockCount = true;
     productsCounted += c.productsCounted;
     shortageCount += c.shortageCount;
-    shortageUnits += c.shortageUnits;
+    shortageUnitsQty += c.shortageUnits;
     surplusCount += c.surplusCount;
-    surplusUnits += c.surplusUnits;
+    surplusUnitsQty += c.surplusUnits;
     final money = countSessionShortage(
       c,
       attributedRows: shortageRowsBySession[c.id] ?? const [],
@@ -1698,12 +1704,12 @@ ReconData reconDataFrom(ReconInputs input) {
     };
     crateCounts.forEach((mfrId, count) {
       if (count > 0) {
-        crateUnits += count;
-        final value = count * (depositById[mfrId] ?? 0);
+        crateUnits += count.round(); // whole until S4 (#620)
+        final value = lineTotalKobo(depositById[mfrId] ?? 0, count);
         crateDepositKobo += value;
         manufacturerEmpties.add((
           manufacturerName: mfrNameById[mfrId] ?? 'Unknown',
-          count: count,
+          count: count.round(),
           valueKobo: value,
         ));
       }
@@ -1898,9 +1904,11 @@ ReconData reconDataFrom(ReconInputs input) {
     vatRateBps: vat.rateBps,
     vatKobo: vatKobo,
     vatBasis: vat.basis,
-    itemsSold: itemsSold,
+    // Whole-number report fields: rounded here, widened with the screens in
+    // S3-S5 (#620). Money above is already exact.
+    itemsSold: itemsSoldQty.round(),
     skus: skuSet.length,
-    uncostedItems: uncostedItems,
+    uncostedItems: uncostedItemsQty.round(),
     refundsKobo: refundsKobo,
     cashSalesKobo: cashSalesKobo,
     cashDebtsCollectedKobo: cashDebtsCollectedKobo,
@@ -1917,16 +1925,16 @@ ReconData reconDataFrom(ReconInputs input) {
     bestStaffKobo: bestStaffKobo,
     expensesKobo: expensesKobo,
     expensesCount: expensesCount,
-    damageUnits: damageUnits,
+    damageUnits: damageUnitsQty.round(),
     damageCostKobo: damageCostKobo,
     damageRetailKobo: damageRetailKobo,
     crateDamageDepositKobo: crateDamageDepositKobo,
     hasStockCount: hasStockCount,
     productsCounted: productsCounted,
     shortageCount: shortageCount,
-    shortageUnits: shortageUnits,
+    shortageUnits: shortageUnitsQty.round(),
     surplusCount: surplusCount,
-    surplusUnits: surplusUnits,
+    surplusUnits: surplusUnitsQty.round(),
     shortageCostKobo: shortageCostKobo,
     shortageRetailKobo: shortageRetailKobo,
     shortages: shortages,
@@ -1944,7 +1952,7 @@ ReconData reconDataFrom(ReconInputs input) {
     supplierPayableKobo: supplierPayableKobo,
     inventoryOnHandKobo: inventoryOnHandKobo,
     inTransitValueKobo: inTransitValueKobo,
-    uncostedInventoryItems: uncostedInventoryItems,
+    uncostedInventoryItems: uncostedInventoryQty.round(),
     surplusCostKobo: surplusCostKobo,
     stockOpeningKobo: stockOpeningKobo,
     stockReceivedKobo: stockReceivedKobo,
