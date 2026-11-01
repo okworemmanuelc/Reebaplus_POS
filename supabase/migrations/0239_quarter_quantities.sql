@@ -40,8 +40,9 @@
 -- (order_items, stock_transactions, inventory, crate_ledger are the big ones).
 -- Deploy in a quiet window.
 --
--- DEPLOY GATE: do NOT deploy until the supervisor decides the release order
--- (new app on Play -> minimum version raised -> cloud). Part C also rewrites
+-- DEPLOY ORDER: safe ahead of the app. Old clients only ever send and receive
+-- whole values, which stay JSON integers; rehearsed on production in a
+-- transaction that aborted (2026-11-01, under one second). Part C also rewrites
 -- functions that originate in the reebaplus-web migrations (console_*,
 -- pos_stock_transfer, pos_cancel_transfer, pos_receive_transfer, add_product,
 -- receive_stock, console_revenue, console_platform_revenue,
@@ -296,7 +297,7 @@ BEGIN
       'quantity',           v_qty_line,
       'cogs_total_kobo',    round(v_line_cost)::bigint,
       'cogs_per_unit_kobo',
-        COALESCE(round(round(v_line_cost) / NULLIF(v_qty_line, 0)::numeric)::bigint, 0),
+        COALESCE(round(v_line_cost / NULLIF(v_qty_line, 0)::numeric)::bigint, 0),
       'uncosted_units',     v_uncosted
     );
   END LOOP;

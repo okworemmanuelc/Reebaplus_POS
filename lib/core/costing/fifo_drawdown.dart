@@ -35,6 +35,12 @@ class FifoDrawResult {
   /// shortfall (e.g. fall back to the product's scalar cost).
   final List<int> lineCogsKobo;
 
+  /// Cost per unit (kobo) for each requested line: the line's unrounded cost
+  /// divided by its quantity, rounded once, half away from zero, the same as SQL
+  /// `fifo_assign`. Dividing the rounded total instead would drift on a part
+  /// quantity: 0.5 at 1001 is 500.5, rounded to 501, which gives back 1002.
+  final List<int> lineUnitCostKobo;
+
   /// Units the queue ran out of stock for, per line, in input order. `0` on the
   /// happy path (the queue fully covers the sale).
   final List<double> lineShortfall;
@@ -45,6 +51,7 @@ class FifoDrawResult {
 
   const FifoDrawResult({
     required this.lineCogsKobo,
+    required this.lineUnitCostKobo,
     required this.lineShortfall,
     required this.batchConsumption,
   });
@@ -64,6 +71,7 @@ FifoDrawResult fifoDrawDown(
 ) {
   final consumption = List<double>.filled(batches.length, 0);
   final lineCogs = List<int>.filled(lineQuantities.length, 0);
+  final lineUnitCost = List<int>.filled(lineQuantities.length, 0);
   final lineShort = List<double>.filled(lineQuantities.length, 0);
 
   var batchIdx = 0;
@@ -90,11 +98,14 @@ FifoDrawResult fifoDrawDown(
     }
 
     lineCogs[li] = cogs.round();
+    final lineQty = lineQuantities[li];
+    if (lineQty > 0) lineUnitCost[li] = (cogs / lineQty).round();
     lineShort[li] = need; // whatever the queue could not cover
   }
 
   return FifoDrawResult(
     lineCogsKobo: lineCogs,
+    lineUnitCostKobo: lineUnitCost,
     lineShortfall: lineShort,
     batchConsumption: consumption,
   );

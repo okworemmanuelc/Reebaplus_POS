@@ -216,10 +216,7 @@ class CostBatchesDao extends DatabaseAccessor<AppDatabase>
       // agree when the queue covered the line and no cross-till re-ordering
       // happened.
       for (var i = 0; i < group.length; i++) {
-        final line = group[i];
-        perUnitByIndex[line.index] = line.quantity > 0
-            ? (result.lineCogsKobo[i] / line.quantity).round()
-            : 0;
+        perUnitByIndex[group[i].index] = result.lineUnitCostKobo[i];
       }
 
       // Decrement every consumed batch and enqueue its push.
