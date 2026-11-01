@@ -29,6 +29,10 @@ relevant file before continuing.
 Use the `git-issue-workflow` skill when starting or
 finishing work on an issue.
 
+For unfamiliar features, don't write from scratch —
+first search GitHub for open-source projects, compare
+approaches, then get started.
+
 ## Agent skills
 
 ### Issue tracker
@@ -48,3 +52,7 @@ Single-context layout — `CONTEXT.md` + `docs/adr/` at the repo root (created l
 Any PR that changes a database table, column, status value, or money calculation rule MUST open a `pos-parity` issue in `okworemmanuelc/reebaplus-web` (the web console shares the same Supabase database and must remain POS-faithful).
 
 reebaplus-web issues are logged in that repo's `docs/progress-tracker.md`, never in this repo's `CONTEXT/progress-tracker.md`.
+
+### Web console (reebaplus-web)
+
+The admin console lives at `/Users/solomonizu/reebaplus-web` (GitHub `okworemmanuelc/reebaplus-web`, default branch `master`). Console changes are committed, PR'd and merged in that repo, never here; work in a worktree beside it (`../reebaplus-web-wt-<topic>`).
