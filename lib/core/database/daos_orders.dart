@@ -2454,7 +2454,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   /// cancelled or absent.
   Future<void> reverseRejectedSaleLocal({
     required String orderId,
-    required List<({String productId, String storeId, int quantity})> items,
+    required List<({String productId, String storeId, double quantity})> items,
     required String staffId,
   }) async {
     await db.transaction(() async {
@@ -2490,7 +2490,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           'UPDATE inventory SET quantity = quantity + ?, last_updated_at = ? '
           'WHERE business_id = ? AND product_id = ? AND store_id = ?',
           variables: [
-            Variable<int>(line.quantity),
+            Variable<double>(line.quantity),
             Variable<DateTime>(now),
             Variable<String>(requireBusinessId()),
             Variable<String>(line.productId),

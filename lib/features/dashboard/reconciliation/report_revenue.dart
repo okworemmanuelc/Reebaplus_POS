@@ -116,10 +116,10 @@ bool _anyStore(String? _) => true;
 int lineConcessionKobo({
   required int? cataloguePriceKobo,
   required int unitPriceKobo,
-  required int quantity,
+  required double quantity,
 }) {
   if (cataloguePriceKobo == null) return 0;
-  return (cataloguePriceKobo - unitPriceKobo) * quantity;
+  return lineTotalKobo(cataloguePriceKobo - unitPriceKobo, quantity);
 }
 
 /// The goods-paid-now vs on-credit split of ONE order's contribution to Total

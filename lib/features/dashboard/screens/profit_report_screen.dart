@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/database/daos.dart';
@@ -86,7 +87,7 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
     final byProduct = <String, _ProductAccum>{};
     var revenueKobo = 0;
     var cogsKobo = 0;
-    var uncostedItems = 0;
+    var uncostedItems = 0.0;
     var concessionKobo = 0;
 
     // #549 — recognized at checkout ('pending'), not at the ceremonial Confirm
@@ -124,8 +125,14 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
           uncostedItems += sign * i.item.quantity;
           continue;
         }
-        final lineRevenue = i.item.quantity * i.item.unitPriceKobo;
-        final lineCogs = i.item.quantity * i.item.buyingPriceKobo;
+        final lineRevenue = lineTotalKobo(
+          i.item.unitPriceKobo,
+          i.item.quantity,
+        );
+        final lineCogs = lineTotalKobo(
+          i.item.buyingPriceKobo,
+          i.item.quantity,
+        );
         revenueKobo += sign * lineRevenue;
         cogsKobo += sign * lineCogs;
         final acc = byProduct.putIfAbsent(
@@ -188,7 +195,7 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
       for (final p in data.products)
         [
           p.name,
-          '${p.qty}',
+          formatQty(p.qty),
           (p.revenueKobo / 100.0).toStringAsFixed(2),
           if (canSeeCost) (p.cogsKobo / 100.0).toStringAsFixed(2),
           (p.profitKobo / 100.0).toStringAsFixed(2),
@@ -380,9 +387,11 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
 
   Widget _uncostedNote(
     ThemeData theme,
-    int items, {
+    double itemsQty, {
     required bool allUncosted,
   }) {
+    final items = formatQty(itemsQty);
+    final plural = itemsQty == 1 ? '' : 's';
     final muted =
         theme.textTheme.bodySmall?.color ?? theme.colorScheme.onSurface;
     return ReportCard(
@@ -398,9 +407,9 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
           Expanded(
             child: Text(
               allUncosted
-                  ? '$items item${items == 1 ? '' : 's'} sold this period had no '
+                  ? '$items item$plural sold this period had no '
                         'recorded buying price, so profit can\'t be calculated.'
-                  : 'Profit excludes $items item${items == 1 ? '' : 's'} sold '
+                  : 'Profit excludes $items item$plural sold '
                         'with no recorded buying price.',
               style: context.regularStyle(13).copyWith(color: muted),
             ),
@@ -489,7 +498,7 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
               ),
               SizedBox(height: context.getRSize(2)),
               Text(
-                '×${p.qty}  ·  Rev ${formatCurrency(p.revenueKobo / 100.0)}  ·  ${p.marginPct.toStringAsFixed(1)}%',
+                '×${formatQty(p.qty)}  ·  Rev ${formatCurrency(p.revenueKobo / 100.0)}  ·  ${p.marginPct.toStringAsFixed(1)}%',
                 style: context.regularStyle(12).copyWith(color: muted),
               ),
               // #200 / US 32 — per-product concession, so margin review can see
@@ -534,7 +543,7 @@ class _ProfitData {
 
   /// Quantity of sold items excluded from the profit math because their captured
   /// buying price was 0 (cost never recorded). Surfaced as a transparency note.
-  final int uncostedItems;
+  final double uncostedItems;
 
   /// #200 / PRD #155 US 32 — money given away by selling below the tier list
   /// price ("catalogue − charged", from `order_items.catalogue_price_kobo`).
@@ -559,7 +568,7 @@ class _ProfitData {
 class _ProductAccum {
   _ProductAccum(this.name);
   final String name;
-  int qty = 0;
+  double qty = 0;
   int revenueKobo = 0;
   int cogsKobo = 0;
   int concessionKobo = 0;
@@ -575,7 +584,7 @@ class _ProductProfit {
   });
 
   final String name;
-  final int qty;
+  final double qty;
   final int revenueKobo;
   final int cogsKobo;
 
