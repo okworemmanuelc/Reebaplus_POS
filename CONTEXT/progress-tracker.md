@@ -7,6 +7,10 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #626: Must-update switch (2026-11-01, ready for review)
+- `ForceUpdateWrapper` compares the `PackageInfo` build number with server `app_config.min_android_build` (launch + resume, 1-min debounce); below = full-screen Update Required with a Play Store button. Offline/error/non-Android never block; the child renders immediately (no spinner gate). Tests: below/equal/above/offline/error/non-Android.
+- Cloud migration 0240 (`app_config`, seed 0) NOT deployed (supervisor deploys); console control = pos-parity issue in reebaplus-web (supervisor files).
+
 ### Issue #621: No credit limit unless one is set (2026-11-01, ready for review)
 - `checkDebtLimit`: a limit of 0/none = unlimited credit; a positive limit still caps. `DebtLimitNotSet` removed, checkout "no limit set" messages removed, customer limit sheet says "Leave empty for no limit".
 - Cloud migration 0237 re-issues `checkout_order` (same 9-arg signature) with the gate `v_limit > 0 AND projected < -v_limit`. NOT deployed (supervisor deploys); pos-parity issue in reebaplus-web to be filed by the supervisor.
