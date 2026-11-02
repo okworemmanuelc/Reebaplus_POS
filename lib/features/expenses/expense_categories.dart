@@ -11,13 +11,14 @@ class ExpenseCategoryChoice {
   final IconData icon;
 }
 
-/// The fixed category grid, in mockup order (3 × 3). The saved name is the
-/// label, so an old expense under one of these names lights the same tile.
+/// The fixed category grid, in mockup order, three to a row. The saved name is
+/// the label, so an old expense under one of these names lights the same tile.
+/// Salary is not here: salaries belong to Payroll (#661), so no new expense can
+/// count one twice.
 const List<ExpenseCategoryChoice> kExpenseCategoryChoices = [
   ExpenseCategoryChoice(name: 'Fuel', icon: AppIcons.fuel),
   ExpenseCategoryChoice(name: 'Transport', icon: AppIcons.vanDelivery),
   ExpenseCategoryChoice(name: 'Labour', icon: AppIcons.labour),
-  ExpenseCategoryChoice(name: 'Salary', icon: AppIcons.cash),
   ExpenseCategoryChoice(name: 'Electricity', icon: AppIcons.electricity),
   ExpenseCategoryChoice(name: 'Repairs', icon: AppIcons.maintenance),
   ExpenseCategoryChoice(name: 'Rent', icon: AppIcons.storefront),
@@ -26,8 +27,9 @@ const List<ExpenseCategoryChoice> kExpenseCategoryChoices = [
 ];
 
 /// The icon for a saved category name. Covers the grid plus the names the old
-/// free-text form seeded (Maintenance, Utilities, Supplies, Others), so old
-/// expenses keep a sensible icon; anything else gets the receipt.
+/// free-text form seeded (Maintenance, Utilities, Supplies, Others) and the
+/// retired Salary tile, so old expenses keep a sensible icon; anything else gets
+/// the receipt.
 IconData expenseCategoryIcon(String name) {
   final key = name.trim().toLowerCase();
   for (final c in kExpenseCategoryChoices) {
@@ -38,6 +40,7 @@ IconData expenseCategoryIcon(String name) {
     'utilities' => AppIcons.electricity,
     'supplies' => AppIcons.box,
     'others' => AppIcons.moreHorizontal,
+    'salary' => AppIcons.cash,
     _ => AppIcons.receipt,
   };
 }
@@ -48,6 +51,7 @@ bool isOtherExpenseCategory(String? name) {
   return key == 'other' || key == 'others';
 }
 
-/// True when the money went to a staff member (relabels "Paid to").
+/// True for an old Salary expense, where the money went to a staff member
+/// (relabels "Paid to"). New salaries are not expenses (#661).
 bool isSalaryExpenseCategory(String? name) =>
     name?.trim().toLowerCase() == 'salary';

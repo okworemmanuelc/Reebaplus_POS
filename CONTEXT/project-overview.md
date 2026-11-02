@@ -85,7 +85,7 @@ security prerequisites, including the separate #467 and #468 fixes.
 ### Orders, Expenses & Suppliers
 
 - Orders in Pending / Completed / Cancelled tabs, with refunds restricted to Manager and CEO, and an Approve All floating action button for Manager and CEO on the Pending Orders screen.
-- Expenses with a pending-approval flow, a fixed category grid (Fuel, Transport, Labour, Salary, Electricity, Repairs, Rent, Food, Other), an optional "Paid to", and per-store monthly budgets (#652). No payment method or receipt upload on the form; no Stats tab.
+- Expenses with a pending-approval flow, a fixed category grid (Fuel, Transport, Labour, Electricity, Repairs, Rent, Food, Other; Salary is retired for new expenses because salaries belong to Payroll, #661, and old Salary expenses stay as they are), an optional "Paid to", and per-store monthly budgets (#652). No payment method or receipt upload on the form; no Stats tab.
 - Supplier Accounts with a real per-supplier ledger of invoice totals and payments.
 
 ### Home quick actions

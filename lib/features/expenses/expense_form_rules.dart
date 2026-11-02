@@ -13,7 +13,7 @@ enum ExpenseFormProblem {
 }
 
 /// The problems blocking a save. "Paid to" is always optional (owner,
-/// 2026-11-01), Salary included. The amount is not checked on edit because
+/// 2026-11-01), an old Salary expense included. The amount is not checked on edit because
 /// it cannot be changed there.
 Set<ExpenseFormProblem> validateExpenseForm({
   required int amountKobo,
