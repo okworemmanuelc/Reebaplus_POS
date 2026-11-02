@@ -119,11 +119,13 @@ void main() {
 
   test('walk-in (no customer) fires no crate-debt notification', () async {
     final (storeId, staffId, _) = await seedBase();
-    final (_, productId) = await seedCrateProduct(storeId);
+    final (mfrId, productId) = await seedCrateProduct(storeId);
     final service = OrderService(db);
 
+    // #656: a walk-in crate sale must return every empty at Checkout.
     await service.addOrder(
       customerId: null,
+      cratesReturnedByManufacturer: {mfrId: 2},
       cart: [
         {'id': productId, 'qty': 2, 'unitPriceKobo': 100000, 'name': 'Star Bottle'},
       ],

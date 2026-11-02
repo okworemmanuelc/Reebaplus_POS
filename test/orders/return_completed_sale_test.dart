@@ -173,7 +173,7 @@ void main() {
       await (db.update(db.businesses)..where((b) => b.id.equals(businessId)))
           .write(const BusinessesCompanion(type: Value('Bar')));
       final bottle = await seedProduct(unit: 'Bottle', trackEmpties: true);
-      final pending = await sell([line(bottle, 1)]);
+      final pending = await sell([line(bottle, 1)], customer: customerId);
       expect((await order(pending)).status, 'pending');
       expect(await svc.isReturnable(pending), isFalse);
 
@@ -304,7 +304,7 @@ void main() {
       await (db.update(db.businesses)..where((b) => b.id.equals(businessId)))
           .write(const BusinessesCompanion(type: Value('Bar')));
       final bottle = await seedProduct(unit: 'Bottle', trackEmpties: true);
-      final pending = await sell([line(bottle, 1)]);
+      final pending = await sell([line(bottle, 1)], customer: customerId);
       final queue = await queueCount();
       await expectLater(
         doReturn(pending),
