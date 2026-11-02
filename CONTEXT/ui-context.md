@@ -909,3 +909,10 @@ centred: danger `IconTile` (verified-person icon) + red "18+" `TagPill`,
 ExtraBold 17 "Are you 18 or older?", muted 14 body, full-width primary
 "I am 18 or older" and outline "Not now" `AppButton`s. Goldens
 `age_confirmation_390x844_light` / `_844x390_dark`.
+
+## Buttons that save, print or navigate (#659)
+
+- Use `AppButton(onAsyncPressed: ...)` and return the real future. It locks on the first tap, before any waiting, and spins until the future ends. A spinner set after an `await` is not a lock.
+- A custom button copies that lock (`_LogOutButton` in `app_drawer_parts.dart`).
+- A sheet stays open with the spinner until the save ends, and stays open with the typed values on failure. Close it with `if (ctx.mounted && (ModalRoute.of(ctx)?.isCurrent ?? false)) Navigator.pop(ctx);` so a sheet dragged away cannot close the screen under it.
+- A sheet that can be retried needs an all-or-nothing save, so wrap several writes in one transaction.

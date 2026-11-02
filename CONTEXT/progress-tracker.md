@@ -7,6 +7,9 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #659 PR 2 + 3: first-tap lock everywhere else (2026-11-02, PRs #663, #664)
+Customers, supplier crate and float sheets stay open with a spinner until saved and stay open on failure. Orders Confirm, Refund, Return and Mark as paid spin until done. Log Out spins in the drawer and is single-flight. Product photo locks through the picker and upload. Record Return is now one transaction. No database, status or money rule changes, so no `pos-parity` issue. Left open: the database still runs on the screen's thread (`NativeDatabase`), which is why taps can pile up during sync; that is separate work. Owner phone check pending.
+
 ### Issue #659 PR 1: first-tap lock on the sale path (2026-11-02, branch `fix/659-tap-lock-sale-path`)
 `AppButton` gains `onAsyncPressed` (locks synchronously on the first tap, spinner until the future ends, releases on error). Used by Confirm Payment, Print in Orders and Customer detail. Checkout blocks Back (arrow and Android) while a sale saves; Checkout printing is single-flight; Proceed to Checkout opens one Checkout page (spinner only during the crate pre-flight). App-only: no table, status or money change. Left for PR 2 (customers) and PR 3 (suppliers, orders, log out, photo).
 
