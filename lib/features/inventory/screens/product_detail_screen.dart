@@ -91,6 +91,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   bool _savingListing = false;
   bool _savingPhotos = false;
   bool _sharingPhoto = false;
+  // A photo is being picked or saved (#659); blocks a second pick/share.
+  bool _photoBusy = false;
   String? _imagePath;
 
   // ── Role gating (master plan §16.6 / §16.7) ────────────────────────────────
@@ -526,6 +528,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       expiry: expiry == null ? null : expiryPillFor(expiry, _now),
       archived: _archived,
       onChangePhoto: _canEdit ? _pickImage : null,
+      photoBusy: _photoBusy || _sharingPhoto,
     );
   }
 
@@ -591,7 +594,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         gaps: gaps,
         onFix: _fixListingGap,
         onUseSharedPhoto: canShare ? _useSharedPhoto : null,
-        sharedPhotoBusy: _sharingPhoto,
+        sharedPhotoBusy: _sharingPhoto || _photoBusy,
       ),
     );
   }
@@ -619,7 +622,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       return;
     }
     final code = _productData?.barcode;
-    if (_sharingPhoto || code == null) return;
+    if (_sharingPhoto || _photoBusy || code == null) return;
     setState(() => _sharingPhoto = true);
     final outcome = await ref.read(barcodeCatalogueServiceProvider).lookupOutcome(code);
     if (!mounted) return;
@@ -1295,23 +1298,32 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       return;
     }
 
-    AutoLockWrapper.suppressNextResume = true;
-    final imgSvc = ref.read(productImageServiceProvider);
-    final picked = await imgSvc.pickAndProcess();
-    if (!mounted) return;
+    // Synchronous guard: held through the picker and the upload (#659).
+    if (_photoBusy || _sharingPhoto) return;
+    _photoBusy = true;
+    setState(() {});
+    try {
+      AutoLockWrapper.suppressNextResume = true;
+      final imgSvc = ref.read(productImageServiceProvider);
+      final picked = await imgSvc.pickAndProcess();
+      if (!mounted) return;
 
-    final Uint8List bytes;
-    switch (picked) {
-      case Ok(:final value):
-        bytes = value;
-      case Err(:final error):
-        if (!error.isCancelled) {
-          AppNotification.showError(context, 'Could not load image.');
-        }
-        return;
+      final Uint8List bytes;
+      switch (picked) {
+        case Ok(:final value):
+          bytes = value;
+        case Err(:final error):
+          if (!error.isCancelled) {
+            AppNotification.showError(context, 'Could not load image.');
+          }
+          return;
+      }
+
+      await _saveProductPhoto(bytes);
+    } finally {
+      _photoBusy = false;
+      if (mounted) setState(() {});
     }
-
-    await _saveProductPhoto(bytes);
   }
 
   /// Saves already-processed photo [bytes] as the shop's own product photo.

@@ -1462,7 +1462,17 @@ class AuthService extends ValueNotifier<UserData?> {
   ///
   /// Separate from [fullLogout] (the involuntary remote-kick / shift-expiry /
   /// session-expired path), which does not wipe local data.
-  Future<void> logOutCurrentUser() async {
+  Future<void> logOutCurrentUser() {
+    // Single-flight (#659): a second call while one is running (a double tap,
+    // or the drawer swiped closed and reopened) shares the first run.
+    return _logOutInFlight ??= _logOutCurrentUser().whenComplete(
+      () => _logOutInFlight = null,
+    );
+  }
+
+  Future<void>? _logOutInFlight;
+
+  Future<void> _logOutCurrentUser() async {
     final user = value;
     if (user == null) return;
     final businessId = user.businessId;

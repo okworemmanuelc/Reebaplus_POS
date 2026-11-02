@@ -235,6 +235,7 @@ class ProductHeroCard extends StatelessWidget {
     this.expiry,
     this.archived = false,
     this.onChangePhoto,
+    this.photoBusy = false,
   });
 
   final String name;
@@ -258,6 +259,10 @@ class ProductHeroCard extends StatelessWidget {
   /// Null hides the camera badge and makes the photo a plain picture.
   final VoidCallback? onChangePhoto;
 
+  /// A photo is being picked or saved: shows a spinner over the photo and
+  /// ignores taps until it finishes.
+  final bool photoBusy;
+
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
@@ -271,7 +276,14 @@ class ProductHeroCard extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           _photo(context),
-          if (onChangePhoto != null)
+          if (photoBusy)
+            Container(
+              key: const Key('product-photo-busy'),
+              color: Colors.black38,
+              alignment: Alignment.center,
+              child: const CircularProgressIndicator(),
+            ),
+          if (onChangePhoto != null && !photoBusy)
             Positioned(
               right: context.getRSize(8),
               bottom: context.getRSize(8),
@@ -306,7 +318,10 @@ class ProductHeroCard extends StatelessWidget {
               Semantics(
                 button: true,
                 label: 'Change photo',
-                child: InkWell(onTap: onChangePhoto, child: band),
+                child: InkWell(
+                  onTap: photoBusy ? null : onChangePhoto,
+                  child: band,
+                ),
               )
             else
               band,

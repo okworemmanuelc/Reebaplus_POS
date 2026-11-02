@@ -32,6 +32,10 @@ import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 import 'package:reebaplus_pos/shared/widgets/tabbed_sliver_scaffold.dart';
 
+/// How long a supplier sheet's text controllers outlive its close, so the exit
+/// animation never rebuilds them after disposal (#659).
+const Duration kSheetExitGrace = Duration(milliseconds: 500);
+
 /// Key prefix on every ledger row, followed by the entry id. The test seam for
 /// "at least one complete ledger row is laid out and hit-testable" (PRD #239).
 const String kSupplierLedgerRowKeyPrefix = 'supplier-ledger-row-';
@@ -1032,7 +1036,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
                     text: canPostDirectly
                         ? (isTopUp ? 'Record Top-up' : 'Record Payout')
                         : 'Send for Confirmation',
-                    onPressed: () => _submitFloatMovement(
+                    onAsyncPressed: () => _submitFloatMovement(
                       ctx,
                       supplier: supplier,
                       manufacturerId: selectedId,
@@ -1053,8 +1057,12 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
         },
       ),
     );
-    amountCtrl.dispose();
-    noteCtrl.dispose();
+    // Let the sheet finish sliding away first: the save now closes it from
+    // inside, and a rebuild during the exit would touch a disposed controller.
+    Future<void>.delayed(kSheetExitGrace, () {
+      amountCtrl.dispose();
+      noteCtrl.dispose();
+    });
   }
 
   Future<void> _submitFloatMovement(
@@ -1086,7 +1094,14 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
     }
     final postDirectly =
         canPostDirectly && Gates.confirmCrateDeposit.allowsNow(ref);
-    Navigator.pop(sheetCtx);
+    // The sheet can be dragged away mid-save; a plain pop would then close
+    // the screen underneath. Pop only while the sheet is still the top route.
+    void closeSheet() {
+      if (sheetCtx.mounted && (ModalRoute.of(sheetCtx)?.isCurrent ?? false)) {
+        Navigator.pop(sheetCtx);
+      }
+    }
+
     try {
       final dao = ref.read(databaseProvider).cratePoolDao;
       if (postDirectly) {
@@ -1102,6 +1117,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
           storeId: storeId,
           note: note,
         );
+        closeSheet();
         messenger.showSnackBar(
           SnackBar(
             content: Text(
@@ -1127,6 +1143,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
         requestedAmountKobo: amountKobo,
         note: note,
       );
+      closeSheet();
       messenger.showSnackBar(
         SnackBar(
           content: Text(
@@ -1484,7 +1501,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
                     text: isReturn
                         ? (isMoneyBrand ? 'Record Settlement' : 'Record Return')
                         : 'Record Receipt',
-                    onPressed: () => _submitCrateMovement(
+                    onAsyncPressed: () => _submitCrateMovement(
                       ctx,
                       supplier: supplier,
                       manufacturerId: selectedId,
@@ -1505,8 +1522,11 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
         },
       ),
     );
-    qtyCtrl.dispose();
-    depositCtrl.dispose();
+    // Same as the float sheet: dispose once the exit animation is over.
+    Future<void>.delayed(kSheetExitGrace, () {
+      qtyCtrl.dispose();
+      depositCtrl.dispose();
+    });
   }
 
   /// A two-way toggle chip in the crate sheets (#392): a 48dp stadium, primary
@@ -1587,7 +1607,14 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
       showGateDenied(context, Gates.manageSuppliers);
       return;
     }
-    Navigator.pop(sheetCtx);
+    // The sheet can be dragged away mid-save; a plain pop would then close
+    // the screen underneath. Pop only while the sheet is still the top route.
+    void closeSheet() {
+      if (sheetCtx.mounted && (ModalRoute.of(sheetCtx)?.isCurrent ?? false)) {
+        Navigator.pop(sheetCtx);
+      }
+    }
+
     try {
       final service = ref.read(supplierCrateServiceProvider);
       if (isReturn && isMoneyBrand && storeId != null) {
@@ -1605,6 +1632,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
           storeId: storeId,
           refundAmountKobo: depositKobo > 0 ? depositKobo : null,
         );
+        closeSheet();
         messenger.showSnackBar(
           SnackBar(
             content: Text(
@@ -1640,6 +1668,7 @@ class _SupplierDetailScreenState extends ConsumerState<SupplierDetailScreen>
           depositPaidKobo: depositKobo,
         );
       }
+      closeSheet();
       messenger.showSnackBar(
         SnackBar(
           content: Text(
