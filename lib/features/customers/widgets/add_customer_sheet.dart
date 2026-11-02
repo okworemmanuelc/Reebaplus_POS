@@ -190,7 +190,7 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
                     child: AppButton(
                       text: 'Save Customer',
                       variant: AppButtonVariant.primary,
-                      onPressed: () async {
+                      onAsyncPressed: () async {
                         // Defense-in-depth (hard rule #6): this is the single
                         // chokepoint for creating a customer — the Cart "New"
                         // button and the Customers screen both route here — so
@@ -235,6 +235,9 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
                             isWalkIn: false,
                             storeId: storeId,
                           );
+                          // Captured before the await: the sheet can be dragged
+                          // away mid-save, and the message must still show.
+                          final messenger = ScaffoldMessenger.of(context);
                           try {
                             final saved = await ref
                                 .read(customerServiceProvider)
@@ -242,24 +245,38 @@ class _AddCustomerSheetState extends ConsumerState<AddCustomerSheet> {
                                   newCustomer,
                                   businessId: businessId,
                                 );
-                            if (!context.mounted) return;
-                            Navigator.pop(context);
+                            // Close only if this sheet is still the top route;
+                            // a pop after a drag-away would close the screen.
+                            if (context.mounted &&
+                                (ModalRoute.of(context)?.isCurrent ?? false)) {
+                              Navigator.pop(context);
+                            }
                             if (saved == null) {
-                              if (context.mounted) {
-                                AppNotification.showError(
-                                  context,
-                                  'Customer saved but could not be loaded. Pull to refresh.',
-                                );
-                              }
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Customer saved but could not be loaded. Pull to refresh.',
+                                  ),
+                                ),
+                              );
                               return;
                             }
                             widget.onCustomerAdded?.call(saved);
                           } catch (e) {
-                            if (!context.mounted) return;
-                            AppNotification.showError(
-                              context,
-                              'Could not save customer. Please try again.',
-                            );
+                            if (context.mounted) {
+                              AppNotification.showError(
+                                context,
+                                'Could not save customer. Please try again.',
+                              );
+                            } else {
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Could not save customer. Please try again.',
+                                  ),
+                                ),
+                              );
+                            }
                           }
                         }
                       },

@@ -497,7 +497,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                             ? 'Refund to Credit Balance'
                             : 'Refund Cash',
                         icon: AppIcons.transfer,
-                        onPressed: () async {
+                        onAsyncPressed: () async {
                           if (!formKey.currentState!.validate()) return;
                           final amount = parseCurrency(amountCtrl.text);
                           final amountKobo = (amount * 100).round();
@@ -518,7 +518,6 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                           // an unstamped cash-out vanishes under a locked store
                           // (#194). Same store resolution as Add Credit above.
                           final storeId = ref.read(activeWriteStoreProvider).id;
-                          Navigator.pop(ctx);
                           try {
                             final refundedKobo = await ref
                                 .read(customerServiceProvider)
@@ -530,6 +529,13 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                                   storeId: storeId,
                                   note: note.isEmpty ? null : note,
                                 );
+                            // Close only after the save, and only if this sheet
+                            // is still the top route (a drag-away pop would
+                            // close the screen underneath).
+                            if (ctx.mounted &&
+                                (ModalRoute.of(ctx)?.isCurrent ?? false)) {
+                              Navigator.pop(ctx);
+                            }
                             messenger.showSnackBar(
                               refundedKobo <= 0
                                   ? const SnackBar(
@@ -544,11 +550,20 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                                     ),
                             );
                           } catch (_) {
-                            messenger.showSnackBar(
-                              const SnackBar(
-                                content: Text('Could not process refund'),
-                              ),
-                            );
+                            // Stay open with the typed values so it can be
+                            // retried; a sheet already gone gets the snackbar.
+                            if (ctx.mounted) {
+                              AppNotification.showError(
+                                ctx,
+                                'Could not process refund',
+                              );
+                            } else {
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text('Could not process refund'),
+                                ),
+                              );
+                            }
                           }
                         },
                       ),
@@ -633,17 +648,22 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                   key: CustomersKeys.limitSubmit,
                   text: 'Save Limit',
                   icon: AppIcons.check,
-                  onPressed: () async {
+                  onAsyncPressed: () async {
                     if (!formKey.currentState!.validate()) return;
                     final amount = parseCurrency(limitCtrl.text);
                     final id = _customerId;
                     if (id == null) return;
                     final messenger = ScaffoldMessenger.of(context);
-                    Navigator.pop(ctx);
                     try {
                       await ref
                           .read(customerServiceProvider)
                           .updateWalletLimit(id, amount);
+                      // Close only after the save, and only if this sheet is
+                      // still the top route.
+                      if (ctx.mounted &&
+                          (ModalRoute.of(ctx)?.isCurrent ?? false)) {
+                        Navigator.pop(ctx);
+                      }
                       messenger.showSnackBar(
                         SnackBar(
                           content: Text(
@@ -655,11 +675,21 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                         ),
                       );
                     } catch (_) {
-                      if (!mounted) return;
-                      AppNotification.showError(
-                        context,
-                        'Could not update the debt limit. Please try again.',
-                      );
+                      // Stay open so the limit can be retried.
+                      if (ctx.mounted) {
+                        AppNotification.showError(
+                          ctx,
+                          'Could not update the debt limit. Please try again.',
+                        );
+                      } else {
+                        messenger.showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Could not update the debt limit. Please try again.',
+                            ),
+                          ),
+                        );
+                      }
                     }
                   },
                 ),
@@ -1793,7 +1823,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                     key: CustomersKeys.crateSubmit,
                     text: 'Record Return',
                     icon: AppIcons.check,
-                    onPressed: () async {
+                    onAsyncPressed: () async {
                       if (!formKey.currentState!.validate()) return;
                       final mfrId = selectedId!;
                       final qty = Qty.parse(qtyCtrl.text, allowZero: false)!;
@@ -1807,7 +1837,6 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                         showGateDenied(context, Gates.recordCrateReturn);
                         return;
                       }
-                      Navigator.pop(ctx);
                       try {
                         // §16.8.1: credit the empties to the store the customer's
                         // order(s) for this brand were created from, so per-store
@@ -1844,6 +1873,13 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                           entityType: 'customer',
                           entityId: id,
                         );
+                        // Close only after the writes, and only if this sheet is
+                        // still the top route (a drag-away pop would close the
+                        // screen underneath).
+                        if (ctx.mounted &&
+                            (ModalRoute.of(ctx)?.isCurrent ?? false)) {
+                          Navigator.pop(ctx);
+                        }
                         messenger.showSnackBar(
                           SnackBar(
                             content: Text(
@@ -1854,11 +1890,19 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                           ),
                         );
                       } catch (_) {
-                        messenger.showSnackBar(
-                          const SnackBar(
-                            content: Text('Could not record the return'),
-                          ),
-                        );
+                        // Stay open with the typed values so it can be retried.
+                        if (ctx.mounted) {
+                          AppNotification.showError(
+                            ctx,
+                            'Could not record the return',
+                          );
+                        } else {
+                          messenger.showSnackBar(
+                            const SnackBar(
+                              content: Text('Could not record the return'),
+                            ),
+                          );
+                        }
                       }
                     },
                   ),
