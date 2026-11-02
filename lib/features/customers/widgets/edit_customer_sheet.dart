@@ -255,7 +255,7 @@ class _EditCustomerSheetState extends ConsumerState<EditCustomerSheet> {
                 child: AppButton(
                   text: 'Save Details',
                   variant: AppButtonVariant.primary,
-                  onPressed: () async {
+                  onAsyncPressed: () async {
                     // Defense-in-depth (hard rule #6): re-check the gate at
                     // the write boundary (fire-time decision, no subscribe).
                     if (!Gates.editCustomer.allowsNow(ref)) {
@@ -275,19 +275,34 @@ class _EditCustomerSheetState extends ConsumerState<EditCustomerSheet> {
                         isWalkIn: false,
                         storeId: _selectedStoreId,
                       );
+                      // Captured before the await so a message can still show if
+                      // the sheet is gone by the time the save ends.
+                      final messenger = ScaffoldMessenger.of(context);
                       try {
                         await ref
                             .read(customerServiceProvider)
                             .updateCustomer(updated);
-                        if (!context.mounted) return;
-                        Navigator.pop(context);
+                        // Close only if this sheet is still the top route.
+                        if (context.mounted &&
+                            (ModalRoute.of(context)?.isCurrent ?? false)) {
+                          Navigator.pop(context);
+                        }
                         widget.onCustomerUpdated?.call(updated);
                       } catch (_) {
-                        if (!context.mounted) return;
-                        AppNotification.showError(
-                          context,
-                          'Could not update customer. Please try again.',
-                        );
+                        if (context.mounted) {
+                          AppNotification.showError(
+                            context,
+                            'Could not update customer. Please try again.',
+                          );
+                        } else {
+                          messenger.showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Could not update customer. Please try again.',
+                              ),
+                            ),
+                          );
+                        }
                       }
                     }
                   },

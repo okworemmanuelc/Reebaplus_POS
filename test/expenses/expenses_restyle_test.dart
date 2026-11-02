@@ -370,7 +370,7 @@ void main() {
     });
   }
 
-  Future<void> pumpForm(WidgetTester tester) async {
+  Future<void> pumpForm(WidgetTester tester, {ExpenseData? editing}) async {
     await pumpScreen(
       tester,
       env: env,
@@ -381,7 +381,7 @@ void main() {
       screen: Builder(
         builder: (context) => Center(
           child: TextButton(
-            onPressed: () => AddExpenseScreen.show(context),
+            onPressed: () => AddExpenseScreen.show(context, editing: editing),
             child: const Text('open form'),
           ),
         ),
@@ -415,9 +415,10 @@ void main() {
     expect(find.text('Amount spent'), findsOneWidget);
     expect(find.text('+${formatCurrency(500)}'), findsOneWidget);
     expect(find.text('What was it for?'), findsOneWidget);
-    for (final name in ['Fuel', 'Salary', 'Food', 'Other']) {
+    for (final name in ['Fuel', 'Labour', 'Food', 'Other']) {
       expect(find.text(name), findsOneWidget);
     }
+    expect(find.text('Salary'), findsNothing); // salaries belong to Payroll
     expect(find.text('Paid to'), findsNothing); // rich text: label + optional
     expect(find.text('When did you spend it?'), findsOneWidget);
     expect(find.text('Today'), findsOneWidget);
@@ -425,6 +426,43 @@ void main() {
     expect(find.text('Save Expense'), findsOneWidget);
     expect(find.text('Payment Method'), findsNothing);
     expect(tester.takeException(), isNull);
+    await close(tester);
+  });
+
+  testWidgets('an old Salary expense stays Salary when edited', (tester) async {
+    final old = (await tester.runAsync<ExpenseData>(() async {
+      final db = env.db;
+      final categoryId = UuidV7.generate();
+      await db
+          .into(db.expenseCategories)
+          .insert(
+            ExpenseCategoriesCompanion.insert(
+              id: Value(categoryId),
+              businessId: env.businessId,
+              name: 'Salary',
+            ),
+          );
+      final id = UuidV7.generate();
+      await db
+          .into(db.expenses)
+          .insert(
+            ExpensesCompanion.insert(
+              id: Value(id),
+              businessId: env.businessId,
+              categoryId: Value(categoryId),
+              amountKobo: 3000000,
+              description: 'October pay',
+              reference: const Value('Musa Bello'),
+            ),
+          );
+      return (db.select(
+        db.expenses,
+      )..where((t) => t.id.equals(id))).getSingle();
+    }))!;
+    await pumpForm(tester, editing: old);
+    await settle(tester);
+    expect(find.text('Salary'), findsOneWidget);
+    expect(find.textContaining('Staff member paid'), findsWidgets);
     await close(tester);
   });
 
@@ -439,14 +477,13 @@ void main() {
     );
     expect(find.text('Enter how much you spent.'), findsOneWidget);
     expect(find.text('Pick what the money was for.'), findsOneWidget);
-    // Salary does not make "Staff member paid" required.
-    await tester.tap(find.text('Salary'));
+    // Labour needs no note or "Paid to", so only the amount is left to fix.
+    await tester.tap(find.text('Labour'));
     await settle(tester);
     expect(
       find.text('Please fix 1 thing below before saving.'),
       findsOneWidget,
     );
-    expect(find.text('For example, Musa Bello'), findsOneWidget);
     await close(tester);
   });
 

@@ -68,7 +68,7 @@ void main() {
       });
     });
 
-    test('Paid to is never required, Salary included', () {
+    test('Paid to is never required, on an old Salary expense too', () {
       expect(
         validateExpenseForm(amountKobo: 100, category: 'Salary', note: ''),
         isEmpty,
@@ -111,12 +111,11 @@ void main() {
   });
 
   group('categories', () {
-    test('the grid is the nine mockup tiles, in order', () {
+    test('the grid is the eight tiles, in order, without Salary', () {
       expect(kExpenseCategoryChoices.map((c) => c.name), [
         'Fuel',
         'Transport',
         'Labour',
-        'Salary',
         'Electricity',
         'Repairs',
         'Rent',
@@ -129,6 +128,7 @@ void main() {
       expect(expenseCategoryIcon('fuel'), AppIcons.fuel);
       expect(expenseCategoryIcon('Maintenance'), AppIcons.maintenance);
       expect(expenseCategoryIcon('Others'), AppIcons.moreHorizontal);
+      expect(expenseCategoryIcon('Salary'), AppIcons.cash);
       expect(expenseCategoryIcon('Something new'), AppIcons.receipt);
     });
   });
