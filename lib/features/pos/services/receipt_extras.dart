@@ -16,7 +16,9 @@ class ReceiptExtras {
     this.saleDate,
     this.vatRateBps,
     this.vatIncluded,
-    this.cratesOwedByManufacturer,
+    this.cratesReturnedByManufacturer,
+    this.cratesSettledBrands = const {},
+    this.cratesTotalOwedByManufacturer,
     this.crateDepositFull,
   });
 
@@ -28,7 +30,18 @@ class ReceiptExtras {
   final DateTime? saleDate;
   final int? vatRateBps;
   final double? vatIncluded;
-  final Map<String, double>? cratesOwedByManufacturer;
+
+  /// Empties brought back for this sale, per brand (#656): the Checkout count
+  /// on a fresh sale, every empty returned (Checkout + Confirm) on a reprint.
+  final Map<String, double>? cratesReturnedByManufacturer;
+
+  /// Brands whose deposit was settled at Confirm: their shortfall was paid for
+  /// in money, so this sale owes none of it.
+  final Set<String> cratesSettledBrands;
+
+  /// The customer's TOTAL crates owed per brand (null for a walk-in). The
+  /// per-row Owed is worked out by [buildReceiptCrateRows], not here.
+  final Map<String, double>? cratesTotalOwedByManufacturer;
   final double? crateDepositFull;
 }
 
@@ -51,6 +64,8 @@ ReceiptExtras composeReceiptExtras({
   int? fullDepositKobo,
   List<CrateBalanceEntry>? crateBalances,
   Map<String, double> depositCrates = const {},
+  Map<String, double>? cratesReturned,
+  Set<String> settledBrands = const {},
 }) {
   final vatOn = vat.enabled && vat.rateBps > 0;
   final goodsKobo = totalKobo - depositKobo;
@@ -65,7 +80,9 @@ ReceiptExtras composeReceiptExtras({
         ? computeVatKobo(goodsKobo, vat.rateBps, basis: VatBasis.inclusive) /
               100.0
         : null,
-    cratesOwedByManufacturer: crateBalances == null
+    cratesReturnedByManufacturer: cratesReturned,
+    cratesSettledBrands: settledBrands,
+    cratesTotalOwedByManufacturer: crateBalances == null
         ? null
         : _cratesOwed(crateBalances, depositCrates),
     crateDepositFull: (fullDepositKobo != null && fullDepositKobo > depositKobo)
@@ -74,12 +91,13 @@ ReceiptExtras composeReceiptExtras({
   );
 }
 
-/// "Crates still to bring back", per brand (owner decision, #605): the
+/// "Total crates you owe", per brand (#656; the #605 formula): the
 /// customer's no-deposit ledger debt (positive = owes us empties, floored at 0)
 /// plus the crates THIS sale took under a deposit. The ledger only records
 /// crates taken with no deposit, so without the second term a deposit sale
-/// would print "Owed: 0". Older deposit-covered crates are not tracked per
-/// customer, so they are not counted.
+/// would show nothing owed. Older deposit-covered crates are not tracked per
+/// customer, so they are not counted. [depositCrates] must hold only lines not
+/// yet settled at Confirm.
 Map<String, double> _cratesOwed(
   List<CrateBalanceEntry> balances,
   Map<String, double> depositCrates,
@@ -113,6 +131,7 @@ Future<ReceiptExtras> loadReceiptExtras(
   String? orderId,
   int? fullDepositKobo,
   Map<String, double>? depositCrates,
+  Map<String, double>? cratesReturned,
 }) async {
   var cashier = cashierName;
   if (cashier == null && staffId != null) {
@@ -120,7 +139,9 @@ Future<ReceiptExtras> loadReceiptExtras(
   }
   var full = fullDepositKobo;
   var covered = depositCrates;
-  if ((full == null || covered == null) && orderId != null) {
+  var returned = cratesReturned;
+  var settled = const <String>{};
+  if (orderId != null) {
     final lines = await db.orderCrateLinesDao.getForOrder(orderId);
     if (full == null && lines.isNotEmpty) {
       full = lines.fold<int>(
@@ -128,10 +149,17 @@ Future<ReceiptExtras> loadReceiptExtras(
         (s, l) => s + lineTotalKobo(l.depositRateKobo, l.cratesTaken),
       );
     }
+    // A deposit line counts toward the total only until Confirm settles it.
     covered ??= {
       for (final l in lines)
-        if (l.depositPaidKobo > 0) l.manufacturerId: l.cratesTaken,
+        if (l.depositPaidKobo > 0 && l.settledAt == null)
+          l.manufacturerId: l.cratesTaken,
     };
+    settled = {
+      for (final l in lines)
+        if (l.depositPaidKobo > 0 && l.settledAt != null) l.manufacturerId,
+    };
+    returned ??= await db.cratePoolDao.cratesReturnedForOrder(orderId);
   }
   List<CrateBalanceEntry>? balances;
   if (customerId != null) {
@@ -150,13 +178,16 @@ Future<ReceiptExtras> loadReceiptExtras(
     fullDepositKobo: full,
     crateBalances: balances,
     depositCrates: covered ?? const {},
+    cratesReturned: returned,
+    settledBrands: settled,
   );
 }
 
 /// [loadReceiptExtras] for an already-recorded order (reprints from Orders and
 /// the customer page, van re-opens): the sale date is the order's `createdAt`
 /// in local time, the cashier is the order's `staffId` user, the crate deposit
-/// and the full deposit come off the order.
+/// and the full deposit come off the order, and the empties returned are every
+/// one brought back for it so far (Checkout + Confirm).
 Future<ReceiptExtras> loadReceiptExtrasForOrder(
   AppDatabase db,
   OrderData order, {

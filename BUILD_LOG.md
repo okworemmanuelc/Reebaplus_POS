@@ -36,6 +36,8 @@ full history is preserved verbatim in `build_log_history.md` (and in git —
 New entries: add a compact bullet at the top of the current month, same format —
 `- **YYYY-MM-DD** — **<short title>**: <the durable fact/invariant/gotcha>.`
 
+- **2026-11-02** — **Receipt shows empties returned + this sale's Owed (#656 PR A, no Drift or cloud migration)**: all three renderers (phone, text, picture) print rows from ONE pure `buildReceiptCrateRows` (`receipt_crates.dart`): `owed = max(0, taken − returned)`, 0 for a brand whose deposit line is settled, plus a "Total BRAND crates you owe: N" line only when the customer's total differs. Returned comes from `CratePoolDao.cratesReturnedForOrder` (customer-less `adjusted` pool rows with the order id: Checkout exchange + Confirm's credit − reversals), so a reprint reflects Confirm. `ReceiptExtras.cratesOwedByManufacturer` is now `cratesTotalOwedByManufacturer` (the #605 formula, deposit lines counted only while `settledAt` is null). Don't run `dart format` on the three renderer files.
+
 ---
 
 - **2026-11-01** — **Stock in parts (#630)**: stock screens type quarters through `lib/shared/utils/quantity_input.dart` (`parseStockQty` honours the product's `allow_fractional_sales`; the formatter drops the dot when it is off). The DAO is the authority: `InventoryDao.assertQuantityAllowed` guards what a person TYPED (requests, approval, transfers, dispatch), never a count's difference (a whole-only product can still hold 2.5 and be counted at 2). `adjustStock` rejects off-quarter deltas. Stock-count `lines_json` keeps whole values as integers (`Qty.toJson`) and readers use `Qty.fromJson`, never `as int`. Tracked-bottle damages stay whole until S4.
