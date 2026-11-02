@@ -609,6 +609,8 @@ class _CartScreenState extends ConsumerState<CartScreen>
                               AddCustomerSheet.show(
                                 context,
                                 onCustomerAdded: (newCustomer) {
+                                  // The save can end after the cart has gone.
+                                  if (!mounted) return;
                                   setState(() => _activeCustomer = newCustomer);
                                   widget.onCustomerChanged(newCustomer);
                                   ref

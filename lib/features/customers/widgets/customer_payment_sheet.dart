@@ -205,7 +205,6 @@ class _CustomerPaymentSheetState extends ConsumerState<CustomerPaymentSheet> {
     final storeId = ref.read(activeWriteStoreProvider).id;
     final service = ref.read(customerServiceProvider);
     final staffId = widget.staffId;
-    navigator.pop();
     try {
       await service.topUpWallet(
         customerId: customerId,
@@ -215,6 +214,11 @@ class _CustomerPaymentSheetState extends ConsumerState<CustomerPaymentSheet> {
         storeId: storeId,
         note: note.isEmpty ? null : note,
       );
+      // Close only after the save, and only if this sheet is still the top
+      // route: a pop after a drag-away would close the screen underneath.
+      if (mounted && (ModalRoute.of(context)?.isCurrent ?? false)) {
+        navigator.pop();
+      }
       messenger.showSnackBar(
         SnackBar(
           content: Text('${formatCurrency(amount)} added to credit balance'),
@@ -395,7 +399,7 @@ class _CustomerPaymentSheetState extends ConsumerState<CustomerPaymentSheet> {
                   key: CustomerPaymentSheetKeys.submit,
                   text: widget.submitLabel,
                   icon: AppIcons.add,
-                  onPressed: () => _submit(picked.id),
+                  onAsyncPressed: () => _submit(picked.id),
                 ),
               ],
             ),
