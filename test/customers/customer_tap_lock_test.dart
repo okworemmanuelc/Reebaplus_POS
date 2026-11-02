@@ -539,5 +539,57 @@ void main() {
       expect(logs, hasLength(1), reason: 'the return was recorded once');
       await disposeScreen(tester);
     });
+
+    testWidgets('Record Return: a failed save adds nothing, so a retry cannot '
+        'count the empties twice', (tester) async {
+      Future<double> stock() async {
+        final rows = await tester.runAsync(
+          () => env.db.select(env.db.manufacturers).get(),
+        );
+        return rows!
+            .firstWhere((m) => m.id == env.manufacturers.first.id)
+            .emptyCrateStock
+            .toDouble();
+      }
+
+      await pumpDetail(tester);
+      await tester.drag(find.byType(NestedScrollView), const Offset(0, -600));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Crates'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(CustomersKeys.recordCrateReturn));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Select a manufacturer'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(env.manufacturers.first.name).last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(CustomersKeys.crateQty), '2');
+      final before = await stock();
+
+      // The empties write succeeds, then the customer's return write fails.
+      await tester.runAsync(
+        () => env.db.customStatement(
+          'CREATE TRIGGER fail_return BEFORE INSERT ON crate_ledger '
+          'WHEN NEW.customer_id IS NOT NULL '
+          "BEGIN SELECT RAISE(ABORT, 'boom'); END",
+        ),
+      );
+      await tester.tap(find.byKey(CustomersKeys.crateSubmit));
+      await deliver(tester);
+      await tester.pumpAndSettle();
+      expect(find.text('Record Crate Return'), findsOneWidget);
+      expect(await stock(), before, reason: 'the failed save left nothing');
+
+      await tester.runAsync(
+        () => env.db.customStatement('DROP TRIGGER fail_return'),
+      );
+      await tester.tap(find.byKey(CustomersKeys.crateSubmit));
+      await deliver(tester);
+      await tester.pumpAndSettle();
+      expect(find.text('Record Crate Return'), findsNothing);
+      expect(await stock(), before + 2, reason: 'counted once on the retry');
+      await tester.pump(const Duration(seconds: 6)); // the error banner ends
+      await disposeScreen(tester);
+    });
   });
 }

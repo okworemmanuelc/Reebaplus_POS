@@ -1850,29 +1850,33 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                                   manufacturerId: mfrId,
                                 ) ??
                             ref.read(lockedStoreProvider).value;
-                        await db.inventoryDao.addEmptyCrates(
-                          mfrId,
-                          qty,
-                          storeId: creditStoreId,
-                        );
-                        await db.cratePoolDao.recordCrateReturnByCustomer(
-                          customerId: id,
-                          manufacturerId: mfrId,
-                          quantity: qty,
-                          performedBy: staffId,
-                        );
-                        // §7.8 — audit the manual crate return (who/when/brand/
-                        // count) so it appears in Activity Logs.
-                        await db.activityLogDao.logActivity(
-                          action: 'crate_return',
-                          description:
-                              '${formatQty(qty)} crate${qty == 1 ? '' : 's'} returned for '
-                              '$mfrName',
-                          staffId: staffId,
-                          storeId: ref.read(lockedStoreProvider).value,
-                          entityType: 'customer',
-                          entityId: id,
-                        );
+                        // All or nothing: a failed save stays open for a retry,
+                        // which must not add the same empties twice (#659).
+                        await db.transaction(() async {
+                          await db.inventoryDao.addEmptyCrates(
+                            mfrId,
+                            qty,
+                            storeId: creditStoreId,
+                          );
+                          await db.cratePoolDao.recordCrateReturnByCustomer(
+                            customerId: id,
+                            manufacturerId: mfrId,
+                            quantity: qty,
+                            performedBy: staffId,
+                          );
+                          // §7.8 — audit the manual crate return (who/when/brand/
+                          // count) so it appears in Activity Logs.
+                          await db.activityLogDao.logActivity(
+                            action: 'crate_return',
+                            description:
+                                '${formatQty(qty)} crate${qty == 1 ? '' : 's'} returned for '
+                                '$mfrName',
+                            staffId: staffId,
+                            storeId: ref.read(lockedStoreProvider).value,
+                            entityType: 'customer',
+                            entityId: id,
+                          );
+                        });
                         // Close only after the writes, and only if this sheet is
                         // still the top route (a drag-away pop would close the
                         // screen underneath).
