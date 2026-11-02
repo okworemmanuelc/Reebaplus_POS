@@ -623,6 +623,7 @@ class CartFooter extends StatelessWidget {
     required this.onSave,
     required this.onRecall,
     required this.onCheckout,
+    this.checkoutLoading = false,
     required this.bottomPadding,
     required this.pinned,
   });
@@ -631,6 +632,9 @@ class CartFooter extends StatelessWidget {
   final VoidCallback onSave;
   final VoidCallback onRecall;
   final VoidCallback onCheckout;
+
+  /// Spinner on Proceed to Checkout while its pre-flight runs.
+  final bool checkoutLoading;
 
   /// `deviceBottomPadding`, added below the checkout button.
   final double bottomPadding;
@@ -688,6 +692,7 @@ class CartFooter extends StatelessWidget {
             text: 'Proceed to Checkout',
             variant: AppButtonVariant.primary,
             icon: AppIcons.cartCheckout,
+            isLoading: checkoutLoading,
             onPressed: onCheckout,
           ),
         ],
