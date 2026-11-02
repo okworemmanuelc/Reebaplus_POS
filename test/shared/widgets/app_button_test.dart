@@ -39,6 +39,68 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
+  testWidgets('a dialog over the button hides the spinner, not the lock', (
+    tester,
+  ) async {
+    final answered = Completer<void>();
+    final saved = Completer<void>();
+    var calls = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: AppButton(
+                text: 'Go',
+                onAsyncPressed: () async {
+                  calls++;
+                  // Waiting on the person: the dialog is up.
+                  await showDialog<void>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      content: TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('Answer'),
+                      ),
+                    ),
+                  );
+                  answered.complete();
+                  // Waiting on the save.
+                  await saved.future;
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byType(AppButton));
+    // Settles only because nothing is spinning behind the dialog.
+    await tester.pumpAndSettle();
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+
+    // Still locked, even though the button looks normal.
+    final inkWell = tester.widget<InkWell>(
+      find.descendant(
+        of: find.byType(AppButton),
+        matching: find.byType(InkWell),
+      ),
+    );
+    inkWell.onTap!();
+    expect(calls, 1);
+
+    await tester.tap(find.text('Answer'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(answered.isCompleted, isTrue);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+    saved.complete();
+    await tester.pump();
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
   testWidgets('the lock releases after completion', (tester) async {
     var calls = 0;
     await tester.pumpWidget(

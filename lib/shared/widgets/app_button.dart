@@ -12,8 +12,9 @@ class AppButton extends StatefulWidget {
 
   /// Async tap handler. The button locks on the FIRST tap (before the callback
   /// runs or anything is awaited), shows the loading spinner, and unlocks when
-  /// the returned future finishes (or throws). Use instead of [onPressed] for
-  /// actions that save, print or navigate. Do not set both.
+  /// the returned future finishes (or throws). The spinner hides while another
+  /// route covers the button, and the lock holds. Use instead of [onPressed]
+  /// for actions that save, print or navigate. Do not set both.
   final Future<void> Function()? onAsyncPressed;
   final AppButtonVariant variant;
   final bool isLoading;
@@ -70,7 +71,10 @@ class _AppButtonState extends State<AppButton> {
     final size = widget.size;
     final icon = widget.icon;
     final trailingIcon = widget.trailingIcon;
-    final isLoading = widget.isLoading || _running;
+    // Still locked while a dialog or sheet covers this button, but no spinner:
+    // the app is waiting on the person then, not on a save.
+    final spinning = _running && (ModalRoute.isCurrentOf(context) ?? true);
+    final isLoading = widget.isLoading || spinning;
     final VoidCallback? onTap = widget.onAsyncPressed != null
         ? _handleAsyncTap
         : widget.onPressed;

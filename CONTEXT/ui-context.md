@@ -913,6 +913,7 @@ ExtraBold 17 "Are you 18 or older?", muted 14 body, full-width primary
 ## Buttons that save, print or navigate (#659)
 
 - Use `AppButton(onAsyncPressed: ...)` and return the real future. It locks on the first tap, before any waiting, and spins until the future ends. A spinner set after an `await` is not a lock.
+- The spinner hides while a dialog or sheet covers the button, because the app is waiting on the person then, and the lock holds.
 - A custom button copies that lock (`_LogOutButton` in `app_drawer_parts.dart`).
 - A sheet stays open with the spinner until the save ends, and stays open with the typed values on failure. Close it with `if (ctx.mounted && (ModalRoute.of(ctx)?.isCurrent ?? false)) Navigator.pop(ctx);` so a sheet dragged away cannot close the screen under it.
 - A sheet that can be retried needs an all-or-nothing save, so wrap several writes in one transaction.

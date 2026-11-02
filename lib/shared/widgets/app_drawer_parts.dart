@@ -702,6 +702,9 @@ class _LogOutButtonState extends State<_LogOutButton> {
 
   @override
   Widget build(BuildContext context) {
+    // Locked behind the confirm dialog, but no spinner while it waits on the
+    // person (same rule as AppButton).
+    final spinning = _running && (ModalRoute.isCurrentOf(context) ?? true);
     final f =
         Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light;
     final radius = BorderRadius.circular(AppSpacing.borderRadiusL);
@@ -709,7 +712,7 @@ class _LogOutButtonState extends State<_LogOutButton> {
         .getRSize(50)
         .clamp(kMinInteractiveDimension, double.infinity);
     return Opacity(
-      opacity: _running ? 0.7 : 1.0,
+      opacity: spinning ? 0.7 : 1.0,
       child: SizedBox(
         key: AppDrawerKeys.logOut,
         height: height,
@@ -725,7 +728,7 @@ class _LogOutButtonState extends State<_LogOutButton> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                if (_running)
+                if (spinning)
                   SizedBox(
                     width: context.getRSize(22),
                     height: context.getRSize(22),
