@@ -91,6 +91,12 @@ class _CartScreenState extends ConsumerState<CartScreen>
   // ── Clear animation ──
   late AnimationController _clearCtrl;
   bool _isClearing = false;
+
+  /// A Checkout page is being prepared or is open (#659). Synchronous guard.
+  bool _checkoutOpen = false;
+
+  /// The crate pre-flight is running: drives the Proceed button's spinner.
+  bool _checkoutPreflight = false;
   List<Map<String, dynamic>> _animatingItems = [];
   bool _showCartHint = false;
 
@@ -186,29 +192,41 @@ class _CartScreenState extends ConsumerState<CartScreen>
   /// mirrors how the price-staleness prompt returns to the cart.
   Future<void> _goToCheckout() async {
     if (ref.read(zeroStoresEmptySurfaceProvider)) return;
-    final bool moved;
+    // Only one Checkout page can be open (#659). Taken synchronously, before
+    // any await, and held until the pushed page is popped.
+    if (_checkoutOpen) return;
+    _checkoutOpen = true;
+    setState(() => _checkoutPreflight = true);
     try {
-      moved = await _crateSync.sync();
-    } catch (e, st) {
-      // §33.4 — never let a pre-flight read kill the checkout button. Record it
-      // and go on with the figures on screen: the live query has been feeding
-      // this cart all along, so they are the best available.
-      CrashReporter.record(e, st, context: 'pos.cart.crate_preflight');
-      if (mounted) _openCheckout();
-      return;
+      final bool moved;
+      try {
+        moved = await _crateSync.sync();
+      } catch (e, st) {
+        // §33.4 — never let a pre-flight read kill the checkout button. Record
+        // it and go on with the figures on screen: the live query has been
+        // feeding this cart all along, so they are the best available.
+        CrashReporter.record(e, st, context: 'pos.cart.crate_preflight');
+        if (mounted) await _openCheckout();
+        return;
+      }
+      if (!mounted) return;
+      if (moved) {
+        AppNotification.showInfo(
+          context,
+          'Crate values updated. Review the cart and check out again.',
+        );
+        return;
+      }
+      await _openCheckout();
+    } finally {
+      _checkoutOpen = false;
+      if (mounted && _checkoutPreflight) {
+        setState(() => _checkoutPreflight = false);
+      }
     }
-    if (!mounted) return;
-    if (moved) {
-      AppNotification.showInfo(
-        context,
-        'Crate values updated. Review the cart and check out again.',
-      );
-      return;
-    }
-    _openCheckout();
   }
 
-  void _openCheckout() {
+  Future<void> _openCheckout() {
     // Rebuilt from the live cart rather than captured in `build`, so the values
     // pushed to checkout are the ones that survived the pre-flight above.
     // Sorted by quantity for checkout only: its order summary and the order it
@@ -220,7 +238,10 @@ class _CartScreenState extends ConsumerState<CartScreen>
       items,
       isCrate: businessTracksCrates(ref.read(currentBusinessProvider)),
     );
-    Navigator.push(
+    // The spinner is for the pre-flight only: on a wide screen the cart stays
+    // visible beside Checkout and must not spin while it is open.
+    if (_checkoutPreflight) setState(() => _checkoutPreflight = false);
+    return Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => CheckoutPage(
@@ -1235,6 +1256,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
       onSave: _saveCurrentCart,
       onRecall: _viewSavedCarts,
       onCheckout: _goToCheckout,
+      checkoutLoading: _checkoutPreflight,
       bottomPadding: bottomPadding,
       pinned: pinned,
     );

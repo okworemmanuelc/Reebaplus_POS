@@ -112,6 +112,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   // True while a receipt print is in flight — drives the persistent blue
   // "Printing receipt…" banner on the receipt view (no toast, no spinner).
   bool _isPrinting = false;
+
+  /// Synchronous single-flight latch for printing (#659). `_isPrinting` only
+  /// drives the banner and is set after awaits; this one is taken before any.
+  bool _printInFlight = false;
   Map<String, String> _manufacturerNames = {};
   String? _storeAddress;
   StreamSubscription<List<ManufacturerData>>? _manufacturersSub;
@@ -433,22 +437,31 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     ref.watch(
       currencySymbolProvider,
     ); // rebuild money displays when currency changes
-    return Scaffold(
-      backgroundColor: _bg,
-      appBar: SalesTopBar(
-        key: CheckoutKeys.topBar,
-        height: salesTopBarHeight(context),
-        icon: _paymentConfirmed ? AppIcons.receipt : AppIcons.cartCheckout,
-        title: _paymentConfirmed ? 'Receipt' : 'Checkout',
-        // The payable total, live (it moves with the crate deposit).
-        subtitle: _paymentConfirmed ? null : formatCurrency(_totalKobo / 100),
-        leading: SalesBackButton(onPressed: () => Navigator.pop(context)),
-      ),
-      body: DecoratedBox(
-        decoration: AppDecorations.pageBackground(context),
-        child: SafeArea(
-          top: false,
-          child: _paymentConfirmed ? _buildReceiptView() : _buildCheckoutForm(),
+    return PopScope(
+      canPop: !_isProcessing,
+      child: Scaffold(
+        backgroundColor: _bg,
+        appBar: SalesTopBar(
+          key: CheckoutKeys.topBar,
+          height: salesTopBarHeight(context),
+          icon: _paymentConfirmed ? AppIcons.receipt : AppIcons.cartCheckout,
+          title: _paymentConfirmed ? 'Receipt' : 'Checkout',
+          // The payable total, live (it moves with the crate deposit).
+          subtitle: _paymentConfirmed ? null : formatCurrency(_totalKobo / 100),
+          // Locked while the sale is being saved: leaving then would keep the
+          // cart (the clear only runs while mounted) and let it be sold twice.
+          leading: SalesBackButton(
+            onPressed: _isProcessing ? null : () => Navigator.pop(context),
+          ),
+        ),
+        body: DecoratedBox(
+          decoration: AppDecorations.pageBackground(context),
+          child: SafeArea(
+            top: false,
+            child: _paymentConfirmed
+                ? _buildReceiptView()
+                : _buildCheckoutForm(),
+          ),
         ),
       ),
     );
@@ -605,7 +618,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               variant: AppButtonVariant.primary,
               isLoading: _isProcessing,
               icon: AppIcons.check,
-              onPressed: _confirmPayment,
+              onAsyncPressed: _confirmPayment,
             ),
           ],
         ),
@@ -1545,7 +1558,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                   saleDate: _extras.saleDate,
                   vatRateBps: _extras.vatRateBps,
                   vatIncluded: _extras.vatIncluded,
-                  cratesReturnedByManufacturer: _extras.cratesReturnedByManufacturer,
+                  cratesReturnedByManufacturer:
+                      _extras.cratesReturnedByManufacturer,
                   cratesSettledBrands: _extras.cratesSettledBrands,
                   cratesTotalOwedByManufacturer:
                       _extras.cratesTotalOwedByManufacturer,
@@ -1751,6 +1765,18 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   /// Retry) keeps the picker so the cashier can choose a printer.
   Future<void> _printReceipt({bool auto = false}) async {
     if (!mounted) return;
+    // One print at a time, for manual taps and auto-print alike (#659). Taken
+    // synchronously, before the first await; released on every exit.
+    if (_printInFlight) return;
+    _printInFlight = true;
+    try {
+      await _printReceiptGuarded(auto: auto);
+    } finally {
+      _printInFlight = false;
+    }
+  }
+
+  Future<void> _printReceiptGuarded({required bool auto}) async {
     final printer = ref.read(printerServiceProvider);
     if (auto && !await printer.hasPrinterSetUp()) return;
     if (!mounted) return;
@@ -1805,8 +1831,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         vatIncluded: extras.vatIncluded,
         cratesReturnedByManufacturer: extras.cratesReturnedByManufacturer,
         cratesSettledBrands: extras.cratesSettledBrands,
-        cratesTotalOwedByManufacturer:
-            extras.cratesTotalOwedByManufacturer,
+        cratesTotalOwedByManufacturer: extras.cratesTotalOwedByManufacturer,
         crateDepositFull: extras.crateDepositFull,
         businessName: ref.read(currentBusinessNameProvider),
         tracksCrates: businessTracksCrates(ref.read(currentBusinessProvider)),
@@ -1876,6 +1901,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
           if (!mounted) return;
           // Re-arm the print-progress banner for the manual connect + print.
+          if (_printInFlight) return;
+          _printInFlight = true;
           setState(() => _isPrinting = true);
           AppNotification.showSuccess(
             context,
@@ -1915,6 +1942,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               AppNotification.showError(context, 'Print error: $e');
             }
           } finally {
+            _printInFlight = false;
             if (mounted) setState(() => _isPrinting = false);
           }
         },

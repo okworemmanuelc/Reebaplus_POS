@@ -968,9 +968,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                           child: AppButton(
                             text: 'Print',
                             icon: AppIcons.print,
-                            onPressed: () {
+                            onAsyncPressed: () {
                               setModalState(() => reprintDate = DateTime.now());
-                              _printReceiptFromDetail(
+                              return _printReceiptFromDetail(
                                 ctx,
                                 order,
                                 items,

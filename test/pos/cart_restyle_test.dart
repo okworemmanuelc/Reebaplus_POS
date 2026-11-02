@@ -4,6 +4,8 @@
 // shows, the money figures for a cart with crates, a discount and a deposit,
 // the checkout hand-off, and no overflow at the tight sizes.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,10 +17,27 @@ import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/pos/screens/cart_screen.dart';
 import 'package:reebaplus_pos/features/pos/screens/checkout_page.dart';
 import 'package:reebaplus_pos/features/pos/widgets/cart/cart_parts.dart';
+import 'package:reebaplus_pos/shared/services/cart_crate_sync.dart';
 import 'package:reebaplus_pos/shared/services/cart_service.dart';
+import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 
 import '../helpers/screen_harness.dart';
 import 'cart_fixture.dart';
+
+/// A crate pre-flight that waits on [gate], like a slow database (#659).
+class _SlowCrateSync extends CartCrateSync {
+  _SlowCrateSync(super.db, super.cart);
+
+  final gate = Completer<void>();
+  int syncs = 0;
+
+  @override
+  Future<bool> sync() async {
+    syncs++;
+    await gate.future;
+    return false;
+  }
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -47,6 +66,7 @@ void main() {
     EdgeInsets viewInsets = EdgeInsets.zero,
     TextScaler? textScaler,
     void Function(CartService cart)? fill,
+    List<Override> extraOverrides = const [],
   }) async {
     late CartService cart;
     await pumpScreen(
@@ -72,6 +92,7 @@ void main() {
         firstRunSurfaceStateProvider.overrideWithValue(
           FirstRunSurfaceState.hasContent,
         ),
+        ...extraOverrides,
       ],
       sharedPreferences: const {'hint_cart_tap_edit': 2},
       settle: false,
@@ -390,6 +411,59 @@ void main() {
     setUp(
       () async => env = await setupScreenTestEnvironment(businessType: 'Bar'),
     );
+
+    testWidgets('two quick taps on Proceed to Checkout open one page (#659)', (
+      tester,
+    ) async {
+      late _SlowCrateSync slow;
+      await pumpCart(
+        tester,
+        size: const Size(800, 1280),
+        padding: const EdgeInsets.only(top: 24, bottom: 24),
+        fill: fullFixture(customer: regular),
+        extraOverrides: [
+          cartCrateSyncProvider.overrideWith((ref) {
+            slow = _SlowCrateSync(
+              ref.read(databaseProvider),
+              ref.read(cartProvider),
+            );
+            ref.onDispose(slow.dispose);
+            return slow;
+          }),
+        ],
+      );
+
+      // The pre-flight is slow; tap twice while it waits.
+      await tester.tap(find.byKey(CartKeys.checkout));
+      await tester.tap(find.byKey(CartKeys.checkout));
+      await tester.pump();
+      expect(slow.syncs, 1);
+      expect(
+        tester.widget<AppButton>(find.byKey(CartKeys.checkout)).isLoading,
+        isTrue,
+      );
+      slow.gate.complete();
+      await settle(tester);
+      expect(find.byType(CheckoutPage), findsOneWidget);
+      // The cart does not spin while Checkout is open.
+      expect(
+        tester
+            .widget<AppButton>(
+              find.byKey(CartKeys.checkout, skipOffstage: false),
+            )
+            .isLoading,
+        isFalse,
+      );
+
+      // Back from Checkout frees the button for the next time.
+      tester.state<NavigatorState>(find.byType(Navigator).last).pop();
+      await settle(tester);
+      expect(find.byType(CheckoutPage), findsNothing);
+      await tester.tap(find.byKey(CartKeys.checkout));
+      await settle(tester);
+      expect(find.byType(CheckoutPage), findsOneWidget);
+      await disposeScreen(tester);
+    });
 
     testWidgets('figures for crates + a discount + a deposit are unchanged, '
         'and checkout receives them', (tester) async {
