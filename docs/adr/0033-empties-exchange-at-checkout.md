@@ -47,7 +47,8 @@ manufacturer edit that coalesced into it.
 
 ## Consequences
 
-**A crate-bearing sale that completes at checkout cannot be refunded.** Pending
+**A crate-bearing sale that completes at checkout cannot be refunded** (and,
+since #656, that is every walk-in crate sale). Pending
 refund needs `pending`, and Return (`returnRefusal`) refuses anything with crate
 history. That matches every Confirmed crate sale today, except that this sale
 never sits in Pending first. Kept on purpose.
@@ -60,3 +61,29 @@ counted, so it does not stop a sale completing.
 
 The flag-held v2 `pos_cancel_order` path still writes no crate rows, so that hold
 (ADR 0020 follow-up in `markCancelled`) now covers the exchange too.
+
+## Walk-ins return everything (#656), 2026-11-02
+
+A walk-in has no one to chase for the empties, and a Pending walk-in sale has no
+customer to hold the debt against. So a walk-in crate-bearing sale must return
+ALL empties per brand at Checkout. A blank count is 0 entered. If any brand is
+short, Confirm Payment refuses with `A walk-in must return all 5 Star empties
+(3 entered).` (first short brand; `walkInExchangeShortfall` in
+`crate_exchange.dart`). A walk-in crate sale is therefore always born
+`completed` and never reaches Pending. Registered customers are unchanged: a
+part exchange still goes to Pending.
+
+The write boundary enforces it too: `OrderCommands.checkout` throws a
+`StateError` with the same text before any write, so no other caller can book a
+Pending walk-in. A walk-in whose crate-tracked bottles have no manufacturer has
+nothing countable (rule above) and is born `completed`, not refused. Walk-in
+orders already in Pending keep working through Confirm.
+
+Consequence: every walk-in crate sale now completes at checkout, so none can be
+refunded (the Pending refund path needs `pending`, and Return refuses crate
+history).
+
+**A van road sale is exempt.** The driver terminal has no empties field and sells
+to walk-ins only, so the rule would refuse every crate sale on the road. A road
+sale keeps its earlier status. Van Sales is switched off today; revisit this when
+it comes back.

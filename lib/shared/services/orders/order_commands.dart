@@ -66,9 +66,10 @@ class OrderCommands {
 
   /// **Checkout** — build an order from a UI cart and persist it atomically,
   /// recognising revenue. The Order is born `pending` only if it is a
-  /// crate-bearing sale (PRD #337) with crates still to come back after any
-  /// Empties Exchange ([cratesReturnedByManufacturer], #649), otherwise
-  /// `completed`.
+  /// crate-bearing sale (PRD #337) for a registered customer with crates still
+  /// to come back after any Empties Exchange ([cratesReturnedByManufacturer],
+  /// #649), otherwise `completed`. A walk-in must return every empty here
+  /// (#656): a short count throws a [StateError] before any write.
   ///
   /// Returns the human-readable order number (e.g. `ORD-000042`) — the
   /// checkout/receipt code displays this to the user.
@@ -133,10 +134,47 @@ class OrderCommands {
     final crateBearing = await _ordersDao.isCrateBearingCart(
       cart.map((i) => i['id'] as String?),
     );
+    final taken = crateBearing
+        ? await _ordersDao.cratesTakenByManufacturer(items)
+        : const <String, double>{};
+    final isWalkIn = customerId == null || customerId.isEmpty;
+    // #656 — a road sale is exempt: the driver terminal has no empties field
+    // and is walk-in only, so holding it to this rule would refuse every crate
+    // sale on the road. Van crates keep their own trip accounting.
+    final isVanSale =
+        (await _db.vanTripsDao.saleContextForStore(storeId)).isVanSale;
+    final mustReturnAllEmpties = isWalkIn && !isVanSale;
+    if (crateBearing && mustReturnAllEmpties) {
+      // #656 — a walk-in must return ALL empties at Checkout. Refused before
+      // any write; Checkout shows the same text first. A count the exchange
+      // itself refuses (quarters, more than taken) keeps its own error.
+      final problem = crateExchangeProblem(
+        taken: taken,
+        returned: cratesReturnedByManufacturer,
+      );
+      if (problem != null) throw problem;
+      final short = walkInExchangeShortfall(
+        taken: taken,
+        returned: cratesReturnedByManufacturer,
+      );
+      if (short != null) {
+        throw StateError(
+          walkInShortfallMessage(
+            await _ordersDao.manufacturerNameFor(short.manufacturerId),
+            short.taken,
+            short.returned,
+          ),
+        );
+      }
+    }
+    // A till walk-in never waits: either every crate came back, or the bottles
+    // have no brand and cannot be counted (#649 decision 8), so there is nothing
+    // to wait for. Anyone else waits for whatever is still outstanding.
     final waitsForEmpties =
         crateBearing &&
+        !mustReturnAllEmpties &&
         !crateExchangeClearsSale(
-          taken: await _ordersDao.cratesTakenByManufacturer(items),
+          taken: taken,
           returned: cratesReturnedByManufacturer,
         );
     final checkoutAt = DateTime.now().toUtc();
@@ -165,7 +203,10 @@ class OrderCommands {
       // still waiting for empties to be counted back (business tracks empties
       // AND at least one line is a crate-tracked bottle; see
       // [isCrateBearingSale]) whose crates an Empties Exchange did not cover
-      // (#649; see [crateExchangeClearsSale]). Every other sale, a fully
+      // (#649; see [crateExchangeClearsSale]). A walk-in is never pending
+      // (#656): it returns every empty at Checkout or the sale is refused above.
+      // A van road sale is exempt from that rule.
+      // Every other sale, a fully
       // exchanged one included, is born `completed` with completedAt = the
       // checkout instant and no confirmer (nobody confirmed it). Decided
       // on-device from the DB rows, so it works offline. Either way the sale is

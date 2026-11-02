@@ -101,6 +101,16 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     return cratesByManufacturer;
   }
 
+  /// The brand's name for a refusal message, or 'Brand' when it is unknown.
+  Future<String> manufacturerNameFor(String manufacturerId) async {
+    final row =
+        await (select(manufacturers)
+              ..where((m) => m.id.equals(manufacturerId) & whereBusiness(m))
+              ..limit(1))
+            .getSingleOrNull();
+    return row?.name ?? 'Brand';
+  }
+
   Stream<List<OrderData>> watchPendingOrders() {
     return (select(orders)
           ..where((o) => whereBusiness(o) & o.status.equals('pending'))

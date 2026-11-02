@@ -259,6 +259,34 @@ void main() {
     await tester.pump();
   }
 
+  String starId() => env.manufacturers[0].id;
+  String heroId() => env.manufacturers[1].id;
+
+  Finder emptiesField(String manufacturerId) => inCheckout(
+    find.descendant(
+      of: find.byKey(CheckoutKeys.emptiesReturned(manufacturerId)),
+      matching: find.byType(TextField),
+    ),
+  );
+
+  Future<void> enterEmpties(
+    WidgetTester tester,
+    String manufacturerId,
+    String text,
+  ) async {
+    final field = emptiesField(manufacturerId);
+    await tester.ensureVisible(field);
+    await tester.pump();
+    await tester.enterText(field, text);
+    await tester.pump();
+  }
+
+  /// #656 — a walk-in returns every empty: Star 2, Hero 1.
+  Future<void> returnAllEmpties(WidgetTester tester) async {
+    await enterEmpties(tester, starId(), '2');
+    await enterEmpties(tester, heroId(), '1');
+  }
+
   testWidgets('registered customer: crates + discount + part deposit + part '
       'payment — every figure and what Confirm sends', (tester) async {
     await openCheckout(tester, customer: regular, creditKobo: 500000);
@@ -485,6 +513,7 @@ void main() {
   testWidgets('a Cart sent to the till hands its Online Order to Checkout '
       '(#431)', (tester) async {
     await openCheckout(tester, onlineOrderId: 'online-1');
+    await returnAllEmpties(tester);
     await tapButton(tester, 'Confirm Payment');
     expect(orders.calls.single['onlineOrderId'], 'online-1');
     expect(orders.calls.single['totalAmountKobo'], 3250000);
@@ -617,6 +646,7 @@ void main() {
     // Walk-ins pay no deposit: no deposit section, total is the goods total.
     expect(inCheckout(find.text('Full deposit if collected')), findsNothing);
     expect(inCheckout(find.text('Empty Crates Being Taken')), findsOneWidget);
+    await returnAllEmpties(tester);
 
     await enterAmountPaid(tester, '30000');
     await tapButton(tester, 'Confirm Payment');
@@ -637,28 +667,6 @@ void main() {
   });
 
   group('Empties Exchange (#649)', () {
-    String starId() => env.manufacturers[0].id;
-    String heroId() => env.manufacturers[1].id;
-
-    Finder emptiesField(String manufacturerId) => inCheckout(
-      find.descendant(
-        of: find.byKey(CheckoutKeys.emptiesReturned(manufacturerId)),
-        matching: find.byType(TextField),
-      ),
-    );
-
-    Future<void> enterEmpties(
-      WidgetTester tester,
-      String manufacturerId,
-      String text,
-    ) async {
-      final field = emptiesField(manufacturerId);
-      await tester.ensureVisible(field);
-      await tester.pump();
-      await tester.enterText(field, text);
-      await tester.pump();
-    }
-
     Finder note() => inCheckout(find.byKey(CheckoutKeys.emptiesReturnedNote));
 
     testWidgets('every brand gets a blank number field above Confirm', (
@@ -795,10 +803,57 @@ void main() {
       await finish(tester);
     });
 
+    testWidgets('a walk-in must return every empty (#656)', (tester) async {
+      await openCheckout(tester);
+      // Star is Nigerian Breweries (2 crates); Hero Breweries (1) sorts first.
+      const heroNone = 'A walk-in must return all 1 Hero Breweries empty '
+          '(0 entered).';
+      const starNone = 'A walk-in must return all 2 Nigerian Breweries '
+          'empties (0 entered).';
+
+      // Nothing entered: the first brand on the screen is the short one.
+      await tapButton(tester, 'Confirm Payment');
+      expect(orders.calls, isEmpty);
+      expect(find.text(heroNone), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
+
+      // Hero in full: the note is the refusal about Star, not "Pending".
+      await enterEmpties(tester, heroId(), '1');
+      expect(tester.widget<Text>(note()).data, starNone);
+      await tapButton(tester, 'Confirm Payment');
+      expect(orders.calls, isEmpty);
+      expect(find.text(starNone), findsWidgets);
+      await tester.pump(const Duration(seconds: 5));
+
+      // A part count names the number entered.
+      await enterEmpties(tester, starId(), '1.5');
+      await tapButton(tester, 'Confirm Payment');
+      expect(orders.calls, isEmpty);
+      expect(
+        find.text(
+          'A walk-in must return all 2 Nigerian Breweries empties '
+          '(1.5 entered).',
+        ),
+        findsWidgets,
+      );
+      await finish(tester);
+    });
+
+    testWidgets('a registered customer may still part-exchange', (
+      tester,
+    ) async {
+      await openCheckout(tester, customer: regular);
+      await enterEmpties(tester, starId(), '1');
+      expect(
+        tester.widget<Text>(note()).data,
+        '2 crates still to come back. This sale goes to Pending.',
+      );
+      await finish(tester);
+    });
+
     testWidgets('walk-ins can use it too', (tester) async {
       await openCheckout(tester);
-      await enterEmpties(tester, starId(), '2');
-      await enterEmpties(tester, heroId(), '1');
+      await returnAllEmpties(tester);
       await tapButton(tester, 'Confirm Payment');
       expect(orders.calls.single['customerId'], isNull);
       expect(orders.calls.single['cratesReturnedByManufacturer'], {
