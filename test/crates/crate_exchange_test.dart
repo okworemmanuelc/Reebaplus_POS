@@ -58,6 +58,64 @@ void main() {
     });
   });
 
+  group('walk-ins return everything (#656)', () {
+    const taken = {'a': 5.0, 'b': 2.5};
+
+    test('every brand covered is no shortfall', () {
+      expect(walkInExchangeShortfall(taken: taken, returned: taken), isNull);
+      expect(
+        walkInExchangeShortfall(taken: taken, returned: {'a': 5, 'b': 2.5}),
+        isNull,
+      );
+    });
+
+    test('a part count names the first short brand', () {
+      final short = walkInExchangeShortfall(
+        taken: taken,
+        returned: {'a': 3, 'b': 1},
+      );
+      expect(short, (manufacturerId: 'a', taken: 5.0, returned: 3.0));
+      final second = walkInExchangeShortfall(
+        taken: taken,
+        returned: {'a': 5, 'b': 2},
+      );
+      expect(second, (manufacturerId: 'b', taken: 2.5, returned: 2.0));
+    });
+
+    test('a blank brand is short with 0 entered', () {
+      expect(walkInExchangeShortfall(taken: taken, returned: {}), (
+        manufacturerId: 'a',
+        taken: 5.0,
+        returned: 0.0,
+      ));
+      expect(walkInExchangeShortfall(taken: taken, returned: {'a': 5}), (
+        manufacturerId: 'b',
+        taken: 2.5,
+        returned: 0.0,
+      ));
+    });
+
+    test('nothing countable is never short', () {
+      expect(walkInExchangeShortfall(taken: {}, returned: {}), isNull);
+      expect(walkInExchangeShortfall(taken: {}, returned: {'a': 1}), isNull);
+    });
+
+    test('the refusal text', () {
+      expect(
+        walkInShortfallMessage('Star', 5, 3),
+        'A walk-in must return all 5 Star empties (3 entered).',
+      );
+      expect(
+        walkInShortfallMessage('Star', 1, 0),
+        'A walk-in must return all 1 Star empty (0 entered).',
+      );
+      expect(
+        walkInShortfallMessage('Star', 2.5, 0.25),
+        'A walk-in must return all 2.5 Star empties (0.25 entered).',
+      );
+    });
+  });
+
   for (final v2 in [false, true]) {
     group(v2 ? 'v2 held path' : 'v1 path', () {
       late AppDatabase db;
@@ -257,6 +315,59 @@ void main() {
         expect(await debt(starId), 0);
       });
 
+      test(
+        'walk-in short: refused with the exact text, nothing written',
+        () async {
+          final before = await db.select(db.orders).get();
+          await expectLater(
+            sell(
+              [line(starBottle, 5), line(heroBottle, 2)],
+              returned: {starId: 5, heroId: 1},
+            ),
+            throwsA(
+              isA<StateError>().having(
+                (e) => e.message,
+                'message',
+                'A walk-in must return all 2 Hero empties (1 entered).',
+              ),
+            ),
+          );
+          expect(await db.select(db.orders).get(), hasLength(before.length));
+          expect(await db.select(db.crateLedger).get(), isEmpty);
+          expect(
+            (await db.select(db.syncQueue).get()).where(
+              (q) => !q.actionType.startsWith('customer'),
+            ),
+            isEmpty,
+          );
+          expect(await pool(), isEmpty);
+        },
+      );
+
+      test('walk-in with nothing entered: refused with 0 entered', () async {
+        await expectLater(
+          sell([line(starBottle, 3)]),
+          throwsA(
+            isA<StateError>().having(
+              (e) => e.message,
+              'message',
+              'A walk-in must return all 3 Star empties (0 entered).',
+            ),
+          ),
+        );
+        expect(await db.select(db.orders).get(), isEmpty);
+      });
+
+      test('registered part exchange still goes pending', () async {
+        final order = await sell(
+          [line(starBottle, 5)],
+          customer: customerId,
+          returned: {starId: 3},
+        );
+        expect(order.status, 'pending');
+        expect(await debt(starId), 2);
+      });
+
       test('full exchange, walk-in: same, with a pool credit', () async {
         final order = await sell([line(starBottle, 3)], returned: {starId: 3});
         expect(order.status, 'completed');
@@ -374,8 +485,25 @@ void main() {
         expect(await debt(starId), 0);
       });
 
-      test('part exchange, walk-in, then Confirm', () async {
-        final order = await sell([line(starBottle, 5)], returned: {starId: 2});
+      /// A walk-in Pending order as an older build wrote it (#656: Checkout no
+      /// longer can): no customer, no crate line, the exchange row in the pool.
+      Future<OrderData> legacyWalkInPending() async {
+        final order = await sell(
+          [line(starBottle, 5)],
+          customer: customerId,
+          returned: {starId: 2},
+        );
+        await (db.update(db.orders)..where((o) => o.id.equals(order.id))).write(
+          const OrdersCompanion(customerId: Value(null)),
+        );
+        await (db.delete(
+          db.orderCrateLines,
+        )..where((l) => l.orderId.equals(order.id))).go();
+        return reload(order.id);
+      }
+
+      test('a legacy walk-in Pending order still confirms', () async {
+        final order = await legacyWalkInPending();
         expect(order.status, 'pending');
         await confirm(order, [
           CrateReturnLine(
@@ -516,8 +644,9 @@ void main() {
         },
       );
 
-      test('a walk-in Pending refund takes the empties back off', () async {
-        final order = await sell([line(starBottle, 5)], returned: {starId: 2});
+      test('a legacy walk-in Pending refund takes the empties back off',
+          () async {
+        final order = await legacyWalkInPending();
         await service.markAsCancelled(
           order.id,
           'Changed mind',

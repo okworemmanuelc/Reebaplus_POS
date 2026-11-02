@@ -4,7 +4,8 @@
 ///
 /// Every brand at 0 and the order is born `completed`; any brand above 0 and it
 /// is born `pending`, with Confirm counting only what is still outstanding.
-/// Nothing entered is today's behaviour. No Flutter, no database.
+/// Nothing entered is today's behaviour. A walk-in must return every crate at
+/// Checkout (#656; see [walkInExchangeShortfall]). No Flutter, no database.
 library;
 
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
@@ -80,3 +81,27 @@ bool crateExchangeClearsSale({
     taken.isNotEmpty &&
     returned.values.any((count) => count > 0) &&
     outstandingCrates(taken, returned).isEmpty;
+
+/// #656 — a walk-in has no one to chase for empties, so a walk-in crate sale
+/// must return ALL of them at Checkout. The first brand (in [taken]'s order)
+/// whose returned count is below the crates in the sale, or null when every
+/// brand is covered. A blank or missing count reads as 0 entered. Empty [taken]
+/// is null: nothing countable, so nothing to refuse (#649 decision 8).
+({String manufacturerId, double taken, double returned})?
+walkInExchangeShortfall({
+  required Map<String, double> taken,
+  required Map<String, double> returned,
+}) {
+  for (final entry in taken.entries) {
+    final back = returned[entry.key] ?? 0;
+    if (back < entry.value) {
+      return (manufacturerId: entry.key, taken: entry.value, returned: back);
+    }
+  }
+  return null;
+}
+
+/// The owner-approved refusal for a [walkInExchangeShortfall] on brand [name].
+String walkInShortfallMessage(String name, double taken, double returned) =>
+    'A walk-in must return all ${formatQty(taken)} $name '
+    '${taken == 1 ? 'empty' : 'empties'} (${formatQty(returned)} entered).';

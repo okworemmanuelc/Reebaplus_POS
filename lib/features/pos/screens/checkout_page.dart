@@ -652,8 +652,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   // ── Empties Returned (Empties Exchange, per brand) ───────────────────────────
   /// #649 — the crates the customer hands over now. If they cover every brand
   /// the sale completes straight away; otherwise it goes to Pending and Confirm
-  /// counts only what is still out. One row per brand, always the full count in
-  /// this sale. Old empties go through the customer's Record Crate Return.
+  /// counts only what is still out; a walk-in must cover every brand (#656).
+  /// One row per brand, always the full count in this sale. Old empties go
+  /// through the customer's Record Crate Return.
   Widget _buildEmptiesReturnedSection() {
     final note = _emptiesNote;
     return Column(
@@ -686,12 +687,35 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     if (crateExchangeClearsSale(taken: taken, returned: returned)) {
       return 'All crates back. This sale completes now.';
     }
+    // #656 — a walk-in never goes to Pending: a short count is a refusal.
+    if (_walkInShortfallError case final refusal?) return refusal;
     final left = outstandingCrates(
       taken,
       returned,
     ).values.fold<double>(0, (s, v) => s + v);
     return '${formatQty(left)} crate${left == 1 ? '' : 's'} still to come '
         'back. This sale goes to Pending.';
+  }
+
+  /// #656 — the refusal when a walk-in crate sale has not returned every empty
+  /// (blank counts as 0 entered), or null when it has, or this isn't one.
+  String? get _walkInShortfallError {
+    if (!_isWalkIn || !_isCrateBusiness || widget.crateLines.isEmpty) {
+      return null;
+    }
+    final short = walkInExchangeShortfall(
+      taken: _cratesInSale,
+      returned: _emptiesReturned,
+    );
+    if (short == null) return null;
+    final line = widget.crateLines.firstWhere(
+      (l) => l['manufacturerId'] == short.manufacturerId,
+    );
+    return walkInShortfallMessage(
+      (line['name'] as String?) ?? 'Brand',
+      short.taken,
+      short.returned,
+    );
   }
 
   /// Why the entered counts can't be recorded, or null when they can.
@@ -1154,6 +1178,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     final emptiesError = _emptiesCountError;
     if (emptiesError != null) {
       AppNotification.showError(context, emptiesError);
+      return;
+    }
+    final walkInShort = _walkInShortfallError;
+    if (walkInShort != null) {
+      AppNotification.showError(context, walkInShort);
       return;
     }
     if (_emptiesReturned.isNotEmpty) {

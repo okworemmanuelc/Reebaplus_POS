@@ -16,6 +16,7 @@ void main() {
   late String businessId;
   late String storeId;
   late String staffId;
+  late String customerId;
 
   setUp(() async {
     final boot = await bootstrapTestDb();
@@ -35,6 +36,9 @@ void main() {
               name: 'Cashier',
               pin: '0000'),
         );
+    customerId = await db.customersDao.addCustomer(
+      CustomersCompanion.insert(businessId: businessId, name: 'Buyer'),
+    );
   });
 
   tearDown(() => db.close());
@@ -74,6 +78,25 @@ void main() {
     return id;
   }
 
+  /// A branded, crate-tracked bottle: the manufacturer and its product.
+  Future<({String mfr, String product})> seedBrand({double qty = 1}) async {
+    final mfr = UuidV7.generate();
+    await db
+        .into(db.manufacturers)
+        .insert(
+          ManufacturersCompanion.insert(
+            id: Value(mfr),
+            businessId: businessId,
+            name: 'Star',
+          ),
+        );
+    final product = await seedProduct(unit: 'Bottle', trackEmpties: true);
+    await (db.update(db.products)..where((p) => p.id.equals(product))).write(
+      ProductsCompanion(manufacturerId: Value(mfr)),
+    );
+    return (mfr: mfr, product: product);
+  }
+
   Map<String, dynamic> line(String? productId) => {
         'id': productId,
         'qty': 1,
@@ -81,9 +104,15 @@ void main() {
         'name': 'Item',
       };
 
-  Future<OrderData> checkout(List<Map<String, dynamic>> cart) async {
+  /// A walk-in unless [registered].
+  Future<OrderData> checkout(
+    List<Map<String, dynamic>> cart, {
+    bool registered = false,
+    Map<String, double> returned = const {},
+  }) async {
     final number = await OrderService(db).addOrder(
-      customerId: null,
+      customerId: registered ? customerId : null,
+      cratesReturnedByManufacturer: returned,
       cart: cart,
       totalAmountKobo: 100000 * cart.length,
       amountPaidKobo: 100000 * cart.length,
@@ -122,17 +151,79 @@ void main() {
       expectCompletedAtCheckout(await checkout([line(p)]), before);
     });
 
-    test('crate-tracked bottle at a crate business → pending', () async {
+    test('crate-tracked bottle for a registered customer → pending', () async {
       await setBusiness(type: 'Bar');
       final p = await seedProduct(unit: 'Bottle', trackEmpties: true);
-      expectPending(await checkout([line(p)]));
+      expectPending(await checkout([line(p)], registered: true));
+    });
+
+    test(
+      'walk-in, bottle with no manufacturer → completed, not refused (#656)',
+      () async {
+        await setBusiness(type: 'Bar');
+        final p = await seedProduct(unit: 'Bottle', trackEmpties: true);
+        final before = DateTime.now();
+        expectCompletedAtCheckout(await checkout([line(p)]), before);
+      },
+    );
+
+    test(
+      'walk-in, branded bottle, every empty back → completed (#656)',
+      () async {
+        await setBusiness(type: 'Bar');
+        final star = await seedBrand();
+        final before = DateTime.now();
+        expectCompletedAtCheckout(
+          await checkout([line(star.product)], returned: {star.mfr: 1}),
+          before,
+        );
+      },
+    );
+
+    test(
+      'walk-in, branded bottle, short → refused, nothing written (#656)',
+      () async {
+        await setBusiness(type: 'Bar');
+        final star = await seedBrand();
+        await expectLater(
+          checkout([line(star.product)]),
+          throwsA(
+            isA<StateError>().having(
+              (e) => e.message,
+              'message',
+              'A walk-in must return all 1 Star empty (0 entered).',
+            ),
+          ),
+        );
+        expect(await db.select(db.orders).get(), isEmpty);
+        expect(
+        (await getPendingQueue(db)).where(
+          (q) => !q.actionType.startsWith('customer'),
+        ),
+        isEmpty,
+      );
+      },
+    );
+
+    test('registered part exchange of a branded bottle → pending', () async {
+      await setBusiness(type: 'Bar');
+      final star = await seedBrand(qty: 2);
+      expectPending(
+        await checkout(
+          [
+            {...line(star.product), 'qty': 2},
+          ],
+          registered: true,
+          returned: {star.mfr: 1},
+        ),
+      );
     });
 
     test('mixed cart (bottle + plain) → pending as one order', () async {
       await setBusiness(type: 'Bar');
       final b = await seedProduct(unit: 'Bottle', trackEmpties: true);
       final p = await seedProduct(unit: 'Piece');
-      expectPending(await checkout([line(p), line(b)]));
+      expectPending(await checkout([line(p), line(b)], registered: true));
     });
 
     test('bottle with track-empties off → completed', () async {
@@ -152,7 +243,7 @@ void main() {
         () async {
       await setBusiness(type: 'Bar');
       final b = await seedProduct(unit: 'Bottle', trackEmpties: true);
-      expectPending(await checkout([line(null), line(b)]));
+      expectPending(await checkout([line(null), line(b)], registered: true));
     });
 
     test('crate-tracked bottle at a non-crate business type → completed',
@@ -191,7 +282,7 @@ void main() {
         () async {
       await setBusiness(type: 'Bar');
       final b = await seedProduct(unit: 'Bottle', trackEmpties: true);
-      final order = await checkout([line(b)]);
+      final order = await checkout([line(b)], registered: true);
 
       final push = (await getPendingQueue(db))
           .where((r) => r.actionType == 'orders:upsert')
@@ -209,7 +300,7 @@ void main() {
       final b = await seedProduct(unit: 'Bottle', trackEmpties: true);
 
       final plain = await checkout([line(p)]);
-      final crate = await checkout([line(b)]);
+      final crate = await checkout([line(b)], registered: true);
 
       final byOrder = {
         for (final r in (await getPendingQueue(db))
