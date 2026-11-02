@@ -32,12 +32,12 @@ import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 import 'package:reebaplus_pos/shared/widgets/tabbed_sliver_scaffold.dart';
 
-/// Key prefix on every ledger row, followed by the entry id. The test seam for
-/// "at least one complete ledger row is laid out and hit-testable" (PRD #239).
 /// How long a supplier sheet's text controllers outlive its close, so the exit
 /// animation never rebuilds them after disposal (#659).
 const Duration kSheetExitGrace = Duration(milliseconds: 500);
 
+/// Key prefix on every ledger row, followed by the entry id. The test seam for
+/// "at least one complete ledger row is laid out and hit-testable" (PRD #239).
 const String kSupplierLedgerRowKeyPrefix = 'supplier-ledger-row-';
 
 /// Scroll-position identities: each surface keeps its place across tab
