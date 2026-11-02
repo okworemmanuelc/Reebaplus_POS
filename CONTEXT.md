@@ -155,9 +155,11 @@ not tied to the `completed` status).
 **Checkout**:
 The lifecycle operation that settles a sale and recognizes revenue: books wallet
 legs, deducts inventory, issues crates, writes the Order. The Order is born
-`pending` only for a **Crate-bearing sale** with crates still to come back after
-any **Empties Exchange**; every other sale is born `completed` (`completedAt` =
-the checkout instant, no confirmer). The economic act.
+`pending` only for a **Crate-bearing sale** to a registered customer with crates
+still to come back after any **Empties Exchange**; every other sale is born
+`completed` (`completedAt` = the checkout instant, no confirmer). A walk-in is
+never pending: it returns every empty at Checkout or is refused (#656). The
+economic act.
 _Avoid_: settle, record-sale (as user-facing verbs), "complete the sale".
 
 **Sale totals**:
@@ -174,16 +176,21 @@ A Sale made by a business that tracks empties (`isCrateBusiness(type)` and
 Decided at Checkout from the business and the cart's products by
 `isCrateBearingSale` (`lib/core/crates/crate_bearing_sale.dart`, §13.4 / rule #13,
 PRD #337) — the same rule the Empty-Crates sheet uses to decide whether to open.
-Only these sales can wait in Pending for the empties to be counted back; one
-whose crates are all covered by an **Empties Exchange** does not.
+Only these sales can wait in Pending for the empties to be counted back, and
+only for a registered customer; one whose crates are all covered by an
+**Empties Exchange** does not, and a walk-in's never does (#656).
 
 **Empties Exchange**:
 Empties handed over at **Checkout**, per brand (ADR 0033, #649):
 `outstanding = crates in this sale − empties returned`. Netted inside the sale:
 the returned crates credit the Empties Pool (walk-ins too), and only the
 outstanding ones reach the order's crate line, the `issued` row and the deposit.
-Every brand at 0 and the Order is born `completed`; any brand above 0 and it is
-born `pending`. Cannot exceed this sale's crates per brand: old empties go through
+Every brand at 0 and the Order is born `completed`; any brand above 0 and a
+registered customer's Order is born `pending`. A walk-in must return ALL empties
+per brand (blank is 0 entered): a short brand refuses Confirm Payment with "A
+walk-in must return all 5 Star empties (3 entered).", so a walk-in is never
+pending (#656). A walk-in whose bottles have no brand cannot be counted and is
+not refused. Cannot exceed this sale's crates per brand: old empties go through
 Record Crate Return. Blank means 0. Rule: `crate_exchange.dart`.
 _Avoid_: swap, trade-in; "return" alone (a **Return** is a reversed sale).
 
