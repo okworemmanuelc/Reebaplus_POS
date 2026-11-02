@@ -138,7 +138,13 @@ class OrderCommands {
         ? await _ordersDao.cratesTakenByManufacturer(items)
         : const <String, double>{};
     final isWalkIn = customerId == null || customerId.isEmpty;
-    if (crateBearing && isWalkIn) {
+    // #656 — a road sale is exempt: the driver terminal has no empties field
+    // and is walk-in only, so holding it to this rule would refuse every crate
+    // sale on the road. Van crates keep their own trip accounting.
+    final isVanSale =
+        (await _db.vanTripsDao.saleContextForStore(storeId)).isVanSale;
+    final mustReturnAllEmpties = isWalkIn && !isVanSale;
+    if (crateBearing && mustReturnAllEmpties) {
       // #656 — a walk-in must return ALL empties at Checkout. Refused before
       // any write; Checkout shows the same text first. A count the exchange
       // itself refuses (quarters, more than taken) keeps its own error.
@@ -161,12 +167,12 @@ class OrderCommands {
         );
       }
     }
-    // A walk-in never waits: either every crate came back, or the bottles have
-    // no brand and cannot be counted (#649 decision 8), so there is nothing to
-    // wait for. A registered customer waits for whatever is still outstanding.
+    // A till walk-in never waits: either every crate came back, or the bottles
+    // have no brand and cannot be counted (#649 decision 8), so there is nothing
+    // to wait for. Anyone else waits for whatever is still outstanding.
     final waitsForEmpties =
         crateBearing &&
-        !isWalkIn &&
+        !mustReturnAllEmpties &&
         !crateExchangeClearsSale(
           taken: taken,
           returned: cratesReturnedByManufacturer,
@@ -199,6 +205,7 @@ class OrderCommands {
       // [isCrateBearingSale]) whose crates an Empties Exchange did not cover
       // (#649; see [crateExchangeClearsSale]). A walk-in is never pending
       // (#656): it returns every empty at Checkout or the sale is refused above.
+      // A van road sale is exempt from that rule.
       // Every other sale, a fully
       // exchanged one included, is born `completed` with completedAt = the
       // checkout instant and no confirmer (nobody confirmed it). Decided

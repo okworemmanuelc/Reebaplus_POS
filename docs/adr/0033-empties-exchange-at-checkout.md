@@ -82,3 +82,8 @@ orders already in Pending keep working through Confirm.
 Consequence: every walk-in crate sale now completes at checkout, so none can be
 refunded (the Pending refund path needs `pending`, and Return refuses crate
 history).
+
+**A van road sale is exempt.** The driver terminal has no empties field and sells
+to walk-ins only, so the rule would refuse every crate sale on the road. A road
+sale keeps its earlier status. Van Sales is switched off today; revisit this when
+it comes back.

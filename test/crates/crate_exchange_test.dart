@@ -358,6 +358,14 @@ void main() {
         expect(await db.select(db.orders).get(), isEmpty);
       });
 
+      test('a van road sale is exempt: it has no empties field', () async {
+        await (db.update(db.stores)..where((s) => s.id.equals(storeId))).write(
+          const StoresCompanion(kind: Value(kStoreKindVan)),
+        );
+        final order = await sell([line(starBottle, 3)]);
+        expect(order.status, 'pending');
+      });
+
       test('registered part exchange still goes pending', () async {
         final order = await sell(
           [line(starBottle, 5)],
