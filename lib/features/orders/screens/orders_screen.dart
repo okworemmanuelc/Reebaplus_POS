@@ -1349,12 +1349,12 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                           child: AppButton(
                             text: 'Print',
                             icon: AppIcons.print,
-                            onPressed: () {
+                            onAsyncPressed: () {
                               setModalState(() {
                                 reprintDate = DateTime.now();
                                 reshareDate = null;
                               });
-                              _printReceipt(
+                              return _printReceipt(
                                 context,
                                 richOrder,
                                 storeAddress: storeAddress,

@@ -11,6 +11,7 @@
 // goods total ₦32,500. A registered customer holding ₦5,000 credit with a
 // ₦50,000 debt limit.
 
+import 'dart:async';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -39,6 +40,9 @@ class _RecordingOrderService extends OrderService {
   _RecordingOrderService(super.db);
 
   final calls = <Map<String, Object?>>[];
+
+  /// When set, addOrder waits on it after recording the call (a slow save).
+  Completer<void>? gate;
 
   @override
   Future<String> addOrder({
@@ -77,6 +81,7 @@ class _RecordingOrderService extends OrderService {
         crateDepositPaidByManufacturer,
       ),
     });
+    await gate?.future;
     return 'ORD-000001-TEST01';
   }
 }
@@ -94,6 +99,22 @@ class _BrokenPrinter extends PrinterService {
 
   @override
   Future<bool> requestPermissions() async => false;
+}
+
+/// A set-up printer that holds the print open until [gate] completes (#659).
+class _SlowPrinter extends PrinterService {
+  final gate = Completer<void>();
+  int permissionAsks = 0;
+
+  @override
+  Future<bool> hasPrinterSetUp() async => true;
+
+  @override
+  Future<bool> requestPermissions() async {
+    permissionAsks++;
+    await gate.future;
+    return false;
+  }
 }
 
 void main() {
@@ -246,6 +267,11 @@ void main() {
     await settle(tester);
   }
 
+  Future<void> tapReceiptPrint(WidgetTester tester) async {
+    await tester.tap(inCheckout(find.text('Print Receipt')));
+    await tester.pump();
+  }
+
   Future<void> enterAmountPaid(WidgetTester tester, String text) async {
     final field = inCheckout(
       find.descendant(
@@ -393,8 +419,9 @@ void main() {
     await finish(tester);
   });
 
-  testWidgets('no printer set up: the sale finishes with no print error',
-      (tester) async {
+  testWidgets('no printer set up: the sale finishes with no print error', (
+    tester,
+  ) async {
     await openCheckout(tester, customer: regular, creditKobo: 0);
     await enterAmountPaid(tester, '32500');
     await tapButton(tester, 'Confirm Payment');
@@ -405,8 +432,9 @@ void main() {
     await finish(tester);
   });
 
-  testWidgets('a set-up printer that fails shows Couldn\'t print + Retry',
-      (tester) async {
+  testWidgets('a set-up printer that fails shows Couldn\'t print + Retry', (
+    tester,
+  ) async {
     await openCheckout(
       tester,
       customer: regular,
@@ -421,6 +449,69 @@ void main() {
     expect(find.text("Couldn't print — check the printer"), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
     // The notice stays 8s, longer than finish() waits.
+    await tester.pump(const Duration(seconds: 9));
+    await finish(tester);
+  });
+
+  testWidgets('two quick taps on Confirm Payment record one sale (#659)', (
+    tester,
+  ) async {
+    orders.gate = Completer<void>();
+    await openCheckout(tester, customer: regular, creditKobo: 0);
+    await enterAmountPaid(tester, '32500');
+    final confirm = inCheckout(find.byKey(CheckoutKeys.confirm));
+    await tester.ensureVisible(confirm);
+    await tester.pump();
+    // No frame between the taps: the lock must already be taken.
+    await tester.tap(confirm);
+    await tester.tap(confirm);
+    await settle(tester);
+    expect(orders.calls, hasLength(1));
+
+    // While the sale saves, Back is locked too: the in-app arrow and the
+    // Android back gesture. Leaving would keep the cart to be sold again.
+    final back = tester.widget<IconButton>(
+      find.descendant(
+        of: find.byKey(CheckoutKeys.topBar),
+        matching: find.byType(IconButton),
+      ),
+    );
+    expect(back.onPressed, isNull);
+    await tester.binding.handlePopRoute();
+    await settle(tester);
+    expect(find.byType(CheckoutPage), findsOneWidget);
+
+    orders.gate!.complete();
+    await settle(tester);
+    expect(orders.calls, hasLength(1));
+    await finish(tester);
+  });
+
+  testWidgets('only one print runs at a time, auto or manual (#659)', (
+    tester,
+  ) async {
+    final printer = _SlowPrinter();
+    await openCheckout(
+      tester,
+      customer: regular,
+      creditKobo: 0,
+      printer: printer,
+    );
+    await enterAmountPaid(tester, '32500');
+    await tapButton(tester, 'Confirm Payment');
+    await tester.pump();
+    // Auto-print is waiting on the printer.
+    expect(printer.permissionAsks, 1);
+    // A manual tap, twice, during auto-print is ignored.
+    await tapReceiptPrint(tester);
+    await tapReceiptPrint(tester);
+    expect(printer.permissionAsks, 1);
+
+    printer.gate.complete();
+    await settle(tester);
+    // After it ends, a manual print runs again.
+    await tapReceiptPrint(tester);
+    expect(printer.permissionAsks, 2);
     await tester.pump(const Duration(seconds: 9));
     await finish(tester);
   });
@@ -540,8 +631,10 @@ void main() {
   testWidgets('Pay on delivery is offered only for a Cart from an online '
       'order (#432)', (tester) async {
     await openCheckout(tester, customer: regular);
-    expect(inCheckout(find.byKey(CheckoutKeys.modePayOnDelivery)),
-        findsNothing);
+    expect(
+      inCheckout(find.byKey(CheckoutKeys.modePayOnDelivery)),
+      findsNothing,
+    );
     expect(inCheckout(find.byKey(CheckoutKeys.modeCredit)), findsOneWidget);
     await finish(tester);
   });
@@ -557,8 +650,10 @@ void main() {
     await tapButton(tester, 'Confirm Payment');
     final call = orders.calls.single;
     expect(call['paymentType'], label);
-    expect((call['paymentType'] as String).toLowerCase(),
-        isNot(contains('credit')));
+    expect(
+      (call['paymentType'] as String).toLowerCase(),
+      isNot(contains('credit')),
+    );
     // Underneath: exactly the credit-sale call.
     expect(call['paymentSubType'], 'cash');
     expect(call['amountPaidKobo'], 0);
@@ -704,7 +799,10 @@ void main() {
       );
       expect(inCheckout(find.byKey(CheckoutKeys.crateDeposit)), findsNothing);
       expect(inCheckout(find.byKey(CheckoutKeys.cratesTaken)), findsNothing);
-      expect(inCheckout(find.byKey(CheckoutKeys.crateValueMissing)), findsNothing);
+      expect(
+        inCheckout(find.byKey(CheckoutKeys.crateValueMissing)),
+        findsNothing,
+      );
 
       await enterAmountPaid(tester, '32500');
       await tapButton(tester, 'Confirm Payment');
@@ -747,7 +845,9 @@ void main() {
         '1.5 crates still to come back. This sale goes to Pending.',
       );
       expect(
-        inCheckout(find.text('0.5 crates · Full ${formatCurrency(500)} · Full')),
+        inCheckout(
+          find.text('0.5 crates · Full ${formatCurrency(500)} · Full'),
+        ),
         findsOneWidget,
       );
       expect(inCheckout(find.text(formatCurrency(33000))), findsWidgets);
@@ -806,9 +906,11 @@ void main() {
     testWidgets('a walk-in must return every empty (#656)', (tester) async {
       await openCheckout(tester);
       // Star is Nigerian Breweries (2 crates); Hero Breweries (1) sorts first.
-      const heroNone = 'A walk-in must return all 1 Hero Breweries empty '
+      const heroNone =
+          'A walk-in must return all 1 Hero Breweries empty '
           '(0 entered).';
-      const starNone = 'A walk-in must return all 2 Nigerian Breweries '
+      const starNone =
+          'A walk-in must return all 2 Nigerian Breweries '
           'empties (0 entered).';
 
       // Nothing entered: the first brand on the screen is the short one.
@@ -863,7 +965,9 @@ void main() {
       await finish(tester);
     });
 
-    testWidgets('no field without the Record Crate Return gate', (tester) async {
+    testWidgets('no field without the Record Crate Return gate', (
+      tester,
+    ) async {
       await pumpCheckout(tester, env: env, crates: true, grantedKeys: const {});
       expect(
         inCheckout(find.byKey(CheckoutKeys.emptiesReturnedSection)),

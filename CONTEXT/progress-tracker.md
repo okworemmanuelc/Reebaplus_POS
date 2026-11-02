@@ -7,6 +7,9 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #659 PR 1: first-tap lock on the sale path (2026-11-02, branch `fix/659-tap-lock-sale-path`)
+`AppButton` gains `onAsyncPressed` (locks synchronously on the first tap, spinner until the future ends, releases on error). Used by Confirm Payment, Print in Orders and Customer detail. Checkout blocks Back (arrow and Android) while a sale saves; Checkout printing is single-flight; Proceed to Checkout opens one Checkout page (spinner only during the crate pre-flight). App-only: no table, status or money change. Left for PR 2 (customers) and PR 3 (suppliers, orders, log out, photo).
+
 ### Issue #656 PR B: walk-ins return all empties (2026-11-02, branch `feat/656-walkin-all-empties`)
 A walk-in crate sale must return every empty per brand at Checkout (blank = 0). A short brand refuses Confirm Payment with "A walk-in must return all 5 Star empties (3 entered)."; the Empties Returned note shows the same text for a walk-in. `OrderCommands.checkout` throws the same `StateError` before any write; a walk-in is never `pending` (bottles with no brand are uncountable and complete). Registered part exchanges still go to Pending. New `walkInExchangeShortfall` / `walkInShortfallMessage` in `crate_exchange.dart`. ADR 0033, `CONTEXT.md`, `ui-context.md` updated. App-only: no migration. Parity: walk-in crate sales now always complete, so web must not expect pending walk-ins (see #656).
 

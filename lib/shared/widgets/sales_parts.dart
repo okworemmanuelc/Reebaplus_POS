@@ -103,7 +103,8 @@ class SalesBackButton extends StatelessWidget {
     this.tooltip,
   });
 
-  final VoidCallback onPressed;
+  /// Null disables the button (e.g. while a sale is being saved).
+  final VoidCallback? onPressed;
   final IconData icon;
   final String? tooltip;
 
