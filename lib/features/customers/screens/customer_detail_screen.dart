@@ -933,8 +933,10 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                             saleDate: extras.saleDate,
                             vatRateBps: extras.vatRateBps,
                             vatIncluded: extras.vatIncluded,
-                            cratesOwedByManufacturer:
-                                extras.cratesOwedByManufacturer,
+                            cratesReturnedByManufacturer: extras.cratesReturnedByManufacturer,
+                            cratesSettledBrands: extras.cratesSettledBrands,
+                            cratesTotalOwedByManufacturer:
+                                extras.cratesTotalOwedByManufacturer,
                             crateDepositFull: extras.crateDepositFull,
                             // Watched, so the label follows the business row
                             // even when nothing else keeps it loaded (#487).
@@ -1063,7 +1065,10 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
             saleDate: extras.saleDate,
             vatRateBps: extras.vatRateBps,
             vatIncluded: extras.vatIncluded,
-            cratesOwedByManufacturer: extras.cratesOwedByManufacturer,
+            cratesReturnedByManufacturer: extras.cratesReturnedByManufacturer,
+            cratesSettledBrands: extras.cratesSettledBrands,
+            cratesTotalOwedByManufacturer:
+                extras.cratesTotalOwedByManufacturer,
             crateDepositFull: extras.crateDepositFull,
             tracksCrates: businessTracksCrates(
               ref.read(currentBusinessProvider),

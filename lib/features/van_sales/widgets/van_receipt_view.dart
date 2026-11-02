@@ -180,7 +180,10 @@ class _VanReceiptViewState extends ConsumerState<VanReceiptView> {
             saleDate: _extras.saleDate,
             vatRateBps: _extras.vatRateBps,
             vatIncluded: _extras.vatIncluded,
-            cratesOwedByManufacturer: _extras.cratesOwedByManufacturer,
+            cratesReturnedByManufacturer: _extras.cratesReturnedByManufacturer,
+            cratesSettledBrands: _extras.cratesSettledBrands,
+            cratesTotalOwedByManufacturer:
+                _extras.cratesTotalOwedByManufacturer,
             crateDepositFull: _extras.crateDepositFull,
             tracksCrates: businessTracksCrates(
               ref.watch(currentBusinessProvider),
@@ -259,7 +262,10 @@ class _VanReceiptViewState extends ConsumerState<VanReceiptView> {
             saleDate: _extras.saleDate,
             vatRateBps: _extras.vatRateBps,
             vatIncluded: _extras.vatIncluded,
-            cratesOwedByManufacturer: _extras.cratesOwedByManufacturer,
+            cratesReturnedByManufacturer: _extras.cratesReturnedByManufacturer,
+            cratesSettledBrands: _extras.cratesSettledBrands,
+            cratesTotalOwedByManufacturer:
+                _extras.cratesTotalOwedByManufacturer,
             crateDepositFull: _extras.crateDepositFull,
             tracksCrates: businessTracksCrates(
               ref.read(currentBusinessProvider),

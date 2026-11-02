@@ -4,6 +4,8 @@ import 'package:reebaplus_pos/core/crates/crate_exchange.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/permissions/gate.dart';
+import 'package:reebaplus_pos/core/settings/vat_settings.dart';
+import 'package:reebaplus_pos/features/pos/services/receipt_extras.dart';
 import 'package:reebaplus_pos/shared/services/orders/crate_return_input.dart';
 import 'package:reebaplus_pos/shared/services/orders/order_service.dart';
 
@@ -651,6 +653,79 @@ void main() {
           expect(await db.cratePoolDao.exchangeEmptiesForOrder(order.id), {});
         },
       );
+
+      test('cratesReturnedForOrder sums the exchange and Confirm credits', () async {
+        final order = await sell(
+          [line(starBottle, 5)],
+          customer: customerId,
+          returned: {starId: 2},
+        );
+        expect(await db.cratePoolDao.cratesReturnedForOrder(order.id), {
+          starId: 2,
+        });
+        await db.cratePoolDao.addEmptiesToPool(
+          starId,
+          1,
+          storeId: storeId,
+          orderId: order.id,
+        );
+        expect(await db.cratePoolDao.cratesReturnedForOrder(order.id), {
+          starId: 3,
+        });
+        expect(await db.cratePoolDao.cratesReturnedForOrder('other'), {});
+      });
+
+      test('cratesReturnedForOrder nets a reversed exchange to nothing', () async {
+        final order = await sell(
+          [line(starBottle, 5)],
+          customer: customerId,
+          returned: {starId: 2},
+        );
+        await service.markAsCancelled(
+          order.id,
+          'Changed mind',
+          staffId,
+          gateContext: _granted,
+        );
+        expect(await db.cratePoolDao.cratesReturnedForOrder(order.id), {});
+      });
+
+      test('a reprint reads Returned and the unsettled / settled deposit', () async {
+        final order = await sell(
+          [line(starBottle, 5)],
+          customer: customerId,
+          returned: {starId: 2},
+          deposits: {starId: 150000},
+        );
+        final fresh = await (db.select(db.orders)
+              ..where((o) => o.id.equals(order.id)))
+            .getSingle();
+        var x = await loadReceiptExtrasForOrder(
+          db,
+          fresh,
+          business: null,
+          vat: VatConfig.off,
+        );
+        expect(x.cratesReturnedByManufacturer, {starId: 2});
+        expect(x.cratesSettledBrands, isEmpty);
+        expect(x.cratesTotalOwedByManufacturer![starId], 3);
+
+        await (db.update(db.orderCrateLines)
+              ..where((l) => l.orderId.equals(order.id)))
+            .write(OrderCrateLinesCompanion(settledAt: Value(DateTime.now())));
+        x = await loadReceiptExtrasForOrder(
+          db,
+          fresh,
+          business: null,
+          vat: VatConfig.off,
+        );
+        expect(x.cratesSettledBrands, {starId});
+        expect(
+          x.cratesTotalOwedByManufacturer![starId] ?? 0,
+          0,
+          reason: 'a settled deposit line no longer counts toward the total',
+        );
+      });
 
       test('a legacy walk-in Pending refund takes the empties back off',
           () async {
