@@ -1464,6 +1464,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         cashierName: ref.read(authProvider).currentUser?.name,
         customerId: _isWalkIn ? null : _initialCustomer?.id,
         fullDepositKobo: crates.fold<int>(0, (s, c) => s + c.fullDepositKobo),
+        // #656 — the empties handed over at Checkout: the receipt's Returned.
+        cratesReturned: _emptiesReturned,
         depositCrates: {
           for (final c in crates)
             if ((_depositByMfr[c.manufacturerId] ?? 0) > 0)
@@ -1514,7 +1516,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                   saleDate: _extras.saleDate,
                   vatRateBps: _extras.vatRateBps,
                   vatIncluded: _extras.vatIncluded,
-                  cratesOwedByManufacturer: _extras.cratesOwedByManufacturer,
+                  cratesReturnedByManufacturer: _extras.cratesReturnedByManufacturer,
+                  cratesSettledBrands: _extras.cratesSettledBrands,
+                  cratesTotalOwedByManufacturer:
+                      _extras.cratesTotalOwedByManufacturer,
                   crateDepositFull: _extras.crateDepositFull,
                   storeAddress: _storeAddress,
                   businessName: ref.watch(currentBusinessNameProvider),
@@ -1769,7 +1774,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         saleDate: extras.saleDate,
         vatRateBps: extras.vatRateBps,
         vatIncluded: extras.vatIncluded,
-        cratesOwedByManufacturer: extras.cratesOwedByManufacturer,
+        cratesReturnedByManufacturer: extras.cratesReturnedByManufacturer,
+        cratesSettledBrands: extras.cratesSettledBrands,
+        cratesTotalOwedByManufacturer:
+            extras.cratesTotalOwedByManufacturer,
         crateDepositFull: extras.crateDepositFull,
         businessName: ref.read(currentBusinessNameProvider),
         tracksCrates: businessTracksCrates(ref.read(currentBusinessProvider)),

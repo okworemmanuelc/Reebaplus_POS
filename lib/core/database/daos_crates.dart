@@ -947,6 +947,37 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     return byBrand;
   }
 
+  /// **Empties returned for the sale** (#656), per brand: every empty brought
+  /// back against [orderId], at Checkout or at Confirm. Sums the order's
+  /// customer-less `adjusted` pool credits: the Checkout exchange rows, Confirm's
+  /// credit ([addEmptiesToPool] with `orderId`, no reason), net of the
+  /// `checkout_exchange_reversal` rows. Brands at or below 0 are dropped. Pure
+  /// read, business scoped. Feeds the receipt's Returned column.
+  Future<Map<String, double>> cratesReturnedForOrder(String orderId) async {
+    final rows =
+        await (select(crateLedger)..where(
+              (l) =>
+                  whereBusiness(l) &
+                  l.referenceOrderId.equals(orderId) &
+                  l.customerId.isNull() &
+                  l.manufacturerId.isNotNull() &
+                  l.movementType.equals(kCrateMovementAdjusted) &
+                  (l.reason.isNull() |
+                      l.reason.isIn(const [
+                        kCheckoutExchangeReason,
+                        kCheckoutExchangeReversalReason,
+                      ])),
+            ))
+            .get();
+    final byBrand = <String, double>{};
+    for (final row in rows) {
+      final brand = row.manufacturerId!;
+      byBrand[brand] = (byBrand[brand] ?? 0) + row.quantityDelta;
+    }
+    byBrand.removeWhere((_, crates) => crates <= 0);
+    return byBrand;
+  }
+
   /// Undoes [orderId]'s Empties Exchange: a compensating negative row per brand
   /// and store, with the scalar and store cache moved back. Modelled on
   /// [_reverseIssuedByCustomer], and like it [enqueue] tells a Pending refund

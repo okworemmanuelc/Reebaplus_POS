@@ -33,6 +33,9 @@ List<String> _lines(
   bool hasLogo = false,
   String name = 'Freshmart Supermarket',
   bool wallet = false,
+  Map<String, double>? returned,
+  Set<String>? settled,
+  Map<String, double>? totalOwed,
 }) => buildReceiptLines(
   paperSize: size,
   orderId: 'ORD-000482-AB12CD',
@@ -58,6 +61,9 @@ List<String> _lines(
   hasLogo: hasLogo,
   walletBalance: 500,
   showWalletInfo: wallet,
+  cratesReturnedByManufacturer: returned,
+  cratesSettledBrands: settled,
+  cratesTotalOwedByManufacturer: totalOwed,
 ).where((l) => l.kind == ReceiptLineKind.text).map((l) => l.plain).toList();
 
 void main() {
@@ -182,6 +188,63 @@ void main() {
       });
     });
   }
+
+  group('part exchange (#656)', () {
+    final five = [
+      {..._cart.last, 'qty': 5.0},
+    ];
+    test('58mm: Taken 5, Returned 3, Owed 2 on one row; total line', () {
+      final l = _lines(
+        ReceiptPaperSize.mm58,
+        cart: five,
+        returned: {'m1': 3},
+        totalOwed: {'m1': 6},
+      );
+      expect(l, contains('Taken: 5   Returned: 3   Owed: 2'));
+      // 39 chars wraps on 32-wide paper: the words stay in order, none cut.
+      expect(
+        l.join(' ').replaceAll(RegExp(r'\s+'), ' '),
+        contains('Total Lager Beer 60cl crates you owe: 6'),
+      );
+    });
+
+    test('80mm: columns carry Returned and Owed; no total for a walk-in', () {
+      final l = _lines(ReceiptPaperSize.mm80, cart: five, returned: {'m1': 3});
+      final r = l.skipWhile((x) => x != 'EMPTY CRATES').firstWhere(
+        (x) => x.startsWith('Lager Beer 60cl '),
+      );
+      expect(r.substring(24, 32).trim(), '5');
+      expect(r.substring(32, 42).trim(), '3');
+      expect(r.substring(42).trim(), '2');
+      expect(l.join('\n'), isNot(contains('crates you owe')));
+    });
+
+    test('full return -> Owed 0; settled deposit brand -> Owed 0', () {
+      final full = _lines(
+        ReceiptPaperSize.mm58,
+        cart: five,
+        returned: {'m1': 5},
+      );
+      expect(full, contains('Taken: 5   Returned: 5   Owed: 0'));
+      final settled = _lines(
+        ReceiptPaperSize.mm58,
+        cart: five,
+        returned: {'m1': 3},
+        settled: {'m1'},
+      );
+      expect(settled, contains('Taken: 5   Returned: 3   Owed: 0'));
+    });
+
+    test('a total equal to the row Owed prints no total line', () {
+      final l = _lines(
+        ReceiptPaperSize.mm58,
+        cart: five,
+        returned: {'m1': 3},
+        totalOwed: {'m1': 2},
+      );
+      expect(l.join('\n'), isNot(contains('crates you owe')));
+    });
+  });
 
   group('58mm specifics', () {
     final l = _lines(ReceiptPaperSize.mm58);

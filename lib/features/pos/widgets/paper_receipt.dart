@@ -6,6 +6,7 @@ import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/utils/name_case.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/product_name.dart';
+import 'package:reebaplus_pos/features/pos/services/receipt_crates.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
 import 'package:reebaplus_pos/shared/widgets/receipt_format.dart';
 
@@ -39,7 +40,9 @@ class PaperReceipt extends StatelessWidget {
   final DateTime? saleDate;
   final int? vatRateBps;
   final double? vatIncluded;
-  final Map<String, double>? cratesOwedByManufacturer;
+  final Map<String, double>? cratesReturnedByManufacturer;
+  final Set<String>? cratesSettledBrands;
+  final Map<String, double>? cratesTotalOwedByManufacturer;
 
   /// Full deposit when only part was paid (see ReceiptWidget).
   final double? crateDepositFull;
@@ -73,7 +76,9 @@ class PaperReceipt extends StatelessWidget {
     this.saleDate,
     this.vatRateBps,
     this.vatIncluded,
-    this.cratesOwedByManufacturer,
+    this.cratesReturnedByManufacturer,
+    this.cratesSettledBrands,
+    this.cratesTotalOwedByManufacturer,
     this.crateDepositFull,
     required this.tracksCrates,
   });
@@ -379,9 +384,13 @@ class PaperReceipt extends StatelessWidget {
   List<Widget> _crates() {
     final empties = ReceiptFormat.emptiesByManufacturer(cart);
     if (empties.isEmpty) return const [];
-    final entries = empties.entries.toList()
-      ..sort((a, b) => (manufacturerNames?[a.key] ?? 'Unknown')
-          .compareTo(manufacturerNames?[b.key] ?? 'Unknown'));
+    final rows = buildReceiptCrateRows(
+      taken: empties,
+      returned: cratesReturnedByManufacturer,
+      settledBrands: cratesSettledBrands,
+      totalOwed: cratesTotalOwedByManufacturer,
+    )..sort((a, b) => (manufacturerNames?[a.manufacturerId] ?? 'Unknown')
+        .compareTo(manufacturerNames?[b.manufacturerId] ?? 'Unknown'));
     Widget num(String s, double w, {bool bold = false}) => SizedBox(
           width: w,
           child: Text(s, textAlign: TextAlign.right, style: _t(bold: bold)),
@@ -397,17 +406,16 @@ class PaperReceipt extends StatelessWidget {
           num('Returned', 58),
           num('Owed', 40),
         ]),
-      ...entries.map((e) {
-        final owed = cratesOwedByManufacturer?[e.key] ?? e.value;
-        final nm = manufacturerNames?[e.key] ?? 'Unknown';
+      ...rows.map((r) {
+        final nm = manufacturerNames?[r.manufacturerId] ?? 'Unknown';
         if (_wide) {
           return Padding(
             padding: const EdgeInsets.only(top: 2),
             child: Row(children: [
               Expanded(child: Text(nm, style: _t(bold: true))),
-              num(ReceiptFormat.qty(e.value), 44),
-              num('0', 58),
-              num(ReceiptFormat.qty(owed), 40, bold: true),
+              num(ReceiptFormat.qty(r.taken), 44),
+              num(ReceiptFormat.qty(r.returned), 58),
+              num(ReceiptFormat.qty(r.owed), 40, bold: true),
             ]),
           );
         }
@@ -420,15 +428,27 @@ class PaperReceipt extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Taken: ${ReceiptFormat.qty(e.value)}', style: _t()),
-                  Text('Returned: 0', style: _t()),
-                  Text('Owed: ${ReceiptFormat.qty(owed)}', style: _t(bold: true)),
+                  Text('Taken: ${ReceiptFormat.qty(r.taken)}', style: _t()),
+                  Text('Returned: ${ReceiptFormat.qty(r.returned)}', style: _t()),
+                  Text('Owed: ${ReceiptFormat.qty(r.owed)}', style: _t(bold: true)),
                 ],
               ),
             ],
           ),
         );
       }),
+      for (final r in rows)
+        if (r.totalOwed != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              receiptTotalOwedLine(
+                manufacturerNames?[r.manufacturerId] ?? 'Unknown',
+                ReceiptFormat.qty(r.totalOwed!),
+              ),
+              style: _t(bold: true),
+            ),
+          ),
       if (crateDeposit > 0)
         Padding(
           padding: const EdgeInsets.only(top: 4),

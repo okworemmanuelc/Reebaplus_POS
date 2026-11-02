@@ -2,6 +2,7 @@ import 'package:reebaplus_pos/core/settings/vat_settings.dart';
 import 'package:reebaplus_pos/core/utils/name_case.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/product_name.dart';
+import 'package:reebaplus_pos/features/pos/services/receipt_crates.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
 import 'package:reebaplus_pos/shared/widgets/receipt_format.dart';
 
@@ -178,7 +179,9 @@ List<ReceiptLine> buildReceiptLines({
   DateTime? saleDate,
   int? vatRateBps,
   double? vatIncluded,
-  Map<String, double>? cratesOwedByManufacturer,
+  Map<String, double>? cratesReturnedByManufacturer,
+  Set<String>? cratesSettledBrands,
+  Map<String, double>? cratesTotalOwedByManufacturer,
   double? crateDepositFull,
   Map<String, String>? manufacturerNames,
   bool hasLogo = false,
@@ -412,9 +415,13 @@ List<ReceiptLine> buildReceiptLines({
   // Empty crates.
   final empties = ReceiptFormat.emptiesByManufacturer(cart);
   if (empties.isNotEmpty) {
-    final entries = empties.entries.toList()
-      ..sort((a, b) => (manufacturerNames?[a.key] ?? 'Unknown')
-          .compareTo(manufacturerNames?[b.key] ?? 'Unknown'));
+    final rows = buildReceiptCrateRows(
+      taken: empties,
+      returned: cratesReturnedByManufacturer,
+      settledBrands: cratesSettledBrands,
+      totalOwed: cratesTotalOwedByManufacturer,
+    )..sort((a, b) => (manufacturerNames?[a.manufacturerId] ?? 'Unknown')
+        .compareTo(manufacturerNames?[b.manufacturerId] ?? 'Unknown'));
     section();
     lines.add(ReceiptLine.text([seg('EMPTY CRATES', bold: true)]));
     if (wide) {
@@ -425,21 +432,20 @@ List<ReceiptLine> buildReceiptLines({
         const _Col('Owed', 6, right: true),
       ]);
     }
-    for (final e in entries) {
-      final owed = cratesOwedByManufacturer?[e.key] ?? e.value;
-      final nm = manufacturerNames?[e.key] ?? 'Unknown';
+    for (final r in rows) {
+      final nm = manufacturerNames?[r.manufacturerId] ?? 'Unknown';
       if (wide) {
         columns([
           _Col(nm, 24, bold: true),
-          _Col(ReceiptFormat.qty(e.value), 8, right: true),
-          const _Col('0', 10, right: true),
-          _Col(ReceiptFormat.qty(owed), 6, right: true, bold: true),
+          _Col(ReceiptFormat.qty(r.taken), 8, right: true),
+          _Col(ReceiptFormat.qty(r.returned), 10, right: true),
+          _Col(ReceiptFormat.qty(r.owed), 6, right: true, bold: true),
         ]);
       } else {
         columns([_Col(nm, w, bold: true)]);
-        final a = 'Taken: ${ReceiptFormat.qty(e.value)}';
-        const b = 'Returned: 0';
-        final c = 'Owed: ${ReceiptFormat.qty(owed)}';
+        final a = 'Taken: ${ReceiptFormat.qty(r.taken)}';
+        final b = 'Returned: ${ReceiptFormat.qty(r.returned)}';
+        final c = 'Owed: ${ReceiptFormat.qty(r.owed)}';
         final gap = a.length + b.length + c.length + 6 <= w ? 3 : 1;
         if (a.length + b.length + c.length + 2 * gap <= w) {
           lines.add(ReceiptLine.text([
@@ -451,6 +457,19 @@ List<ReceiptLine> buildReceiptLines({
           columns([_Col(c, w, bold: true)]);
         }
       }
+    }
+    for (final r in rows) {
+      if (r.totalOwed == null) continue;
+      columns([
+        _Col(
+          receiptTotalOwedLine(
+            manufacturerNames?[r.manufacturerId] ?? 'Unknown',
+            ReceiptFormat.qty(r.totalOwed!),
+          ),
+          w,
+          bold: true,
+        ),
+      ]);
     }
     if (crateDeposit > 0) {
       final note = (crateDepositFull != null && crateDepositFull > crateDeposit)

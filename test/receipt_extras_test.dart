@@ -72,8 +72,11 @@ void main() {
           CrateBalanceEntry(manufacturerId: 'b', manufacturerName: 'B', balance: -3),
         ],
       );
-      expect(x.cratesOwedByManufacturer, {'a': 7.0, 'b': 0.0});
-      expect(composeReceiptExtras(totalKobo: 1000).cratesOwedByManufacturer, isNull);
+      expect(x.cratesTotalOwedByManufacturer, {'a': 7.0, 'b': 0.0});
+      expect(
+        composeReceiptExtras(totalKobo: 1000).cratesTotalOwedByManufacturer,
+        isNull,
+      );
     });
 
     test('owed adds the crates this sale took under a deposit', () {
@@ -87,7 +90,20 @@ void main() {
         ],
         depositCrates: {'a': 1, 'b': 1, 'c': 4},
       );
-      expect(x.cratesOwedByManufacturer, {'a': 3.0, 'b': 1.0, 'c': 4.0});
+      expect(x.cratesTotalOwedByManufacturer, {'a': 3.0, 'b': 1.0, 'c': 4.0});
+    });
+
+    test('returned and settled brands ride along (#656)', () {
+      final x = composeReceiptExtras(
+        totalKobo: 1000,
+        cratesReturned: {'a': 3},
+        settledBrands: {'b'},
+      );
+      expect(x.cratesReturnedByManufacturer, {'a': 3.0});
+      expect(x.cratesSettledBrands, {'b'});
+      final none = composeReceiptExtras(totalKobo: 1000);
+      expect(none.cratesReturnedByManufacturer, isNull);
+      expect(none.cratesSettledBrands, isEmpty);
     });
 
     test('full deposit only when above what was paid', () {
@@ -186,6 +202,88 @@ void main() {
       expect(find.text(fullNote), findsNothing);
     });
   }
+
+  group('part exchange (#656)', () {
+    const crateCart = <Map<String, dynamic>>[
+      {
+        'name': 'Lager',
+        'unit': 'Bottle',
+        'price': 1000.0,
+        'qty': 5.0,
+        'trackEmpties': true,
+        'manufacturerId': 'm1',
+      },
+    ];
+
+    Widget phoneCrates({Map<String, double>? total}) => MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: ReceiptWidget(
+            orderId: 'ORD-1',
+            cart: crateCart,
+            subtotal: 5000,
+            crateDeposit: 0,
+            total: 5000,
+            paymentMethod: 'Cash',
+            customerName: 'Ada',
+            manufacturerNames: const {'m1': 'Star'},
+            cratesReturnedByManufacturer: const {'m1': 3},
+            cratesTotalOwedByManufacturer: total,
+            tracksCrates: true,
+          ),
+        ),
+      ),
+    );
+
+    Widget paperCrates(ReceiptPaperSize size, {Map<String, double>? total}) =>
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: PaperReceipt(
+                paperSize: size,
+                orderId: 'ORD-1',
+                cart: crateCart,
+                subtotal: 5000,
+                crateDeposit: 0,
+                total: 5000,
+                paymentMethod: 'Cash',
+                customerName: 'Ada',
+                manufacturerNames: const {'m1': 'Star'},
+                cratesReturnedByManufacturer: const {'m1': 3},
+                cratesTotalOwedByManufacturer: total,
+                tracksCrates: true,
+              ),
+            ),
+          ),
+        );
+
+    testWidgets('phone: Taken 5, Returned 3, Owed 2, total line only if set', (
+      tester,
+    ) async {
+      await tester.pumpWidget(phoneCrates());
+      expect(find.text('5'), findsWidgets);
+      expect(find.text('3'), findsOneWidget);
+      expect(find.text('2'), findsOneWidget);
+      expect(find.textContaining('crates you owe'), findsNothing);
+      await tester.pumpWidget(phoneCrates(total: const {'m1': 6}));
+      expect(find.text('Total Star crates you owe: 6'), findsOneWidget);
+    });
+
+    for (final size in ReceiptPaperSize.values) {
+      testWidgets('paper ${size.name}: Returned 3, Owed 2, total line', (
+        tester,
+      ) async {
+        await tester.pumpWidget(paperCrates(size));
+        expect(find.textContaining('crates you owe'), findsNothing);
+        await tester.pumpWidget(paperCrates(size, total: const {'m1': 6}));
+        expect(find.text('Total Star crates you owe: 6'), findsOneWidget);
+        if (size == ReceiptPaperSize.mm58) {
+          expect(find.text('Returned: 3'), findsOneWidget);
+          expect(find.text('Owed: 2'), findsOneWidget);
+        }
+      });
+    }
+  });
 
   testWidgets('a reprint shows the order date, not now', (tester) async {
     await tester.pumpWidget(

@@ -172,7 +172,8 @@ void main() {
     String? logoPath,
     int? vatRateBps,
     double? vatIncluded,
-    Map<String, double>? owed,
+    Map<String, double>? returned,
+    Map<String, double>? totalOwed,
     double width = 390,
     String? businessName,
   }) => MaterialApp(
@@ -192,7 +193,8 @@ void main() {
             logoPath: logoPath,
             vatRateBps: vatRateBps,
             vatIncluded: vatIncluded,
-            cratesOwedByManufacturer: owed,
+            cratesReturnedByManufacturer: returned,
+            cratesTotalOwedByManufacturer: totalOwed,
             manufacturerNames: const {'m1': 'Lager Beer'},
             businessName: businessName,
             tracksCrates: false,
@@ -285,10 +287,29 @@ void main() {
     await tester.pumpWidget(hostWith(
       items: crateItems,
       crateDeposit: 300,
-      owed: const {'m1': 5},
+      returned: const {'m1': 1},
     ));
     expect(find.textContaining('₦300 deposit is refunded'), findsOneWidget);
-    expect(find.text('5'), findsOneWidget);
+    // Taken 2, Returned 1, Owed 1; no total line without a total.
+    expect(find.text('2'), findsWidgets);
+    expect(find.textContaining('crates you owe'), findsNothing);
+  });
+
+  testWidgets('crate panel: full return -> Owed 0; total line when it differs',
+      (tester) async {
+    await tester.pumpWidget(hostWith(
+      items: crateItems,
+      returned: const {'m1': 2},
+      totalOwed: const {'m1': 4},
+    ));
+    expect(find.text('Total Lager Beer crates you owe: 4'), findsOneWidget);
+    expect(find.text('0'), findsOneWidget);
+    await tester.pumpWidget(hostWith(
+      items: crateItems,
+      returned: const {'m1': 2},
+      totalOwed: const {'m1': 0},
+    ));
+    expect(find.textContaining('crates you owe'), findsNothing);
   });
 
   testWidgets('no crate panel without crate lines', (tester) async {

@@ -6,6 +6,7 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/name_case.dart';
 import 'package:reebaplus_pos/core/utils/product_name.dart';
+import 'package:reebaplus_pos/features/pos/services/receipt_crates.dart';
 import 'package:reebaplus_pos/shared/widgets/receipt_format.dart';
 
 class ReceiptWidget extends StatelessWidget {
@@ -64,9 +65,13 @@ class ReceiptWidget extends StatelessWidget {
   final int? vatRateBps;
   final double? vatIncluded;
 
-  /// manufacturerId → the customer's total crates owed. Falls back to this
-  /// sale's crates when a manufacturer is missing (walk-ins).
-  final Map<String, double>? cratesOwedByManufacturer;
+  /// Empty Crates panel inputs (#656). Taken comes from [cart]; the per-row
+  /// Returned / Owed and the "Total ... crates you owe" line are worked out by
+  /// [buildReceiptCrateRows]. [cratesTotalOwedByManufacturer] is null for a
+  /// walk-in (no total line).
+  final Map<String, double>? cratesReturnedByManufacturer;
+  final Set<String>? cratesSettledBrands;
+  final Map<String, double>? cratesTotalOwedByManufacturer;
 
   /// The full deposit when only part was paid. Non-null AND above
   /// [crateDeposit] switches the crates note to "Deposit paid ₦X of ₦Y."
@@ -104,7 +109,9 @@ class ReceiptWidget extends StatelessWidget {
     this.saleDate,
     this.vatRateBps,
     this.vatIncluded,
-    this.cratesOwedByManufacturer,
+    this.cratesReturnedByManufacturer,
+    this.cratesSettledBrands,
+    this.cratesTotalOwedByManufacturer,
     this.crateDepositFull,
     required this.tracksCrates,
   });
@@ -487,9 +494,13 @@ class ReceiptWidget extends StatelessWidget {
   Widget _cratesPanel(BuildContext context) {
     final empties = _computeEmpties();
     if (empties.isEmpty) return const SizedBox.shrink();
-    final entries = empties.entries.toList()
-      ..sort((a, b) => (manufacturerNames?[a.key] ?? 'Unknown')
-          .compareTo(manufacturerNames?[b.key] ?? 'Unknown'));
+    final rows = buildReceiptCrateRows(
+      taken: empties,
+      returned: cratesReturnedByManufacturer,
+      settledBrands: cratesSettledBrands,
+      totalOwed: cratesTotalOwedByManufacturer,
+    )..sort((a, b) => (manufacturerNames?[a.manufacturerId] ?? 'Unknown')
+        .compareTo(manufacturerNames?[b.manufacturerId] ?? 'Unknown'));
 
     TextStyle head() =>
         TextStyle(fontSize: context.getRFontSize(12), color: _sub);
@@ -539,15 +550,14 @@ class ReceiptWidget extends StatelessWidget {
               numCell('Owed', numW, header: true),
             ],
           ),
-          ...entries.map((e) {
-            final owed = cratesOwedByManufacturer?[e.key] ?? e.value;
+          ...rows.map((r) {
             return Padding(
               padding: EdgeInsets.only(top: context.getRSize(6)),
               child: Row(
                 children: [
                   Expanded(
                     child: Text(
-                      manufacturerNames?[e.key] ?? 'Unknown',
+                      manufacturerNames?[r.manufacturerId] ?? 'Unknown',
                       style: TextStyle(
                         fontSize: context.getRFontSize(14),
                         fontWeight: FontWeight.w700,
@@ -555,13 +565,29 @@ class ReceiptWidget extends StatelessWidget {
                       ),
                     ),
                   ),
-                  numCell(_qty(e.value), numW),
-                  numCell('0', retW),
-                  numCell(_qty(owed), numW),
+                  numCell(_qty(r.taken), numW),
+                  numCell(_qty(r.returned), retW),
+                  numCell(_qty(r.owed), numW),
                 ],
               ),
             );
           }),
+          for (final r in rows)
+            if (r.totalOwed != null)
+              Padding(
+                padding: EdgeInsets.only(top: context.getRSize(8)),
+                child: Text(
+                  receiptTotalOwedLine(
+                    manufacturerNames?[r.manufacturerId] ?? 'Unknown',
+                    _qty(r.totalOwed!),
+                  ),
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(12),
+                    fontWeight: FontWeight.w700,
+                    color: _textCol,
+                  ),
+                ),
+              ),
           if (crateDeposit > 0) ...[
             SizedBox(height: context.getRSize(8)),
             Text(
