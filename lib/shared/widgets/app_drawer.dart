@@ -504,7 +504,8 @@ class AppDrawer extends ConsumerWidget {
       ),
     );
     if (confirmed != true) return;
-    if (context.mounted) Navigator.pop(context); // close the drawer
+    // The drawer stays open and the Log Out button spins until this ends
+    // (#659); on success the app reroutes on its own.
     try {
       await auth.logOutCurrentUser(); // → main.dart routes to Welcome
     } on LogoutBlockedByUnsyncedDataException catch (e) {

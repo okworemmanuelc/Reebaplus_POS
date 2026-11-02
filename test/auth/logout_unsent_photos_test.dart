@@ -9,6 +9,7 @@
 //   * a photo whose product was deleted, or whose copy is gone, can never
 //     upload and never blocks.
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:drift/drift.dart' hide isNull, isNotNull;
@@ -68,9 +69,13 @@ class _FakePhotoUploads extends PendingPhotoUploads {
   bool uploadSucceeds = false;
   int uploadCalls = 0;
 
+  /// When set, the upload waits here (a slow network).
+  Completer<void>? hold;
+
   @override
   Future<void> upload(String businessId) async {
     uploadCalls++;
+    if (hold != null) await hold!.future;
     if (!uploadSucceeds) return;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(LocalPhotoFiles.pendingProductUploadsKey, []);
@@ -194,6 +199,23 @@ void main() {
     expect(photos.uploadCalls, 1);
     expect(await deviceWiped(), isTrue);
     expect(auth.value, isNull);
+  });
+
+  test('a second logOutCurrentUser while one runs shares it: the wipe gate '
+      'and teardown run once (#659)', () async {
+    photos.uploadSucceeds = true;
+    photos.hold = Completer<void>();
+
+    final first = auth.logOutCurrentUser();
+    final second = auth.logOutCurrentUser();
+    expect(identical(first, second), isTrue);
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(photos.uploadCalls, 1);
+
+    photos.hold!.complete();
+    await Future.wait([first, second]);
+    expect(photos.uploadCalls, 1);
+    expect(await deviceWiped(), isTrue);
   });
 
   test('online and the upload still fails: routed to the Resolve flow, never '

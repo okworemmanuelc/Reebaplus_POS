@@ -553,7 +553,7 @@ class DrawerFooter extends StatelessWidget {
 
   /// Null hides the Display card (roles below CEO find it in Settings).
   final VoidCallback? onDisplay;
-  final VoidCallback onLogOut;
+  final Future<void> Function() onLogOut;
 
   /// The system navigation inset under the footer.
   final double bottomPadding;
@@ -676,10 +676,29 @@ class _DisplayCard extends StatelessWidget {
 /// Full-width Log Out, outlined in the fixed danger colour. Candidate for a
 /// shared "danger outline button" part (no `AppButton` variant draws a
 /// transparent fill with a red border).
-class _LogOutButton extends StatelessWidget {
+class _LogOutButton extends StatefulWidget {
   const _LogOutButton({required this.onPressed});
 
-  final VoidCallback onPressed;
+  final Future<void> Function() onPressed;
+
+  @override
+  State<_LogOutButton> createState() => _LogOutButtonState();
+}
+
+class _LogOutButtonState extends State<_LogOutButton> {
+  bool _running = false;
+
+  Future<void> _handleTap() async {
+    if (_running) return;
+    // Set synchronously, before the callback or any await: this is the lock.
+    _running = true;
+    setState(() {});
+    try {
+      await widget.onPressed();
+    } finally {
+      if (mounted) setState(() => _running = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -689,36 +708,52 @@ class _LogOutButton extends StatelessWidget {
     final height = context
         .getRSize(50)
         .clamp(kMinInteractiveDimension, double.infinity);
-    return SizedBox(
-      key: AppDrawerKeys.logOut,
-      height: height,
-      child: Material(
-        color: Colors.transparent,
-        shape: RoundedRectangleBorder(
-          borderRadius: radius,
-          side: BorderSide(color: f.danger, width: 1.5),
-        ),
-        child: InkWell(
-          borderRadius: radius,
-          onTap: onPressed,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              AppIcon(
-                AppIcons.logout,
-                size: context.getRSize(22),
-                color: f.danger,
-              ),
-              SizedBox(width: context.getRSize(10)),
-              Flexible(
-                child: Text(
-                  'Log Out',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: context.boldStyle(16).copyWith(color: f.danger),
+    return Opacity(
+      opacity: _running ? 0.7 : 1.0,
+      child: SizedBox(
+        key: AppDrawerKeys.logOut,
+        height: height,
+        child: Material(
+          color: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: radius,
+            side: BorderSide(color: f.danger, width: 1.5),
+          ),
+          child: InkWell(
+            borderRadius: radius,
+            onTap: _running ? null : _handleTap,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (_running)
+                  SizedBox(
+                    width: context.getRSize(22),
+                    height: context.getRSize(22),
+                    child: Padding(
+                      padding: EdgeInsets.all(context.getRSize(2)),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(f.danger),
+                      ),
+                    ),
+                  )
+                else
+                  AppIcon(
+                    AppIcons.logout,
+                    size: context.getRSize(22),
+                    color: f.danger,
+                  ),
+                SizedBox(width: context.getRSize(10)),
+                Flexible(
+                  child: Text(
+                    'Log Out',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.boldStyle(16).copyWith(color: f.danger),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
