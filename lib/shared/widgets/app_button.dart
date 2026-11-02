@@ -6,9 +6,15 @@ enum AppButtonVariant { primary, secondary, outline, danger, ghost, success }
 
 enum AppButtonSize { xsmall, small, normal, large }
 
-class AppButton extends StatelessWidget {
+class AppButton extends StatefulWidget {
   final String text;
   final VoidCallback? onPressed;
+
+  /// Async tap handler. The button locks on the FIRST tap (before the callback
+  /// runs or anything is awaited), shows the loading spinner, and unlocks when
+  /// the returned future finishes (or throws). Use instead of [onPressed] for
+  /// actions that save, print or navigate. Do not set both.
+  final Future<void> Function()? onAsyncPressed;
   final AppButtonVariant variant;
   final bool isLoading;
   final bool isFullWidth;
@@ -22,7 +28,8 @@ class AppButton extends StatelessWidget {
   const AppButton({
     super.key,
     required this.text,
-    required this.onPressed,
+    this.onPressed,
+    this.onAsyncPressed,
     this.variant = AppButtonVariant.primary,
     this.size = AppButtonSize.normal,
     this.isLoading = false,
@@ -32,12 +39,43 @@ class AppButton extends StatelessWidget {
     this.width,
     this.height,
     this.padding,
-  });
+  }) : assert(
+         onPressed == null || onAsyncPressed == null,
+         'Set either onPressed or onAsyncPressed, not both.',
+       );
+
+  @override
+  State<AppButton> createState() => _AppButtonState();
+}
+
+class _AppButtonState extends State<AppButton> {
+  bool _running = false;
+
+  Future<void> _handleAsyncTap() async {
+    if (_running) return;
+    // Set synchronously, before the callback or any await: this is the lock.
+    _running = true;
+    setState(() {});
+    try {
+      await widget.onAsyncPressed!();
+    } finally {
+      if (mounted) setState(() => _running = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final text = widget.text;
+    final variant = widget.variant;
+    final size = widget.size;
+    final icon = widget.icon;
+    final trailingIcon = widget.trailingIcon;
+    final isLoading = widget.isLoading || _running;
+    final VoidCallback? onTap = widget.onAsyncPressed != null
+        ? _handleAsyncTap
+        : widget.onPressed;
     final t = Theme.of(context);
-    final bool isDisabled = onPressed == null || isLoading;
+    final bool isDisabled = onTap == null || isLoading;
 
     // Define colors based on variant
     Color? bgColor;
@@ -140,17 +178,21 @@ class AppButton extends StatelessWidget {
     return Opacity(
       opacity: isDisabled ? 0.7 : 1.0,
       child: Container(
-        width: isFullWidth ? (width ?? double.infinity) : width,
+        width: widget.isFullWidth
+            ? (widget.width ?? double.infinity)
+            : widget.width,
         height:
-            height ??
+            widget.height ??
             (size == AppButtonSize.xsmall
                 ? 32.0
                 : (size == AppButtonSize.small
-                    ? 40.0
-                    : max(
-                        kMinInteractiveDimension,
-                        context.getRSize(size == AppButtonSize.large ? 60 : 54),
-                      ))),
+                      ? 40.0
+                      : max(
+                          kMinInteractiveDimension,
+                          context.getRSize(
+                            size == AppButtonSize.large ? 60 : 54,
+                          ),
+                        ))),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
           gradient: gradient != null
@@ -182,11 +224,11 @@ class AppButton extends StatelessWidget {
         child: Material(
           color: Colors.transparent,
           child: InkWell(
-            onTap: isDisabled ? null : onPressed,
+            onTap: isDisabled ? null : onTap,
             borderRadius: BorderRadius.circular(14),
             child: Padding(
               padding:
-                  padding ??
+                  widget.padding ??
                   EdgeInsets.symmetric(horizontal: context.getRSize(16)),
               child: Center(child: content),
             ),
