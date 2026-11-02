@@ -655,6 +655,53 @@ all `performed_by` / `recorded_by` / `staff_id` / `initiated_by` FKs point at
 kept so past sales still read "Sold by <name>".
 _Avoid_: anonymizing or deleting the stub; re-pointing historical FKs.
 
+### Payroll
+
+**Payroll Worker**:
+A person a permitted user has deliberately added to Payroll, by typing a name or
+by picking someone from Staff Management. A login is optional, and having one
+does not put a person on Payroll.
+_Avoid_: assuming every staff member is on Payroll; calling a Payroll Worker
+without a login a Staff member.
+
+**Salary Month**:
+The calendar month a salary was earned in. It is paid soon after that month ends,
+so a salary paid in early November belongs to October.
+_Avoid_: dating a salary to the month it was paid in.
+
+**Total Pay**:
+Everything a worker earned for a Salary Month, added up: the salary, that month's
+Daily Allowances and any Bonus. An Advance is already inside the salary, and a
+Staff Loan is owed back, so neither is added. It is not the cash handed over on
+payday.
+_Avoid_: using it for the payday cash figure.
+
+**Bonus**:
+One-off extra money given to a worker on top of their salary, including what
+might elsewhere be called overtime or extra pay. It adds to Total Pay.
+_Avoid_: Extra Pay, overtime as a separate kind of pay.
+
+**Daily Allowance**:
+Money a worker receives for a day on top of their monthly salary, such as feeding
+or transport money. Each worker has a set daily amount, and it is recorded
+automatically under that date unless a permitted person changes or cancels that
+worker's allowance for that day. It is an extra cost to the shop and is never
+taken out of the salary.
+_Avoid_: calling it an Advance; deducting it at month end; entering it by hand
+each day.
+
+**Advance**:
+Part of a worker's salary paid early. It is deducted from that salary when the
+month is settled, so it changes when the money is paid, not how much the month
+costs.
+_Avoid_: calling a Daily Allowance or a Staff Loan an Advance.
+
+**Staff Loan**:
+Money the shop lends a worker that is not part of their salary. It stays owed until
+repaid, and repayments are deducted from the worker's salary when the month is
+settled.
+_Avoid_: calling it an Advance or an expense.
+
 ### Web
 
 **Web POS**:
