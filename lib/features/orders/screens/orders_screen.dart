@@ -933,11 +933,11 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
 
   // ─────────────────────── ACTION HANDLERS (unchanged) ────────────────────
 
-  void _markAsDelivered(OrderWithItems orderWithItems) {
-    _executeMarkDelivered(orderWithItems);
+  Future<void> _markAsDelivered(OrderWithItems orderWithItems) {
+    return _executeMarkDelivered(orderWithItems);
   }
 
-  void _executeMarkDelivered(OrderWithItems orderWithItems) async {
+  Future<void> _executeMarkDelivered(OrderWithItems orderWithItems) async {
     final order = orderWithItems.order;
 
     // ── Write-boundary gate (#171, ADR 0002) ────────────────────────────────
@@ -1020,11 +1020,13 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
   /// restored, payment voided, and **both wallet legs reversed** (the wallet
   /// returns to its pre-sale balance, §14.3). The order moves to the Cancelled
   /// tab.
-  void _refundPendingOrder(OrderData order) async {
+  Future<void> _refundPendingOrder(OrderData order) async {
     final reasonController = TextEditingController();
     final refundLabel = formatCurrency(order.amountPaidKobo / 100.0);
 
-    showDialog(
+    // The dialog only collects the reason; the refund runs below so the
+    // Refund button keeps spinning until the whole save is done.
+    final reason = await showDialog<String>(
       context: context,
       builder: (ctx) {
         return StatefulBuilder(
@@ -1074,10 +1076,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                   isFullWidth: false,
                   onPressed: reason.isEmpty
                       ? null
-                      : () {
-                          Navigator.pop(ctx);
-                          _executeRefund(order, reason);
-                        },
+                      : () => Navigator.pop(ctx, reason),
                 ),
               ],
             );
@@ -1085,9 +1084,11 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         );
       },
     );
+    if (reason == null || !mounted) return;
+    await _executeRefund(order, reason);
   }
 
-  void _executeRefund(OrderData order, String reason) async {
+  Future<void> _executeRefund(OrderData order, String reason) async {
     try {
       Gates.refundOrder.require(ref);
     } on GateDeniedError {
@@ -1641,7 +1642,7 @@ class _ReturnableCard extends ConsumerStatefulWidget {
   final OrderWithItems orderWithItems;
   final String status;
   final VoidCallback onViewReceipt;
-  final VoidCallback onReturn;
+  final Future<void> Function() onReturn;
 
   const _ReturnableCard({
     super.key,
@@ -1695,11 +1696,11 @@ class _ReturnableCardState extends ConsumerState<_ReturnableCard> {
 class _OrderCard extends ConsumerWidget {
   final OrderWithItems orderWithItems;
   final String status;
-  final VoidCallback? onMarkAsDelivered;
+  final Future<void> Function()? onMarkAsDelivered;
   final Function(String)? onAssignRider;
   // §19.7: fires on the Pending tab only (Refund). Null hides the button —
   // either the order isn't pending, or the user lacks sales.cancel.
-  final VoidCallback? onRefund;
+  final Future<void> Function()? onRefund;
   final VoidCallback onViewReceipt;
 
   const _OrderCard({
@@ -2310,7 +2311,7 @@ class _OrderCard extends ConsumerWidget {
                                 icon: AppIcons.cash,
                                 variant: AppButtonVariant.secondary,
                                 height: kMinInteractiveDimension,
-                                onPressed: () =>
+                                onAsyncPressed: () =>
                                     markPayOnDeliveryPaid(context, ref, pod),
                               ),
                             ),
@@ -2342,7 +2343,7 @@ class _OrderCard extends ConsumerWidget {
                                         icon: AppIcons.refresh,
                                         variant: AppButtonVariant.danger,
                                         height: kMinInteractiveDimension,
-                                        onPressed: onRefund,
+                                        onAsyncPressed: onRefund,
                                       ),
                                     ),
                                     SizedBox(width: context.getRSize(12)),
@@ -2354,7 +2355,7 @@ class _OrderCard extends ConsumerWidget {
                                         text: 'Confirm',
                                         icon: AppIcons.vanDelivery,
                                         height: kMinInteractiveDimension,
-                                        onPressed: onMarkAsDelivered,
+                                        onAsyncPressed: onMarkAsDelivered,
                                       ),
                                     ),
                                 ],
