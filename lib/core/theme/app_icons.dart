@@ -13,6 +13,7 @@ abstract final class AppIcons {
   static const IconData arrowUp = Symbols.arrow_upward;
   static const IconData chevronDown = Symbols.expand_more;
   static const IconData chevronRight = Symbols.chevron_right;
+  static const IconData chevronLeft = Symbols.chevron_left;
   static const IconData chevronUp = Symbols.expand_less;
   static const IconData close = Symbols.close;
   static const IconData unfoldMore = Symbols.unfold_more;

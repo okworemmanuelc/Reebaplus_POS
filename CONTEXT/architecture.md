@@ -625,6 +625,17 @@ hid screens. A registry entry may now carry a **`permissionKey`**
   Newly held ⇒ the gated tables are fetched in full once, because an incremental
   pull would never return the older rows RLS used to hide.
 
+**Combined pay lines (#669).** `staff_pay_totals` is the only payroll figure
+every phone receives: one row per store, kind (`daily_allowances`; `salaries`
+reserved for #671) and day, naming no worker, under the deterministic
+`staffPayTotalId`. It is an ordinary business-wide table (in
+`pos_pull_snapshot`, 0245) whose cloud SELECT is membership-only but whose
+INSERT / UPDATE require `payroll.manage`. It is a derived total, not a ledger:
+a Payroll phone rewrites it as the full sum of its allowance entries after
+every post, change and pull, so phones converge by last-write-wins. Daily
+Reconciliation (`ReconData.dailyAllowancesKobo`, in cash out, net profit and
+net result) and Expenses read it.
+
 ### Ordering, idempotency, and crash capture
 
 - **Ordering & idempotency:** outbox entries are ordered and carry client-generated UUIDv7 IDs so replays are idempotent — re-sending a batch after a dropped connection can never double-apply a sale.

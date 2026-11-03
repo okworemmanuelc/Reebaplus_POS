@@ -35,6 +35,7 @@ import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/main_layout.dart';
 import 'package:reebaplus_pos/shared/widgets/auto_lock_wrapper.dart';
+import 'package:reebaplus_pos/features/payroll/widgets/daily_allowance_runner.dart';
 import 'package:reebaplus_pos/shared/widgets/force_update_wrapper.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/services/push_notification_service.dart';
@@ -495,45 +496,48 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
 
     return ForceUpdateWrapper(
       child: AutoLockWrapper(
-        child: MaterialApp(
-          title: 'Reebaplus POS',
-          debugShowCheckedModeBanner: false,
-          builder: (context, child) {
-            // Cap OS font-scaling so large system-text settings can't overflow
-            // the dense POS layouts. responsive.dart already scales type by
-            // screen width; this bounds the per-device accessibility multiplier
-            // on top of that. Raise the cap if larger text is needed.
-            final mq = MediaQuery.of(context);
-            return MediaQuery(
-              data: mq.copyWith(
-                textScaler: mq.textScaler.clamp(maxScaleFactor: 1.3),
-              ),
-              child: GestureDetector(
-                onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-                behavior: HitTestBehavior.opaque,
-                child: child,
-              ),
-            );
-          },
-          themeMode: theme.themeMode,
-          theme: switch (theme.designSystem) {
-            DesignSystem.purple => AppTheme.purpleLight(),
-            DesignSystem.amber => AppTheme.amberLight(),
-            DesignSystem.green => AppTheme.greenLight(),
-            DesignSystem.bw => AppTheme.bwLight(),
-            DesignSystem.blue => AppTheme.light(),
-          },
-          darkTheme: switch (theme.designSystem) {
-            DesignSystem.purple => AppTheme.purpleDarkTheme(),
-            DesignSystem.amber => AppTheme.amberDarkTheme(),
-            DesignSystem.green => AppTheme.greenDarkTheme(),
-            DesignSystem.bw => AppTheme.bwDarkTheme(),
-            DesignSystem.blue => AppTheme.dark(),
-          },
-          navigatorKey: _navigatorKey,
-          home: _HomeRouter(
-            hasDeviceUser: _hasDeviceUser,
-            supabaseHasSession: _supabaseHasSession,
+        // #669 — posts the automatic Daily Allowance on open / resume, offline.
+        child: DailyAllowanceRunner(
+          child: MaterialApp(
+            title: 'Reebaplus POS',
+            debugShowCheckedModeBanner: false,
+            builder: (context, child) {
+              // Cap OS font-scaling so large system-text settings can't overflow
+              // the dense POS layouts. responsive.dart already scales type by
+              // screen width; this bounds the per-device accessibility multiplier
+              // on top of that. Raise the cap if larger text is needed.
+              final mq = MediaQuery.of(context);
+              return MediaQuery(
+                data: mq.copyWith(
+                  textScaler: mq.textScaler.clamp(maxScaleFactor: 1.3),
+                ),
+                child: GestureDetector(
+                  onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+                  behavior: HitTestBehavior.opaque,
+                  child: child,
+                ),
+              );
+            },
+            themeMode: theme.themeMode,
+            theme: switch (theme.designSystem) {
+              DesignSystem.purple => AppTheme.purpleLight(),
+              DesignSystem.amber => AppTheme.amberLight(),
+              DesignSystem.green => AppTheme.greenLight(),
+              DesignSystem.bw => AppTheme.bwLight(),
+              DesignSystem.blue => AppTheme.light(),
+            },
+            darkTheme: switch (theme.designSystem) {
+              DesignSystem.purple => AppTheme.purpleDarkTheme(),
+              DesignSystem.amber => AppTheme.amberDarkTheme(),
+              DesignSystem.green => AppTheme.greenDarkTheme(),
+              DesignSystem.bw => AppTheme.bwDarkTheme(),
+              DesignSystem.blue => AppTheme.dark(),
+            },
+            navigatorKey: _navigatorKey,
+            home: _HomeRouter(
+              hasDeviceUser: _hasDeviceUser,
+              supabaseHasSession: _supabaseHasSession,
+            ),
           ),
         ),
       ),

@@ -142,6 +142,9 @@ ReconData computeReconData(
           : const [],
       payOnDelivery:
           ref.watch(payOnDeliveryOrdersProvider).valueOrNull ?? const [],
+      // #669 — the combined "Daily allowances" lines (no worker named).
+      staffPayTotals:
+          ref.watch(allStaffPayTotalsProvider).valueOrNull ?? const [],
       isCeo: isCeo,
       inScope: reconStoreFilter(ref, businessWide: businessWide),
       start: start,

@@ -217,6 +217,40 @@ void main() {
     } finally { await db.close(); }
   });
 
+  test('v102 to v103 adds staff_pay_totals with its sync index and trigger',
+      () async {
+    var db = await openAndInit();
+    final businessId = UuidV7.generate();
+    await db.into(db.businesses).insert(
+      BusinessesCompanion.insert(id: Value(businessId), name: 'Test Shop'));
+    await db.customStatement('DROP TABLE staff_pay_totals');
+    await db.customStatement('PRAGMA user_version = 102');
+    await db.close();
+    db = await openAndInit();
+    try {
+      expect(await columnsOf(db, 'staff_pay_totals'), containsAll([
+        'business_id', 'store_id', 'kind', 'total_date', 'amount_kobo',
+        'cash_kobo', 'last_updated_at',
+      ]));
+      final objects = {
+        for (final r in await db.customSelect(
+          "SELECT name FROM sqlite_master WHERE tbl_name = 'staff_pay_totals'",
+        ).get())
+          r.read<String>('name'),
+      };
+      expect(objects, containsAll([
+        'idx_staff_pay_totals_business_lua',
+        'bump_staff_pay_totals_last_updated_at',
+      ]));
+      expect((await db.select(db.businesses).get()).single.id, businessId);
+      // Re-running the step is idempotent.
+      await db.customStatement('PRAGMA user_version = 102');
+      await db.close();
+      db = await openAndInit();
+      expect(await db.select(db.staffPayTotals).get(), isEmpty);
+    } finally { await db.close(); }
+  });
+
   test('v90 to v91 adds product_photos with its trigger and live-slot index',
       () async {
     var db = await openAndInit();

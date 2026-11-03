@@ -2416,3 +2416,20 @@ final payrollWorkersProvider = businessScopedStream<List<PayrollWorkerData>>(
   (ref, db, businessId) => db.payrollDao.watchWorkers(),
   whenAbsent: const [],
 );
+
+// ── Daily Allowance (#669) ───────────────────────────────────────────────────
+/// Every Daily Allowance entry (originals and corrections). Empty on a phone
+/// without `payroll.manage` (ADR 0034).
+final payrollAllowanceEntriesProvider =
+    businessScopedStream<List<PayrollEntryData>>(
+  (ref, db, businessId) => db.payrollDao.watchAllowanceEntries(),
+  whenAbsent: const [],
+);
+
+/// The combined pay lines ("Daily allowances" per store per day, no worker
+/// named). On EVERY phone: Daily Reconciliation, Expenses and Profit read it.
+final allStaffPayTotalsProvider =
+    businessScopedStream<List<StaffPayTotalData>>(
+  (ref, db, businessId) => db.staffPayTotalsDao.watchAll(),
+  whenAbsent: const [],
+);

@@ -209,10 +209,21 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
         : (storeNameById[scopeStoreId] ?? 'Store');
     final showRowStore = scopeStoreId == null && stores.length > 1;
 
-    final summary = summarizeExpenses(all.map((e) => e.expense));
+    // #669 — the combined "Daily allowances" lines (per store per day, no
+    // worker named, ADR 0034). Never waiting: they show under "All" only.
+    final allowanceLines = dailyAllowanceLinesInScope(
+      ref.watch(allStaffPayTotalsProvider).valueOrNull ?? const [],
+      scopeStoreId,
+    );
+    final summary = summarizeExpenses(
+      all.map((e) => e.expense),
+      allowanceLines: allowanceLines,
+    );
     final waiting = all.where((e) => e.expense.status == 'pending').toList();
-    final shown = (_filter == _ExpenseFilter.waiting ? waiting : all).toList()
-      ..sort((a, b) => b.expense.expenseDate.compareTo(a.expense.expenseDate));
+    final shown = <Object>[
+      ...(_filter == _ExpenseFilter.waiting ? waiting : all),
+      if (_filter == _ExpenseFilter.all) ...allowanceLines,
+    ]..sort((a, b) => _itemDate(b).compareTo(_itemDate(a)));
     final canApprove = Gates.approveExpenses.allows(ref);
 
     return AppRefreshWrapper(
@@ -279,15 +290,23 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
                     itemCount: shown.length,
                     separatorBuilder: (_, _) =>
                         SizedBox(height: context.getRSize(12)),
-                    itemBuilder: (context, i) => _buildRow(
-                      shown[i],
-                      categoryNames: categoryNames,
-                      users: users,
-                      storeName: showRowStore
-                          ? _storeLabel(shown[i], storeNameById)
-                          : null,
-                      canApprove: canApprove,
-                    ),
+                    itemBuilder: (context, i) => switch (shown[i]) {
+                      StaffPayTotalData line => _buildAllowanceRow(
+                        line,
+                        storeName: showRowStore
+                            ? (storeNameById[line.storeId] ?? 'Store')
+                            : null,
+                      ),
+                      final e => _buildRow(
+                        e as ExpenseWithCategory,
+                        categoryNames: categoryNames,
+                        users: users,
+                        storeName: showRowStore
+                            ? _storeLabel(e, storeNameById)
+                            : null,
+                        canApprove: canApprove,
+                      ),
+                    },
                   ),
                 );
               },
@@ -417,6 +436,42 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
   }
 
   // ─────────────────────────── ROWS ───────────────────────────────────────────
+
+  /// The day a list item sorts by: an expense's picked date, or a Daily
+  /// allowances line's day.
+  DateTime _itemDate(Object item) => switch (item) {
+    StaffPayTotalData line => staffPayLineDay(line),
+    final e => (e as ExpenseWithCategory).expense.expenseDate,
+  };
+
+  /// #669 — one store's combined Daily allowances for one day. Read-only here:
+  /// a change or cancel happens in Payroll.
+  Widget _buildAllowanceRow(StaffPayTotalData line, {String? storeName}) {
+    final day = staffPayLineDay(line);
+    final now = DateTime.now();
+    final diff = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).difference(DateTime(day.year, day.month, day.day)).inDays;
+    final when = diff == 0
+        ? 'Today'
+        : diff == 1
+        ? 'Yesterday'
+        : DateFormat('EEE d MMM').format(day);
+    return ExpenseListRow(
+      key: ValueKey('$kExpenseRowKeyPrefix${line.id}'),
+      icon: AppIcons.payroll,
+      title: 'Daily allowances',
+      subtitle: ['Payroll', when, ?storeName].join(' · '),
+      amountKobo: line.amountKobo,
+      status: 'approved',
+      onTap: () => AppNotification.showInfo(
+        context,
+        'Daily allowances are recorded automatically in Payroll.',
+      ),
+    );
+  }
 
   Widget _buildRow(
     ExpenseWithCategory e, {

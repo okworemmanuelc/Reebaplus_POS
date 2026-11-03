@@ -395,7 +395,11 @@ class ExpenseListRow extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
-                          '−${formatCurrency(amountKobo / 100.0)}',
+                          // A negative line (a late Daily allowance
+                          // correction, #669) is money back, not out.
+                          amountKobo < 0
+                              ? '+${formatCurrency(-amountKobo / 100.0)}'
+                              : '−${formatCurrency(amountKobo / 100.0)}',
                           style: amountStyle,
                         ),
                         SizedBox(height: context.getRSize(4)),

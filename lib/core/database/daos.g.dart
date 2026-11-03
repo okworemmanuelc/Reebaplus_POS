@@ -2027,3 +2027,24 @@ class PayrollDaoManager {
         _db.payrollStatements,
       );
 }
+
+mixin _$StaffPayTotalsDaoMixin on DatabaseAccessor<AppDatabase> {
+  $BusinessesTable get businesses => attachedDatabase.businesses;
+  $StoresTable get stores => attachedDatabase.stores;
+  $StaffPayTotalsTable get staffPayTotals => attachedDatabase.staffPayTotals;
+  StaffPayTotalsDaoManager get managers => StaffPayTotalsDaoManager(this);
+}
+
+class StaffPayTotalsDaoManager {
+  final _$StaffPayTotalsDaoMixin _db;
+  StaffPayTotalsDaoManager(this._db);
+  $$BusinessesTableTableManager get businesses =>
+      $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$StoresTableTableManager get stores =>
+      $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
+  $$StaffPayTotalsTableTableManager get staffPayTotals =>
+      $$StaffPayTotalsTableTableManager(
+        _db.attachedDatabase,
+        _db.staffPayTotals,
+      );
+}
