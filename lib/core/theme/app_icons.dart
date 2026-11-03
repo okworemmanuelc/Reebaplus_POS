@@ -39,6 +39,7 @@ abstract final class AppIcons {
   static const IconData deposit = Symbols.savings;
   static const IconData discount = Symbols.confirmation_number;
   static const IconData expenses = Symbols.payments;
+  static const IconData payroll = Symbols.badge;
   static const IconData invoice = Symbols.receipt;
   static const IconData localGroceryStore = Symbols.local_grocery_store;
   static const IconData moneyBag = Symbols.savings;
