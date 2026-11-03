@@ -170,8 +170,7 @@ class ThermalReceiptService {
       final band = img.copyCrop(bw, x: 0, y: y, width: bw.width, height: h);
       bytes.addAll(generator.imageRaster(band, align: PosAlign.center));
     }
-    bytes.addAll(generator.feed(2));
-    bytes.addAll(generator.cut());
+    // No feed or cut: PrinterService appends the printer's paper end (#717).
     return bytes;
   }
 
@@ -245,7 +244,7 @@ class ThermalReceiptService {
           }
       }
     }
-    bytes.addAll(generator.cut());
+    // No feed or cut: PrinterService appends the printer's paper end (#717).
     return bytes;
   }
 

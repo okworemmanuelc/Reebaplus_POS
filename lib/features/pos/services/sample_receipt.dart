@@ -60,7 +60,6 @@ class SampleReceipt {
           ).join(),
         ),
       ]),
-      const ReceiptLine.feed(2),
     ];
   }
 

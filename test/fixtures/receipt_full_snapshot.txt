@@ -42,7 +42,6 @@ normal/left/-|The N2,000 deposit is refunded  |
 normal/left/-|when the crates are returned.   |
 normal/left/-|- - - - - - - - - - - - - - - - |
 normal/center/-|Powered by Reebaplus|
-FEED2||
 == mm58 refunded
 big/center/B|REFUNDED N36,400|
 LOGO||
@@ -88,7 +87,6 @@ normal/left/-|The N2,000 deposit is refunded  |
 normal/left/-|when the crates are returned.   |
 normal/left/-|- - - - - - - - - - - - - - - - |
 normal/center/-|Powered by Reebaplus|
-FEED2||
 == mm80
 LOGO||
 big/center/B|FRESHMART SUPERMARKET|
@@ -128,7 +126,6 @@ normal/left/-|The N2,000 deposit is refunded when the crates  |
 normal/left/-|are returned.                                   |
 normal/left/-|- - - - - - - - - - - - - - - - - - - - - - - - |
 normal/center/-|Powered by Reebaplus|
-FEED2||
 == mm80 refunded
 big/center/B|REFUNDED N36,400|
 LOGO||
@@ -169,4 +166,3 @@ normal/left/-|The N2,000 deposit is refunded when the crates  |
 normal/left/-|are returned.                                   |
 normal/left/-|- - - - - - - - - - - - - - - - - - - - - - - - |
 normal/center/-|Powered by Reebaplus|
-FEED2||

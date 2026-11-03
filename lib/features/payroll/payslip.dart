@@ -164,7 +164,6 @@ List<ReceiptLine> buildPayslipLines(PayslipData d, ReceiptPaperSize paperSize) {
     rule,
     text('Signed on screen by the worker'),
     text('and by ${d.payerName ?? 'the payer'}.'),
-    const ReceiptLine.feed(3),
   ];
 }
 
