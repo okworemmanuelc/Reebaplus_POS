@@ -2414,6 +2414,11 @@ class PayrollWorkers extends Table {
       integer().withDefault(const Constant(0))();
   // 'YYYY-MM-DD'. The first day the allowance applies; never backdated.
   TextColumn get allowanceStartDate => text().nullable()();
+  // #723 (v106 / cloud 0248): the worker's job ("Driver"), optional.
+  TextColumn get jobTitle => text().nullable()();
+  // #723 (v106 / cloud 0248): the day of the month the worker is usually
+  // paid, 1–31. Null = the last day of the month. Display only.
+  IntColumn get paydayDay => integer().nullable()();
   BoolColumn get isRemoved => boolean().withDefault(const Constant(false))();
   DateTimeColumn get removedAt => dateTime().nullable()();
   TextColumn get createdBy => text().nullable().references(Users, #id)();
@@ -2429,6 +2434,7 @@ class PayrollWorkers extends Table {
   List<String> get customConstraints => [
     'CHECK (monthly_salary_kobo >= 0)',
     'CHECK (daily_allowance_kobo >= 0)',
+    'CHECK (payday_day IS NULL OR payday_day BETWEEN 1 AND 31)',
   ];
 }
 
@@ -2466,6 +2472,9 @@ class PayrollEntries extends Table {
   TextColumn get approvedBy => text().nullable().references(Users, #id)();
   DateTimeColumn get approvedAt => dateTime().nullable()();
   TextColumn get rejectionReason => text().nullable()();
+  // #723 (v106 / cloud 0248): a staff loan's plan — how much is taken back
+  // each payday. 'loan_given' only; null = no plan (every older loan).
+  IntColumn get monthlyRepaymentKobo => integer().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
       dateTime().withDefault(currentDateAndTime)();
@@ -3427,7 +3436,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 105;
+  int get schemaVersion => 106;
 
   /// The v90 (#473) listing columns, pinned to their defaults in every older
   /// products rebuild: TableMigration copies from the CURRENT schema, so a
@@ -7325,6 +7334,35 @@ class AppDatabase extends _$AppDatabase {
         ).getSingle();
         if ((itemSql.read<String?>('sql') ?? '').contains('quantity > 0')) {
           await m.alterTable(TableMigration(orderItems));
+        }
+      }
+
+      if (from < 106) {
+        // ── v106 — #723: worker job + payday, loan repayment plan ────────
+        //
+        // Mirrors supabase/migrations/0248_payroll_payday_loan_plan.sql: three
+        // nullable columns. The v101 step creates the payroll tables from the
+        // CURRENT definition, so a DB stepped up from < 101 already has them:
+        // guard each with pragma_table_info. The cloud CHECKs are not copied
+        // into existing tables (SQLite cannot add a CHECK in place); the DAO
+        // enforces both ranges and fresh installs get them from the definition.
+        Future<Set<String>> cols(String table) async => {
+          for (final r in await customSelect(
+            "SELECT name FROM pragma_table_info('$table')",
+          ).get())
+            r.read<String>('name'),
+        };
+        final workerCols = await cols('payroll_workers');
+        if (!workerCols.contains('job_title')) {
+          await m.addColumn(payrollWorkers, payrollWorkers.jobTitle);
+        }
+        if (!workerCols.contains('payday_day')) {
+          await m.addColumn(payrollWorkers, payrollWorkers.paydayDay);
+        }
+        if (!(await cols('payroll_entries')).contains(
+          'monthly_repayment_kobo',
+        )) {
+          await m.addColumn(payrollEntries, payrollEntries.monthlyRepaymentKobo);
         }
       }
     },

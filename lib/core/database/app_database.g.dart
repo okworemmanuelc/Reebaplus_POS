@@ -35007,6 +35007,28 @@ class $PayrollWorkersTable extends PayrollWorkers
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _jobTitleMeta = const VerificationMeta(
+    'jobTitle',
+  );
+  @override
+  late final GeneratedColumn<String> jobTitle = GeneratedColumn<String>(
+    'job_title',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _paydayDayMeta = const VerificationMeta(
+    'paydayDay',
+  );
+  @override
+  late final GeneratedColumn<int> paydayDay = GeneratedColumn<int>(
+    'payday_day',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _isRemovedMeta = const VerificationMeta(
     'isRemoved',
   );
@@ -35093,6 +35115,8 @@ class $PayrollWorkersTable extends PayrollWorkers
     monthlySalaryKobo,
     dailyAllowanceKobo,
     allowanceStartDate,
+    jobTitle,
+    paydayDay,
     isRemoved,
     removedAt,
     createdBy,
@@ -35170,6 +35194,18 @@ class $PayrollWorkersTable extends PayrollWorkers
           data['allowance_start_date']!,
           _allowanceStartDateMeta,
         ),
+      );
+    }
+    if (data.containsKey('job_title')) {
+      context.handle(
+        _jobTitleMeta,
+        jobTitle.isAcceptableOrUnknown(data['job_title']!, _jobTitleMeta),
+      );
+    }
+    if (data.containsKey('payday_day')) {
+      context.handle(
+        _paydayDayMeta,
+        paydayDay.isAcceptableOrUnknown(data['payday_day']!, _paydayDayMeta),
       );
     }
     if (data.containsKey('is_removed')) {
@@ -35252,6 +35288,14 @@ class $PayrollWorkersTable extends PayrollWorkers
         DriftSqlType.string,
         data['${effectivePrefix}allowance_start_date'],
       ),
+      jobTitle: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}job_title'],
+      ),
+      paydayDay: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}payday_day'],
+      ),
       isRemoved: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_removed'],
@@ -35295,6 +35339,8 @@ class PayrollWorkerData extends DataClass
   final int monthlySalaryKobo;
   final int dailyAllowanceKobo;
   final String? allowanceStartDate;
+  final String? jobTitle;
+  final int? paydayDay;
   final bool isRemoved;
   final DateTime? removedAt;
   final String? createdBy;
@@ -35310,6 +35356,8 @@ class PayrollWorkerData extends DataClass
     required this.monthlySalaryKobo,
     required this.dailyAllowanceKobo,
     this.allowanceStartDate,
+    this.jobTitle,
+    this.paydayDay,
     required this.isRemoved,
     this.removedAt,
     this.createdBy,
@@ -35331,6 +35379,12 @@ class PayrollWorkerData extends DataClass
     map['daily_allowance_kobo'] = Variable<int>(dailyAllowanceKobo);
     if (!nullToAbsent || allowanceStartDate != null) {
       map['allowance_start_date'] = Variable<String>(allowanceStartDate);
+    }
+    if (!nullToAbsent || jobTitle != null) {
+      map['job_title'] = Variable<String>(jobTitle);
+    }
+    if (!nullToAbsent || paydayDay != null) {
+      map['payday_day'] = Variable<int>(paydayDay);
     }
     map['is_removed'] = Variable<bool>(isRemoved);
     if (!nullToAbsent || removedAt != null) {
@@ -35361,6 +35415,12 @@ class PayrollWorkerData extends DataClass
       allowanceStartDate: allowanceStartDate == null && nullToAbsent
           ? const Value.absent()
           : Value(allowanceStartDate),
+      jobTitle: jobTitle == null && nullToAbsent
+          ? const Value.absent()
+          : Value(jobTitle),
+      paydayDay: paydayDay == null && nullToAbsent
+          ? const Value.absent()
+          : Value(paydayDay),
       isRemoved: Value(isRemoved),
       removedAt: removedAt == null && nullToAbsent
           ? const Value.absent()
@@ -35392,6 +35452,8 @@ class PayrollWorkerData extends DataClass
       allowanceStartDate: serializer.fromJson<String?>(
         json['allowanceStartDate'],
       ),
+      jobTitle: serializer.fromJson<String?>(json['jobTitle']),
+      paydayDay: serializer.fromJson<int?>(json['paydayDay']),
       isRemoved: serializer.fromJson<bool>(json['isRemoved']),
       removedAt: serializer.fromJson<DateTime?>(json['removedAt']),
       createdBy: serializer.fromJson<String?>(json['createdBy']),
@@ -35412,6 +35474,8 @@ class PayrollWorkerData extends DataClass
       'monthlySalaryKobo': serializer.toJson<int>(monthlySalaryKobo),
       'dailyAllowanceKobo': serializer.toJson<int>(dailyAllowanceKobo),
       'allowanceStartDate': serializer.toJson<String?>(allowanceStartDate),
+      'jobTitle': serializer.toJson<String?>(jobTitle),
+      'paydayDay': serializer.toJson<int?>(paydayDay),
       'isRemoved': serializer.toJson<bool>(isRemoved),
       'removedAt': serializer.toJson<DateTime?>(removedAt),
       'createdBy': serializer.toJson<String?>(createdBy),
@@ -35430,6 +35494,8 @@ class PayrollWorkerData extends DataClass
     int? monthlySalaryKobo,
     int? dailyAllowanceKobo,
     Value<String?> allowanceStartDate = const Value.absent(),
+    Value<String?> jobTitle = const Value.absent(),
+    Value<int?> paydayDay = const Value.absent(),
     bool? isRemoved,
     Value<DateTime?> removedAt = const Value.absent(),
     Value<String?> createdBy = const Value.absent(),
@@ -35447,6 +35513,8 @@ class PayrollWorkerData extends DataClass
     allowanceStartDate: allowanceStartDate.present
         ? allowanceStartDate.value
         : this.allowanceStartDate,
+    jobTitle: jobTitle.present ? jobTitle.value : this.jobTitle,
+    paydayDay: paydayDay.present ? paydayDay.value : this.paydayDay,
     isRemoved: isRemoved ?? this.isRemoved,
     removedAt: removedAt.present ? removedAt.value : this.removedAt,
     createdBy: createdBy.present ? createdBy.value : this.createdBy,
@@ -35472,6 +35540,8 @@ class PayrollWorkerData extends DataClass
       allowanceStartDate: data.allowanceStartDate.present
           ? data.allowanceStartDate.value
           : this.allowanceStartDate,
+      jobTitle: data.jobTitle.present ? data.jobTitle.value : this.jobTitle,
+      paydayDay: data.paydayDay.present ? data.paydayDay.value : this.paydayDay,
       isRemoved: data.isRemoved.present ? data.isRemoved.value : this.isRemoved,
       removedAt: data.removedAt.present ? data.removedAt.value : this.removedAt,
       createdBy: data.createdBy.present ? data.createdBy.value : this.createdBy,
@@ -35494,6 +35564,8 @@ class PayrollWorkerData extends DataClass
           ..write('monthlySalaryKobo: $monthlySalaryKobo, ')
           ..write('dailyAllowanceKobo: $dailyAllowanceKobo, ')
           ..write('allowanceStartDate: $allowanceStartDate, ')
+          ..write('jobTitle: $jobTitle, ')
+          ..write('paydayDay: $paydayDay, ')
           ..write('isRemoved: $isRemoved, ')
           ..write('removedAt: $removedAt, ')
           ..write('createdBy: $createdBy, ')
@@ -35514,6 +35586,8 @@ class PayrollWorkerData extends DataClass
     monthlySalaryKobo,
     dailyAllowanceKobo,
     allowanceStartDate,
+    jobTitle,
+    paydayDay,
     isRemoved,
     removedAt,
     createdBy,
@@ -35533,6 +35607,8 @@ class PayrollWorkerData extends DataClass
           other.monthlySalaryKobo == this.monthlySalaryKobo &&
           other.dailyAllowanceKobo == this.dailyAllowanceKobo &&
           other.allowanceStartDate == this.allowanceStartDate &&
+          other.jobTitle == this.jobTitle &&
+          other.paydayDay == this.paydayDay &&
           other.isRemoved == this.isRemoved &&
           other.removedAt == this.removedAt &&
           other.createdBy == this.createdBy &&
@@ -35550,6 +35626,8 @@ class PayrollWorkersCompanion extends UpdateCompanion<PayrollWorkerData> {
   final Value<int> monthlySalaryKobo;
   final Value<int> dailyAllowanceKobo;
   final Value<String?> allowanceStartDate;
+  final Value<String?> jobTitle;
+  final Value<int?> paydayDay;
   final Value<bool> isRemoved;
   final Value<DateTime?> removedAt;
   final Value<String?> createdBy;
@@ -35566,6 +35644,8 @@ class PayrollWorkersCompanion extends UpdateCompanion<PayrollWorkerData> {
     this.monthlySalaryKobo = const Value.absent(),
     this.dailyAllowanceKobo = const Value.absent(),
     this.allowanceStartDate = const Value.absent(),
+    this.jobTitle = const Value.absent(),
+    this.paydayDay = const Value.absent(),
     this.isRemoved = const Value.absent(),
     this.removedAt = const Value.absent(),
     this.createdBy = const Value.absent(),
@@ -35583,6 +35663,8 @@ class PayrollWorkersCompanion extends UpdateCompanion<PayrollWorkerData> {
     this.monthlySalaryKobo = const Value.absent(),
     this.dailyAllowanceKobo = const Value.absent(),
     this.allowanceStartDate = const Value.absent(),
+    this.jobTitle = const Value.absent(),
+    this.paydayDay = const Value.absent(),
     this.isRemoved = const Value.absent(),
     this.removedAt = const Value.absent(),
     this.createdBy = const Value.absent(),
@@ -35602,6 +35684,8 @@ class PayrollWorkersCompanion extends UpdateCompanion<PayrollWorkerData> {
     Expression<int>? monthlySalaryKobo,
     Expression<int>? dailyAllowanceKobo,
     Expression<String>? allowanceStartDate,
+    Expression<String>? jobTitle,
+    Expression<int>? paydayDay,
     Expression<bool>? isRemoved,
     Expression<DateTime>? removedAt,
     Expression<String>? createdBy,
@@ -35621,6 +35705,8 @@ class PayrollWorkersCompanion extends UpdateCompanion<PayrollWorkerData> {
         'daily_allowance_kobo': dailyAllowanceKobo,
       if (allowanceStartDate != null)
         'allowance_start_date': allowanceStartDate,
+      if (jobTitle != null) 'job_title': jobTitle,
+      if (paydayDay != null) 'payday_day': paydayDay,
       if (isRemoved != null) 'is_removed': isRemoved,
       if (removedAt != null) 'removed_at': removedAt,
       if (createdBy != null) 'created_by': createdBy,
@@ -35640,6 +35726,8 @@ class PayrollWorkersCompanion extends UpdateCompanion<PayrollWorkerData> {
     Value<int>? monthlySalaryKobo,
     Value<int>? dailyAllowanceKobo,
     Value<String?>? allowanceStartDate,
+    Value<String?>? jobTitle,
+    Value<int?>? paydayDay,
     Value<bool>? isRemoved,
     Value<DateTime?>? removedAt,
     Value<String?>? createdBy,
@@ -35657,6 +35745,8 @@ class PayrollWorkersCompanion extends UpdateCompanion<PayrollWorkerData> {
       monthlySalaryKobo: monthlySalaryKobo ?? this.monthlySalaryKobo,
       dailyAllowanceKobo: dailyAllowanceKobo ?? this.dailyAllowanceKobo,
       allowanceStartDate: allowanceStartDate ?? this.allowanceStartDate,
+      jobTitle: jobTitle ?? this.jobTitle,
+      paydayDay: paydayDay ?? this.paydayDay,
       isRemoved: isRemoved ?? this.isRemoved,
       removedAt: removedAt ?? this.removedAt,
       createdBy: createdBy ?? this.createdBy,
@@ -35694,6 +35784,12 @@ class PayrollWorkersCompanion extends UpdateCompanion<PayrollWorkerData> {
     if (allowanceStartDate.present) {
       map['allowance_start_date'] = Variable<String>(allowanceStartDate.value);
     }
+    if (jobTitle.present) {
+      map['job_title'] = Variable<String>(jobTitle.value);
+    }
+    if (paydayDay.present) {
+      map['payday_day'] = Variable<int>(paydayDay.value);
+    }
     if (isRemoved.present) {
       map['is_removed'] = Variable<bool>(isRemoved.value);
     }
@@ -35729,6 +35825,8 @@ class PayrollWorkersCompanion extends UpdateCompanion<PayrollWorkerData> {
           ..write('monthlySalaryKobo: $monthlySalaryKobo, ')
           ..write('dailyAllowanceKobo: $dailyAllowanceKobo, ')
           ..write('allowanceStartDate: $allowanceStartDate, ')
+          ..write('jobTitle: $jobTitle, ')
+          ..write('paydayDay: $paydayDay, ')
           ..write('isRemoved: $isRemoved, ')
           ..write('removedAt: $removedAt, ')
           ..write('createdBy: $createdBy, ')
@@ -35947,6 +36045,16 @@ class $PayrollEntriesTable extends PayrollEntries
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _monthlyRepaymentKoboMeta =
+      const VerificationMeta('monthlyRepaymentKobo');
+  @override
+  late final GeneratedColumn<int> monthlyRepaymentKobo = GeneratedColumn<int>(
+    'monthly_repayment_kobo',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -35991,6 +36099,7 @@ class $PayrollEntriesTable extends PayrollEntries
     approvedBy,
     approvedAt,
     rejectionReason,
+    monthlyRepaymentKobo,
     createdAt,
     lastUpdatedAt,
   ];
@@ -36129,6 +36238,15 @@ class $PayrollEntriesTable extends PayrollEntries
         ),
       );
     }
+    if (data.containsKey('monthly_repayment_kobo')) {
+      context.handle(
+        _monthlyRepaymentKoboMeta,
+        monthlyRepaymentKobo.isAcceptableOrUnknown(
+          data['monthly_repayment_kobo']!,
+          _monthlyRepaymentKoboMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -36221,6 +36339,10 @@ class $PayrollEntriesTable extends PayrollEntries
         DriftSqlType.string,
         data['${effectivePrefix}rejection_reason'],
       ),
+      monthlyRepaymentKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}monthly_repayment_kobo'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -36257,6 +36379,7 @@ class PayrollEntryData extends DataClass
   final String? approvedBy;
   final DateTime? approvedAt;
   final String? rejectionReason;
+  final int? monthlyRepaymentKobo;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
   const PayrollEntryData({
@@ -36277,6 +36400,7 @@ class PayrollEntryData extends DataClass
     this.approvedBy,
     this.approvedAt,
     this.rejectionReason,
+    this.monthlyRepaymentKobo,
     required this.createdAt,
     required this.lastUpdatedAt,
   });
@@ -36316,6 +36440,9 @@ class PayrollEntryData extends DataClass
     if (!nullToAbsent || rejectionReason != null) {
       map['rejection_reason'] = Variable<String>(rejectionReason);
     }
+    if (!nullToAbsent || monthlyRepaymentKobo != null) {
+      map['monthly_repayment_kobo'] = Variable<int>(monthlyRepaymentKobo);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
     return map;
@@ -36354,6 +36481,9 @@ class PayrollEntryData extends DataClass
       rejectionReason: rejectionReason == null && nullToAbsent
           ? const Value.absent()
           : Value(rejectionReason),
+      monthlyRepaymentKobo: monthlyRepaymentKobo == null && nullToAbsent
+          ? const Value.absent()
+          : Value(monthlyRepaymentKobo),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
     );
@@ -36382,6 +36512,9 @@ class PayrollEntryData extends DataClass
       approvedBy: serializer.fromJson<String?>(json['approvedBy']),
       approvedAt: serializer.fromJson<DateTime?>(json['approvedAt']),
       rejectionReason: serializer.fromJson<String?>(json['rejectionReason']),
+      monthlyRepaymentKobo: serializer.fromJson<int?>(
+        json['monthlyRepaymentKobo'],
+      ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
     );
@@ -36407,6 +36540,7 @@ class PayrollEntryData extends DataClass
       'approvedBy': serializer.toJson<String?>(approvedBy),
       'approvedAt': serializer.toJson<DateTime?>(approvedAt),
       'rejectionReason': serializer.toJson<String?>(rejectionReason),
+      'monthlyRepaymentKobo': serializer.toJson<int?>(monthlyRepaymentKobo),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
     };
@@ -36430,6 +36564,7 @@ class PayrollEntryData extends DataClass
     Value<String?> approvedBy = const Value.absent(),
     Value<DateTime?> approvedAt = const Value.absent(),
     Value<String?> rejectionReason = const Value.absent(),
+    Value<int?> monthlyRepaymentKobo = const Value.absent(),
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
   }) => PayrollEntryData(
@@ -36454,6 +36589,9 @@ class PayrollEntryData extends DataClass
     rejectionReason: rejectionReason.present
         ? rejectionReason.value
         : this.rejectionReason,
+    monthlyRepaymentKobo: monthlyRepaymentKobo.present
+        ? monthlyRepaymentKobo.value
+        : this.monthlyRepaymentKobo,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
   );
@@ -36494,6 +36632,9 @@ class PayrollEntryData extends DataClass
       rejectionReason: data.rejectionReason.present
           ? data.rejectionReason.value
           : this.rejectionReason,
+      monthlyRepaymentKobo: data.monthlyRepaymentKobo.present
+          ? data.monthlyRepaymentKobo.value
+          : this.monthlyRepaymentKobo,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       lastUpdatedAt: data.lastUpdatedAt.present
           ? data.lastUpdatedAt.value
@@ -36521,6 +36662,7 @@ class PayrollEntryData extends DataClass
           ..write('approvedBy: $approvedBy, ')
           ..write('approvedAt: $approvedAt, ')
           ..write('rejectionReason: $rejectionReason, ')
+          ..write('monthlyRepaymentKobo: $monthlyRepaymentKobo, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
           ..write(')'))
@@ -36546,6 +36688,7 @@ class PayrollEntryData extends DataClass
     approvedBy,
     approvedAt,
     rejectionReason,
+    monthlyRepaymentKobo,
     createdAt,
     lastUpdatedAt,
   );
@@ -36570,6 +36713,7 @@ class PayrollEntryData extends DataClass
           other.approvedBy == this.approvedBy &&
           other.approvedAt == this.approvedAt &&
           other.rejectionReason == this.rejectionReason &&
+          other.monthlyRepaymentKobo == this.monthlyRepaymentKobo &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
 }
@@ -36592,6 +36736,7 @@ class PayrollEntriesCompanion extends UpdateCompanion<PayrollEntryData> {
   final Value<String?> approvedBy;
   final Value<DateTime?> approvedAt;
   final Value<String?> rejectionReason;
+  final Value<int?> monthlyRepaymentKobo;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
   final Value<int> rowid;
@@ -36613,6 +36758,7 @@ class PayrollEntriesCompanion extends UpdateCompanion<PayrollEntryData> {
     this.approvedBy = const Value.absent(),
     this.approvedAt = const Value.absent(),
     this.rejectionReason = const Value.absent(),
+    this.monthlyRepaymentKobo = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -36635,6 +36781,7 @@ class PayrollEntriesCompanion extends UpdateCompanion<PayrollEntryData> {
     this.approvedBy = const Value.absent(),
     this.approvedAt = const Value.absent(),
     this.rejectionReason = const Value.absent(),
+    this.monthlyRepaymentKobo = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -36662,6 +36809,7 @@ class PayrollEntriesCompanion extends UpdateCompanion<PayrollEntryData> {
     Expression<String>? approvedBy,
     Expression<DateTime>? approvedAt,
     Expression<String>? rejectionReason,
+    Expression<int>? monthlyRepaymentKobo,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
     Expression<int>? rowid,
@@ -36684,6 +36832,8 @@ class PayrollEntriesCompanion extends UpdateCompanion<PayrollEntryData> {
       if (approvedBy != null) 'approved_by': approvedBy,
       if (approvedAt != null) 'approved_at': approvedAt,
       if (rejectionReason != null) 'rejection_reason': rejectionReason,
+      if (monthlyRepaymentKobo != null)
+        'monthly_repayment_kobo': monthlyRepaymentKobo,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -36708,6 +36858,7 @@ class PayrollEntriesCompanion extends UpdateCompanion<PayrollEntryData> {
     Value<String?>? approvedBy,
     Value<DateTime?>? approvedAt,
     Value<String?>? rejectionReason,
+    Value<int?>? monthlyRepaymentKobo,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
     Value<int>? rowid,
@@ -36730,6 +36881,7 @@ class PayrollEntriesCompanion extends UpdateCompanion<PayrollEntryData> {
       approvedBy: approvedBy ?? this.approvedBy,
       approvedAt: approvedAt ?? this.approvedAt,
       rejectionReason: rejectionReason ?? this.rejectionReason,
+      monthlyRepaymentKobo: monthlyRepaymentKobo ?? this.monthlyRepaymentKobo,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
       rowid: rowid ?? this.rowid,
@@ -36790,6 +36942,9 @@ class PayrollEntriesCompanion extends UpdateCompanion<PayrollEntryData> {
     if (rejectionReason.present) {
       map['rejection_reason'] = Variable<String>(rejectionReason.value);
     }
+    if (monthlyRepaymentKobo.present) {
+      map['monthly_repayment_kobo'] = Variable<int>(monthlyRepaymentKobo.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -36822,6 +36977,7 @@ class PayrollEntriesCompanion extends UpdateCompanion<PayrollEntryData> {
           ..write('approvedBy: $approvedBy, ')
           ..write('approvedAt: $approvedAt, ')
           ..write('rejectionReason: $rejectionReason, ')
+          ..write('monthlyRepaymentKobo: $monthlyRepaymentKobo, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
           ..write('rowid: $rowid')
@@ -107180,6 +107336,8 @@ typedef $$PayrollWorkersTableCreateCompanionBuilder =
       Value<int> monthlySalaryKobo,
       Value<int> dailyAllowanceKobo,
       Value<String?> allowanceStartDate,
+      Value<String?> jobTitle,
+      Value<int?> paydayDay,
       Value<bool> isRemoved,
       Value<DateTime?> removedAt,
       Value<String?> createdBy,
@@ -107198,6 +107356,8 @@ typedef $$PayrollWorkersTableUpdateCompanionBuilder =
       Value<int> monthlySalaryKobo,
       Value<int> dailyAllowanceKobo,
       Value<String?> allowanceStartDate,
+      Value<String?> jobTitle,
+      Value<int?> paydayDay,
       Value<bool> isRemoved,
       Value<DateTime?> removedAt,
       Value<String?> createdBy,
@@ -107369,6 +107529,16 @@ class $$PayrollWorkersTableFilterComposer
 
   ColumnFilters<String> get allowanceStartDate => $composableBuilder(
     column: $table.allowanceStartDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get jobTitle => $composableBuilder(
+    column: $table.jobTitle,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get paydayDay => $composableBuilder(
+    column: $table.paydayDay,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -107574,6 +107744,16 @@ class $$PayrollWorkersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get jobTitle => $composableBuilder(
+    column: $table.jobTitle,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get paydayDay => $composableBuilder(
+    column: $table.paydayDay,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isRemoved => $composableBuilder(
     column: $table.isRemoved,
     builder: (column) => ColumnOrderings(column),
@@ -107721,6 +107901,12 @@ class $$PayrollWorkersTableAnnotationComposer
     column: $table.allowanceStartDate,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get jobTitle =>
+      $composableBuilder(column: $table.jobTitle, builder: (column) => column);
+
+  GeneratedColumn<int> get paydayDay =>
+      $composableBuilder(column: $table.paydayDay, builder: (column) => column);
 
   GeneratedColumn<bool> get isRemoved =>
       $composableBuilder(column: $table.isRemoved, builder: (column) => column);
@@ -107928,6 +108114,8 @@ class $$PayrollWorkersTableTableManager
                 Value<int> monthlySalaryKobo = const Value.absent(),
                 Value<int> dailyAllowanceKobo = const Value.absent(),
                 Value<String?> allowanceStartDate = const Value.absent(),
+                Value<String?> jobTitle = const Value.absent(),
+                Value<int?> paydayDay = const Value.absent(),
                 Value<bool> isRemoved = const Value.absent(),
                 Value<DateTime?> removedAt = const Value.absent(),
                 Value<String?> createdBy = const Value.absent(),
@@ -107944,6 +108132,8 @@ class $$PayrollWorkersTableTableManager
                 monthlySalaryKobo: monthlySalaryKobo,
                 dailyAllowanceKobo: dailyAllowanceKobo,
                 allowanceStartDate: allowanceStartDate,
+                jobTitle: jobTitle,
+                paydayDay: paydayDay,
                 isRemoved: isRemoved,
                 removedAt: removedAt,
                 createdBy: createdBy,
@@ -107962,6 +108152,8 @@ class $$PayrollWorkersTableTableManager
                 Value<int> monthlySalaryKobo = const Value.absent(),
                 Value<int> dailyAllowanceKobo = const Value.absent(),
                 Value<String?> allowanceStartDate = const Value.absent(),
+                Value<String?> jobTitle = const Value.absent(),
+                Value<int?> paydayDay = const Value.absent(),
                 Value<bool> isRemoved = const Value.absent(),
                 Value<DateTime?> removedAt = const Value.absent(),
                 Value<String?> createdBy = const Value.absent(),
@@ -107978,6 +108170,8 @@ class $$PayrollWorkersTableTableManager
                 monthlySalaryKobo: monthlySalaryKobo,
                 dailyAllowanceKobo: dailyAllowanceKobo,
                 allowanceStartDate: allowanceStartDate,
+                jobTitle: jobTitle,
+                paydayDay: paydayDay,
                 isRemoved: isRemoved,
                 removedAt: removedAt,
                 createdBy: createdBy,
@@ -108180,6 +108374,7 @@ typedef $$PayrollEntriesTableCreateCompanionBuilder =
       Value<String?> approvedBy,
       Value<DateTime?> approvedAt,
       Value<String?> rejectionReason,
+      Value<int?> monthlyRepaymentKobo,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
       Value<int> rowid,
@@ -108203,6 +108398,7 @@ typedef $$PayrollEntriesTableUpdateCompanionBuilder =
       Value<String?> approvedBy,
       Value<DateTime?> approvedAt,
       Value<String?> rejectionReason,
+      Value<int?> monthlyRepaymentKobo,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
       Value<int> rowid,
@@ -108403,6 +108599,11 @@ class $$PayrollEntriesTableFilterComposer
 
   ColumnFilters<String> get rejectionReason => $composableBuilder(
     column: $table.rejectionReason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get monthlyRepaymentKobo => $composableBuilder(
+    column: $table.monthlyRepaymentKobo,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -108626,6 +108827,11 @@ class $$PayrollEntriesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get monthlyRepaymentKobo => $composableBuilder(
+    column: $table.monthlyRepaymentKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -108806,6 +109012,11 @@ class $$PayrollEntriesTableAnnotationComposer
 
   GeneratedColumn<String> get rejectionReason => $composableBuilder(
     column: $table.rejectionReason,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get monthlyRepaymentKobo => $composableBuilder(
+    column: $table.monthlyRepaymentKobo,
     builder: (column) => column,
   );
 
@@ -109013,6 +109224,7 @@ class $$PayrollEntriesTableTableManager
                 Value<String?> approvedBy = const Value.absent(),
                 Value<DateTime?> approvedAt = const Value.absent(),
                 Value<String?> rejectionReason = const Value.absent(),
+                Value<int?> monthlyRepaymentKobo = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -109034,6 +109246,7 @@ class $$PayrollEntriesTableTableManager
                 approvedBy: approvedBy,
                 approvedAt: approvedAt,
                 rejectionReason: rejectionReason,
+                monthlyRepaymentKobo: monthlyRepaymentKobo,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
                 rowid: rowid,
@@ -109057,6 +109270,7 @@ class $$PayrollEntriesTableTableManager
                 Value<String?> approvedBy = const Value.absent(),
                 Value<DateTime?> approvedAt = const Value.absent(),
                 Value<String?> rejectionReason = const Value.absent(),
+                Value<int?> monthlyRepaymentKobo = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -109078,6 +109292,7 @@ class $$PayrollEntriesTableTableManager
                 approvedBy: approvedBy,
                 approvedAt: approvedAt,
                 rejectionReason: rejectionReason,
+                monthlyRepaymentKobo: monthlyRepaymentKobo,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
                 rowid: rowid,
