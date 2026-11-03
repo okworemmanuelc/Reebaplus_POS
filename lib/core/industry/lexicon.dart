@@ -52,7 +52,7 @@ class Lexicon {
     this.unit,
     this.starterUnits = kGenericUnits,
     this.starterCategories = const [],
-    this.itemNameHint = 'e.g. Product name',
+    this.itemNameHint = 'Eva water 75cl',
     this.itemDescriptionHint = 'e.g. Short description',
   });
 
