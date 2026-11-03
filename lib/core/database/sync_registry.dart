@@ -1832,7 +1832,11 @@ Future<void> _restoreOrders(
   Set<String>? fkSkipped,
 ) async {
   for (final r in rows) {
-    final data = OrderData.fromJson(r);
+    // #712 — a cloud without 0247 (or an older row/fixture) carries no `kind`;
+    // every such order is a sale. Without this the pull would throw.
+    final data = OrderData.fromJson(
+      r['kind'] == null ? {...r, 'kind': 'sale'} : r,
+    );
     await ex.insertResilient(
       'orders',
       r,
