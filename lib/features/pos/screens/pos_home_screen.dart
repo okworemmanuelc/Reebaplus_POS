@@ -659,12 +659,7 @@ class _PosHomeScreenState extends ConsumerState<PosHomeScreen> {
         subtitle:
             _controller!.currentStoreName ??
             ref.watch(activeStoreLabelProvider),
-        leading: context.isRailLayout
-            ? null
-            : const SizedBox.square(
-                dimension: kMinInteractiveDimension,
-                child: MenuButton(),
-              ),
+        leading: context.isRailLayout ? null : const MenuButton(),
         actions: [
           SizedBox(width: gap),
           IconButton(

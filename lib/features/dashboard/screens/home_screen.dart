@@ -465,12 +465,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           title: bizName.isNotEmpty ? bizName : 'Reebaplus POS',
           storeLabel: ref.watch(activeStoreLabelProvider),
           height: homeTopBarHeight(context),
-          leading: context.isRailLayout
-              ? null
-              : const SizedBox.square(
-                  dimension: kMinInteractiveDimension,
-                  child: MenuButton(),
-                ),
+          leading: context.isRailLayout ? null : const MenuButton(),
           periodActions: pillsInBar
               ? [_buildPeriodPill(), if (showReports) _buildReportsPill()]
               : const [],

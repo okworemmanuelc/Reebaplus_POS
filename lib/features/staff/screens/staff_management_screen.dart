@@ -165,12 +165,7 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen>
       icon: AppIcons.staff,
       title: title,
       subtitle: store,
-      leading: context.isRailLayout
-          ? null
-          : const SizedBox.square(
-              dimension: kMinInteractiveDimension,
-              child: MenuButton(),
-            ),
+      leading: context.isRailLayout ? null : const MenuButton(),
     );
   }
 

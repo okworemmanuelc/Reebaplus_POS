@@ -478,12 +478,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
             icon: AppIcons.store,
             title: 'Stores',
             subtitle: ref.watch(activeStoreLabelProvider),
-            leading: context.isRailLayout
-                ? null
-                : const SizedBox.square(
-                    dimension: kMinInteractiveDimension,
-                    child: MenuButton(),
-                  ),
+            leading: context.isRailLayout ? null : const MenuButton(),
             actions: const [StoresLiveBell()],
           ),
         ),

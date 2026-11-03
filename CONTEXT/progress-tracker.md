@@ -7,6 +7,9 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Menu button squashed on Orders + Activity Logs (2026-11-03, branch `fix/menu-button-self-sized`)
+- `MenuButton` now owns its 48dp box; the 9 `SizedBox.square(kMinInteractiveDimension)` wrappers are gone. Orders + Activity Logs goldens re-recorded (390x844 only).
+
 ### Issue #697: First-run "Tap to add your first product" pointer (2026-11-03, branch `fix/697-first-product-pointer`)
 - The stop-2 pointer gated on `SpotlightTargetRegistry.getKey`, which falls back to an unpainted key; MainLayout warms every tab offstage, so the caption floated over Home and every tab with no ring. Now gated on `getTargetRect` (painted only), so it shows only on Stock with the "+" circled.
 - Tapping the caption now opens the fast Add Product form on the current tab's Navigator (was: hid the pointer). "Your store is ready → Add a product" switches to Stock via `setIndex` and keeps the pointer up. `tourProductPointerDismissedProvider` removed (nothing set it any more).
