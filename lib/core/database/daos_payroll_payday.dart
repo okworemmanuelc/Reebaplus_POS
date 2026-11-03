@@ -223,9 +223,9 @@ extension PayrollPayday on PayrollDao {
     if (payday.compareTo(today) > 0) {
       throw const PayrollRuleViolation('The payday cannot be in the future.');
     }
-    // #696: the current month may be paid before it ends; only a month that
-    // has not started yet is refused.
-    if (salaryMonth.compareTo(payrollMonthKey(now ?? DateTime.now())) > 0) {
+    // #696/#704: the payday's own month may be paid before it ends; a month
+    // that has not started yet on the chosen payday is refused.
+    if (salaryMonth.compareTo(payrollMonthKey(paydayDay)) > 0) {
       throw PayrollRuleViolation(
         '${payrollMonthLabel(salaryMonth)} has not started yet.',
       );
