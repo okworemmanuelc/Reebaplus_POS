@@ -426,12 +426,20 @@ class OrderCommands {
   /// pre-sale balance.
   Future<void> cancel(String orderId, String reason, String staffId, {
     required GateContext gateContext,
+    RefundDestination destination = RefundDestination.cashOrTransfer,
+    String? refundMethod,
   }) {
     const gate = Gates.refundOrder;
     if (!gate.evaluate(gateContext)) {
       throw GateDeniedError(gateName: gate.name, action: gate.action);
     }
-    return _ordersDao.markCancelled(orderId, reason, staffId);
+    return _ordersDao.markCancelled(
+      orderId,
+      reason,
+      staffId,
+      destination: destination,
+      refundMethod: refundMethod,
+    );
   }
 
   /// **Return** a crate-free Completed sale (#551, PRD #337): the whole sale is
@@ -448,6 +456,8 @@ class OrderCommands {
     required GateContext gateContext,
     String damageReasonKey = 'other',
     Map<String, double> damagedQtyByLine = const {},
+    RefundDestination destination = RefundDestination.cashOrTransfer,
+    String? refundMethod,
   }) async {
     const gate = Gates.refundOrder;
     if (!gate.evaluate(gateContext)) {
@@ -459,6 +469,8 @@ class OrderCommands {
       staffId: staffId,
       damageReasonKey: damageReasonKey,
       damagedQtyByLine: damagedQtyByLine,
+      destination: destination,
+      refundMethod: refundMethod,
     );
     if (outcome == null) return;
     await _auditReturn(

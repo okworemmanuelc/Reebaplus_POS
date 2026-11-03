@@ -9,6 +9,7 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/features/orders/screens/orders_screen.dart';
 import 'package:reebaplus_pos/features/orders/widgets/orders_parts.dart';
+import 'package:reebaplus_pos/features/orders/widgets/refund_destination_dialog.dart';
 import 'package:reebaplus_pos/shared/services/orders/order_service.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 
@@ -151,6 +152,11 @@ void main() {
           .read(_context.notifier).state = _revoked;
       await tester.pump();
       await tester.tap(find.widgetWithText(AppButton, 'Issue Refund'));
+      await settleOrders(tester);
+      // #710 — a paid order asks where the money goes.
+      await tester.tap(find.byKey(RefundDestinationKeys.cash));
+      await tester.pump();
+      await tester.tap(find.byKey(RefundDestinationKeys.confirm));
       await settleOrders(tester);
       expect(await tester.runAsync(() => _snapshot(env.db)), before);
       expect(find.text('You no longer have access to Refund Order.'), findsOneWidget);

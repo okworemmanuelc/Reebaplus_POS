@@ -51,6 +51,7 @@ import 'package:reebaplus_pos/features/pos/services/receipt_builder.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/features/orders/widgets/crate_return_modal.dart';
 import 'package:reebaplus_pos/features/orders/widgets/return_sale_dialog.dart';
+import 'package:reebaplus_pos/features/orders/widgets/refund_destination_dialog.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/customers/screens/customer_detail_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
@@ -1085,10 +1086,24 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       },
     );
     if (reason == null || !mounted) return;
-    await _executeRefund(order, reason);
+    // #710 — money was paid: ask where it goes (skipped for a pure credit sale).
+    RefundChoice? choice;
+    if (order.amountPaidKobo > 0) {
+      choice = await showRefundDestinationDialog(
+        context,
+        paidKobo: order.amountPaidKobo,
+        hasCustomer: order.customerId != null,
+      );
+      if (choice == null || !mounted) return;
+    }
+    await _executeRefund(order, reason, choice);
   }
 
-  Future<void> _executeRefund(OrderData order, String reason) async {
+  Future<void> _executeRefund(
+    OrderData order,
+    String reason,
+    RefundChoice? choice,
+  ) async {
     try {
       Gates.refundOrder.require(ref);
     } on GateDeniedError {
@@ -1100,7 +1115,10 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       await ref
           .read(orderServiceProvider)
           .markAsCancelled(order.id, reason, staffId,
-            gateContext: ref.read(gateContextProvider));
+            gateContext: ref.read(gateContextProvider),
+            destination:
+                choice?.destination ?? RefundDestination.cashOrTransfer,
+            refundMethod: choice?.method);
       if (mounted) {
         AppNotification.showSuccess(
           context,
@@ -1136,6 +1154,16 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       ],
     );
     if (input == null || !mounted) return;
+    // #710 — money was paid: ask where it goes (skipped for a pure credit sale).
+    RefundChoice? choice;
+    if (order.amountPaidKobo > 0) {
+      choice = await showRefundDestinationDialog(
+        context,
+        paidKobo: order.amountPaidKobo,
+        hasCustomer: order.customerId != null,
+      );
+      if (choice == null || !mounted) return;
+    }
     try {
       Gates.refundOrder.require(ref);
     } on GateDeniedError {
@@ -1151,6 +1179,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
             gateContext: ref.read(gateContextProvider),
             damageReasonKey: input.damageReasonKey,
             damagedQtyByLine: input.damagedQtyByLine,
+            destination:
+                choice?.destination ?? RefundDestination.cashOrTransfer,
+            refundMethod: choice?.method,
           );
       if (mounted) {
         AppNotification.showSuccess(

@@ -39,6 +39,9 @@ class PaymentTransactionsDao extends DatabaseAccessor<AppDatabase>
   ///   nullable, so a legacy store-less original yields a store-less reversal
   ///   that reports business-wide, exactly as today).
   ///
+  /// [method] overrides the copied tender (#710: the cashier picks cash or
+  /// transfer for a refund).
+  ///
   /// [reversalType] is the payment `type` of the compensating row (a valid
   /// `payment_transactions.type`, e.g. `'refund'` for a cancelled sale).
   /// [amountKobo] defaults to the original's amount. [reason] is recorded in
@@ -53,6 +56,7 @@ class PaymentTransactionsDao extends DatabaseAccessor<AppDatabase>
     String? storeId,
     String? reason,
     DateTime? at,
+    String? method,
   }) async {
     final now = at ?? DateTime.now();
     final reversalId = UuidV7.generate();
@@ -61,7 +65,7 @@ class PaymentTransactionsDao extends DatabaseAccessor<AppDatabase>
       businessId: original.businessId,
       storeId: Value(storeId ?? original.storeId),
       amountKobo: amountKobo ?? original.amountKobo,
-      method: original.method,
+      method: method ?? original.method,
       type: reversalType,
       orderId: Value(original.orderId),
       shipmentId: Value(original.shipmentId),
