@@ -163,7 +163,7 @@ void main() {
       });
 
       test('crate section uses the same gate as Full', () {
-        final noCrates = const [
+        const noCrates = [
           {'name': 'Vegetable Oil 1L', 'price': 3500.0, 'qty': 1.0},
         ];
         for (final rs in ReceiptSize.values) {
@@ -180,6 +180,23 @@ void main() {
             receiptSize: rs,
           ).map((l) => l.plain).join('\n');
           expect(out, contains('EMPTY CRATES'));
+        }
+      });
+
+      test('tracksCrates false hides the crate section, like Full', () {
+        for (final rs in ReceiptSize.values) {
+          final out = buildReceiptLines(
+            paperSize: size,
+            orderId: 'ORD-1',
+            cart: _cart,
+            subtotal: 1,
+            crateDeposit: 0,
+            total: 1,
+            paymentMethod: 'Cash',
+            tracksCrates: false,
+            receiptSize: rs,
+          ).map((l) => l.plain).join('\n');
+          expect(out, isNot(contains('EMPTY CRATES')));
         }
       });
 
@@ -204,8 +221,9 @@ void main() {
         );
         bool hasFontB(List<int> b) {
           for (var i = 0; i + 2 < b.length; i++) {
-            if (b[i] == 0x1B && b[i + 1] == 0x4D && b[i + 2] == 0x01)
+            if (b[i] == 0x1B && b[i + 1] == 0x4D && b[i + 2] == 0x01) {
               return true;
+            }
           }
           return false;
         }
