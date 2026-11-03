@@ -1836,7 +1836,17 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     bool forceLocalReversal = false,
     Map<String, double> damagedQtyByLine = const {},
     String damageReasonKey = 'other',
+    RefundDestination destination = RefundDestination.cashOrTransfer,
+    String? refundMethod,
   }) async {
+    // #710 — [destination]/[refundMethod] are the Refund destination. Default
+    // = today's behaviour exactly (method copied from each original row). The
+    // local reversal is the only path that honours a choice, so a non-default
+    // choice never takes the v2 domain RPC.
+    assert(
+      refundMethod == null || refundMethod == 'cash' || refundMethod == 'transfer',
+    );
+    final toBalance = destination == RefundDestination.balance;
     // DO NOT ENABLE UNTIL #121 (the oversell-orphan go-live gate), and not
     // before migration 0170 is DEPLOYED. #201 rewrote `pos_cancel_order` to the
     // rules below — compensating rows only, deposits and top-ups reversed in
@@ -1850,11 +1860,18 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       'feature.domain_rpcs_v2.cancel_order',
     );
     final useDomainRpc =
-        !forceLocalReversal && (flagValue == 'true' || flagValue == '"true"');
+        !forceLocalReversal &&
+        !toBalance &&
+        refundMethod == null &&
+        (flagValue == 'true' || flagValue == '"true"');
 
     return db.transaction(() async {
       final current = await findById(orderId);
       if (current != null && current.status == 'cancelled') return;
+      // #710 — a walk-in has no account to credit; refuse before any write.
+      if (toBalance && current?.customerId == null) {
+        throw const ReturnRefusedException(ReturnRefusal.noCustomerBalance);
+      }
       final now = DateTime.now();
 
       // Update order status (both v1 and v2 paths flip the header locally
@@ -2047,9 +2064,16 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         // `sale` reverses as a positive `refund`; the held/credit rows reverse
         // as a negative row of their own type so their card line nets to zero.
         final isSale = pay.type == 'sale';
+        // #710 — "Add to customer's balance": the paid goods money stays as
+        // account credit, so NO `refund` cash-out row (and, below, the payment
+        // credit leg is not voided). The overpayment `wallet_topup` row stays
+        // too: its cash is still in the till AND still the customer's credit.
+        // Only the crate_deposit row reverses as ever.
+        if (toBalance && (isSale || pay.type == 'wallet_topup')) continue;
         await db.paymentTransactionsDao.postReversalPayment(
           original: pay,
           reversalType: isSale ? 'refund' : pay.type,
+          method: isSale ? refundMethod : null,
           performedBy: staffId,
           amountKobo: isSale ? pay.amountKobo : -pay.amountKobo,
           reason: 'order_cancelled: $reason',
@@ -2099,6 +2123,16 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       final collections = await _payOnDeliveryCollectionIds(orderId);
       for (final leg in saleWalletLegs) {
         if (collections.contains(leg.id)) continue;
+        // #710 — the payment credit leg (leg 2 of createOrder: a credit
+        // `topup_cash` / `topup_transfer` carrying the order id) stays
+        // standing: it IS the customer's balance credit. The goods debit
+        // (`order_payment`) still reverses below with a `refund` credit.
+        if (toBalance &&
+            leg.type == 'credit' &&
+            (leg.referenceType == 'topup_cash' ||
+                leg.referenceType == 'topup_transfer')) {
+          continue;
+        }
         final toCredit = leg.type == 'debit';
         final isHeldDeposit = leg.referenceType == 'crate_deposit';
         final compReverse = WalletTransactionsCompanion.insert(
@@ -2169,6 +2203,21 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
 
   // ── Return a crate-free Completed sale (#551, PRD #337) ────────────────────
 
+  /// #710 — money actually tendered on [orderId] and still refundable: the sum
+  /// of unvoided positive `sale` + `wallet_topup` payment rows. Decides whether
+  /// the Refund destination pop-up shows (0 = pure credit sale, skip it).
+  Future<int> refundablePaidKobo(String orderId) async {
+    final rows = await (select(paymentTransactions)..where(
+          (p) =>
+              p.orderId.equals(orderId) &
+              whereBusiness(p) &
+              p.voidedAt.isNull() &
+              p.type.isIn(const ['sale', 'wallet_topup']),
+        ))
+        .get();
+    return rows.fold<int>(0, (a, p) => a + (p.amountKobo > 0 ? p.amountKobo : 0));
+  }
+
   /// Whether [orderId] may be Returned (PRD #337): `completed`, no crate history
   /// (per-brand crate lines, crate-ledger rows referencing the order, crate
   /// deposit payment rows or wallet legs) and no line that is a crate-tracked
@@ -2229,6 +2278,8 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     required String staffId,
     String damageReasonKey = 'other',
     Map<String, double> damagedQtyByLine = const {},
+    RefundDestination destination = RefundDestination.cashOrTransfer,
+    String? refundMethod,
   }) {
     return db.transaction(() async {
       final order = await findById(orderId);
@@ -2276,6 +2327,8 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         forceLocalReversal: true,
         damagedQtyByLine: damagedQtyByLine,
         damageReasonKey: damageReasonKey,
+        destination: destination,
+        refundMethod: refundMethod,
       );
       return ReturnOutcome(
         orderNumber: order.orderNumber,
@@ -3628,11 +3681,20 @@ enum ReturnRefusal {
     'deposit side was already settled.',
   ),
   badDamagedQty('A damaged quantity is more than was sold on that line.'),
-  badDamageReason('Pick a valid reason for the damaged items.');
+  badDamageReason('Pick a valid reason for the damaged items.'),
+  noCustomerBalance(
+    'A walk-in sale has no customer balance. Give the money back as cash or '
+    'transfer.',
+  );
 
   const ReturnRefusal(this.message);
   final String message;
 }
+
+/// #710 — where refunded money goes. `balance` = stays on the named customer's
+/// account as credit (no cash-out row); `cashOrTransfer` = a `refund` row on
+/// the cancel day (today's behaviour).
+enum RefundDestination { balance, cashOrTransfer }
 
 /// Typed, user-presentable refusal of a Return (nothing was written).
 class ReturnRefusedException implements Exception {

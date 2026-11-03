@@ -290,6 +290,18 @@ withdraws the local rows (through `AppDatabase.withdrawUnsyncedRows`), takes the
 cloud header and discards the held rows. A trigger keeps a claimed or cancelled
 order's cancellation sticky on the cloud.
 
+**Refund destination (#710).** `markCancelled` / `returnCompletedSale` take a
+`RefundDestination` (default `cashOrTransfer` = the old behaviour) and an
+optional `refundMethod` (`cash`/`transfer`, overrides the original tender on the
+`refund` row via `postReversalPayment(method:)`). `balance` (named customers
+only; a walk-in is refused with `ReturnRefusal.noCustomerBalance`): the `sale`
+payment rows get NO `refund` row and the payment credit wallet leg
+(`topup_cash`/`topup_transfer`) is NOT voided, so the paid amount stays as
+account credit; the goods debit still reverses with a `refund` credit. Deposit
+and top-up rows reverse in their own family as before. A non-default choice
+always uses the local reversal (never the v2 domain RPC). All inside the #550
+guarded reversal.
+
 **Pay on delivery + Mark as paid (#432).** No new payment type, status or
 column. A Cart tagged with an Online Order offers Pay on delivery, which is the
 existing credit sale (`payment_type = 'credit'`). An order IS Pay on delivery

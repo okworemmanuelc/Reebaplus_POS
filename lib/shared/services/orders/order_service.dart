@@ -102,8 +102,17 @@ class OrderService {
   /// its confirmation UI. The command enforces the named refund gate (#466).
   Future<void> markAsCancelled(String orderId, String reason, String staffId, {
     required GateContext gateContext,
+    RefundDestination destination = RefundDestination.cashOrTransfer,
+    String? refundMethod,
   }) {
-    return _commands.cancel(orderId, reason, staffId, gateContext: gateContext);
+    return _commands.cancel(
+      orderId,
+      reason,
+      staffId,
+      gateContext: gateContext,
+      destination: destination,
+      refundMethod: refundMethod,
+    );
   }
 
   /// **Return** a crate-free Completed sale (#551). See
@@ -116,6 +125,8 @@ class OrderService {
     required GateContext gateContext,
     String damageReasonKey = 'other',
     Map<String, double> damagedQtyByLine = const {},
+    RefundDestination destination = RefundDestination.cashOrTransfer,
+    String? refundMethod,
   }) {
     return _commands.returnCompletedSale(
       orderId: orderId,
@@ -124,11 +135,17 @@ class OrderService {
       gateContext: gateContext,
       damageReasonKey: damageReasonKey,
       damagedQtyByLine: damagedQtyByLine,
+      destination: destination,
+      refundMethod: refundMethod,
     );
   }
 
   /// Whether a Completed sale may be Returned (#551) — the Orders screen asks
   /// this and never re-derives the rule.
+  /// #710 — tendered money still refundable (drives the destination pop-up).
+  Future<int> refundablePaidKobo(String orderId) =>
+      _queries.refundablePaidKobo(orderId);
+
   Future<bool> isReturnable(String orderId) => _queries.isReturnable(orderId);
 
   /// **Cancel a server-REJECTED sale** — the cashier tapped Cancel on the
