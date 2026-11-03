@@ -25,7 +25,7 @@ void main() {
           final lex = lexiconFor(ind);
           expect(
             lex.itemNameHint,
-            'e.g. Product name',
+            'Eva water 75cl',
             reason: '$ind name hint',
           );
           expect(
@@ -50,7 +50,7 @@ void main() {
         expect(lexiconFor(industryOf('Phone & Gadgets')).item, 'Product');
         expect(
           lexiconFor(industryOf('Beverage distributor')).itemNameHint,
-          'e.g. Product name',
+          'Eva water 75cl',
         );
         expect(lexiconFor(industryOf('Other custom shop')).item, 'Product');
       },
