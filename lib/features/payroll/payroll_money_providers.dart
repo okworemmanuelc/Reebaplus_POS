@@ -25,3 +25,12 @@ final payrollPendingEntriesProvider =
 final payrollIsApproverProvider = Provider<bool>(
   (ref) => ref.watch(currentUserRoleProvider)?.slug == 'ceo',
 );
+
+/// One worker's signed salary statements, newest month first (#671). Empty on
+/// a phone without `payroll.manage` (ADR 0034).
+final payrollWorkerStatementsProvider =
+    businessScopedStreamFamily<List<PayrollStatementData>, String>(
+      (ref, db, businessId, workerId) =>
+          db.payrollDao.watchStatementsForWorker(workerId),
+      whenAbsent: const [],
+    );

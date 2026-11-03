@@ -224,7 +224,7 @@ class _WorkerCard extends StatelessWidget {
                     key: PayrollMoneyKeys.openMoney(worker.id),
                     onPressed: onOpenMoney,
                     icon: const Icon(AppIcons.cash, size: 18),
-                    label: const Text('Bonus, advance and loans'),
+                    label: const Text('Pay salary, bonus, advance and loans'),
                   ),
                 ),
             ],

@@ -636,6 +636,15 @@ every post, change and pull, so phones converge by last-write-wins. Daily
 Reconciliation (`ReconData.dailyAllowancesKobo`, in cash out, net profit and
 net result) and Expenses read it.
 
+**Salaries line (#671).** Kind `salaries` is one row per store per payday:
+`amount_kobo` = salaries paid (a cost: net profit, net result, Expenses),
+`cash_kobo` = the part handed over in till cash (cash out only; a transfer,
+earlier advances and a loan repayment kept back never leave the drawer that
+day). Recomputed from `payroll_statements` joined to their salary entry after
+every payday and pull. The salary entry and the payday repayment use
+deterministic ids (`payrollSalaryEntryId`, `payrollSalaryRepaymentId`) like the
+statement, so two phones paying the same month offline converge on one row.
+
 ### Ordering, idempotency, and crash capture
 
 - **Ordering & idempotency:** outbox entries are ordered and carry client-generated UUIDv7 IDs so replays are idempotent — re-sending a batch after a dropped connection can never double-apply a sale.

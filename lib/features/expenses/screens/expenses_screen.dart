@@ -211,7 +211,8 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
 
     // #669 — the combined "Daily allowances" lines (per store per day, no
     // worker named, ADR 0034). Never waiting: they show under "All" only.
-    final allowanceLines = dailyAllowanceLinesInScope(
+    // #671 — and the combined "Salaries" lines per store per payday.
+    final allowanceLines = staffPayLinesInScope(
       ref.watch(allStaffPayTotalsProvider).valueOrNull ?? const [],
       scopeStoreId,
     );
@@ -462,13 +463,15 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
     return ExpenseListRow(
       key: ValueKey('$kExpenseRowKeyPrefix${line.id}'),
       icon: AppIcons.payroll,
-      title: 'Daily allowances',
+      title: staffPayLineTitle(line),
       subtitle: ['Payroll', when, ?storeName].join(' · '),
       amountKobo: line.amountKobo,
       status: 'approved',
       onTap: () => AppNotification.showInfo(
         context,
-        'Daily allowances are recorded automatically in Payroll.',
+        line.kind == kStaffPayKindSalaries
+            ? 'Salaries are paid in Payroll.'
+            : 'Daily allowances are recorded automatically in Payroll.',
       ),
     );
   }

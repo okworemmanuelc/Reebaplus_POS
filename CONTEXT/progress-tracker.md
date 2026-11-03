@@ -7,6 +7,14 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #671: Payroll payday, signatures, payslip and Total Pay (2026-11-03, branch `feat/671-payroll-payday`)
+- **No schema change** (v103 columns were enough). `PayrollPayday` extension (`lib/core/database/daos_payroll_payday.dart`): `paySalary` writes the `salary_payment` entry (amount = the month's salary, Cash/Transfer/Other, dated the payday), an optional `loan_repaid` entry ("Taken from <month> salary", method other) and the signed `payroll_statements` row, all with deterministic ids. Pure `PaydayFigures`: cash = salary − approved advances for the month − repayment (≥ 0); repayment ≤ min(owed, salary − advances); Total Pay = salary + approved allowances + approved bonuses dated in the month (a correction counts in its original's month).
+- Rules: one payment per worker per month (statement or salary entry present → refused); only a month before the payday's month; payday today or earlier, never future; a different amount needs a reason (saved on the entry note; normal salary unchanged); a waiting advance for the month blocks payday; both signatures required. Straight through; the CEO is notified (`payroll.salary_paid`, name + month, no amount) when someone else pays. Activity log `payroll_salary_paid` (name + month).
+- **Salaries line**: `staff_pay_totals` kind `salaries`, one row per store per payday (amount = salaries, cash = till cash paid), refreshed on payday and after every pull. Recon `salariesKobo` (net profit, net result) + `cashSalariesKobo` (cash out), detail screen + CSV lines; Expenses lists "Salaries" rows (`staffPayLinesInScope`) and counts them in Spent.
+- UI: worker screen ("Pay salary" button, Total Pay this month so far, Salary payments list) → `PayrollPaydayScreen` (month, payday date, salary + reason, loan repayment, method, live cash and Total Pay, two in-house `SignaturePad`s, no package) → `PayrollPayslipScreen` (payslip with signatures; Print = receipt text printing via `ThermalReceiptService.buildFromLines`; Share = screenshot image).
+- Tests: `test/payroll/payroll_payday_test.dart` (26), `payroll_payday_screen_test.dart` (2). pos-parity issue filed in reebaplus-web (Salaries line in recon/expenses/profit).
+- Open: advances and bonuses paid in till cash still never reach the drawer figure (no combined line for them, from #670); home-screen profit excludes allowances/salaries (same as #669).
+
 ### Issue #688: Payroll entry date + CEO salary-change alert (2026-11-03, branch `feat/688-payroll-date-and-salary-alert`)
 
 - `recordMoneyEntry` takes optional `entryDate` ('YYYY-MM-DD'; default today; future rejected with `PayrollRuleViolation`). The entry dialog has a tappable Date field (`showDatePicker`, lastDate today); picking a date in the offered months moves the advance Salary Month dropdown. Corrections stay dated today. Caps unchanged.
