@@ -7,6 +7,12 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #717: Receipts waste paper — trim the end-of-print feed (2026-11-03, branch `fix/717-receipt-paper-feed`)
+- Cause: `receipt_lines` fed 2 blank lines and `esc_pos_utils_plus` `Generator.cut()` silently adds 5 more → ~7 lines (~28 mm) per job; tear-bar printers (MTP-3) ignore the cut, so it was all paper (bottom of this receipt + top of the next).
+- Builders (receipt text/picture, sample, payslip, online slip) now emit content only; `PrinterService` appends `paperEnd(n)` = `ESC d n` + `GS V 65 0` (feed to the cutter's own position) on every write path. Never use `generator.cut()` again.
+- New per-printer setting "Blank paper after receipt" (0–5, default 3) on Receipt printer settings (`printer_paper_end:<id>`).
+- Owner check pending: MTP-3 at default 3 — last line must clear the tear bar.
+
 ### Issue #672: Payroll import from the old POS (2026-11-03, branch `feat/672-payroll-import`)
 - New tool `tool/payroll_import/` (same shape as #623's `tool/legacy_import`: writes `import.sql`, `checks.sql`, `report.md` outside the repo, never connects). Reads the old `Staff*` tables plus a PRIVATE config beside the export (worker list, loan dates, payment methods, the plan's expected totals). No names or amounts in the repo; tests use invented data.
 - Mapping: listed workers only (daily allowance 0, never backdated); SETTLEMENT → `salary_payment` in the month before payday; a cancelled ADVANCE + its offsetting ADJUSTMENT → advance + correction (`corrects_entry_id`); loans → `loan_given` / `loan_repaid` dated from the note (dd/mm/yy), the config, or the entry day; a repayment on the worker's payday is the salary deduction (method other). Signed statements keep both signatures (data-URL prefix stripped). Anything without a faithful mapping (cancelled salary or loan, orphan adjustment, unknown type) stops the build.

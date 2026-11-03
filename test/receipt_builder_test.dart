@@ -46,7 +46,8 @@ void main() {
   });
 
   group('formatItemLine — AC #4: exactly N chars from the same input', () {
-    String itemLine(ReceiptPaperSize size) => ThermalReceiptService.formatItemLine(
+    String itemLine(ReceiptPaperSize size) =>
+        ThermalReceiptService.formatItemLine(
           qtyLabel: '2.0x ',
           name: 'Star Lager',
           priceLabel: 'N2,000',
@@ -79,8 +80,11 @@ void main() {
           priceLabel: 'N10,000',
           charsPerLine: size.charsPerLine,
         );
-        expect(line.length, size.charsPerLine,
-            reason: 'truncated line must be exactly ${size.charsPerLine}');
+        expect(
+          line.length,
+          size.charsPerLine,
+          reason: 'truncated line must be exactly ${size.charsPerLine}',
+        );
         expect(line.startsWith('1.0x '), isTrue);
         expect(line.endsWith('N10,000'), isTrue);
         // A single space between the (truncated) name and the price.
@@ -177,38 +181,51 @@ void main() {
     }
 
     for (final size in [mm58, mm80]) {
-      testWidgets('${size.name}: text style has no raster without a logo',
-          (tester) async {
+      testWidgets('${size.name}: text style has no raster without a logo', (
+        tester,
+      ) async {
         final bytes = await build(size, tester, style: ReceiptPrintStyle.text);
         expect(bytes.sublist(0, 2), [0x1B, 0x40]);
         expect(hasSeq(bytes, [0x1D, 0x76, 0x30]), isFalse);
         expect(hasSeq(bytes, 'Spaghetti 500g'.codeUnits), isTrue);
-        expect(hasSeq(bytes.sublist(bytes.length - 4), [0x1D, 0x56]), isTrue);
+        // No feed or cut: PrinterService appends the paper end (#717).
+        expect(hasSeq(bytes, [0x1D, 0x56]), isFalse);
+        expect(bytes.sublist(bytes.length - 2), isNot([0x0A, 0x0A]));
       });
 
-      testWidgets('${size.name}: text style rasters only the logo',
-          (tester) async {
+      testWidgets('${size.name}: text style rasters only the logo', (
+        tester,
+      ) async {
         final dir = Directory.systemTemp.createTempSync('logo');
         addTearDown(() => dir.deleteSync(recursive: true));
         final png = img.Image(width: 20, height: 10);
         img.fill(png, color: img.ColorRgb8(0, 0, 0));
         final f = File('${dir.path}/logo.png')
           ..writeAsBytesSync(img.encodePng(png));
-        final bytes = await build(size, tester,
-            style: ReceiptPrintStyle.text, logoPath: f.path);
+        final bytes = await build(
+          size,
+          tester,
+          style: ReceiptPrintStyle.text,
+          logoPath: f.path,
+        );
         expect(hasSeq(bytes, [0x1D, 0x76, 0x30]), isTrue);
-        expect(hasSeq(bytes.sublist(bytes.length - 4), [0x1D, 0x56]), isTrue);
+        expect(hasSeq(bytes.sublist(bytes.length - 4), [0x1D, 0x56]), isFalse);
       });
 
-      testWidgets('${size.name}: picture style: ESC @ first, GS v 0 raster, cut last',
-          (tester) async {
-        final bytes = await build(size, tester);
-        expect(bytes.sublist(0, 2), [0x1B, 0x40]);
-        // GS v 0 = raster bit image command.
-        expect(hasSeq(bytes, [0x1D, 0x76, 0x30]), isTrue);
-        // Cut = GS V ...
-        expect(hasSeq(bytes.sublist(bytes.length - 4), [0x1D, 0x56]), isTrue);
-      });
+      testWidgets(
+        '${size.name}: picture style: ESC @ first, GS v 0 raster, no cut',
+        (tester) async {
+          final bytes = await build(size, tester);
+          expect(bytes.sublist(0, 2), [0x1B, 0x40]);
+          // GS v 0 = raster bit image command.
+          expect(hasSeq(bytes, [0x1D, 0x76, 0x30]), isTrue);
+          // No cut: PrinterService appends the paper end (#717).
+          expect(
+            hasSeq(bytes.sublist(bytes.length - 4), [0x1D, 0x56]),
+            isFalse,
+          );
+        },
+      );
     }
   });
 }

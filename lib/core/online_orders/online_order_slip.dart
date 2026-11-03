@@ -215,8 +215,7 @@ class OnlineOrderSlip {
       bytes += generator.hr();
       bytes += generator.text(depositNote);
     }
-    bytes += generator.feed(2);
-    bytes += generator.cut();
+    // No feed or cut: PrinterService appends the printer's paper end (#717).
     return bytes;
   }
 }
