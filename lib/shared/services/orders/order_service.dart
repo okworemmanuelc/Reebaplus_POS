@@ -142,6 +142,10 @@ class OrderService {
 
   /// Whether a Completed sale may be Returned (#551) — the Orders screen asks
   /// this and never re-derives the rule.
+  /// #710 — tendered money still refundable (drives the destination pop-up).
+  Future<int> refundablePaidKobo(String orderId) =>
+      _queries.refundablePaidKobo(orderId);
+
   Future<bool> isReturnable(String orderId) => _queries.isReturnable(orderId);
 
   /// **Cancel a server-REJECTED sale** — the cashier tapped Cancel on the

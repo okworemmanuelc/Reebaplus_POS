@@ -206,4 +206,78 @@ void main() {
     expect((await refunds(id)).single.method, 'cash');
     expect(await balance(), 0);
   });
+
+  // Net till movement for an order: sale + wallet_topup - refund (unvoided).
+  Future<int> tillNet(String orderId) async {
+    final rows = await (db.select(db.paymentTransactions)
+          ..where((p) => p.orderId.equals(orderId) & p.voidedAt.isNull()))
+        .get();
+    return rows.fold<int>(0, (s, r) {
+      if (r.type == 'refund') return s - r.amountKobo;
+      if (r.type == 'sale' || r.type == 'wallet_topup') return s + r.amountKobo;
+      return s;
+    });
+  }
+
+  test('overpaid sale, balance: till unchanged, balance = full tendered',
+      () async {
+    final id = await sell(2, 300000, cid: customerId); // ₦2,000 goods, ₦3,000 in
+    expect(await db.ordersDao.refundablePaidKobo(id), 300000);
+    final before = await tillNet(id);
+    expect(before, 300000);
+    final balBefore = await balance();
+    expect(balBefore, 100000, reason: 'overpay already credited');
+    await db.ordersDao.markCancelled(id, 'x', staffId,
+        destination: RefundDestination.balance);
+    expect(await tillNet(id), before, reason: 'no refund, no topup reversal');
+    expect(await refunds(id), isEmpty);
+    expect(await balance(), 300000, reason: 'pre-sale 0 + everything tendered');
+    final topups = await (db.select(db.paymentTransactions)
+          ..where((p) =>
+              p.orderId.equals(id) & p.type.equals('wallet_topup')))
+        .get();
+    expect(topups.every((t) => t.amountKobo > 0), isTrue);
+  });
+
+  test('overpaid sale, cash: unchanged from before (till nets to 0)', () async {
+    final id = await sell(2, 300000, cid: customerId);
+    await db.ordersDao.markCancelled(id, 'x', staffId);
+    expect(await tillNet(id), 0);
+    expect(await balance(), 0);
+  });
+
+  test('two-method split (cash + transfer sale rows), both modes', () async {
+    for (final toBalance in [true, false]) {
+      final id = await sell(2, 200000, cid: customerId);
+      // Second tender row, as a split checkout would leave it.
+      final first = await (db.select(db.paymentTransactions)
+            ..where((p) => p.orderId.equals(id) & p.type.equals('sale')))
+          .getSingle();
+      await db.paymentTransactionsDao.postReversalPayment(
+        original: first,
+        reversalType: 'sale',
+        performedBy: staffId,
+        amountKobo: 50000,
+        method: 'transfer',
+      );
+      if (toBalance) {
+        await db.ordersDao.markCancelled(id, 'x', staffId,
+            destination: RefundDestination.balance);
+        expect(await refunds(id), isEmpty);
+      } else {
+        await db.ordersDao.markCancelled(id, 'x', staffId,
+            destination: RefundDestination.cashOrTransfer,
+            refundMethod: 'transfer');
+        final r = await refunds(id);
+        expect(r.length, 2, reason: 'one refund per tender row');
+        expect(r.every((x) => x.method == 'transfer'), isTrue);
+        expect(r.fold<int>(0, (a, x) => a + x.amountKobo), 250000);
+      }
+    }
+  });
+
+  test('refundablePaidKobo is 0 for a pure credit sale', () async {
+    final id = await sell(2, 0, cid: customerId);
+    expect(await db.ordersDao.refundablePaidKobo(id), 0);
+  });
 }

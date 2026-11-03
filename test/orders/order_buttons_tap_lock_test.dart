@@ -26,6 +26,11 @@ class _SlowRefund extends OrderService {
   int refunds = 0;
   final gate = Completer<void>();
 
+  // The seeded order has no payment rows; pretend money was paid so the
+  // destination pop-up (#710) shows.
+  @override
+  Future<int> refundablePaidKobo(String orderId) async => 100000;
+
   @override
   Future<void> markAsCancelled(
     String orderId,

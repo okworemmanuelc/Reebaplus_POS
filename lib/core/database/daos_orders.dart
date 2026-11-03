@@ -2066,8 +2066,10 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         final isSale = pay.type == 'sale';
         // #710 — "Add to customer's balance": the paid goods money stays as
         // account credit, so NO `refund` cash-out row (and, below, the payment
-        // credit leg is not voided). Deposit / top-up rows reverse as ever.
-        if (isSale && toBalance) continue;
+        // credit leg is not voided). The overpayment `wallet_topup` row stays
+        // too: its cash is still in the till AND still the customer's credit.
+        // Only the crate_deposit row reverses as ever.
+        if (toBalance && (isSale || pay.type == 'wallet_topup')) continue;
         await db.paymentTransactionsDao.postReversalPayment(
           original: pay,
           reversalType: isSale ? 'refund' : pay.type,
@@ -2200,6 +2202,21 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   }
 
   // ── Return a crate-free Completed sale (#551, PRD #337) ────────────────────
+
+  /// #710 — money actually tendered on [orderId] and still refundable: the sum
+  /// of unvoided positive `sale` + `wallet_topup` payment rows. Decides whether
+  /// the Refund destination pop-up shows (0 = pure credit sale, skip it).
+  Future<int> refundablePaidKobo(String orderId) async {
+    final rows = await (select(paymentTransactions)..where(
+          (p) =>
+              p.orderId.equals(orderId) &
+              whereBusiness(p) &
+              p.voidedAt.isNull() &
+              p.type.isIn(const ['sale', 'wallet_topup']),
+        ))
+        .get();
+    return rows.fold<int>(0, (a, p) => a + (p.amountKobo > 0 ? p.amountKobo : 0));
+  }
 
   /// Whether [orderId] may be Returned (PRD #337): `completed`, no crate history
   /// (per-brand crate lines, crate-ledger rows referencing the order, crate

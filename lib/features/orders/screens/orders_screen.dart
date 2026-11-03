@@ -1088,10 +1088,13 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     if (reason == null || !mounted) return;
     // #710 — money was paid: ask where it goes (skipped for a pure credit sale).
     RefundChoice? choice;
-    if (order.amountPaidKobo > 0) {
+    final paidKobo =
+        await ref.read(orderServiceProvider).refundablePaidKobo(order.id);
+    if (!mounted) return;
+    if (paidKobo > 0) {
       choice = await showRefundDestinationDialog(
         context,
-        paidKobo: order.amountPaidKobo,
+        paidKobo: paidKobo,
         hasCustomer: order.customerId != null,
       );
       if (choice == null || !mounted) return;
@@ -1156,10 +1159,13 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     if (input == null || !mounted) return;
     // #710 — money was paid: ask where it goes (skipped for a pure credit sale).
     RefundChoice? choice;
-    if (order.amountPaidKobo > 0) {
+    final paidKobo =
+        await ref.read(orderServiceProvider).refundablePaidKobo(order.id);
+    if (!mounted) return;
+    if (paidKobo > 0) {
       choice = await showRefundDestinationDialog(
         context,
-        paidKobo: order.amountPaidKobo,
+        paidKobo: paidKobo,
         hasCustomer: order.customerId != null,
       );
       if (choice == null || !mounted) return;
