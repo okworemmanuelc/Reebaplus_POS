@@ -7,6 +7,13 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #723: Payroll redesign to the owner's mockups, phone + tablet (2026-11-03, branch `feat/723-payroll-redesign`)
+- Overview (month switcher, salaries-to-pay card, today's allowances with Change, 2x2 figures, staff list with All / Unpaid / Paid), History (grouped by day on a phone; staff + type filters, figure tiles and a table on a wide screen, Print Report), Pay profile, Pay Salary (signatures after Confirm Payment, Print Payslip After Saving) and Add Pay Record (Allowance / Bonus / Advance / Loan). Wide screens (>= 1024) show the staff list beside the chosen worker.
+- Owner decisions: signatures stay; one salary payment per month (money before payday is an Advance, so no "Part paid" and no split method); loans get a fixed monthly plan filled in at payday and changeable that day; allowances stay automatic.
+- Drift v106 / cloud 0248: payroll_workers.job_title + payday_day, payroll_entries.monthly_repayment_kobo. 0248 applied on DEV and PROD (2026-11-03).
+- Bonus reasons are kept in the note ("Offloading: Heineken truck"). Old PayrollWorkerMoneyScreen and PayrollPaydayScreen removed; correction and approval moved to widgets/payroll_entry_parts.dart.
+- Fixed on the way: Pay Salary filled the amount before the worker's advances loaded, which read as a changed salary.
+
 ### Issue #712: Sale adjustment record + part return (2026-11-03, branch `feat/712-sale-adjustment`)
 - Drift **v105** + cloud **0247_sale_adjustments.sql** (NOT applied; deploy before any v105 client pushes): `orders.kind` (sale|adjustment) + `orders.adjusts_order_id`; `order_items.quantity` CHECK `<> 0`; cloud-only `sale_adjustment_claims` + `pos_claim_sale_adjustment` (over-return guard); full-cancel claim refuses a sale with an adjustment; recost ignores adjustment orders. ADR 0035.
 - `OrdersDao.returnPartOfSale` / `planPartReturn` / `returnableQtyByLine` (`daos_sale_adjustments.dart`), `CratePoolDao.returnCratesForAdjustment` / `emptiesBackFor`; Return pop-up has per-line "up to N" steppers; whole-sale return with no earlier part return still uses `markCancelled`.

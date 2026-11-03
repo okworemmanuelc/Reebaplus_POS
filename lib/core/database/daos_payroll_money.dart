@@ -571,6 +571,11 @@ extension PayrollMoneyEntries on PayrollDao {
   }
 
   /// [workerId]'s entries, newest first.
+  /// #723: every entry of the business, any status (Overview and History work
+  /// their figures out from these). Empty on a phone without the permission.
+  Stream<List<PayrollEntryData>> watchAllEntries() =>
+      (select(payrollEntries)..where((e) => whereBusiness(e))).watch();
+
   Stream<List<PayrollEntryData>> watchEntriesForWorker(String workerId) =>
       (select(payrollEntries)
             ..where((e) => e.workerId.equals(workerId) & whereBusiness(e))

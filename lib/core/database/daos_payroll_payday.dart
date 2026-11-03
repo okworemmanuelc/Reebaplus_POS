@@ -197,6 +197,7 @@ extension PayrollPayday on PayrollDao {
     int loanRepaymentKobo = 0,
     required String paymentMethod,
     String? paydayDate,
+    String? note,
     required String? workerSignaturePng,
     required String? payerSignaturePng,
     DateTime? now,
@@ -319,6 +320,12 @@ extension PayrollPayday on PayrollDao {
 
       final at = DateTime.now();
       final monthLabel = payrollMonthLabel(salaryMonth);
+      // #723: the typed note follows the "different amount" reason, which the
+      // payslip reads from the start of the note.
+      final savedNote = [
+        if (f.salaryChanged) 'Different amount this month: $trimmedReason',
+        if ((note ?? '').trim().isNotEmpty) note!.trim(),
+      ].join('. ');
       final salaryRow = PayrollEntriesCompanion.insert(
         id: Value(salaryEntryId),
         businessId: businessId,
@@ -329,11 +336,7 @@ extension PayrollPayday on PayrollDao {
         entryDate: payday,
         salaryMonth: Value(salaryMonth),
         paymentMethod: Value(paymentMethod),
-        note: Value(
-          f.salaryChanged
-              ? 'Different amount this month: $trimmedReason'
-              : null,
-        ),
+        note: Value(savedNote.isEmpty ? null : savedNote),
         status: const Value('approved'),
         recordedBy: Value(currentUserId),
         approvedBy: Value(currentUserId),
@@ -421,6 +424,16 @@ extension PayrollPayday on PayrollDao {
     }
     return saved;
   }
+
+  /// #723: every signed statement for [salaryMonth] (one month at a time, as
+  /// each row carries both signature images).
+  Stream<List<PayrollStatementData>> watchStatementsForMonth(
+    String salaryMonth,
+  ) =>
+      (select(
+            payrollStatements,
+          )..where((s) => s.salaryMonth.equals(salaryMonth) & whereBusiness(s)))
+          .watch();
 
   /// [workerId]'s signed salary statements, newest month first.
   Stream<List<PayrollStatementData>> watchStatementsForWorker(
