@@ -463,12 +463,8 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
   }
 
   /// The menu button (48dp) under 600dp; the rail carries it at 600dp+.
-  Widget? _menuLeading(BuildContext context) => context.isRailLayout
-      ? null
-      : const SizedBox.square(
-          dimension: kMinInteractiveDimension,
-          child: MenuButton(),
-        );
+  Widget? _menuLeading(BuildContext context) =>
+      context.isRailLayout ? null : const MenuButton();
 
   PreferredSizeWidget _buildAppBar(BuildContext context) {
     return InventoryTopBar(

@@ -7,6 +7,9 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Menu button squashed on Orders + Activity Logs (2026-11-03, branch `fix/menu-button-self-sized`)
+- `MenuButton` now owns its 48dp box; the 9 `SizedBox.square(kMinInteractiveDimension)` wrappers are gone. Orders + Activity Logs goldens re-recorded (390x844 only).
+
 ### Issue #671: Payroll payday, signatures, payslip and Total Pay (2026-11-03, branch `feat/671-payroll-payday`)
 - **No schema change** (v103 columns were enough). `PayrollPayday` extension (`lib/core/database/daos_payroll_payday.dart`): `paySalary` writes the `salary_payment` entry (amount = the month's salary, Cash/Transfer/Other, dated the payday), an optional `loan_repaid` entry ("Taken from <month> salary", method other) and the signed `payroll_statements` row, all with deterministic ids. Pure `PaydayFigures`: cash = salary − approved advances for the month − repayment (≥ 0); repayment ≤ min(owed, salary − advances); Total Pay = salary + approved allowances + approved bonuses dated in the month (a correction counts in its original's month).
 - Rules: one payment per worker per month (statement or salary entry present → refused); only a month before the payday's month; payday today or earlier, never future; a different amount needs a reason (saved on the entry note; normal salary unchanged); a waiting advance for the month blocks payday; both signatures required. Straight through; the CEO is notified (`payroll.salary_paid`, name + month, no amount) when someone else pays. Activity log `payroll_salary_paid` (name + month).

@@ -1065,12 +1065,8 @@ class _CartScreenState extends ConsumerState<CartScreen>
 
   /// The menu button before the header tile, under 600dp only (at 600dp+ the
   /// rail carries the menu).
-  Widget? _leading(BuildContext context) => context.isRailLayout
-      ? null
-      : const SizedBox.square(
-          dimension: kMinInteractiveDimension,
-          child: MenuButton(),
-        );
+  Widget? _leading(BuildContext context) =>
+      context.isRailLayout ? null : const MenuButton();
 
   @override
   Widget build(BuildContext context) {

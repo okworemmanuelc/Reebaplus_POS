@@ -54,12 +54,7 @@ class PaymentsScreen extends ConsumerWidget {
             icon: AppIcons.payments,
             title: 'Supplier Accounts',
             subtitle: ref.watch(activeStoreLabelProvider),
-            leading: context.isRailLayout
-                ? null
-                : const SizedBox.square(
-                    dimension: kMinInteractiveDimension,
-                    child: MenuButton(),
-                  ),
+            leading: context.isRailLayout ? null : const MenuButton(),
             actions: const [PaymentsLiveBell()],
           ),
         ),

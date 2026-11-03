@@ -17,41 +17,46 @@ class MenuButton extends StatelessWidget {
         builder: (ctx) => InkWell(
           borderRadius: BorderRadius.circular(12),
           onTap: () => Scaffold.of(ctx).openDrawer(),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                height: 2.5,
-                width: context.getRSize(22),
-                decoration: BoxDecoration(
-                  color: text,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+          // Owns its 48dp box: in an AppBar *title* (ScreenHeader) the height is
+          // unbounded, and an unsized spaceEvenly Column collapses the bars.
+          child: SizedBox.square(
+            dimension: kMinInteractiveDimension,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    height: 2.5,
+                    width: context.getRSize(22),
+                    decoration: BoxDecoration(
+                      color: text,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Container(
+                    height: 2.5,
+                    width: context.getRSize(16),
+                    decoration: BoxDecoration(
+                      color: primary,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Container(
+                    height: 2.5,
+                    width: context.getRSize(22),
+                    decoration: BoxDecoration(
+                      color: text,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ],
               ),
-              Container(
-                height: 2.5,
-                width: context.getRSize(16),
-                decoration: BoxDecoration(
-                  color: primary,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              Container(
-                height: 2.5,
-                width: context.getRSize(22),
-                decoration: BoxDecoration(
-                  color: text,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 }

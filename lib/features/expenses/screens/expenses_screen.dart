@@ -158,12 +158,7 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
       header: ExpenseListHeader(
         title: 'Expenses',
         subtitle: 'Track what your business spends',
-        leading: context.isRailLayout
-            ? null
-            : const SizedBox.square(
-                dimension: kMinInteractiveDimension,
-                child: MenuButton(),
-              ),
+        leading: context.isRailLayout ? null : const MenuButton(),
         actions: const [ExpenseLiveBell()],
       ),
     );
