@@ -48,6 +48,7 @@ import 'package:reebaplus_pos/core/stores/van_store.dart';
 // follows the CEO-chosen currency. Pure formatting — no provider dependency.
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/order_number.dart';
+import 'package:reebaplus_pos/core/utils/reversal_labels.dart';
 // #145: the trip reconciliation math is a PURE function over plain data (spec
 // §6 / §13 seam 1). The DAO assembles its four inputs and the close write reads
 // its answer — no arithmetic lives here, so the screen, the write and the
