@@ -2345,6 +2345,153 @@ class ExpenseBudgets extends Table {
   List<String> get customConstraints => ['CHECK (amount_kobo >= 0)'];
 }
 
+// ---------------------------------------------------------------------------
+// Payroll (#667, PRD #666, ADR 0034). Mirrors supabase/migrations/0243.
+//
+// The first PERMISSION-GATED synced tables: the cloud only lets a caller
+// holding [kPayrollPermissionKey] read or write them, `pos_pull_snapshot`
+// leaves them out, and a phone that loses the permission drops its local rows
+// (SyncedTable.permissionKey). Money in kobo; dates are 'YYYY-MM-DD' text and a
+// Salary Month is 'YYYY-MM' text, identical on every phone and the cloud.
+// `legacy_id` keys the old-POS import (#672) so it is safe to re-run.
+// ---------------------------------------------------------------------------
+
+/// The permission that unlocks Payroll data on a phone (ADR 0034). CEO and
+/// Manager by default (cloud 0243).
+const String kPayrollPermissionKey = 'payroll.manage';
+
+/// The Payroll Entry types (CONTEXT.md → Payroll). Append-only; a correction is
+/// a new entry, never an edit.
+const Set<String> kPayrollEntryTypes = {
+  'salary_payment',
+  'allowance',
+  'bonus',
+  'advance',
+  'loan_given',
+  'loan_repaid',
+};
+
+/// How a Payroll Entry was paid. Only till cash reduces the drawer figure.
+const Set<String> kPayrollPaymentMethods = {'cash', 'transfer', 'other'};
+
+/// A worker on Payroll. Added deliberately by a permitted user; a login
+/// ([userId]) is optional. Removal stops future allowances and keeps history
+/// ([isRemoved], never hard-deleted).
+@DataClassName('PayrollWorkerData')
+class PayrollWorkers extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get storeId => text().references(Stores, #id)();
+  TextColumn get userId => text().nullable().references(Users, #id)();
+  TextColumn get name => text()();
+  IntColumn get monthlySalaryKobo =>
+      integer().withDefault(const Constant(0))();
+  IntColumn get dailyAllowanceKobo =>
+      integer().withDefault(const Constant(0))();
+  // 'YYYY-MM-DD'. The first day the allowance applies; never backdated.
+  TextColumn get allowanceStartDate => text().nullable()();
+  BoolColumn get isRemoved => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get removedAt => dateTime().nullable()();
+  TextColumn get createdBy => text().nullable().references(Users, #id)();
+  TextColumn get legacyId => text().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    'CHECK (monthly_salary_kobo >= 0)',
+    'CHECK (daily_allowance_kobo >= 0)',
+  ];
+}
+
+/// One append-only money movement for a worker. Typed by [type]
+/// ([kPayrollEntryTypes]); [salaryMonth] ('YYYY-MM') is set for the salary
+/// payment and advances. A correction is a NEW row pointing at the entry it
+/// corrects ([correctsEntryId]), dated the day it is made.
+@DataClassName('PayrollEntryData')
+class PayrollEntries extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get workerId => text().references(PayrollWorkers, #id)();
+  TextColumn get storeId => text().references(Stores, #id)();
+  TextColumn get type => text()();
+  IntColumn get amountKobo => integer()();
+  // 'YYYY-MM-DD'.
+  TextColumn get entryDate => text()();
+  // 'YYYY-MM'.
+  TextColumn get salaryMonth => text().nullable()();
+  TextColumn get paymentMethod => text().withDefault(const Constant('cash'))();
+  TextColumn get note => text().nullable()();
+  TextColumn get correctsEntryId => text().nullable()();
+  TextColumn get recordedBy => text().nullable().references(Users, #id)();
+  TextColumn get legacyId => text().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    "CHECK (type IN ('salary_payment', 'allowance', 'bonus', 'advance', "
+        "'loan_given', 'loan_repaid'))",
+    "CHECK (payment_method IN ('cash', 'transfer', 'other'))",
+    "CHECK (type <> 'salary_payment' OR salary_month IS NOT NULL)",
+  ];
+}
+
+/// The signed salary statement for one worker and one Salary Month: the
+/// figures shown at payday and both signatures (PNG, base64). One per worker
+/// per month — the id is deterministic ([payrollStatementId]).
+@DataClassName('PayrollStatementData')
+class PayrollStatements extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get workerId => text().references(PayrollWorkers, #id)();
+  TextColumn get storeId => text().references(Stores, #id)();
+  // 'YYYY-MM'.
+  TextColumn get salaryMonth => text()();
+  IntColumn get salaryKobo => integer().withDefault(const Constant(0))();
+  IntColumn get allowancesKobo => integer().withDefault(const Constant(0))();
+  IntColumn get bonusesKobo => integer().withDefault(const Constant(0))();
+  IntColumn get advancesKobo => integer().withDefault(const Constant(0))();
+  IntColumn get loanRepaidKobo => integer().withDefault(const Constant(0))();
+  IntColumn get cashPaidKobo => integer().withDefault(const Constant(0))();
+  IntColumn get totalPayKobo => integer().withDefault(const Constant(0))();
+  TextColumn get salaryEntryId =>
+      text().nullable().references(PayrollEntries, #id)();
+  TextColumn get workerSignaturePng => text().nullable()();
+  TextColumn get payerSignaturePng => text().nullable()();
+  TextColumn get signedBy => text().nullable().references(Users, #id)();
+  DateTimeColumn get signedAt => dateTime().nullable()();
+  TextColumn get legacyId => text().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => ['UNIQUE (worker_id, salary_month)'];
+}
+
+/// The deterministic id of a worker's Daily Allowance for [entryDate]
+/// ('YYYY-MM-DD'): every phone that posts it mints the SAME id, so two phones
+/// (or a retry) land as ONE row locally and in the cloud.
+String payrollAllowanceId(String workerId, String entryDate) =>
+    UuidV7.deterministic('payroll_allowance:$workerId:$entryDate');
+
+/// The deterministic id of a worker's salary statement for [salaryMonth]
+/// ('YYYY-MM') — one per worker per month on every phone.
+String payrollStatementId(String workerId, String salaryMonth) =>
+    UuidV7.deterministic('payroll_statement:$workerId:$salaryMonth');
+
 @DataClassName('DriverData')
 class Drivers extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
@@ -3044,6 +3191,9 @@ class MigrationEvents extends Table {
     ExpenseCategories,
     Expenses,
     ExpenseBudgets,
+    PayrollWorkers,
+    PayrollEntries,
+    PayrollStatements,
     Drivers,
     DeliveryReceipts,
     SavedCarts,
@@ -3123,6 +3273,7 @@ class MigrationEvents extends Table {
     InviteCodesDao,
     UserStoresDao,
     OnlineOrdersDao,
+    PayrollDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -3157,7 +3308,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 100;
+  int get schemaVersion => 101;
 
   /// The v90 (#473) listing columns, pinned to their defaults in every older
   /// products rebuild: TableMigration copies from the CURRENT schema, so a
@@ -6937,6 +7088,41 @@ class AppDatabase extends _$AppDatabase {
         // of the three are append-only ledgers, so a rebuild would also fight
         // their immutable / no-delete triggers.
       }
+
+      if (from < 101) {
+        // ── v101 — #667: Payroll tables + the `payroll.manage` key ─────────
+        //
+        // Mirrors supabase/migrations/0243_payroll.sql. Three new tables (no
+        // existing table changes, so no TableMigration stale-column pins) and
+        // one catalogue key — role grants arrive from the cloud, which must
+        // deploy 0243 first (role_permissions FK). Guarded so a re-upgrade is
+        // idempotent; the sync indexes, bump triggers and unique indexes match
+        // what onCreate builds for a fresh install.
+        final names = {
+          for (final r in await customSelect(
+            "SELECT name FROM sqlite_master WHERE type = 'table' "
+            "AND name LIKE 'payroll_%'",
+          ).get())
+            r.read<String>('name'),
+        };
+        if (!names.contains('payroll_workers')) {
+          await m.createTable(payrollWorkers);
+        }
+        if (!names.contains('payroll_entries')) {
+          await m.createTable(payrollEntries);
+        }
+        if (!names.contains('payroll_statements')) {
+          await m.createTable(payrollStatements);
+        }
+        for (final stmt in _payrollUpgradeStatements) {
+          await customStatement(stmt);
+        }
+        await customStatement(
+          "INSERT OR IGNORE INTO permissions (key, description, category) "
+          "VALUES ('$kPayrollPermissionKey', "
+          "'${_sqlEscape(_payrollPermissionDescription)}', 'Payroll')",
+        );
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -7563,7 +7749,13 @@ const List<List<String>> _defaultPermissionRows = [
   // §10.3 Danger Zone. CEO-only, hidden from the per-role toggle list
   // (kHiddenPermissionKeys). Cloud catalog + CEO backfill: 0112.
   ['settings.delete_business', 'Delete the business and account', 'System'],
+  // #667 Payroll (ADR 0034). CEO + Manager by default; cloud catalogue + role
+  // grants: 0243. The key reaches the cloud before any grant syncs (FK).
+  ['payroll.manage', _payrollPermissionDescription, 'Payroll'],
 ];
+
+const String _payrollPermissionDescription =
+    'Manage payroll: workers, pay, allowances and staff loans';
 
 // SQL statements that seed the global permissions table. Built once
 // at app start (top-level final). Used by both `_postCreateStatements`
@@ -7740,6 +7932,47 @@ const List<String> _productPhotoUpgradeStatements = [
   _productPhotoLivePositionIndex,
 ];
 
+/// #667 — Payroll indexes beyond the generic sync loops. The allowance index
+/// is the backstop to [payrollAllowanceId]: one allowance per worker per day
+/// (a correction carries `corrects_entry_id` and is exempt). Shared by
+/// `_postCreateStatements` and the v101 step (IF NOT EXISTS, re-upgrade safe).
+const List<String> _payrollIndexStatements = [
+  'CREATE UNIQUE INDEX IF NOT EXISTS uq_payroll_entries_allowance_day '
+      'ON payroll_entries (worker_id, entry_date) '
+      "WHERE type = 'allowance' AND corrects_entry_id IS NULL",
+  'CREATE INDEX IF NOT EXISTS idx_payroll_entries_worker_date '
+      'ON payroll_entries (business_id, worker_id, entry_date)',
+  'CREATE UNIQUE INDEX IF NOT EXISTS uq_payroll_workers_legacy '
+      'ON payroll_workers (business_id, legacy_id) WHERE legacy_id IS NOT NULL',
+  'CREATE UNIQUE INDEX IF NOT EXISTS uq_payroll_entries_legacy '
+      'ON payroll_entries (business_id, legacy_id) WHERE legacy_id IS NOT NULL',
+  'CREATE UNIQUE INDEX IF NOT EXISTS uq_payroll_statements_legacy '
+      'ON payroll_statements (business_id, legacy_id) '
+      'WHERE legacy_id IS NOT NULL',
+];
+
+/// The v101 upgrade's extras for the three Payroll tables — the same sync index
+/// and bump trigger the onCreate loops build for every synced tenant table,
+/// plus [_payrollIndexStatements]. All IF NOT EXISTS (re-upgrade safe).
+List<String> get _payrollUpgradeStatements => [
+  for (final t in const [
+    'payroll_workers',
+    'payroll_entries',
+    'payroll_statements',
+  ]) ...[
+    'CREATE INDEX IF NOT EXISTS idx_${t}_business_lua '
+        'ON $t (business_id, last_updated_at)',
+    'CREATE TRIGGER IF NOT EXISTS bump_${t}_last_updated_at '
+        'AFTER UPDATE ON $t '
+        'FOR EACH ROW '
+        'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+        'BEGIN '
+        "UPDATE $t SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+        'END',
+  ],
+  ..._payrollIndexStatements,
+];
+
 const List<String> _crateShortfallIndexStatements = [
   // The two reads there are: the brand's net written-off COUNT (which nets out
   // of the derived shortfall on the card) and the period's booked LOSS (which
@@ -7839,6 +8072,9 @@ List<String> get _postCreateStatements {
     ..._crateShortfallIndexStatements,
     // v91 (#474) — one live gallery photo per (product, position).
     _productPhotoLivePositionIndex,
+    // v101 (#667) — Payroll: one allowance per worker per day, the legacy
+    // import keys and the per-worker history scans.
+    ..._payrollIndexStatements,
     // v31 (Expenses budget) — one live goal per (business, store-or-null).
     'CREATE UNIQUE INDEX uq_expense_budgets_business ON expense_budgets '
         '(business_id) WHERE store_id IS NULL AND is_deleted = 0',

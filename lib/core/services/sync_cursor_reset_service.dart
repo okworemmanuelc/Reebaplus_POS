@@ -32,6 +32,9 @@ class SyncCursorResetService {
     // Per-business one-shot `users` backfill flag (#285): a cleared business
     // that ever returns must run its backfill again, exactly like a new device.
     'users_backfill_v1::',
+    // Per-business permission-gated catch-up record (#667, ADR 0034): a wiped
+    // phone must fetch the gated tables in full again on its next pull.
+    'permission_gated_access::',
   ];
 
   /// Removes ONE business's pull-state keys, leaving every other business's

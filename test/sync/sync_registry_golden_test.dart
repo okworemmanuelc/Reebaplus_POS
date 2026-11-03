@@ -138,10 +138,18 @@ void main() {
     'daily_closings',
     'sessions',
     'settings',
+    // #667 Payroll (ADR 0034): permission-gated, workers → entries → statements.
+    'payroll_workers',
+    'payroll_entries',
+    'payroll_statements',
   ];
 
   // 2) The synced tenant tables (membership set; order not significant).
   const goldenTenantTables = <String>{
+    // #667 Payroll (permission-gated, ADR 0034).
+    'payroll_workers',
+    'payroll_entries',
+    'payroll_statements',
     'users',
     'sessions',
     'stores',
@@ -436,6 +444,9 @@ void main() {
       'store_crate_balances': 35,
       'supplier_crate_ledger': 36,
       'system_config': 50,
+      // #667: a worker before its entries, entries before statements.
+      'payroll_workers': 60,
+      'payroll_entries': 61,
     };
     const goldenConflictTargets = <String, String>{
       'store_crate_balances': 'business_id,store_id,manufacturer_id',

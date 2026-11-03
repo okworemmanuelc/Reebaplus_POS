@@ -600,6 +600,31 @@ became a registry lookup. **List order governs pull / restore / hard-delete
 reconcile only** — push drains the outbox row-by-row and never iterates tables
 in order.
 
+### Permission-gated tables — Payroll (#667, ADR 0034)
+
+Until #667 every phone of a business received all of its data; permissions only
+hid screens. A registry entry may now carry a **`permissionKey`**
+(`kSyncPermissionGatedTables`); the only ones today are the three Payroll tables
+(`payroll.manage`). For such a table:
+
+- **Cloud** RLS requires business membership **and**
+  `caller_has_permission(business_id, key)` for SELECT / INSERT / UPDATE (no
+  DELETE). This is the first access rule that depends on a permission.
+- **Pull**: the table is kept OUT of `pos_pull_snapshot` (SECURITY DEFINER,
+  bypasses RLS); on the snapshot path the client fetches it through PostgREST,
+  where RLS applies. `test/sync/snapshot_covers_tenant_tables_test.dart` pins
+  that it stays out.
+- **Push**: `SyncDao.enqueueUpsert` refuses a gated row unless
+  `PermissionsDao.userHolds` (the local twin of `caller_has_permission`: active
+  membership, CEO all-on, user override, role grant; no store layer) says the
+  signed-in user holds the key.
+- **Losing / gaining the key**: after every pull, and after a realtime change to
+  `roles`, `role_permissions`, `user_permission_overrides` or
+  `user_businesses`, the sync service re-checks. Lost ⇒ the local rows are
+  deleted (local-only; rows still waiting to upload are kept, invariant #12).
+  Newly held ⇒ the gated tables are fetched in full once, because an incremental
+  pull would never return the older rows RLS used to hide.
+
 ### Ordering, idempotency, and crash capture
 
 - **Ordering & idempotency:** outbox entries are ordered and carry client-generated UUIDv7 IDs so replays are idempotent — re-sending a batch after a dropped connection can never double-apply a sale.
@@ -666,7 +691,7 @@ These are rules, not guidelines. Code that breaks one of these is wrong even if 
 
 4. **Every business cloud write goes through the outbox.** A repository that needs to change cloud state writes to Drift and enqueues an outbox entry; it must not call Supabase directly. This guarantees offline durability, ordered delivery, idempotent retries, and adaptive batching through one and only one write path. **Shopper exception (ADR 0031):** Shopper commands call restricted storefront RPCs directly; identity comes from auth.uid() and validation is server-side. Business writes still use Drift + outbox.
 
-5. **Cross-business data access is impossible, and is enforced on the server.** Every business-scoped row carries a `business_id`, and Postgres Row-Level Security is the authority — the client is never trusted to scope its own queries. No code path may read or write a row outside the caller's `business_id`. **Exception (ADR 0029, #322):** the shared barcode catalogue. One read-only definer RPC (`barcode_suggestion`) returns a consensus name, unit and photo for a factory barcode, computed across businesses, with no business identity; Add Product reads it through `BarcodeCatalogueService` (#332). No row of another business ever becomes readable. **Storefront exception (ADR 0031):** approved public listing projections may cross businesses through restricted RPCs. Shoppers cannot read base tenant rows, buying prices, cost batches or other customers' data.
+5. **Cross-business data access is impossible, and is enforced on the server.** Every business-scoped row carries a `business_id`, and Postgres Row-Level Security is the authority — the client is never trusted to scope its own queries. No code path may read or write a row outside the caller's `business_id`. **Exception (ADR 0029, #322):** the shared barcode catalogue. One read-only definer RPC (`barcode_suggestion`) returns a consensus name, unit and photo for a factory barcode, computed across businesses, with no business identity; Add Product reads it through `BarcodeCatalogueService` (#332). No row of another business ever becomes readable. **Within a business (ADR 0034, #667):** permission-gated tables (Payroll) are readable and writable only by users holding their key; the server enforces it with `caller_has_permission` in RLS, and they never ride the definer `pos_pull_snapshot`. **Storefront exception (ADR 0031):** approved public listing projections may cross businesses through restricted RPCs. Shoppers cannot read base tenant rows, buying prices, cost batches or other customers' data.
 
 6. **Permissions are read from data, never hard-coded.** Gating decisions come exclusively from role and override rows via `lib/core/permissions/`. No feature may branch on a hard-coded role name (e.g. `if (role == 'Cashier')`); it must ask `can(action)`.
 

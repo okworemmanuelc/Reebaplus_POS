@@ -2663,7 +2663,7 @@ class SupabaseSyncService {
         : backfillStr.split(',').toSet();
 
     try {
-      final skipped = await pullInitialData(
+      var skipped = await pullInitialData(
         businessId,
         since: since,
         fullPullTables: backfillTables,
@@ -2704,8 +2704,19 @@ class SupabaseSyncService {
         //     tables stay incremental, and record only the deferred leaf tables
         //     in the backfill set — the next pull runs since=null for exactly
         //     those and stays incremental for the rest.
+        // #667: a permission-gated table that skipped (a failed gated fetch,
+        // or an entry whose worker has not landed yet) is healed by
+        // re-pulling the gated tables in full — their parents are ordinary
+        // business tables that already arrived — never the whole dataset.
+        if (skipped.any(kSyncPermissionGatedTables.containsKey)) {
+          skipped = {...skipped, ...kSyncPermissionGatedTables.keys};
+        }
         final fkOrphanSkips = skipped
-            .where((t) => !_deferrableTables.contains(t))
+            .where(
+              (t) =>
+                  !_deferrableTables.contains(t) &&
+                  !kSyncPermissionGatedTables.containsKey(t),
+            )
             .toSet();
         if (fkOrphanSkips.isNotEmpty) {
           debugPrint(
@@ -2760,6 +2771,9 @@ class SupabaseSyncService {
       } catch (e) {
         debugPrint('[SyncService] van restatement sweep skipped: $e');
       }
+      // #667 (ADR 0034): this pull may have changed what the user is allowed
+      // to see. Non-fatal like the sweep above; the next pull retries it.
+      await _enforcePermissionGatedAccess(businessId);
       pullStatus.value = pullStatus.value.copyWith(stage: PullStage.completed);
     } catch (e, st) {
       debugPrint('[SyncService] pullChanges failed: $e\n$st');
@@ -2781,6 +2795,99 @@ class SupabaseSyncService {
       rethrow;
     }
   }
+
+  /// SharedPreferences key (per-business) holding the permission keys this
+  /// phone last found the user HOLDING and fully caught up on (#667). Cleared
+  /// with the other pull state by `SyncCursorResetService`.
+  static String permissionGatedAccessKey(String businessId) =>
+      'permission_gated_access::$businessId';
+
+  /// The tables whose rows decide what a user may do — a realtime change to
+  /// one of them can grant or remove a permission-gated key.
+  static const Set<String> _permissionSourceTables = {
+    'roles',
+    'role_permissions',
+    'user_permission_overrides',
+    'user_businesses',
+  };
+
+  Future<void> _enforceAfterPermissionChange(String table) async {
+    if (!_permissionSourceTables.contains(table)) return;
+    final businessId = _db.businessIdResolver.call();
+    if (businessId == null) return;
+    await _enforcePermissionGatedAccess(businessId);
+  }
+
+  /// #667 (ADR 0034) — keeps this phone's permission-gated rows in step with
+  /// what its user may see:
+  ///   * LOST (or never held) the key → drop the local rows
+  ///     ([PayrollDao.purgeForLostAccess]; rows still waiting to upload are
+  ///     kept — invariant #12);
+  ///   * GAINED the key → fetch the gated tables in full once. An incremental
+  ///     pull alone would never return rows older than the cursor, which RLS
+  ///     hid from this user until now.
+  /// Never throws: a failure leaves the record unchanged so the next pull
+  /// retries.
+  Future<void> _enforcePermissionGatedAccess(String businessId) async {
+    try {
+      final userId = _db.currentUserId;
+      if (userId == null) return;
+      final prefs = await SharedPreferences.getInstance();
+      final recordKey = permissionGatedAccessKey(businessId);
+      final caughtUp = (prefs.getString(recordKey) ?? '')
+          .split(',')
+          .where((k) => k.isNotEmpty)
+          .toSet();
+      final tablesByKey = <String, List<String>>{};
+      kSyncPermissionGatedTables.forEach(
+        (table, key) => tablesByKey.putIfAbsent(key, () => []).add(table),
+      );
+      final nowCaughtUp = <String>{};
+      for (final entry in tablesByKey.entries) {
+        final key = entry.key;
+        final holds = await _db.permissionsDao.userHolds(
+          userId: userId,
+          businessId: businessId,
+          permissionKey: key,
+        );
+        if (!holds) {
+          final purge = _purgeForLostAccess[key];
+          final removed = purge == null ? 0 : await purge(businessId);
+          if (removed > 0) {
+            debugPrint(
+              '[SyncService] "$key" not held — removed $removed local row(s)',
+            );
+          }
+          continue;
+        }
+        if (caughtUp.contains(key)) {
+          nowCaughtUp.add(key);
+          continue;
+        }
+        // Newly held: bring every gated row in, parents first.
+        for (final table in entry.value) {
+          final rows = await _fetchOneTable(table, businessId, null);
+          if (rows.isEmpty) continue;
+          await _db.transaction(() => _restoreTableData(table, rows));
+        }
+        nowCaughtUp.add(key);
+      }
+      await prefs.setString(recordKey, nowCaughtUp.join(','));
+    } catch (e) {
+      debugPrint('[SyncService] permission-gated access check skipped: $e');
+    }
+  }
+
+  /// Per gated key, how a phone drops its rows when the key is lost.
+  late final Map<String, Future<int> Function(String businessId)>
+  _purgeForLostAccess = {
+    kPayrollPermissionKey: _db.payrollDao.purgeForLostAccess,
+  };
+
+  /// Test seam for [_enforcePermissionGatedAccess].
+  @visibleForTesting
+  Future<void> enforcePermissionGatedAccessForTesting(String businessId) =>
+      _enforcePermissionGatedAccess(businessId);
 
   /// Writes one `error_logs` row for a failed download. The message holds only
   /// the exception type and (for [PartialPullException]) the failing TABLE
@@ -2960,6 +3067,27 @@ class SupabaseSyncService {
       );
       snapshot = fallback.data;
       skipped = fallback.skipped;
+    } else {
+      // #667 (ADR 0034): the permission-gated tables are deliberately NOT in
+      // the definer `pos_pull_snapshot` (it bypasses RLS). Fetch them through
+      // PostgREST, where RLS returns them only to a caller holding the key —
+      // an empty slice for everyone else. A failed fetch holds just these
+      // tables for a backfill, never the whole pull.
+      for (final table in kSyncPermissionGatedTables.keys) {
+        if (snapshot.containsKey(table)) continue;
+        try {
+          snapshot[table] = await _fetchOneTable(
+            table,
+            businessId,
+            since,
+            pageSize: pageSize,
+          );
+        } catch (e) {
+          debugPrint('[SyncService] Gated fetch failed for $table: $e');
+          snapshot[table] = const <dynamic>[];
+          skipped = {...skipped, table};
+        }
+      }
     }
 
     // `pos_pull_snapshot` predates the `users` restore path (see 0005_sync_rpcs
@@ -3676,6 +3804,7 @@ class SupabaseSyncService {
         if (id != null) {
           await _deleteLocalRowById(eventTable, id);
         }
+        await _enforceAfterPermissionChange(eventTable);
         return;
       }
 
@@ -3683,6 +3812,7 @@ class SupabaseSyncService {
 
       if (newRecord.isNotEmpty) {
         await _restoreTableData(eventTable, [newRecord]);
+        await _enforceAfterPermissionChange(eventTable);
         // Single-active-device sign-in: when our own session row
         // gets revoked by another device's fresh sign-in, ask
         // AuthService to fullLogout this device.

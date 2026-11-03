@@ -773,6 +773,19 @@ abstract final class Gates {
     rule: AndGate(Gate.when(isVanSalesEnabled), Gate.key('van.sell')),
   );
 
+  // ── Payroll (#667, PRD #666 / ADR 0034) ───────────────────────────────────
+
+  /// Open Payroll and manage workers, pay, allowances and staff loans
+  /// (`payroll.manage`, CEO + Manager by default). Unlike every other key it
+  /// also decides which DATA reaches the phone: payroll rows sync only to
+  /// users holding it (cloud RLS via `caller_has_permission`; the client
+  /// mirror is `PermissionsDao.userHolds`).
+  static const NamedGate managePayroll = NamedGate(
+    name: 'managePayroll',
+    action: 'Manage Payroll',
+    rule: Gate.key('payroll.manage'),
+  );
+
   /// Every declared gate. Backs the membership test (every entry cited) and
   /// doubles as a living inventory of gated actions (support / onboarding).
   static const List<NamedGate> all = <NamedGate>[
@@ -840,5 +853,6 @@ abstract final class Gates {
     confirmCrateDeposit,
     vanManage,
     vanSell,
+    managePayroll,
   ];
 }

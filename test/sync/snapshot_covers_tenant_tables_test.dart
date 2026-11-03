@@ -11,7 +11,13 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 void main() {
   /// Tenant tables that intentionally are NOT pulled via pos_pull_snapshot.
   /// Justify every entry; the default for a new table is to add it to the RPC.
-  const intentionallyNotSnapshotted = <String, String>{};
+  const intentionallyNotSnapshotted = <String, String>{
+    // #667 (ADR 0034): permission-gated. pos_pull_snapshot is SECURITY DEFINER
+    // and would skip their RLS, so they are fetched through PostgREST instead.
+    'payroll_workers': 'permission-gated (ADR 0034)',
+    'payroll_entries': 'permission-gated (ADR 0034)',
+    'payroll_statements': 'permission-gated (ADR 0034)',
+  };
 
   List<String> latestSnapshotTables() {
     final files = Directory('supabase/migrations')
@@ -52,6 +58,15 @@ void main() {
       () {
     expect(latestSnapshotTables(), contains('crate_shortfall_writeoffs'));
     expect(kSyncedTenantTables, contains('crate_shortfall_writeoffs'));
+  });
+
+  test('the permission-gated tables stay OUT of pos_pull_snapshot', () {
+    final inRpc = latestSnapshotTables().toSet();
+    for (final t in kSyncPermissionGatedTables.keys) {
+      expect(inRpc, isNot(contains(t)),
+          reason: '$t is permission-gated; the definer snapshot would leak it');
+      expect(intentionallyNotSnapshotted, contains(t));
+    }
   });
 
   test('allowlist entries are real tenant tables', () {

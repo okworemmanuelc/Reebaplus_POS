@@ -26,6 +26,52 @@ class PermissionsDao extends DatabaseAccessor<AppDatabase>
       permissions,
     )..where((t) => t.key.equals(key))).getSingleOrNull();
   }
+
+  /// Whether [userId] holds [permissionKey] in [businessId], read from local
+  /// rows — the Drift twin of the cloud's `caller_has_permission` (0135), on
+  /// purpose: it decides which permission-gated rows (ADR 0034) this phone
+  /// may keep, queue and pull, so it must agree with the cloud rule that
+  /// filters them. Same layers in the same order: the ACTIVE membership's role
+  /// (CEO all-on), its role grant, then a user override. Store-scope overrides
+  /// are NOT consulted, exactly like the cloud function. Fails closed: no
+  /// active membership means no access.
+  Future<bool> userHolds({
+    required String userId,
+    required String businessId,
+    required String permissionKey,
+  }) async {
+    final membership = await customSelect(
+      'SELECT ub.role_id AS role_id, r.slug AS slug '
+      'FROM user_businesses ub JOIN roles r ON r.id = ub.role_id '
+      "WHERE ub.user_id = ?1 AND ub.business_id = ?2 AND ub.status = 'active' "
+      'ORDER BY ub.last_login_at IS NULL, ub.last_login_at DESC LIMIT 1',
+      variables: [Variable.withString(userId), Variable.withString(businessId)],
+    ).getSingleOrNull();
+    if (membership == null) return false;
+    if (membership.read<String>('slug') == 'ceo') return true;
+
+    final override = await customSelect(
+      'SELECT is_granted FROM user_permission_overrides '
+      'WHERE user_id = ?1 AND business_id = ?2 AND permission_key = ?3 LIMIT 1',
+      variables: [
+        Variable.withString(userId),
+        Variable.withString(businessId),
+        Variable.withString(permissionKey),
+      ],
+    ).getSingleOrNull();
+    if (override != null) return override.read<bool>('is_granted');
+
+    final grant = await customSelect(
+      'SELECT 1 FROM role_permissions '
+      'WHERE role_id = ?1 AND business_id = ?2 AND permission_key = ?3 LIMIT 1',
+      variables: [
+        Variable.withString(membership.read<String>('role_id')),
+        Variable.withString(businessId),
+        Variable.withString(permissionKey),
+      ],
+    ).getSingleOrNull();
+    return grant != null;
+  }
 }
 
 @DriftAccessor(tables: [Roles])
