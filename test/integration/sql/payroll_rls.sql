@@ -25,7 +25,7 @@ INSERT INTO auth.users (id, email) VALUES
   (current_setting('t.a_mgr')::uuid,  current_setting('t.a_mgr')  || '@example.invalid'),
   (current_setting('t.a_cash')::uuid, current_setting('t.a_cash') || '@example.invalid');
 INSERT INTO public.businesses (id, name, subscription_status)
-VALUES (current_setting('t.biz')::uuid, 'Payroll RLS fixture', 'active');
+VALUES (current_setting('t.biz')::uuid, 'Payroll RLS fixture', 'trial');  -- trial = premium limits, so two staff fit
 INSERT INTO public.stores (id, business_id, name)
 VALUES (current_setting('t.store')::uuid, current_setting('t.biz')::uuid, 'Main');
 INSERT INTO public.roles (id, business_id, name, slug) VALUES
@@ -39,9 +39,9 @@ INSERT INTO public.users (id, business_id, name, auth_user_id) VALUES
 INSERT INTO public.user_businesses (business_id, user_id, role_id, status) VALUES
   (current_setting('t.biz')::uuid, current_setting('t.u_mgr')::uuid,  current_setting('t.r_mgr')::uuid,  'active'),
   (current_setting('t.biz')::uuid, current_setting('t.u_cash')::uuid, current_setting('t.r_cash')::uuid, 'active');
-INSERT INTO public.profiles (id, business_id) VALUES
-  (current_setting('t.a_mgr')::uuid,  current_setting('t.biz')::uuid),
-  (current_setting('t.a_cash')::uuid, current_setting('t.biz')::uuid)
+INSERT INTO public.profiles (id, business_id, name) VALUES
+  (current_setting('t.a_mgr')::uuid,  current_setting('t.biz')::uuid, 'Test Manager'),
+  (current_setting('t.a_cash')::uuid, current_setting('t.biz')::uuid, 'Test Cashier')
 ON CONFLICT (id) DO UPDATE SET business_id = EXCLUDED.business_id;
 
 -- Act as the Manager.
