@@ -135,6 +135,21 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('a Bluetooth printer used more recently sits above USB '
+        '(#724)', (tester) async {
+      SharedPreferences.setMockInitialValues({
+        'printer_recent_ids': [_large, 'usb:1208:514'],
+      });
+      final usb = FakeUsbPrinterChannel(printers: [fakeUsbPrinter()]);
+      await _pump(tester, usb: usb);
+
+      final recentY = tester.getTopLeft(find.text('Back office printer')).dy;
+      final usbY = tester.getTopLeft(find.text('TM-T20')).dy;
+      final unusedY = tester.getTopLeft(find.text('Counter printer')).dy;
+      expect(recentY, lessThan(usbY));
+      expect(usbY, lessThan(unusedY));
+    });
+
     testWidgets('Test print writes to the USB printer', (tester) async {
       final usb = FakeUsbPrinterChannel(printers: [fakeUsbPrinter()]);
       await _pump(tester, usb: usb);

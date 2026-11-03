@@ -7,6 +7,10 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #724: Most recently used printers at the top (2026-11-03, branch `feat/724-printer-recent-first`)
+- `PrinterService` keeps `printer_recent_ids` (newest first, max 20; seeded from `last_printer_mac`), updated after every successful print (USB, Bluetooth auto/direct, test prints).
+- Receipt printer settings: USB + Bluetooth in ONE list ordered by recency (`PrinterService.sortByRecent`); never-used keep old order below. Printer picker sorted the same way.
+
 ### Issue #708: Reports show Sales / Returns / Net separately (2026-11-03, branch `feat/708-returns-line`)
 - Home, Profit report and Daily Recon split the figure into Sales / Returns / Net (and Profit / Profit returned) only when the period has cancel entries; `computeSalesSplitKobo` in `report_revenue.dart` is the one source, Net == old total, day-close snapshot untouched.
 ### Issue #717: Receipts waste paper — trim the end-of-print feed (2026-11-03, branch `fix/717-receipt-paper-feed`)
