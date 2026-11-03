@@ -33,6 +33,7 @@ OrderWithItems _order({
   final goodsNet = gross - discountKobo;
   final orderId = 'o-${createdAt.microsecondsSinceEpoch}-${lines.length}';
   final order = OrderData(
+    kind: 'sale',
     id: orderId,
     businessId: 'b1',
     orderNumber: 'ORD-$orderId',

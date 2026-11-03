@@ -111,16 +111,21 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     return row?.name ?? 'Brand';
   }
 
+  /// #712 — sale adjustments (part returns) are never their own row in any
+  /// list, count or stat; they show inside their parent sale. Reports read them
+  /// through `watchAllOrdersWithItems` instead.
+  Expression<bool> _notAdjustment(Orders o) => o.kind.equals('adjustment').not();
+
   Stream<List<OrderData>> watchPendingOrders() {
     return (select(orders)
-          ..where((o) => whereBusiness(o) & o.status.equals('pending'))
+          ..where((o) => whereBusiness(o) & _notAdjustment(o) & o.status.equals('pending'))
           ..orderBy([(o) => OrderingTerm.desc(o.createdAt)]))
         .watch();
   }
 
   Stream<List<OrderData>> watchAllOrders() {
     return (select(orders)
-          ..where((o) => whereBusiness(o))
+          ..where((o) => whereBusiness(o) & _notAdjustment(o))
           ..orderBy([(o) => OrderingTerm.desc(o.createdAt)]))
         .watch();
   }
@@ -144,7 +149,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   Stream<List<OrderData>> watchOrdersByStore(String? storeId) {
     return (select(orders)
           ..where((o) {
-            final expr = whereBusiness(o);
+            final expr = whereBusiness(o) & _notAdjustment(o);
             if (storeId != null) {
               return expr & o.storeId.equals(storeId);
             }
@@ -156,21 +161,21 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
 
   Stream<List<OrderData>> watchCompletedOrders() {
     return (select(orders)
-          ..where((o) => whereBusiness(o) & o.status.equals('completed'))
+          ..where((o) => whereBusiness(o) & _notAdjustment(o) & o.status.equals('completed'))
           ..orderBy([(o) => OrderingTerm.desc(o.createdAt)]))
         .watch();
   }
 
   Stream<List<OrderData>> watchCancelledOrders() {
     return (select(orders)
-          ..where((o) => whereBusiness(o) & o.status.equals('cancelled'))
+          ..where((o) => whereBusiness(o) & _notAdjustment(o) & o.status.equals('cancelled'))
           ..orderBy([(o) => OrderingTerm.desc(o.createdAt)]))
         .watch();
   }
 
   Stream<List<OrderData>> watchOrdersByCustomer(String customerId) {
     return (select(orders)
-          ..where((o) => whereBusiness(o) & o.customerId.equals(customerId))
+          ..where((o) => whereBusiness(o) & _notAdjustment(o) & o.customerId.equals(customerId))
           ..orderBy([(o) => OrderingTerm.desc(o.createdAt)]))
         .watch();
   }
@@ -222,6 +227,17 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
               ..addColumns([discountCol, countCol])
               ..where(whereThisStaffsRecognizedSale()))
             .getSingle();
+    // #712 — a part return nets the money (its lines and discount are minus)
+    // but is not a sale: it never counts as an order.
+    final adjustmentCountCol = orders.id.count();
+    final adjustmentRow =
+        await (selectOnly(orders)
+              ..addColumns([adjustmentCountCol])
+              ..where(
+                whereThisStaffsRecognizedSale() &
+                    orders.kind.equals('adjustment'),
+              ))
+            .getSingle();
 
     // Drift types an aggregate over an arithmetic expression as `num`; both
     // operands are integer columns, so SQLite returns an integer.
@@ -229,7 +245,10 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     final int discountKobo = (headerRow.read(discountCol) ?? 0).toInt();
     return (
       totalKobo: grossKobo - discountKobo,
-      orderCount: headerRow.read(countCol) ?? 0,
+      orderCount:
+          ((headerRow.read(countCol) ?? 0) -
+                  (adjustmentRow.read(adjustmentCountCol) ?? 0))
+              .toInt(),
     );
   }
 
@@ -336,7 +355,8 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     } else {
       statusPredicate = orders.status.equals(status);
     }
-    var predicate = whereBusiness(orders) & statusPredicate;
+    var predicate =
+        whereBusiness(orders) & _notAdjustment(orders) & statusPredicate;
 
     if (storeId != null) {
       predicate = predicate & orders.storeId.equals(storeId);
@@ -463,7 +483,8 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     } else {
       statusPredicate = orders.status.equals(status);
     }
-    var predicate = whereBusiness(orders) & statusPredicate;
+    var predicate =
+        whereBusiness(orders) & _notAdjustment(orders) & statusPredicate;
 
     if (storeId != null) {
       predicate = predicate & orders.storeId.equals(storeId);
@@ -568,7 +589,8 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     } else {
       statusPredicate = orders.status.equals(status);
     }
-    var predicate = whereBusiness(orders) & statusPredicate;
+    var predicate =
+        whereBusiness(orders) & _notAdjustment(orders) & statusPredicate;
 
     if (storeId != null) {
       predicate = predicate & orders.storeId.equals(storeId);
@@ -2539,6 +2561,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     required String reversalId,
     required String orderId,
     Map<String, dynamic>? cloudHeader,
+    String? adjustmentOrderId,
   }) {
     return db.transaction(() async {
       final held = await db.syncDao.heldRowsFor(reversalId);
@@ -2599,9 +2622,18 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         );
       }
 
+      // #712 — a rejected PART return: the parent was never touched, so there
+      // is no header to restore; the adjustment's own header and minus lines
+      // never uploaded and go away with the rest.
+      if (adjustmentOrderId != null) {
+        await removeRejectedAdjustmentRows(adjustmentOrderId);
+      }
+
       // Header: back to the cloud's.
       final status = cloudHeader?['status'];
-      if (status is String) {
+      if (adjustmentOrderId != null) {
+        // nothing to restore on the parent
+      } else if (status is String) {
         final cancelledAt = cloudHeader?['cancelled_at'];
         final lua = cloudHeader?['last_updated_at'];
         await (update(
@@ -2657,7 +2689,10 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   /// one) that a refund of [orderId] made on this phone was rejected because the
   /// sale had already been refunded on another phone: cash may have been handed
   /// back twice. Best-effort: never throws.
-  Future<void> alertRefundRejected(String orderId) async {
+  Future<void> alertRefundRejected(
+    String orderId, {
+    bool partReturn = false,
+  }) async {
     try {
       final order = await (select(
         orders,
@@ -2677,10 +2712,13 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       for (final uid in <String>{...ceoIds, ...managerIds}) {
         await db.notificationsDao.fireNotification(
           type: 'sale_refund_rejected',
-          message:
-              'A refund of $label was rejected: the sale had already been '
-              'refunded on another phone. Check whether money was handed back '
-              'twice.',
+          message: partReturn
+              ? 'A return on $label was rejected: more of it was returned on '
+                    'another phone than was sold. Check whether goods or money '
+                    'were handed back twice.'
+              : 'A refund of $label was rejected: the sale had already been '
+                    'refunded on another phone. Check whether money was handed '
+                    'back twice.',
           severity: 'warning',
           linkedRecordId: orderId,
           recipientUserId: uid,
@@ -3811,6 +3849,12 @@ enum ReturnRefusal {
   ),
   badDamagedQty('A damaged quantity is more than was sold on that line.'),
   badDamageReason('Pick a valid reason for the damaged items.'),
+  badReturnQty('A returned quantity is not valid for that line.'),
+  overReturn(
+    'More was picked than can still be returned. Part of this sale may '
+    'already have been returned.',
+  ),
+  nothingToReturn('Pick at least one item to return.'),
   noCustomerBalance(
     'A walk-in sale has no customer balance. Give the money back as cash or '
     'transfer.',

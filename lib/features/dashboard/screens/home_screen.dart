@@ -300,11 +300,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     // Metrics. Cashier sees own sales only (§11.4); other roles see the
     // store/period-scoped total.
+    // #712 — a part return (sale adjustment) nets the money everywhere but is
+    // never a row in an order list.
+    final listableOrders = filteredOrdersWithItems
+        .where((o) => o.order.kind != 'adjustment')
+        .toList();
     final salesOrders = isCashier
-        ? filteredOrdersWithItems
-              .where((o) => o.order.staffId == userId)
-              .toList()
-        : filteredOrdersWithItems;
+        ? listableOrders.where((o) => o.order.staffId == userId).toList()
+        : listableOrders;
     // #176 — the single "Total Sales" definition, shared with the Daily
     // Reconciliation and the Profit report (deposit-exclusive item lines minus
     // discounts). Replaces the old Σ`totalAmountKobo` (deposit-IN, so a crate

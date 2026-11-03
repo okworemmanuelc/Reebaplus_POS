@@ -1098,6 +1098,180 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     }
   }
 
+  /// **Crates of a PART return** (#712, ADR 0035): [returnedByBrand] (brand id ->
+  /// crates coming back) for the sale adjustment [adjustmentOrderId]. [orderIds]
+  /// is the parent sale, every earlier adjustment and this one, because the
+  /// crate rows of all of them are one running position. Per brand, in order:
+  ///   1. the crates the customer still owes for this sale are cancelled first
+  ///      (a customer `adjusted` row, [kOrderPartReturnedReason]);
+  ///   2. any remainder hands empties back: a negative pool row that lowers the
+  ///      shop's empty count, from the Checkout exchange credits first
+  ///      ([kCheckoutExchangeReversalReason]) then Confirm's
+  ///      ([kOrderReturnedEmptiesReason]). Never more than was credited.
+  /// Every row references [adjustmentOrderId], carries a fresh id (a rejected
+  /// part return is withdrawn) and is enqueued. A deposit held is the caller's
+  /// money rule. No own transaction: the caller is inside one.
+  Future<void> returnCratesForAdjustment({
+    required List<String> orderIds,
+    required String adjustmentOrderId,
+    required Map<String, double> returnedByBrand,
+    required String staffId,
+  }) async {
+    final now = DateTime.now();
+    for (final entry in returnedByBrand.entries) {
+      final brand = entry.key;
+      var rest = entry.value;
+      if (rest <= 0) continue;
+
+      // 1. Cancel what the customer still owes.
+      final customerRows =
+          await (select(crateLedger)..where(
+                (l) =>
+                    whereBusiness(l) &
+                    l.referenceOrderId.isIn(orderIds) &
+                    l.customerId.isNotNull() &
+                    l.manufacturerId.equals(brand),
+              ))
+              .get();
+      final owed = <String, double>{};
+      for (final r in customerRows) {
+        owed[r.customerId!] = (owed[r.customerId!] ?? 0) + r.quantityDelta;
+      }
+      for (final o in owed.entries) {
+        if (rest <= 0) break;
+        if (o.value <= 0) continue;
+        final cancel = o.value < rest ? o.value : rest;
+        final compRow = CrateLedgerCompanion.insert(
+          id: Value(UuidV7.generate()),
+          businessId: requireBusinessId(),
+          customerId: Value(o.key),
+          manufacturerId: Value(brand),
+          quantityDelta: -cancel,
+          movementType: kCrateMovementAdjusted,
+          referenceOrderId: Value(adjustmentOrderId),
+          performedBy: Value(staffId),
+          reason: const Value(kOrderPartReturnedReason),
+          lastUpdatedAt: Value(now),
+        );
+        await into(crateLedger).insert(compRow);
+        await customUpdate(
+          'UPDATE customer_crate_balances SET balance = balance - ?, '
+          "last_updated_at = CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER) "
+          'WHERE business_id = ? AND customer_id = ? AND manufacturer_id = ?',
+          variables: [
+            Variable<double>(cancel),
+            Variable<String>(requireBusinessId()),
+            Variable<String>(o.key),
+            Variable<String>(brand),
+          ],
+          updates: {customerCrateBalances},
+        );
+        await db.syncDao.enqueueUpsert('crate_ledger', compRow);
+        rest -= cancel;
+      }
+
+      // 2. Hand empties back, exchange credits first, then Confirm's.
+      for (final reasons in <({List<String?> credit, String reversalReason})>[
+        (
+          credit: const [kCheckoutExchangeReason, kCheckoutExchangeReversalReason],
+          reversalReason: kCheckoutExchangeReversalReason,
+        ),
+        (
+          credit: const [null, kOrderReturnedEmptiesReason],
+          reversalReason: kOrderReturnedEmptiesReason,
+        ),
+      ]) {
+        if (rest <= 0) break;
+        final poolRows =
+            await (select(crateLedger)..where(
+                  (l) =>
+                      whereBusiness(l) &
+                      l.referenceOrderId.isIn(orderIds) &
+                      l.customerId.isNull() &
+                      l.manufacturerId.equals(brand) &
+                      l.movementType.equals(kCrateMovementAdjusted) &
+                      (reasons.credit.contains(null)
+                          ? (l.reason.isNull() |
+                              l.reason.isIn(
+                                reasons.credit.whereType<String>().toList(),
+                              ))
+                          : l.reason.isIn(
+                              reasons.credit.whereType<String>().toList(),
+                            )),
+                ))
+                .get();
+        final byStore = <String?, double>{};
+        for (final r in poolRows) {
+          byStore[r.storeId] = (byStore[r.storeId] ?? 0) + r.quantityDelta;
+        }
+        for (final st in byStore.entries) {
+          if (rest <= 0) break;
+          if (st.value <= 0) continue;
+          final back = st.value < rest ? st.value : rest;
+          final compRow = CrateLedgerCompanion.insert(
+            id: Value(UuidV7.generate()),
+            businessId: requireBusinessId(),
+            manufacturerId: Value(brand),
+            storeId: Value(st.key),
+            quantityDelta: -back,
+            movementType: kCrateMovementAdjusted,
+            referenceOrderId: Value(adjustmentOrderId),
+            performedBy: Value(staffId),
+            reason: Value(reasons.reversalReason),
+            lastUpdatedAt: Value(now),
+          );
+          await into(crateLedger).insert(compRow);
+          await _movePoolProjection(brand, storeId: st.key, delta: -back);
+          await db.syncDao.enqueueUpsert('crate_ledger', compRow);
+          rest -= back;
+        }
+      }
+    }
+  }
+
+  /// What a part return would hand back to the customer, per brand, without
+  /// writing: for each brand, the crates not covered by what the customer still
+  /// owes, capped at the empties the sale credited to the pool. Feeds the
+  /// Return pop-up's "give back their empties" note; mirrors
+  /// [returnCratesForAdjustment].
+  Future<Map<String, double>> emptiesBackFor({
+    required List<String> orderIds,
+    required Map<String, double> returnedByBrand,
+  }) async {
+    final out = <String, double>{};
+    for (final entry in returnedByBrand.entries) {
+      final brand = entry.key;
+      final rows = await (select(crateLedger)..where(
+            (l) =>
+                whereBusiness(l) &
+                l.referenceOrderId.isIn(orderIds) &
+                l.manufacturerId.equals(brand),
+          ))
+          .get();
+      final owed = <String, double>{};
+      var credited = 0.0;
+      for (final r in rows) {
+        final cid = r.customerId;
+        if (cid != null) {
+          owed[cid] = (owed[cid] ?? 0) + r.quantityDelta;
+        } else if (r.movementType == kCrateMovementAdjusted &&
+            (r.reason == null ||
+                r.reason == kCheckoutExchangeReason ||
+                r.reason == kCheckoutExchangeReversalReason ||
+                r.reason == kOrderReturnedEmptiesReason)) {
+          credited += r.quantityDelta;
+        }
+      }
+      var rest = entry.value;
+      for (final o in owed.values) {
+        if (o > 0) rest -= o < rest ? o : rest;
+      }
+      final back = rest < credited ? rest : credited;
+      if (back > 0) out[brand] = back;
+    }
+    return out;
+  }
+
   /// Every exchange row and exchange reversal row of [orderId].
   Future<List<CrateLedgerData>> _exchangeRows(String orderId) =>
       (select(crateLedger)..where(
@@ -3745,6 +3919,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
           referenceOrderId: entry.referenceOrderId,
           orderNumber: order?.orderNumber,
           orderStatus: order?.status,
+          orderKind: order?.kind,
         );
         return CrateMovementHistoryEntry(
           id: entry.id,

@@ -57,6 +57,7 @@ OrderWithItems _order({
 }) {
   final product = _product();
   final order = OrderData(
+    kind: 'sale',
     id: id,
     businessId: 'b1',
     orderNumber: id,

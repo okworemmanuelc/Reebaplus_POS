@@ -264,6 +264,7 @@ void main() {
           ),
           // orders
           OrderData(
+            kind: 'sale',
             id: UuidV7.generate(),
             businessId: 'biz-1',
             orderNumber: 'ORD-001',

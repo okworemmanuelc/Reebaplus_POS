@@ -17694,6 +17694,29 @@ class $OrdersTable extends Orders with TableInfo<$OrdersTable, OrderData> {
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    $customConstraints:
+        'NOT NULL DEFAULT \'sale\' CHECK (kind IN (\'sale\',\'adjustment\'))',
+    defaultValue: const CustomExpression('\'sale\''),
+  );
+  static const VerificationMeta _adjustsOrderIdMeta = const VerificationMeta(
+    'adjustsOrderId',
+  );
+  @override
+  late final GeneratedColumn<String> adjustsOrderId = GeneratedColumn<String>(
+    'adjusts_order_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -17741,6 +17764,8 @@ class $OrdersTable extends Orders with TableInfo<$OrdersTable, OrderData> {
     vanTripId,
     completedAt,
     cancelledAt,
+    kind,
+    adjustsOrderId,
     createdAt,
     lastUpdatedAt,
   ];
@@ -17918,6 +17943,21 @@ class $OrdersTable extends Orders with TableInfo<$OrdersTable, OrderData> {
         ),
       );
     }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    }
+    if (data.containsKey('adjusts_order_id')) {
+      context.handle(
+        _adjustsOrderIdMeta,
+        adjustsOrderId.isAcceptableOrUnknown(
+          data['adjusts_order_id']!,
+          _adjustsOrderIdMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -18022,6 +18062,14 @@ class $OrdersTable extends Orders with TableInfo<$OrdersTable, OrderData> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}cancelled_at'],
       ),
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      adjustsOrderId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}adjusts_order_id'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -18078,6 +18126,18 @@ class OrderData extends DataClass implements Insertable<OrderData> {
   final String? vanTripId;
   final DateTime? completedAt;
   final DateTime? cancelledAt;
+
+  /// #712 (ADR 0035) — `sale` (every ordinary order) or `adjustment`: the
+  /// record a part return writes. An adjustment is born `completed`, never
+  /// shows as its own row in the Orders list, and carries NEGATIVE goods
+  /// totals and lines. The CHECK is column-level so `addColumn` can carry it
+  /// into an upgraded phone (a table-level CHECK would force a rebuild).
+  final String kind;
+
+  /// #712 — the sale an `adjustment` adjusts; NULL on every sale. A plain id
+  /// with no local FK (like `OnlineOrders.linkedOrderId`): a pulled adjustment
+  /// must never wait on its parent row. The cloud column is a real FK.
+  final String? adjustsOrderId;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
   const OrderData({
@@ -18101,6 +18161,8 @@ class OrderData extends DataClass implements Insertable<OrderData> {
     this.vanTripId,
     this.completedAt,
     this.cancelledAt,
+    required this.kind,
+    this.adjustsOrderId,
     required this.createdAt,
     required this.lastUpdatedAt,
   });
@@ -18144,6 +18206,10 @@ class OrderData extends DataClass implements Insertable<OrderData> {
     }
     if (!nullToAbsent || cancelledAt != null) {
       map['cancelled_at'] = Variable<DateTime>(cancelledAt);
+    }
+    map['kind'] = Variable<String>(kind);
+    if (!nullToAbsent || adjustsOrderId != null) {
+      map['adjusts_order_id'] = Variable<String>(adjustsOrderId);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
@@ -18190,6 +18256,10 @@ class OrderData extends DataClass implements Insertable<OrderData> {
       cancelledAt: cancelledAt == null && nullToAbsent
           ? const Value.absent()
           : Value(cancelledAt),
+      kind: Value(kind),
+      adjustsOrderId: adjustsOrderId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(adjustsOrderId),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
     );
@@ -18225,6 +18295,8 @@ class OrderData extends DataClass implements Insertable<OrderData> {
       vanTripId: serializer.fromJson<String?>(json['vanTripId']),
       completedAt: serializer.fromJson<DateTime?>(json['completedAt']),
       cancelledAt: serializer.fromJson<DateTime?>(json['cancelledAt']),
+      kind: serializer.fromJson<String>(json['kind']),
+      adjustsOrderId: serializer.fromJson<String?>(json['adjustsOrderId']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
     );
@@ -18253,6 +18325,8 @@ class OrderData extends DataClass implements Insertable<OrderData> {
       'vanTripId': serializer.toJson<String?>(vanTripId),
       'completedAt': serializer.toJson<DateTime?>(completedAt),
       'cancelledAt': serializer.toJson<DateTime?>(cancelledAt),
+      'kind': serializer.toJson<String>(kind),
+      'adjustsOrderId': serializer.toJson<String?>(adjustsOrderId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
     };
@@ -18279,6 +18353,8 @@ class OrderData extends DataClass implements Insertable<OrderData> {
     Value<String?> vanTripId = const Value.absent(),
     Value<DateTime?> completedAt = const Value.absent(),
     Value<DateTime?> cancelledAt = const Value.absent(),
+    String? kind,
+    Value<String?> adjustsOrderId = const Value.absent(),
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
   }) => OrderData(
@@ -18304,6 +18380,10 @@ class OrderData extends DataClass implements Insertable<OrderData> {
     vanTripId: vanTripId.present ? vanTripId.value : this.vanTripId,
     completedAt: completedAt.present ? completedAt.value : this.completedAt,
     cancelledAt: cancelledAt.present ? cancelledAt.value : this.cancelledAt,
+    kind: kind ?? this.kind,
+    adjustsOrderId: adjustsOrderId.present
+        ? adjustsOrderId.value
+        : this.adjustsOrderId,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
   );
@@ -18355,6 +18435,10 @@ class OrderData extends DataClass implements Insertable<OrderData> {
       cancelledAt: data.cancelledAt.present
           ? data.cancelledAt.value
           : this.cancelledAt,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      adjustsOrderId: data.adjustsOrderId.present
+          ? data.adjustsOrderId.value
+          : this.adjustsOrderId,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       lastUpdatedAt: data.lastUpdatedAt.present
           ? data.lastUpdatedAt.value
@@ -18385,6 +18469,8 @@ class OrderData extends DataClass implements Insertable<OrderData> {
           ..write('vanTripId: $vanTripId, ')
           ..write('completedAt: $completedAt, ')
           ..write('cancelledAt: $cancelledAt, ')
+          ..write('kind: $kind, ')
+          ..write('adjustsOrderId: $adjustsOrderId, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
           ..write(')'))
@@ -18413,6 +18499,8 @@ class OrderData extends DataClass implements Insertable<OrderData> {
     vanTripId,
     completedAt,
     cancelledAt,
+    kind,
+    adjustsOrderId,
     createdAt,
     lastUpdatedAt,
   ]);
@@ -18440,6 +18528,8 @@ class OrderData extends DataClass implements Insertable<OrderData> {
           other.vanTripId == this.vanTripId &&
           other.completedAt == this.completedAt &&
           other.cancelledAt == this.cancelledAt &&
+          other.kind == this.kind &&
+          other.adjustsOrderId == this.adjustsOrderId &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
 }
@@ -18465,6 +18555,8 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
   final Value<String?> vanTripId;
   final Value<DateTime?> completedAt;
   final Value<DateTime?> cancelledAt;
+  final Value<String> kind;
+  final Value<String?> adjustsOrderId;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
   final Value<int> rowid;
@@ -18489,6 +18581,8 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
     this.vanTripId = const Value.absent(),
     this.completedAt = const Value.absent(),
     this.cancelledAt = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.adjustsOrderId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -18514,6 +18608,8 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
     this.vanTripId = const Value.absent(),
     this.completedAt = const Value.absent(),
     this.cancelledAt = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.adjustsOrderId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -18544,6 +18640,8 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
     Expression<String>? vanTripId,
     Expression<DateTime>? completedAt,
     Expression<DateTime>? cancelledAt,
+    Expression<String>? kind,
+    Expression<String>? adjustsOrderId,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
     Expression<int>? rowid,
@@ -18570,6 +18668,8 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
       if (vanTripId != null) 'van_trip_id': vanTripId,
       if (completedAt != null) 'completed_at': completedAt,
       if (cancelledAt != null) 'cancelled_at': cancelledAt,
+      if (kind != null) 'kind': kind,
+      if (adjustsOrderId != null) 'adjusts_order_id': adjustsOrderId,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -18597,6 +18697,8 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
     Value<String?>? vanTripId,
     Value<DateTime?>? completedAt,
     Value<DateTime?>? cancelledAt,
+    Value<String>? kind,
+    Value<String?>? adjustsOrderId,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
     Value<int>? rowid,
@@ -18622,6 +18724,8 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
       vanTripId: vanTripId ?? this.vanTripId,
       completedAt: completedAt ?? this.completedAt,
       cancelledAt: cancelledAt ?? this.cancelledAt,
+      kind: kind ?? this.kind,
+      adjustsOrderId: adjustsOrderId ?? this.adjustsOrderId,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
       rowid: rowid ?? this.rowid,
@@ -18693,6 +18797,12 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
     if (cancelledAt.present) {
       map['cancelled_at'] = Variable<DateTime>(cancelledAt.value);
     }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (adjustsOrderId.present) {
+      map['adjusts_order_id'] = Variable<String>(adjustsOrderId.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -18728,6 +18838,8 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
           ..write('vanTripId: $vanTripId, ')
           ..write('completedAt: $completedAt, ')
           ..write('cancelledAt: $cancelledAt, ')
+          ..write('kind: $kind, ')
+          ..write('adjustsOrderId: $adjustsOrderId, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
           ..write('rowid: $rowid')
@@ -87511,6 +87623,8 @@ typedef $$OrdersTableCreateCompanionBuilder =
       Value<String?> vanTripId,
       Value<DateTime?> completedAt,
       Value<DateTime?> cancelledAt,
+      Value<String> kind,
+      Value<String?> adjustsOrderId,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
       Value<int> rowid,
@@ -87537,6 +87651,8 @@ typedef $$OrdersTableUpdateCompanionBuilder =
       Value<String?> vanTripId,
       Value<DateTime?> completedAt,
       Value<DateTime?> cancelledAt,
+      Value<String> kind,
+      Value<String?> adjustsOrderId,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
       Value<int> rowid,
@@ -87916,6 +88032,16 @@ class $$OrdersTableFilterComposer
 
   ColumnFilters<DateTime> get cancelledAt => $composableBuilder(
     column: $table.cancelledAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get adjustsOrderId => $composableBuilder(
+    column: $table.adjustsOrderId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -88347,6 +88473,16 @@ class $$OrdersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get adjustsOrderId => $composableBuilder(
+    column: $table.adjustsOrderId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -88564,6 +88700,14 @@ class $$OrdersTableAnnotationComposer
 
   GeneratedColumn<DateTime> get cancelledAt => $composableBuilder(
     column: $table.cancelledAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get adjustsOrderId => $composableBuilder(
+    column: $table.adjustsOrderId,
     builder: (column) => column,
   );
 
@@ -88981,6 +89125,8 @@ class $$OrdersTableTableManager
                 Value<String?> vanTripId = const Value.absent(),
                 Value<DateTime?> completedAt = const Value.absent(),
                 Value<DateTime?> cancelledAt = const Value.absent(),
+                Value<String> kind = const Value.absent(),
+                Value<String?> adjustsOrderId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -89005,6 +89151,8 @@ class $$OrdersTableTableManager
                 vanTripId: vanTripId,
                 completedAt: completedAt,
                 cancelledAt: cancelledAt,
+                kind: kind,
+                adjustsOrderId: adjustsOrderId,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
                 rowid: rowid,
@@ -89031,6 +89179,8 @@ class $$OrdersTableTableManager
                 Value<String?> vanTripId = const Value.absent(),
                 Value<DateTime?> completedAt = const Value.absent(),
                 Value<DateTime?> cancelledAt = const Value.absent(),
+                Value<String> kind = const Value.absent(),
+                Value<String?> adjustsOrderId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -89055,6 +89205,8 @@ class $$OrdersTableTableManager
                 vanTripId: vanTripId,
                 completedAt: completedAt,
                 cancelledAt: cancelledAt,
+                kind: kind,
+                adjustsOrderId: adjustsOrderId,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
                 rowid: rowid,

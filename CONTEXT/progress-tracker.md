@@ -7,6 +7,13 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #712: Sale adjustment record + part return (2026-11-03, branch `feat/712-sale-adjustment`)
+- Drift **v105** + cloud **0247_sale_adjustments.sql** (NOT applied; deploy before any v105 client pushes): `orders.kind` (sale|adjustment) + `orders.adjusts_order_id`; `order_items.quantity` CHECK `<> 0`; cloud-only `sale_adjustment_claims` + `pos_claim_sale_adjustment` (over-return guard); full-cancel claim refuses a sale with an adjustment; recost ignores adjustment orders. ADR 0035.
+- `OrdersDao.returnPartOfSale` / `planPartReturn` / `returnableQtyByLine` (`daos_sale_adjustments.dart`), `CratePoolDao.returnCratesForAdjustment` / `emptiesBackFor`; Return pop-up has per-line "up to N" steppers; whole-sale return with no earlier part return still uses `markCancelled`.
+- Reports: negative adjustment entries land under Returns; order lists/counts/stats exclude adjustments; parent card shows "Returned: …"; labels "Returned — ORD-…".
+- Tests: `test/orders/sale_adjustment_test.dart` (13), v104→v105 in `migration_upgrade_test.dart`. pos-parity issue to open on merge.
+- Deferred: order-details/receipt sheet lists adjustments only via the card line; no per-line crate deposit split (deposit released pro rata by crates).
+
 ### Issue #708: Reports show Sales / Returns / Net separately (2026-11-03, branch `feat/708-returns-line`)
 - Home, Profit report and Daily Recon split the figure into Sales / Returns / Net (and Profit / Profit returned) only when the period has cancel entries; `computeSalesSplitKobo` in `report_revenue.dart` is the one source, Net == old total, day-close snapshot untouched.
 ### Issue #717: Receipts waste paper — trim the end-of-print feed (2026-11-03, branch `fix/717-receipt-paper-feed`)

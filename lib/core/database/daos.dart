@@ -65,6 +65,7 @@ part 'daos_catalog.dart';
 part 'daos_inventory.dart';
 part 'daos_costing.dart';
 part 'daos_orders.dart';
+part 'daos_sale_adjustments.dart';
 part 'daos_payments.dart';
 part 'daos_customers.dart';
 part 'daos_suppliers.dart';

@@ -2079,6 +2079,22 @@ class Orders extends Table {
   TextColumn get vanTripId => text().nullable().references(VanTrips, #id)();
   DateTimeColumn get completedAt => dateTime().nullable()();
   DateTimeColumn get cancelledAt => dateTime().nullable()();
+
+  /// #712 (ADR 0035) — `sale` (every ordinary order) or `adjustment`: the
+  /// record a part return writes. An adjustment is born `completed`, never
+  /// shows as its own row in the Orders list, and carries NEGATIVE goods
+  /// totals and lines. The CHECK is column-level so `addColumn` can carry it
+  /// into an upgraded phone (a table-level CHECK would force a rebuild).
+  TextColumn get kind => text()
+      .withDefault(const Constant('sale'))
+      .customConstraint(
+        "NOT NULL DEFAULT 'sale' CHECK (kind IN ('sale','adjustment'))",
+      )();
+
+  /// #712 — the sale an `adjustment` adjusts; NULL on every sale. A plain id
+  /// with no local FK (like `OnlineOrders.linkedOrderId`): a pulled adjustment
+  /// must never wait on its parent row. The cloud column is a real FK.
+  TextColumn get adjustsOrderId => text().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
       dateTime().withDefault(currentDateAndTime)();
@@ -2217,7 +2233,8 @@ class OrderItems extends Table {
 
   @override
   List<String> get customConstraints => [
-    'CHECK (quantity > 0)',
+    // #712: <> 0, not > 0 — a sale adjustment's returned lines are MINUS.
+    'CHECK (quantity <> 0)',
     "CHECK (price_snapshot IS NULL OR json_valid(price_snapshot))",
   ];
 }
@@ -3410,7 +3427,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 104;
+  int get schemaVersion => 105;
 
   /// The v90 (#473) listing columns, pinned to their defaults in every older
   /// products rebuild: TableMigration copies from the CURRENT schema, so a
@@ -7280,6 +7297,35 @@ class AppDatabase extends _$AppDatabase {
         // rebuilt from the current definition (alterTable keeps its indexes
         // and triggers). No column changed, so no stale-column pins.
         await m.alterTable(TableMigration(staffPayTotals));
+      }
+
+      if (from < 105) {
+        // ── v105 — #712: sale adjustments (ADR 0035) ───────────────────────
+        //
+        // Mirrors supabase/migrations/0247_sale_adjustments.sql.
+        //   • orders.kind (CHECK sale|adjustment, default 'sale') and
+        //     orders.adjusts_order_id (nullable): added with ADD COLUMN, so no
+        //     orders rebuild and no stale-column pins on older steps (no earlier
+        //     step rebuilds `orders`).
+        //   • order_items.quantity CHECK > 0 becomes <> 0: a part return's
+        //     lines are MINUS. SQLite cannot ALTER a CHECK, so order_items is
+        //     rebuilt from the current definition (alterTable keeps its indexes
+        //     and triggers; no order_items column was added since the only
+        //     earlier rebuild, v35, so no stale-column pins either).
+        // Guarded so a re-upgrade is idempotent.
+        final orderCols = await customSelect('PRAGMA table_info(orders)').get();
+        final names = {for (final r in orderCols) r.read<String>('name')};
+        if (!names.contains('kind')) await m.addColumn(orders, orders.kind);
+        if (!names.contains('adjusts_order_id')) {
+          await m.addColumn(orders, orders.adjustsOrderId);
+        }
+        final itemSql = await customSelect(
+          "SELECT sql FROM sqlite_master WHERE type = 'table' "
+          "AND name = 'order_items'",
+        ).getSingle();
+        if ((itemSql.read<String?>('sql') ?? '').contains('quantity > 0')) {
+          await m.alterTable(TableMigration(orderItems));
+        }
       }
     },
     beforeOpen: (details) async {

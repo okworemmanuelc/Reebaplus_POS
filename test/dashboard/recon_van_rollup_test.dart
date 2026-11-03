@@ -96,6 +96,7 @@ OrderWithItems _roadSale({
   final when = at ?? _julDay;
   return OrderWithItems(
     OrderData(
+      kind: 'sale',
       id: id,
       businessId: _biz,
       orderNumber: id,

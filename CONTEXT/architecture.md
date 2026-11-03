@@ -302,6 +302,24 @@ and top-up rows reverse in their own family as before. A non-default choice
 always uses the local reversal (never the v2 domain RPC). All inside the #550
 guarded reversal.
 
+**Sale adjustments and part return (#712, ADR 0035).** Storage: two new
+`orders` columns, `kind` (`sale`|`adjustment`, column-level CHECK, default
+`sale`) and `adjusts_order_id` (cloud FK, plain id locally); `order_items.quantity`
+CHECK becomes `<> 0` (minus lines). Drift v105 / cloud 0247. A part return is
+`OrdersDao.returnPartOfSale` (`daos_sale_adjustments.dart`): one transaction
+behind `beginGuardedReversal`, writing the adjustment header + minus lines, `return`
+stock rows + inventory + a restore cost layer (id from the minus line), the money
+rows (proportional to what was paid; same `RefundDestination` rules as
+`markCancelled`) and the crate rows
+(`CratePoolDao.returnCratesForAdjustment`), all referencing the adjustment id.
+The claim is `domain:pos_claim_sale_adjustment` (cloud-only
+`sale_adjustment_claims`, over-return guard); a refusal withdraws the rows via
+`undoRejectedReversal(adjustmentOrderId:)`. Invariants: the sale is never
+modified; adjustments are filtered out of every order list / count / stat but
+are INCLUDED in the reports feed (`watchAllOrdersWithItems`); `saleDayEntries`
+signs them +1 and the Sales/Returns split files negative `adjustment` entries
+under Returns; the cloud recost ignores `kind = 'adjustment'`.
+
 **Return a Completed crate sale (#711).** `ReturnRefusal.crateBearing` is gone.
 Inside the same guarded reversal, per brand: (1) the customer's crate debt is
 cancelled for what is STILL owed only (`_reverseIssuedByCustomer` now nets every

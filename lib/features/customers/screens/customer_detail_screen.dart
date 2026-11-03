@@ -213,6 +213,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
 
   /// Order numbers for the statement's cancel reversal legs (#709).
   Map<String, String> _reversalOrderNumbers = const {};
+  Set<String> _adjustmentOrderIds = const {};
 
   Future<void> _loadReversalOrderNumbers(
     List<WalletTransactionData> hist,
@@ -223,11 +224,15 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
             (t.referenceType == 'refund' || t.referenceType == 'void'))
           t.orderId!,
     };
-    final numbers = await ref
-        .read(databaseProvider)
-        .walletTransactionsDao
-        .orderNumbersFor(ids);
-    if (mounted) setState(() => _reversalOrderNumbers = numbers);
+    final dao = ref.read(databaseProvider).walletTransactionsDao;
+    final numbers = await dao.orderNumbersFor(ids);
+    final adjustments = await dao.adjustmentIdsAmong(ids);
+    if (mounted) {
+      setState(() {
+        _reversalOrderNumbers = numbers;
+        _adjustmentOrderIds = adjustments;
+      });
+    }
   }
 
   List<WalletTransactionData> get _filteredHistory {
@@ -1559,6 +1564,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                         referenceType: txn.referenceType,
                         orderId: txn.orderId,
                         orderNumber: _reversalOrderNumbers[txn.orderId],
+                        isAdjustment: _adjustmentOrderIds.contains(txn.orderId),
                       ) ??
                       _friendlyRefType(txn.referenceType),
                   subtitle: DateFormat(

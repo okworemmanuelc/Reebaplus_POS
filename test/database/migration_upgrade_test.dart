@@ -4643,4 +4643,120 @@ void main() {
       db = await openAndInit(); // idempotent re-upgrade
     } finally { await db.close(); }
   });
+
+  test('v104 to v105 adds sale adjustments (#712): orders columns, minus '
+      'order_items lines, rows kept, idempotent', () async {
+    var db = await openAndInit();
+    final businessId = UuidV7.generate();
+    final storeId = UuidV7.generate();
+    final orderId = UuidV7.generate();
+    final itemId = UuidV7.generate();
+    await db.into(db.businesses).insert(
+        BusinessesCompanion.insert(id: Value(businessId), name: 'Shop'));
+    await db.into(db.stores).insert(StoresCompanion.insert(
+        id: Value(storeId), businessId: businessId, name: 'Main'));
+    await db.into(db.orders).insert(OrdersCompanion.insert(
+        id: Value(orderId),
+        businessId: businessId,
+        orderNumber: 'ORD-1',
+        totalAmountKobo: 100000,
+        netAmountKobo: 100000,
+        paymentType: 'cash',
+        status: 'completed',
+        storeId: Value(storeId)));
+    await db.into(db.orderItems).insert(OrderItemsCompanion.insert(
+        id: Value(itemId),
+        businessId: businessId,
+        orderId: orderId,
+        storeId: storeId,
+        quantity: 2,
+        unitPriceKobo: 50000,
+        totalKobo: 100000));
+
+    // Revert to the v104 shape: no orders.kind / adjusts_order_id, and
+    // order_items carrying the old CHECK (quantity > 0).
+    await db.customStatement('ALTER TABLE orders DROP COLUMN kind');
+    await db.customStatement('ALTER TABLE orders DROP COLUMN adjusts_order_id');
+    final extras = await db.customSelect(
+      "SELECT sql FROM sqlite_master WHERE tbl_name = 'order_items' "
+      "AND type IN ('index','trigger') AND sql IS NOT NULL",
+    ).get();
+    final createSql = (await db.customSelect(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='order_items'",
+    ).getSingle()).read<String>('sql');
+    expect(createSql, contains('quantity <> 0'));
+    await db.customStatement('PRAGMA foreign_keys = OFF');
+    await db.customStatement('ALTER TABLE order_items RENAME TO order_items_new');
+    final oldSql = createSql
+        .replaceFirst('quantity <> 0', 'quantity > 0');
+    await db.customStatement(oldSql);
+    await db.customStatement(
+        'INSERT INTO order_items SELECT * FROM order_items_new');
+    await db.customStatement('DROP TABLE order_items_new');
+    for (final e in extras) {
+      final sql = e.read<String>('sql');
+      try {
+        await db.customStatement(sql);
+      } catch (_) {/* already carried over */}
+    }
+    await db.customStatement('PRAGMA foreign_keys = ON');
+    await db.customStatement('PRAGMA user_version = 104');
+    await db.close();
+
+    db = await openAndInit();
+    try {
+      final cols = await columnsOf(db, 'orders');
+      expect(cols, containsAll(['kind', 'adjusts_order_id']));
+      final order = await (db.select(db.orders)
+            ..where((o) => o.id.equals(orderId))).getSingle();
+      expect(order.kind, 'sale', reason: 'old orders take the default');
+      expect(order.adjustsOrderId, isNull);
+      expect(order.orderNumber, 'ORD-1');
+      // The old line survived the order_items rebuild...
+      final line = await (db.select(db.orderItems)
+            ..where((i) => i.id.equals(itemId))).getSingle();
+      expect(line.quantity, 2);
+      // ...and a MINUS line is accepted now (the CHECK is <> 0).
+      final adjId = UuidV7.generate();
+      await db.into(db.orders).insert(OrdersCompanion.insert(
+          id: Value(adjId),
+          businessId: businessId,
+          orderNumber: 'ORD-2',
+          totalAmountKobo: -50000,
+          netAmountKobo: -50000,
+          paymentType: 'cash',
+          status: 'completed',
+          kind: const Value('adjustment'),
+          adjustsOrderId: Value(orderId)));
+      await db.into(db.orderItems).insert(OrderItemsCompanion.insert(
+          businessId: businessId,
+          orderId: adjId,
+          storeId: storeId,
+          quantity: -1,
+          unitPriceKobo: 50000,
+          totalKobo: -50000));
+      // The kind CHECK holds.
+      await expectLater(
+        db.customStatement(
+            "UPDATE orders SET kind = 'bogus' WHERE id = '$orderId'"),
+        throwsA(anything),
+      );
+      // A zero line is still refused.
+      await expectLater(
+        db.into(db.orderItems).insert(OrderItemsCompanion.insert(
+            businessId: businessId,
+            orderId: adjId,
+            storeId: storeId,
+            quantity: 0,
+            unitPriceKobo: 50000,
+            totalKobo: 0)),
+        throwsA(anything),
+      );
+      // Idempotent re-upgrade.
+      await db.customStatement('PRAGMA user_version = 104');
+      await db.close();
+      db = await openAndInit();
+      expect(await columnsOf(db, 'orders'), contains('kind'));
+    } finally { await db.close(); }
+  });
 }
