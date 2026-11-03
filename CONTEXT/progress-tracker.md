@@ -7,6 +7,11 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #668: Payroll side menu and worker list (2026-11-03, branch `feat/668-payroll-worker-list`)
+- Drawer item **Payroll** (only with `Gates.managePayroll`) pushes `PayrollScreen` (`lib/features/payroll/screens/payroll_screen.dart`): worker list (name, store, salary, daily allowance), empty state, removed workers hidden behind "Show removed workers". Add worker = type a name or pick from Staff Management (sets `user_id`); store defaults to the active store; salary and allowance in money fields (kobo inside). Edit and Remove (confirm; sets `is_removed` / `removed_at`, history kept, no hard delete) from tapping a row.
+- `PayrollDao` gains `watchWorkers`, `updateWorker`, `removeWorker`, `payrollToday`, and Activity Logs entries (`payroll_worker_added` / `_edited` / `_removed`, worker name only, never amounts). Allowance start date = the day it is set (add, or edit when the worker had none); never a date picker, never backdated. Provider `payrollWorkersProvider`.
+- No schema change. Tests: `test/payroll/payroll_screen_test.dart`. Not here: allowance posting, payday, Reconciliation lines (#669-#671).
+
 ### Issue #667: Payroll database, permission and private sync (2026-11-03, branch `feat/667-payroll-database`)
 Groundwork only, no screens (PRD #666, ADR 0034). Drift **v101** + cloud **0243_payroll.sql**: `payroll_workers`, `payroll_entries` (append-only, typed salary_payment / allowance / bonus / advance / loan_given / loan_repaid; cash / transfer / other; a correction is a new row with `corrects_entry_id`) and `payroll_statements` (one per worker per Salary Month, both signatures as base64 PNG, the payday totals). Dates are 'YYYY-MM-DD', Salary Month 'YYYY-MM'; kobo columns bigint in the cloud; `legacy_id` on all three for #672.
 - **Permission** `payroll.manage` (category Payroll, CEO + Manager; cloud seed + backfill in 0243, local catalogue + v101 INSERT OR IGNORE). Gate `Gates.managePayroll`.

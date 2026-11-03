@@ -17,6 +17,7 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/browse/shop_from_till.dart';
 import 'package:reebaplus_pos/features/profile/screens/profile_screen.dart';
 import 'package:reebaplus_pos/features/settings/screens/staff_settings_screen.dart';
+import 'package:reebaplus_pos/features/payroll/screens/payroll_screen.dart';
 import 'package:reebaplus_pos/features/staff/screens/staff_management_screen.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_access.dart';
 import 'package:reebaplus_pos/features/sync/screens/sync_issues_screen.dart';
@@ -377,6 +378,15 @@ class AppDrawer extends ConsumerWidget {
                 label: 'Expenses',
                 isActive: activeRoute == 'expenses',
                 onTap: () => _navigateTo(context, ref, 'expenses'),
+              ),
+            // Payroll (#668) — only with `payroll.manage` (CEO + Manager by
+            // default). Hidden entirely otherwise (hard rule #7). A pushed
+            // screen, like Staff Management.
+            if (Gates.managePayroll.allows(ref))
+              DrawerNavTile(
+                icon: AppIcons.payroll,
+                label: 'Payroll',
+                onTap: () => _pushRoute(context, ref, const PayrollScreen()),
               ),
             // Stores — CEO (stores.manage) plus any Manager who can take part
             // in the store-scoped transfer flow (§16.8.2): request / dispatch /

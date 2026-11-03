@@ -2407,3 +2407,12 @@ final allStockTransactionsProvider =
   (ref, db, businessId) => db.stockLedgerDao.watchAllTransactions(),
   whenAbsent: const [],
 );
+
+// ── Payroll (#668) ───────────────────────────────────────────────────────────
+/// Every worker on Payroll, removed ones included (the screen hides them by
+/// default). Empty on a phone without `payroll.manage`: those rows never sync
+/// there (ADR 0034).
+final payrollWorkersProvider = businessScopedStream<List<PayrollWorkerData>>(
+  (ref, db, businessId) => db.payrollDao.watchWorkers(),
+  whenAbsent: const [],
+);

@@ -78,8 +78,102 @@ class PayrollDao extends DatabaseAccessor<AppDatabase>
     await transaction(() async {
       await into(payrollWorkers).insert(row);
       await db.syncDao.enqueueUpsert('payroll_workers', row);
+      await db.activityLogDao.log(
+        action: 'payroll_worker_added',
+        description: 'Added payroll worker: $name',
+        staffId: currentUserId,
+        storeId: storeId,
+      );
     });
     return id;
+  }
+
+  /// Every worker the business has put on Payroll, removed ones included
+  /// (the screen hides them by default), oldest first.
+  Stream<List<PayrollWorkerData>> watchWorkers() =>
+      (select(payrollWorkers)
+            ..where((w) => whereBusiness(w))
+            ..orderBy([(w) => OrderingTerm.asc(w.createdAt)]))
+          .watch();
+
+  /// Changes a worker's store, salary and allowance. The allowance start date
+  /// is set to today only when the worker had none (an allowance that
+  /// already runs keeps its start, and it is never backdated). Throws
+  /// [PayrollAccessDenied] without the permission.
+  Future<void> updateWorker({
+    required String workerId,
+    required String storeId,
+    required int monthlySalaryKobo,
+    required int dailyAllowanceKobo,
+  }) async {
+    final businessId = await _requireAccess();
+    await transaction(() async {
+      final worker =
+          await (select(payrollWorkers)..where(
+                (w) => w.id.equals(workerId) & w.businessId.equals(businessId),
+              ))
+              .getSingle();
+      final startDate =
+          worker.allowanceStartDate ??
+          (dailyAllowanceKobo > 0 ? payrollToday() : null);
+      await (update(payrollWorkers)..where((w) => w.id.equals(workerId))).write(
+        PayrollWorkersCompanion(
+          storeId: Value(storeId),
+          monthlySalaryKobo: Value(monthlySalaryKobo),
+          dailyAllowanceKobo: Value(dailyAllowanceKobo),
+          allowanceStartDate: Value(startDate),
+          lastUpdatedAt: Value(DateTime.now()),
+        ),
+      );
+      final row = await (select(
+        payrollWorkers,
+      )..where((w) => w.id.equals(workerId))).getSingle();
+      await db.syncDao.enqueueUpsert('payroll_workers', row.toCompanion(true));
+      await db.activityLogDao.log(
+        action: 'payroll_worker_edited',
+        description: 'Edited payroll worker: ${worker.name}',
+        staffId: currentUserId,
+        storeId: storeId,
+      );
+    });
+  }
+
+  /// Takes a worker off Payroll: no further allowances, every entry and
+  /// statement kept. There is no hard delete.
+  Future<void> removeWorker(String workerId) async {
+    final businessId = await _requireAccess();
+    await transaction(() async {
+      final worker =
+          await (select(payrollWorkers)..where(
+                (w) => w.id.equals(workerId) & w.businessId.equals(businessId),
+              ))
+              .getSingle();
+      final now = DateTime.now();
+      await (update(payrollWorkers)..where((w) => w.id.equals(workerId))).write(
+        PayrollWorkersCompanion(
+          isRemoved: const Value(true),
+          removedAt: Value(now),
+          lastUpdatedAt: Value(now),
+        ),
+      );
+      final row = await (select(
+        payrollWorkers,
+      )..where((w) => w.id.equals(workerId))).getSingle();
+      await db.syncDao.enqueueUpsert('payroll_workers', row.toCompanion(true));
+      await db.activityLogDao.log(
+        action: 'payroll_worker_removed',
+        description: 'Removed payroll worker: ${worker.name}',
+        staffId: currentUserId,
+        storeId: worker.storeId,
+      );
+    });
+  }
+
+  /// Today as 'YYYY-MM-DD' (the phone's calendar day).
+  static String payrollToday() {
+    final n = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${n.year}-${two(n.month)}-${two(n.day)}';
   }
 
   /// Posts [workerId]'s Daily Allowance for [entryDate] ('YYYY-MM-DD') under
