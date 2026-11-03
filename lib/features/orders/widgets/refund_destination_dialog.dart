@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -71,8 +72,8 @@ class _RefundDestinationDialogState extends State<_RefundDestinationDialog> {
           children: [
             Icon(
               _pick == value
-                  ? Icons.radio_button_checked
-                  : Icons.radio_button_unchecked,
+                  ? AppIcons.radioButtonChecked
+                  : AppIcons.radioButtonUnchecked,
               color: _pick == value ? cs.primary : cs.onSurfaceVariant,
             ),
             SizedBox(width: context.getRSize(10)),

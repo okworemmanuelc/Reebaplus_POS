@@ -7,6 +7,8 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #708: Reports show Sales / Returns / Net separately (2026-11-03, branch `feat/708-returns-line`)
+- Home, Profit report and Daily Recon split the figure into Sales / Returns / Net (and Profit / Profit returned) only when the period has cancel entries; `computeSalesSplitKobo` in `report_revenue.dart` is the one source, Net == old total, day-close snapshot untouched.
 ### Issue #717: Receipts waste paper — trim the end-of-print feed (2026-11-03, branch `fix/717-receipt-paper-feed`)
 - Cause: `receipt_lines` fed 2 blank lines and `esc_pos_utils_plus` `Generator.cut()` silently adds 5 more → ~7 lines (~28 mm) per job; tear-bar printers (MTP-3) ignore the cut, so it was all paper (bottom of this receipt + top of the next).
 - Builders (receipt text/picture, sample, payslip, online slip) now emit content only; `PrinterService` appends `paperEnd(n)` = `ESC d n` + `GS V 65 0` (feed to the cutter's own position) on every write path. Never use `generator.cut()` again.

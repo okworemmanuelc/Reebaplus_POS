@@ -408,6 +408,9 @@ class ReconData {
     // optional-defaulted one would let a construction site quietly fall back to
     // the derivation the issue removed. See [totalSalesKobo].
     required this.totalSalesKobo,
+    // #708 — display-only split of [totalSalesKobo]; never part of the day-close
+    // snapshot. Optional-defaulted (0 = no returns).
+    this.returnsKobo = 0,
   });
 
   final int totalRevenueKobo;
@@ -833,6 +836,10 @@ class ReconData {
   /// `test/dashboard/report_revenue_test.dart` pins the two against each other
   /// on the real compute path.
   final int totalSalesKobo;
+
+  /// The −1 cancel entries inside [totalSalesKobo] (zero or negative, #708).
+  /// Sales = `totalSalesKobo − returnsKobo`. Display only.
+  final int returnsKobo;
 
   /// Costed revenue net of discounts given — the real money earned on costed
   /// lines. `costedRevenueKobo` is gross (Σ qty × gross unitPrice), so we
@@ -1999,11 +2006,12 @@ ReconData reconDataFrom(ReconInputs input) {
   // agree today. The gross + discount split above stays for the P&L card; this
   // is the net headline. `computeReconData`'s own loop and the helper are pinned
   // equal by `test/dashboard/report_revenue_test.dart`.
-  final totalSalesKobo = computeTotalSalesKobo(
+  final salesSplit = computeSalesSplitKobo(
     orders,
     inSpan: inSpan,
     inScope: inScope,
   );
+  final totalSalesKobo = salesSplit.netKobo;
 
   // ── The van channel's rollup (#147, spec §8.2) ───────────────────────────
   // Four additive lines. Every one of them is attributed through the trip's
@@ -2073,6 +2081,7 @@ ReconData reconDataFrom(ReconInputs input) {
     // #195 — the headline comes from the shared helper, not from this file's
     // own subtraction. See [ReconData.totalSalesKobo].
     totalSalesKobo: totalSalesKobo,
+    returnsKobo: salesSplit.returnsKobo,
     costedRevenueKobo: costedRevenueKobo,
     cogsKobo: cogsKobo,
     discountsKobo: discountsKobo,
