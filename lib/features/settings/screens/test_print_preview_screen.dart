@@ -175,10 +175,10 @@ class _StatusStrip extends StatelessWidget {
                   ),
                 )
               else
-                Icon(
+                AppIcon(
                   status == _PrintStatus.printed
-                      ? Icons.check_circle
-                      : Icons.error,
+                      ? AppIcons.checkCircle
+                      : AppIcons.alertCircle,
                   color: color,
                   size: 20,
                 ),
@@ -283,7 +283,10 @@ class ReceiptLinesPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const base = TextStyle(
-      fontFamily: 'monospace',
+      fontFamily: 'RobotoMono',
+      // The theme's default letter spacing would widen every line past the
+      // measured column width.
+      letterSpacing: 0,
       fontSize: _fontSize,
       height: 1.25,
       color: Colors.black,

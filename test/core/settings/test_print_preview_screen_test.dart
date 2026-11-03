@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/features/pos/widgets/paper_receipt.dart';
 import 'package:reebaplus_pos/features/settings/screens/test_print_preview_screen.dart';
 import 'package:reebaplus_pos/shared/services/printer_service.dart';
 
@@ -83,6 +84,21 @@ void main() {
 
     expect(sent, 2);
     expect(find.text('Printed'), findsOneWidget);
+  });
+
+  testWidgets('Full picture style previews the paper receipt widget', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'printer_paper_size:$_id': 'mm80',
+      'printer_print_style:$_id': 'picture',
+    });
+    await _pump(tester, (_, _, _) async => true);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PaperReceipt), findsOneWidget);
+    expect(find.byType(ReceiptLinesPreview), findsNothing);
+    expect(find.text('Counter printer · 80mm · Full'), findsOneWidget);
   });
 
   testWidgets('compact shows the column ruler and the size in the header', (
