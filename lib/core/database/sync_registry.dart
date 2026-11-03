@@ -183,6 +183,15 @@ class SyncedTable {
   /// the upgrade steps that rebuild a ledger. `null` ⇒ not a guarded ledger.
   final List<String>? ledgerImmutableColumns;
 
+  /// #667 (ADR 0034): set on a PERMISSION-GATED table — its rows reach only
+  /// phones whose user holds this key. The cloud enforces it (RLS through
+  /// `caller_has_permission`, and the table stays out of the definer
+  /// `pos_pull_snapshot`); the client mirrors it: the table is fetched through
+  /// PostgREST even on the snapshot path, a write is never queued without the
+  /// key, and a phone that loses the key drops its local rows. `null` ⇒ an
+  /// ordinary business-wide table.
+  final String? permissionKey;
+
   const SyncedTable({
     required this.name,
     required this.restore,
@@ -199,6 +208,7 @@ class SyncedTable {
     this.withdrawableReversal = false,
     this.softDeletable = false,
     this.ledgerImmutableColumns,
+    this.permissionKey,
   });
 }
 
@@ -1749,6 +1759,45 @@ final List<SyncedTable> kSyncRegistry = [
       resilient: false,
     ),
   ),
+  // #667 Payroll (PRD #666, ADR 0034) — the permission-gated tables. Last in
+  // the list: their parents (businesses, stores, users) are pulled far
+  // earlier, and nothing else references them. Workers → entries → statements
+  // is their own FK order. All three are plain FK-resilient upserts: entries
+  // and statements are append-only by API (no DAO edits them), and the cloud
+  // freezes their content on a re-push (0243 `_payroll_freeze_row`), so an
+  // upsert here only ever converges a losing phone onto the first writer.
+  SyncedTable(
+    name: 'payroll_workers',
+    pushPriority: 60,
+    tenantScoped: true,
+    permissionKey: kPayrollPermissionKey,
+    restore: Restore.plain(
+      (db) => db.payrollWorkers,
+      PayrollWorkerData.fromJson,
+      resilient: true,
+    ),
+  ),
+  SyncedTable(
+    name: 'payroll_entries',
+    pushPriority: 61,
+    tenantScoped: true,
+    permissionKey: kPayrollPermissionKey,
+    restore: Restore.plain(
+      (db) => db.payrollEntries,
+      PayrollEntryData.fromJson,
+      resilient: true,
+    ),
+  ),
+  SyncedTable(
+    name: 'payroll_statements',
+    tenantScoped: true,
+    permissionKey: kPayrollPermissionKey,
+    restore: Restore.plain(
+      (db) => db.payrollStatements,
+      PayrollStatementData.fromJson,
+      resilient: true,
+    ),
+  ),
 ];
 
 // ---------------------------------------------------------------------------
@@ -2063,4 +2112,11 @@ final List<String> kSoftDeletableTables = [
 final Map<String, List<String>> kLedgerImmutableColumns = {
   for (final t in kSyncRegistry)
     if (t.ledgerImmutableColumns != null) t.name: t.ledgerImmutableColumns!,
+};
+
+/// #667 (ADR 0034): permission-gated table → the key that unlocks it, in
+/// registry (FK) order.
+final Map<String, String> kSyncPermissionGatedTables = {
+  for (final t in kSyncRegistry)
+    if (t.permissionKey != null) t.name: t.permissionKey!,
 };

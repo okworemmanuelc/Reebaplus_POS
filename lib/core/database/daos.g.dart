@@ -1990,3 +1990,40 @@ class OnlineOrdersDaoManager {
   $$CustomersTableTableManager get customers =>
       $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
 }
+
+mixin _$PayrollDaoMixin on DatabaseAccessor<AppDatabase> {
+  $BusinessesTable get businesses => attachedDatabase.businesses;
+  $StoresTable get stores => attachedDatabase.stores;
+  $UsersTable get users => attachedDatabase.users;
+  $PayrollWorkersTable get payrollWorkers => attachedDatabase.payrollWorkers;
+  $PayrollEntriesTable get payrollEntries => attachedDatabase.payrollEntries;
+  $PayrollStatementsTable get payrollStatements =>
+      attachedDatabase.payrollStatements;
+  PayrollDaoManager get managers => PayrollDaoManager(this);
+}
+
+class PayrollDaoManager {
+  final _$PayrollDaoMixin _db;
+  PayrollDaoManager(this._db);
+  $$BusinessesTableTableManager get businesses =>
+      $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$StoresTableTableManager get stores =>
+      $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
+  $$UsersTableTableManager get users =>
+      $$UsersTableTableManager(_db.attachedDatabase, _db.users);
+  $$PayrollWorkersTableTableManager get payrollWorkers =>
+      $$PayrollWorkersTableTableManager(
+        _db.attachedDatabase,
+        _db.payrollWorkers,
+      );
+  $$PayrollEntriesTableTableManager get payrollEntries =>
+      $$PayrollEntriesTableTableManager(
+        _db.attachedDatabase,
+        _db.payrollEntries,
+      );
+  $$PayrollStatementsTableTableManager get payrollStatements =>
+      $$PayrollStatementsTableTableManager(
+        _db.attachedDatabase,
+        _db.payrollStatements,
+      );
+}

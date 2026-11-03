@@ -890,6 +890,28 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
     final bid = resolvedBid;
     payloadMap['business_id'] ??= bid;
 
+    // #667 (ADR 0034): a permission-gated row is never queued by a phone whose
+    // user lacks the key — the cloud would refuse it, and the row must not sit
+    // on this phone either. Throwing rolls back the caller's transaction, so
+    // the local write never lands. Fails closed with no signed-in user.
+    final gateKey = kSyncPermissionGatedTables[tableName];
+    if (gateKey != null) {
+      final userId = db.currentUserId;
+      final allowed =
+          userId != null &&
+          await db.permissionsDao.userHolds(
+            userId: userId,
+            businessId: bid,
+            permissionKey: gateKey,
+          );
+      if (!allowed) {
+        throw StateError(
+          'enqueueUpsert($tableName): the signed-in user lacks "$gateKey" — '
+          'permission-gated rows are never queued (ADR 0034).',
+        );
+      }
+    }
+
     final actionType = '$tableName:upsert';
     final payloadJson = jsonEncode(payloadMap);
     final rowId = payloadMap['id'];

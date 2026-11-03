@@ -62,11 +62,11 @@ void main() {
       );
     });
 
-    test('permissions table seeded with 47 default rows on fresh install',
+    test('permissions table seeded with 48 default rows on fresh install',
         () async {
       final perms = await db.permissionsDao.getAll();
       // #427 added online_orders.view / .answer; #432 the mark-paid key.
-      expect(perms.length, equals(47));
+      expect(perms.length, equals(48)); // +payroll.manage (#667)
       expect(
           perms
               .singleWhere((p) => p.key == 'orders.pay_on_delivery.mark_paid')
@@ -101,7 +101,7 @@ void main() {
         categories,
         equals(['Customers', 'Expenses', 'Online store', 'Products', 'Reports',
                 'Sales', 'Staff', 'Stock', 'Stores', 'Suppliers', 'System',
-                'Van Sales']), // #140
+                'Van Sales', 'Payroll']..sort()), // #140, #667
       );
     });
 

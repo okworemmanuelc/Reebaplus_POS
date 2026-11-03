@@ -67,6 +67,9 @@ const _categoryOrder = [
   // #140 — `van.manage` / `van.sell`. Sits after Staff because both keys are
   // about who does what on the road, not about a store-side capability.
   'Van Sales',
+  // #667 — `payroll.manage`. Its own group: it also decides which pay data
+  // reaches a phone (ADR 0034).
+  'Payroll',
   'System',
   'Funds',
 ];

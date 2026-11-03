@@ -121,6 +121,56 @@ void main() {
     } finally { await db.close(); }
   });
 
+  test('v100 to v101 adds the Payroll tables, their indexes and the key',
+      () async {
+    var db = await openAndInit();
+    final businessId = UuidV7.generate();
+    await db.into(db.businesses).insert(
+      BusinessesCompanion.insert(id: Value(businessId), name: 'Test Shop'));
+    for (final t in ['payroll_statements', 'payroll_entries', 'payroll_workers']) {
+      await db.customStatement('DROP TABLE $t');
+    }
+    await db.customStatement(
+        "DELETE FROM permissions WHERE key = 'payroll.manage'");
+    await db.customStatement('PRAGMA user_version = 100');
+    await db.close();
+    db = await openAndInit();
+    try {
+      expect(await columnsOf(db, 'payroll_workers'), containsAll([
+        'store_id', 'user_id', 'monthly_salary_kobo', 'daily_allowance_kobo',
+        'allowance_start_date', 'is_removed', 'legacy_id',
+      ]));
+      expect(await columnsOf(db, 'payroll_entries'), containsAll([
+        'worker_id', 'type', 'amount_kobo', 'entry_date', 'salary_month',
+        'payment_method', 'note', 'corrects_entry_id', 'legacy_id',
+      ]));
+      expect(await columnsOf(db, 'payroll_statements'), containsAll([
+        'salary_month', 'total_pay_kobo', 'worker_signature_png',
+        'payer_signature_png', 'legacy_id',
+      ]));
+      final objects = {
+        for (final r in await db.customSelect(
+          "SELECT name FROM sqlite_master WHERE tbl_name LIKE 'payroll_%'",
+        ).get())
+          r.read<String>('name'),
+      };
+      expect(objects, containsAll([
+        'uq_payroll_entries_allowance_day',
+        'idx_payroll_entries_business_lua',
+        'bump_payroll_workers_last_updated_at',
+        'uq_payroll_workers_legacy',
+      ]));
+      expect((await db.permissionsDao.getByKey('payroll.manage'))?.category,
+          'Payroll');
+      expect((await db.select(db.businesses).get()).single.id, businessId);
+      // Re-running the step is idempotent.
+      await db.customStatement('PRAGMA user_version = 100');
+      await db.close();
+      db = await openAndInit();
+      expect(await db.select(db.payrollWorkers).get(), isEmpty);
+    } finally { await db.close(); }
+  });
+
   test('v90 to v91 adds product_photos with its trigger and live-slot index',
       () async {
     var db = await openAndInit();
