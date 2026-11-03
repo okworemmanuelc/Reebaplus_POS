@@ -7,6 +7,7 @@ import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/providers/first_run_tour_state.dart';
+import 'package:reebaplus_pos/features/inventory/screens/add_product_screen.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/widgets/spotlight_overlay.dart';
 import 'package:reebaplus_pos/shared/widgets/spotlight_target.dart';
@@ -173,9 +174,6 @@ class FirstRunRailTourView extends ConsumerWidget {
       if (ref.watch(tourHandoffProvider)) {
         return _buildHandoff(context, ref);
       }
-      if (ref.watch(tourProductPointerDismissedProvider)) {
-        return const SizedBox.shrink();
-      }
       return _buildAddProductPointer(context, ref);
     }
 
@@ -281,17 +279,25 @@ class FirstRunRailTourView extends ConsumerWidget {
           return const SizedBox.shrink();
         }
 
-        final hasTarget =
-            SpotlightTargetRegistry.getKey(SpotlightTargetId.addProductFab) !=
-                null;
-        if (!hasTarget) return const SizedBox.shrink();
+        // On screen, not merely built. MainLayout warms every tab offstage at
+        // start-up, so the Stock tab's "+" is registered long before the owner
+        // goes there; gating on registration alone floated this caption over
+        // Home and every other tab with nothing to point at (#697).
+        final targetOnScreen = SpotlightTargetRegistry.getTargetRect(
+              SpotlightTargetId.addProductFab,
+            ) !=
+            null;
+        if (!targetOnScreen) return const SizedBox.shrink();
 
         return SpotlightOverlay(
           targetId: SpotlightTargetId.addProductFab,
           caption: 'Tap to add your first product',
           blocking: false,
-          onCaptionTap: () =>
-              ref.read(tourProductPointerDismissedProvider.notifier).dismiss(),
+          // The caption says "tap to add", so a tap on it adds: it opens the
+          // same fast Add Product form as the empty state and the checklist.
+          // The pointer stands aside while the form is up and comes back if
+          // the owner backs out without saving.
+          onCaptionTap: () => _openAddProduct(context, nav),
           // Dismissing the last stop is a preference, not a failure, so it
           // costs the device nothing (ADR 0026 section 13). The rail is derived
           // from the data, so it offers again on the next cold start until a
@@ -337,10 +343,11 @@ class FirstRunRailTourView extends ConsumerWidget {
         title: '$storeName is ready.',
         body: 'Next, add something to sell.',
         primaryLabel: 'Add a product',
+        // Lands on Stock with the pointer still up, so the "+" is circled
+        // when the owner gets there (#697).
         onPrimary: () {
-          ref.read(tourProductPointerDismissedProvider.notifier).dismiss();
           ref.read(tourHandoffProvider.notifier).settle();
-          nav.currentIndex.value = _inventoryTab;
+          nav.setIndex(_inventoryTab);
         },
         secondaryLabel: 'Not now',
         onSecondary: () => ref.read(tourHandoffProvider.notifier).settle(),
@@ -381,6 +388,20 @@ class FirstRunRailTourView extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+
+  /// Opens the fast Add Product form on the current tab's own Navigator, so
+  /// the bottom nav and this pointer hide behind it like any other page pushed
+  /// from Stock. Falls back to the nearest Navigator outside [MainLayout].
+  static void _openAddProduct(BuildContext context, NavigationService nav) {
+    final index = nav.currentIndex.value;
+    final tabNavigator = index < nav.tabNavigatorKeys.length
+        ? nav.tabNavigatorKeys[index].currentState
+        : null;
+    final navigator = tabNavigator ?? Navigator.maybeOf(context);
+    navigator?.push(
+      MaterialPageRoute(builder: (_) => const AddProductScreen()),
     );
   }
 
