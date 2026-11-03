@@ -14,6 +14,11 @@ The human updates it when resolving open questions or making architectural decis
 - Payday: "month must have ended" removed; payable months include the payday's month; only a month after the current one is refused; payday any day up to today. One payment per month kept.
 - Tests: `test/payroll/payroll_till_cash_test.dart` (13), payday month tests updated, v103→v104 in `migration_upgrade_test.dart`. pos-parity: reebaplus-web#228.
 
+### Issue #702: Test print opens a preview while printing (2026-11-03, branch `feat/702-test-print-preview`)
+- Test print (USB + Bluetooth cards) pushes `TestPrintPreviewScreen`, which sends the print on open and shows the same sample receipt in that printer's paper size, print style and Full/Compact size. Status strip: Printing... / Printed / Failed + Print again (`onAsyncPressed`). Compact keeps the 42/48 column ruler.
+- One source: `SampleReceipt` (`sample_receipt.dart`) feeds `PrinterService.buildSampleReceiptBytes` (replaces `buildTestPrintBytes`) and the preview (`buildReceiptLines` / `PaperReceipt`). `ThermalReceiptService.buildFromLines` gained `compact` (Font B).
+- Tests: `test_print_preview_screen_test.dart`; goldens `test/redesign/goldens/test_print_preview_{58_compact,80_full}_{light,dark}.png`.
+
 ### Menu button squashed on Orders + Activity Logs (2026-11-03, branch `fix/menu-button-self-sized`)
 - `MenuButton` now owns its 48dp box; the 9 `SizedBox.square(kMinInteractiveDimension)` wrappers are gone. Orders + Activity Logs goldens re-recorded (390x844 only).
 

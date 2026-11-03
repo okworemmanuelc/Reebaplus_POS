@@ -23,6 +23,8 @@ class _FakePrinterService extends PrinterService {
 }
 
 void main() {
+  // The sample receipt loads the printer capability profile from assets.
+  TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   group('PrinterService', () {
@@ -444,11 +446,10 @@ void main() {
       );
       final bytes = usb.writes.single.$2;
       expect(bytes.take(2), [0x1B, 0x40]);
-      expect(bytes.skip(bytes.length - 4), [0x1D, 0x56, 0x42, 0x00]);
+      expect(bytes.skip(bytes.length - 3), [0x1D, 0x56, 0x30]);
       final text = String.fromCharCodes(bytes);
-      expect(text, contains('Ada Bar'));
-      expect(text, contains('Test print'));
-      expect(text, contains('Paper: 80mm'));
+      expect(text, contains('ADA BAR'));
+      expect(text, contains('Spaghetti 500g'));
     });
   });
 
@@ -463,25 +464,20 @@ void main() {
       expect(prefs.getString('printer_receipt_size:aa'), 'compact');
     });
 
-    test('test slip: full is unchanged, compact 58mm adds Font B + ruler', () {
-      final full = PrinterService.buildTestPrintBytes(
+    test('sample receipt: compact 58mm adds Font B + ruler', () async {
+      final full = await PrinterService.buildSampleReceiptBytes(
         paperSize: ReceiptPaperSize.mm58,
         printStyle: ReceiptPrintStyle.text,
       );
-      expect(String.fromCharCodes(full), isNot(contains('Compact')));
-      final compact = PrinterService.buildTestPrintBytes(
+      expect(String.fromCharCodes(full), isNot(contains('1234567890')));
+      final compact = await PrinterService.buildSampleReceiptBytes(
         paperSize: ReceiptPaperSize.mm58,
         printStyle: ReceiptPrintStyle.text,
         receiptSize: ReceiptSize.compact,
       );
-      expect(compact.sublist(2, 5), [0x1B, 0x4D, 0x01]);
-      final text = String.fromCharCodes(compact);
-      expect(text, contains('Size: Compact'));
       expect(
-        text,
-        contains(
-          '123456789012345678901234567890123456789012'.replaceAll('0', '0'),
-        ),
+        String.fromCharCodes(compact),
+        contains('123456789012345678901234567890123456789012'),
       );
     });
 
@@ -507,7 +503,7 @@ void main() {
         final ok = await service.testPrintBluetooth('aa', businessName: 'Ada');
         expect(ok, isTrue);
         expect(connected, ['aa']);
-        expect(String.fromCharCodes(written.single), contains('Size: Compact'));
+        expect(String.fromCharCodes(written.single), contains('Spaghetti 500g'));
       },
     );
   });

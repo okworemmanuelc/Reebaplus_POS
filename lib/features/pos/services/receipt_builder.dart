@@ -179,8 +179,9 @@ class ThermalReceiptService {
   /// receipt's text printing.
   static Future<List<int>> buildFromLines(
     List<ReceiptLine> lines,
-    ReceiptPaperSize paperSize,
-  ) => _emitText(lines, paperSize, null);
+    ReceiptPaperSize paperSize, {
+    bool compact = false,
+  }) => _emitText(lines, paperSize, null, compact: compact);
 
   @visibleForTesting
   static Future<List<int>> emitTextForTest(

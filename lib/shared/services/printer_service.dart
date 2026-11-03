@@ -3,7 +3,9 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reebaplus_pos/core/utils/logger.dart';
+import 'package:reebaplus_pos/features/pos/services/receipt_builder.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
+import 'package:reebaplus_pos/features/pos/services/sample_receipt.dart';
 import 'package:reebaplus_pos/shared/services/usb_printer_channel.dart';
 
 /// Receipt printing. Two transports (#614): a USB printer plugged into this
@@ -305,30 +307,46 @@ class PrinterService {
     }
   }
 
-  /// Sends a short test slip to the USB printer [id]. True when it printed.
-  Future<bool> testPrintUsb(String id, {String? businessName}) async {
-    final bytes = buildTestPrintBytes(
-      businessName: businessName,
-      paperSize: await paperSizeFor(id) ?? ReceiptPaperSize.mm80,
-      printStyle: await printStyleFor(id),
-      receiptSize: await receiptSizeFor(id),
-    );
-    return _usb.write(id, bytes);
+  /// Sends the sample receipt (#702) to the USB printer [id], in that
+  /// printer's paper size, print style and receipt size. True when it printed.
+  Future<bool> testPrintUsb(
+    String id, {
+    String? businessName,
+    DateTime? saleDate,
+  }) async {
+    try {
+      final bytes = await buildSampleReceiptBytes(
+        businessName: businessName,
+        paperSize: await paperSizeFor(id) ?? ReceiptPaperSize.mm80,
+        printStyle: await printStyleFor(id),
+        receiptSize: await receiptSizeFor(id),
+        saleDate: saleDate,
+      );
+      return await _usb.write(id, bytes);
+    } catch (e) {
+      AppLogger.error('USB test print failed: $e');
+      return false;
+    }
   }
 
-  /// Sends the same test slip to the Bluetooth printer [mac] (#676), so the
-  /// owner can check Font B / Compact on a real printer. Connects first if
-  /// needed. True when it printed.
-  Future<bool> testPrintBluetooth(String mac, {String? businessName}) async {
+  /// Sends the same sample receipt to the Bluetooth printer [mac] (#676,
+  /// #702), so the owner can check Font B / Compact on a real printer.
+  /// Connects first if needed. True when it printed.
+  Future<bool> testPrintBluetooth(
+    String mac, {
+    String? businessName,
+    DateTime? saleDate,
+  }) async {
     try {
       if (!await isConnected || await lastConnectedMac() != mac) {
         if (!await connect(mac)) return false;
       }
-      final bytes = buildTestPrintBytes(
+      final bytes = await buildSampleReceiptBytes(
         businessName: businessName,
         paperSize: await paperSizeFor(mac) ?? ReceiptPaperSize.mm58,
         printStyle: await printStyleFor(mac),
         receiptSize: await receiptSizeFor(mac),
+        saleDate: saleDate,
       );
       return await _writeJob(bytes);
     } catch (e) {
@@ -337,51 +355,44 @@ class PrinterService {
     }
   }
 
-  /// A plain ESC/POS test slip: business name, "Test print", paper size and
-  /// print style, then a cut. Printer font only (ASCII), so it works on any
-  /// ESC/POS printer before anything else is set up.
-  static List<int> buildTestPrintBytes({
+  /// The ESC/POS bytes of the sample receipt: the same lines (or paper
+  /// receipt picture) the Test print preview shows.
+  static Future<List<int>> buildSampleReceiptBytes({
     String? businessName,
     required ReceiptPaperSize paperSize,
     required ReceiptPrintStyle printStyle,
     ReceiptSize receiptSize = ReceiptSize.full,
+    DateTime? saleDate,
   }) {
-    List<int> line(String text) => [
-      for (final c in text.codeUnits) (c >= 0x20 && c < 0x7F) ? c : 0x3F,
-      0x0A,
-    ];
-    final name = (businessName ?? '').trim();
-    final compact = receiptSize == ReceiptSize.compact;
-    final fontB = compact && paperSize == ReceiptPaperSize.mm58;
-    final cols = compact ? paperSize.compactCharsPerLine : 0;
-    return [
-      0x1B, 0x40, // ESC @ initialise
-      if (fontB) ...[0x1B, 0x4D, 0x01], // ESC M 1 Font B (42 columns)
-      0x1B, 0x61, 0x01, // ESC a 1 centre
-      if (name.isNotEmpty) ...[
-        0x1B, 0x45, 0x01, // bold on
-        ...line(name),
-        0x1B, 0x45, 0x00, // bold off
-      ],
-      ...line('Test print'),
-      ...line(
-        'Paper: ${paperSize == ReceiptPaperSize.mm80 ? '80mm' : '58mm'}',
-      ),
-      ...line(
-        'Style: ${printStyle == ReceiptPrintStyle.text ? 'Text' : 'Picture'}',
-      ),
-      if (compact) ...[
-        ...line('Size: Compact'),
-        0x1B, 0x61, 0x00, // ESC a 0 left
-        // A ruler as wide as the receipt: if it wraps, the font is wrong.
-        ...line(
-          List.generate(cols, (i) => (i + 1) % 10 == 0 ? '0' : '${(i + 1) % 10}')
-              .join(),
+    final date = saleDate ?? DateTime.now();
+    if (SampleReceipt.isText(printStyle, receiptSize)) {
+      return ThermalReceiptService.buildFromLines(
+        SampleReceipt.lines(
+          paperSize: paperSize,
+          receiptSize: receiptSize,
+          saleDate: date,
+          businessName: businessName,
         ),
-      ],
-      0x1B, 0x64, 0x04, // ESC d 4 feed
-      0x1D, 0x56, 0x42, 0x00, // GS V B 0 feed + partial cut
-    ];
+        paperSize,
+        compact: receiptSize == ReceiptSize.compact,
+      );
+    }
+    return ThermalReceiptService.buildReceipt(
+      orderId: SampleReceipt.orderId,
+      cart: SampleReceipt.cart,
+      subtotal: SampleReceipt.subtotal,
+      crateDeposit: 0,
+      total: SampleReceipt.total,
+      paymentMethod: SampleReceipt.paymentMethod,
+      cashReceived: SampleReceipt.cashReceived,
+      businessName: businessName,
+      cashierName: SampleReceipt.cashierName,
+      saleDate: date,
+      tracksCrates: false,
+      paperSize: paperSize,
+      printStyle: printStyle,
+      receiptSize: receiptSize,
+    );
   }
 
   Future<void> _ensureUsbDefaults(String id) async {

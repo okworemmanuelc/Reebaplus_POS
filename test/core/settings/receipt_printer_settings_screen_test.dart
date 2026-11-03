@@ -140,11 +140,18 @@ void main() {
       await _pump(tester, usb: usb);
 
       await tester.tap(find.byKey(const Key('usb-test-print-usb:1208:514')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      // The sample receipt loads printer assets: needs real async time.
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 300)),
+      );
       await tester.pumpAndSettle();
 
+      // Test print opens the preview screen, which sends the print.
+      expect(find.text('Printed'), findsOneWidget);
       expect(usb.writes.single.$1, 'usb:1208:514');
-      expect(String.fromCharCodes(usb.writes.single.$2), contains('Ada Bar'));
-      await tester.pump(const Duration(seconds: 5));
+      expect(String.fromCharCodes(usb.writes.single.$2), contains('ADA BAR'));
     });
 
     testWidgets('opening the screen asks access for a new USB printer', (

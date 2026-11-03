@@ -9,10 +9,9 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/features/settings/screens/settings_page_parts.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
-import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
-import 'package:reebaplus_pos/shared/services/printer_service.dart';
+import 'package:reebaplus_pos/features/settings/screens/test_print_preview_screen.dart';
 import 'package:reebaplus_pos/shared/services/usb_printer_channel.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
@@ -39,7 +38,6 @@ class _ReceiptPrinterSettingsScreenState
   List<BluetoothInfo> _devices = [];
   List<UsbPrinterInfo> _usbPrinters = [];
   bool _supportsUsb = false;
-  String? _testingId;
   Map<String, ReceiptPaperSize?> _sizes = {};
   Map<String, ReceiptPrintStyle> _styles = {};
   Map<String, ReceiptSize> _receiptSizes = {};
@@ -117,38 +115,34 @@ class _ReceiptPrinterSettingsScreenState
     await ref.read(printerServiceProvider).saveReceiptSizeFor(id, size);
   }
 
-  Future<void> _testPrint(UsbPrinterInfo usb) => _runTestPrint(
-    usb.id,
-    (printer, name) => printer.testPrintUsb(usb.id, businessName: name),
-  );
-
-  Future<void> _testPrintBluetooth(BluetoothInfo device) => _runTestPrint(
-    device.macAdress,
-    (printer, name) =>
-        printer.testPrintBluetooth(device.macAdress, businessName: name),
-  );
-
-  Future<void> _runTestPrint(
-    String id,
-    Future<bool> Function(PrinterService printer, String? businessName) send,
-  ) async {
-    setState(() => _testingId = id);
-    final ok = await send(
-      ref.read(printerServiceProvider),
-      ref.read(currentBusinessNameProvider),
+  void _openPreview(String id, String name, TestPrintSender send) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => TestPrintPreviewScreen(
+          printerId: id,
+          printerName: name,
+          send: send,
+        ),
+      ),
     );
-    if (!mounted) return;
-    setState(() => _testingId = null);
-    if (ok) {
-      AppNotification.showSuccess(context, 'Test print sent');
-    } else {
-      AppNotification.showError(
-        context,
-        "Couldn't print. Check the printer is on, has paper and is "
-        'plugged in.',
-      );
-    }
   }
+
+  void _testPrint(UsbPrinterInfo usb) => _openPreview(
+    usb.id,
+    usb.name,
+    (printer, name, date) =>
+        printer.testPrintUsb(usb.id, businessName: name, saleDate: date),
+  );
+
+  void _testPrintBluetooth(BluetoothInfo device) => _openPreview(
+    device.macAdress,
+    device.name.isEmpty ? device.macAdress : device.name,
+    (printer, name, date) => printer.testPrintBluetooth(
+      device.macAdress,
+      businessName: name,
+      saleDate: date,
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -244,16 +238,12 @@ class _ReceiptPrinterSettingsScreenState
         text: 'Test print',
         variant: AppButtonVariant.outline,
         icon: AppIcons.print,
-        isLoading: _testingId == device.macAdress,
-        onPressed: _testingId == device.macAdress
-            ? null
-            : () => _testPrintBluetooth(device),
+        onPressed: () => _testPrintBluetooth(device),
       ),
     );
   }
 
   Widget _usbCard(BuildContext context, UsbPrinterInfo usb) {
-    final testing = _testingId == usb.id;
     return _card(
       context,
       id: usb.id,
@@ -266,8 +256,7 @@ class _ReceiptPrinterSettingsScreenState
         text: 'Test print',
         variant: AppButtonVariant.outline,
         icon: AppIcons.print,
-        isLoading: testing,
-        onPressed: testing || !usb.hasPermission ? null : () => _testPrint(usb),
+        onPressed: usb.hasPermission ? () => _testPrint(usb) : null,
       ),
     );
   }
