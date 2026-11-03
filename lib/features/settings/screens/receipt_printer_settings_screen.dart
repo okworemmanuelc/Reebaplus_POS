@@ -11,6 +11,7 @@ import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/pos/services/paper_end.dart';
+import 'package:reebaplus_pos/shared/services/printer_service.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
 import 'package:reebaplus_pos/features/settings/screens/test_print_preview_screen.dart';
 import 'package:reebaplus_pos/shared/services/usb_printer_channel.dart';
@@ -44,6 +45,8 @@ class _ReceiptPrinterSettingsScreenState
   Map<String, ReceiptSize> _receiptSizes = {};
   Map<String, int> _paperEnds = {};
   String? _lastMac;
+  // USB ids and Bluetooth MACs, most recently printed on first (#724).
+  List<String> _recent = const [];
 
   @override
   void initState() {
@@ -86,12 +89,7 @@ class _ReceiptPrinterSettingsScreenState
     } catch (_) {
       // No Bluetooth adapter / read failed — show the empty state.
     }
-    // Last-used printer first; it is the one receipts go to.
-    devices.sort((a, b) {
-      if (a.macAdress == lastMac) return -1;
-      if (b.macAdress == lastMac) return 1;
-      return 0;
-    });
+    final recent = await printer.recentPrinterIds();
     if (!mounted) return;
     setState(() {
       _devices = devices;
@@ -102,6 +100,7 @@ class _ReceiptPrinterSettingsScreenState
       _receiptSizes = receiptSizes;
       _paperEnds = paperEnds;
       _lastMac = lastMac;
+      _recent = recent;
       _loading = false;
     });
   }
@@ -203,11 +202,22 @@ class _ReceiptPrinterSettingsScreenState
                       ),
                       SizedBox(height: context.getRSize(20)),
                     ],
-                    for (final u in _usbPrinters) ...[
-                      _usbCard(context, u),
-                      SizedBox(height: context.getRSize(12)),
-                    ],
                   ],
+                  // USB and Bluetooth in one list, most recently used first.
+                  for (final card in PrinterService.sortByRecent(
+                    [
+                      if (_supportsUsb)
+                        for (final u in _usbPrinters)
+                          (id: u.id, build: () => _usbCard(context, u)),
+                      for (final d in _devices)
+                        (
+                          id: d.macAdress,
+                          build: () => _printerCard(context, d),
+                        ),
+                    ],
+                    (c) => c.id,
+                    _recent,
+                  )) ...[card.build(), SizedBox(height: context.getRSize(12))],
                   if (_devices.isEmpty)
                     Padding(
                       padding: EdgeInsets.only(top: context.getRSize(24)),
@@ -222,10 +232,6 @@ class _ReceiptPrinterSettingsScreenState
                         style: context.regularStyle(14).copyWith(color: muted),
                       ),
                     ),
-                  for (final d in _devices) ...[
-                    _printerCard(context, d),
-                    SizedBox(height: context.getRSize(12)),
-                  ],
                 ],
               ),
             ),
