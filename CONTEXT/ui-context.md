@@ -917,3 +917,7 @@ ExtraBold 17 "Are you 18 or older?", muted 14 body, full-width primary
 - A custom button copies that lock (`_LogOutButton` in `app_drawer_parts.dart`).
 - A sheet stays open with the spinner until the save ends, and stays open with the typed values on failure. Close it with `if (ctx.mounted && (ModalRoute.of(ctx)?.isCurrent ?? false)) Navigator.pop(ctx);` so a sheet dragged away cannot close the screen under it.
 - A sheet that can be retried needs an all-or-nothing save, so wrap several writes in one transaction.
+
+## Test print preview (#702)
+
+- Test print opens `TestPrintPreviewScreen`: status strip (Printing... / Printed / Failed) with `Print again` (`onAsyncPressed`), then the sample receipt on white paper in every theme. Text and Compact lines render monospace at the true column width (`ReceiptLinesPreview`); picture style shows `PaperReceipt`. Both come from `SampleReceipt`, the same source the printer is sent.
