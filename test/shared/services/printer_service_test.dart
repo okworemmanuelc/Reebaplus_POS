@@ -209,25 +209,27 @@ void main() {
       expect(await service.lastConnectedMac(), printerA);
     });
 
-    test('the old device-wide size moves onto the printer used with it',
-        () async {
-      SharedPreferences.setMockInitialValues({
-        'last_printer_mac': printerA,
-        'printer_paper_size': 'mm80',
-      });
-      final service = _FakePrinterService(
-        connectToPrinter: (mac) async => true,
-        wait: (_) async {},
-      );
+    test(
+      'the old device-wide size moves onto the printer used with it',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'last_printer_mac': printerA,
+          'printer_paper_size': 'mm80',
+        });
+        final service = _FakePrinterService(
+          connectToPrinter: (mac) async => true,
+          wait: (_) async {},
+        );
 
-      // Connecting to a different printer must not steal the old answer.
-      await service.connect(printerB);
+        // Connecting to a different printer must not steal the old answer.
+        await service.connect(printerB);
 
-      expect(await service.paperSizeFor(printerA), ReceiptPaperSize.mm80);
-      expect(await service.paperSizeFor(printerB), isNull);
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.containsKey('printer_paper_size'), isFalse);
-    });
+        expect(await service.paperSizeFor(printerA), ReceiptPaperSize.mm80);
+        expect(await service.paperSizeFor(printerB), isNull);
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.containsKey('printer_paper_size'), isFalse);
+      },
+    );
 
     test('the old size is dropped when no printer was ever used', () async {
       SharedPreferences.setMockInitialValues({'printer_paper_size': 'mm80'});
@@ -253,9 +255,9 @@ void main() {
     });
 
     test('a Bluetooth printer used before -> true', () async {
-      SharedPreferences.setMockInitialValues(
-        {'last_printer_mac': '00:11:22:33:44:55'},
-      );
+      SharedPreferences.setMockInitialValues({
+        'last_printer_mac': '00:11:22:33:44:55',
+      });
       final service = _FakePrinterService(usb: FakeUsbPrinterChannel());
       expect(await service.hasPrinterSetUp(), isTrue);
     });
@@ -281,17 +283,19 @@ void main() {
       return (service: service, btWrites: btWrites);
     }
 
-    test('an attached USB printer gets the bytes as-is, no Bluetooth',
-        () async {
-      final usb = FakeUsbPrinterChannel(printers: [fakeUsbPrinter()]);
-      final r = build(usb);
+    test(
+      'an attached USB printer gets the bytes as-is, no Bluetooth',
+      () async {
+        final usb = FakeUsbPrinterChannel(printers: [fakeUsbPrinter()]);
+        final r = build(usb);
 
-      expect(await r.service.printBytes(body), isTrue);
-      expect(usb.writes.single.$1, 'usb:1208:514');
-      // No ESC @ wake write and no wake gap: the job goes over unchanged.
-      expect(usb.writes.single.$2, body);
-      expect(r.btWrites, isEmpty);
-    });
+        expect(await r.service.printBytes(body), isTrue);
+        expect(usb.writes.single.$1, 'usb:1208:514');
+        // No ESC @ wake write and no wake gap: the job goes over unchanged.
+        expect(usb.writes.single.$2, body);
+        expect(r.btWrites, isEmpty);
+      },
+    );
 
     test('a failed USB write falls back to Bluetooth', () async {
       final usb = FakeUsbPrinterChannel(
@@ -342,74 +346,84 @@ void main() {
       expect(r.btWrites, isEmpty);
     });
 
-    test('a USB printer seen for the first time is saved as 80mm + Text',
-        () async {
-      SharedPreferences.setMockInitialValues({
-        'printer_print_style:usb:9:9': 'picture',
-      });
-      final usb = FakeUsbPrinterChannel(
-        printers: [fakeUsbPrinter(), fakeUsbPrinter(id: 'usb:9:9')],
-      );
-      final service = build(usb).service;
+    test(
+      'a USB printer seen for the first time is saved as 80mm + Text',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'printer_print_style:usb:9:9': 'picture',
+        });
+        final usb = FakeUsbPrinterChannel(
+          printers: [
+            fakeUsbPrinter(),
+            fakeUsbPrinter(id: 'usb:9:9'),
+          ],
+        );
+        final service = build(usb).service;
 
-      await service.usbPrinters();
+        await service.usbPrinters();
 
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString('printer_paper_size:usb:1208:514'), 'mm80');
-      expect(prefs.getString('printer_print_style:usb:1208:514'), 'text');
-      // An existing choice is never overwritten.
-      expect(await service.printStyleFor('usb:9:9'), ReceiptPrintStyle.picture);
-    });
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.getString('printer_paper_size:usb:1208:514'), 'mm80');
+        expect(prefs.getString('printer_print_style:usb:1208:514'), 'text');
+        // An existing choice is never overwritten.
+        expect(
+          await service.printStyleFor('usb:9:9'),
+          ReceiptPrintStyle.picture,
+        );
+      },
+    );
 
     test('a saved USB choice is kept on the next sighting', () async {
       SharedPreferences.setMockInitialValues({
         'printer_paper_size:usb:1208:514': 'mm58',
       });
-      final service =
-          build(FakeUsbPrinterChannel(printers: [fakeUsbPrinter()])).service;
+      final service = build(
+        FakeUsbPrinterChannel(printers: [fakeUsbPrinter()]),
+      ).service;
 
       await service.attachedUsbPrinter();
 
-      expect(
-        await service.paperSizeFor('usb:1208:514'),
-        ReceiptPaperSize.mm58,
-      );
+      expect(await service.paperSizeFor('usb:1208:514'), ReceiptPaperSize.mm58);
     });
 
-    test('currentPrinterId: allowed USB, else last Bluetooth, else none',
-        () async {
-      SharedPreferences.setMockInitialValues({'last_printer_mac': btMac});
-      final usb = FakeUsbPrinterChannel(printers: [fakeUsbPrinter()]);
-      final service = build(usb).service;
+    test(
+      'currentPrinterId: allowed USB, else last Bluetooth, else none',
+      () async {
+        SharedPreferences.setMockInitialValues({'last_printer_mac': btMac});
+        final usb = FakeUsbPrinterChannel(printers: [fakeUsbPrinter()]);
+        final service = build(usb).service;
 
-      expect(await service.currentPrinterId(), 'usb:1208:514');
+        expect(await service.currentPrinterId(), 'usb:1208:514');
 
-      usb.printers = [fakeUsbPrinter(hasPermission: false)];
-      expect(await service.currentPrinterId(), btMac);
-      // Looking up the current printer never shows the permission prompt.
-      expect(usb.permissionRequests, isEmpty);
+        usb.printers = [fakeUsbPrinter(hasPermission: false)];
+        expect(await service.currentPrinterId(), btMac);
+        // Looking up the current printer never shows the permission prompt.
+        expect(usb.permissionRequests, isEmpty);
 
-      usb.printers = [];
-      expect(await service.currentPrinterId(), btMac);
+        usb.printers = [];
+        expect(await service.currentPrinterId(), btMac);
 
-      SharedPreferences.setMockInitialValues({});
-      expect(await service.currentPrinterId(), isNull);
-    });
+        SharedPreferences.setMockInitialValues({});
+        expect(await service.currentPrinterId(), isNull);
+      },
+    );
 
-    test('currentPrintStyle reads the USB printer when one is attached',
-        () async {
-      SharedPreferences.setMockInitialValues({
-        'last_printer_mac': btMac,
-        'printer_print_style:$btMac': 'picture',
-        'printer_print_style:usb:1208:514': 'text',
-      });
-      final usb = FakeUsbPrinterChannel(printers: [fakeUsbPrinter()]);
-      final service = build(usb).service;
+    test(
+      'currentPrintStyle reads the USB printer when one is attached',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'last_printer_mac': btMac,
+          'printer_print_style:$btMac': 'picture',
+          'printer_print_style:usb:1208:514': 'text',
+        });
+        final usb = FakeUsbPrinterChannel(printers: [fakeUsbPrinter()]);
+        final service = build(usb).service;
 
-      expect(await service.currentPrintStyle(), ReceiptPrintStyle.text);
-      usb.printers = [];
-      expect(await service.currentPrintStyle(), ReceiptPrintStyle.picture);
-    });
+        expect(await service.currentPrintStyle(), ReceiptPrintStyle.text);
+        usb.printers = [];
+        expect(await service.currentPrintStyle(), ReceiptPrintStyle.picture);
+      },
+    );
 
     test('printBytesDirectly stays Bluetooth-only', () async {
       final usb = FakeUsbPrinterChannel(printers: [fakeUsbPrinter()]);
@@ -436,5 +450,65 @@ void main() {
       expect(text, contains('Test print'));
       expect(text, contains('Paper: 80mm'));
     });
+  });
+
+  group('receipt size + Bluetooth test print (#676)', () {
+    test('receipt size is per printer and defaults to full', () async {
+      final service = _FakePrinterService();
+      expect(await service.receiptSizeFor('aa'), ReceiptSize.full);
+      await service.saveReceiptSizeFor('aa', ReceiptSize.compact);
+      expect(await service.receiptSizeFor('aa'), ReceiptSize.compact);
+      expect(await service.receiptSizeFor('bb'), ReceiptSize.full);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('printer_receipt_size:aa'), 'compact');
+    });
+
+    test('test slip: full is unchanged, compact 58mm adds Font B + ruler', () {
+      final full = PrinterService.buildTestPrintBytes(
+        paperSize: ReceiptPaperSize.mm58,
+        printStyle: ReceiptPrintStyle.text,
+      );
+      expect(String.fromCharCodes(full), isNot(contains('Compact')));
+      final compact = PrinterService.buildTestPrintBytes(
+        paperSize: ReceiptPaperSize.mm58,
+        printStyle: ReceiptPrintStyle.text,
+        receiptSize: ReceiptSize.compact,
+      );
+      expect(compact.sublist(2, 5), [0x1B, 0x4D, 0x01]);
+      final text = String.fromCharCodes(compact);
+      expect(text, contains('Size: Compact'));
+      expect(
+        text,
+        contains(
+          '123456789012345678901234567890123456789012'.replaceAll('0', '0'),
+        ),
+      );
+    });
+
+    test(
+      'testPrintBluetooth connects to the printer and writes the slip',
+      () async {
+        final written = <List<int>>[];
+        final connected = <String>[];
+        final service = _FakePrinterService(
+          connected: false,
+          isAndroid: false,
+          connectToPrinter: (mac) async {
+            connected.add(mac);
+            return true;
+          },
+          wait: (_) async {},
+          writeBytes: (b) async {
+            written.add(b);
+            return true;
+          },
+        );
+        await service.saveReceiptSizeFor('aa', ReceiptSize.compact);
+        final ok = await service.testPrintBluetooth('aa', businessName: 'Ada');
+        expect(ok, isTrue);
+        expect(connected, ['aa']);
+        expect(String.fromCharCodes(written.single), contains('Size: Compact'));
+      },
+    );
   });
 }

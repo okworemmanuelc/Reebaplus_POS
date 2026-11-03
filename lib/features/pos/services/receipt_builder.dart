@@ -60,9 +60,12 @@ class ThermalReceiptService {
     String? logoPath,
     ReceiptPaperSize paperSize = ReceiptPaperSize.mm58,
     ReceiptPrintStyle printStyle = ReceiptPrintStyle.text,
+    ReceiptSize receiptSize = ReceiptSize.full,
     required bool tracksCrates,
   }) async {
-    if (printStyle == ReceiptPrintStyle.text) {
+    final compact = receiptSize == ReceiptSize.compact;
+    // Compact (#676) always prints as text, whatever the print style says.
+    if (printStyle == ReceiptPrintStyle.text || compact) {
       final hasLogo = logoPath != null && File(logoPath).existsSync();
       final lines = buildReceiptLines(
         paperSize: paperSize,
@@ -84,7 +87,7 @@ class ThermalReceiptService {
         manufacturerNames: manufacturerNames,
         storeAddress: storeAddress,
         businessName: businessName,
-        hasLogo: hasLogo,
+        hasLogo: hasLogo && !compact,
         businessPhone: businessPhone,
         businessEmail: businessEmail,
         cashierName: cashierName,
@@ -96,11 +99,12 @@ class ThermalReceiptService {
         cratesTotalOwedByManufacturer: cratesTotalOwedByManufacturer,
         crateDepositFull: crateDepositFull,
         tracksCrates: tracksCrates,
+        receiptSize: receiptSize,
       );
-      final logo = hasLogo
+      final logo = hasLogo && !compact
           ? await _buildLogo(logoPath, paperSize.logoBoxPx)
           : null;
-      return _emitText(lines, paperSize, logo);
+      return _emitText(lines, paperSize, logo, compact: compact);
     }
 
     final receipt = PaperReceipt(
@@ -171,16 +175,28 @@ class ThermalReceiptService {
     return bytes;
   }
 
+  @visibleForTesting
+  static Future<List<int>> emitTextForTest(
+    List<ReceiptLine> lines,
+    ReceiptPaperSize paperSize, {
+    bool compact = false,
+  }) => _emitText(lines, paperSize, null, compact: compact);
+
   /// Maps [lines] to ESC/POS. Single-style lines go through `generator.text`;
   /// mixed bold lines set the style per segment and write the bytes raw.
   static Future<List<int>> _emitText(
     List<ReceiptLine> lines,
     ReceiptPaperSize paperSize,
-    img.Image? logo,
-  ) async {
+    img.Image? logo, {
+    bool compact = false,
+  }) async {
     final profile = await CapabilityProfile.load();
     final generator = Generator(paperSize.escPos, profile);
     final bytes = <int>[...generator.reset()];
+    // Compact on 58mm prints in the small Font B (42 columns, #676).
+    if (compact && paperSize == ReceiptPaperSize.mm58) {
+      bytes.addAll(generator.setGlobalFont(PosFontType.fontB));
+    }
     for (final line in lines) {
       switch (line.kind) {
         case ReceiptLineKind.logo:

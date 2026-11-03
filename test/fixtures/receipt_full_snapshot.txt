@@ -1,0 +1,172 @@
+== mm58
+LOGO||
+tall/center/B|FRESHMART SUPERMARKET|
+normal/center/-|Plot 14, Market Road, Wuse II,|
+normal/center/-|Abuja|
+normal/center/-|Tel: 0803 123 4567|
+normal/center/-|hello@freshmart.ng|
+normal/left/-|--------------------------------|
+normal/left/-B|Receipt No.    ORD-000482-AB12CD|
+normal/left/--|Date          31/10/2026 4:52 PM|
+normal/left/--|Cashier              Amina Bello|
+normal/left/--|Customer          Chinedu Okafor|
+normal/left/-|--------------------------------|
+normal/left/BB|ITEM                      AMOUNT|
+normal/left/-|- - - - - - - - - - - - - - - - |
+normal/left/B|Spaghetti 500g                  |
+normal/left/-B|4 x N1,200                N4,800|
+normal/left/-|- - - - - - - - - - - - - - - - |
+normal/left/B|Vegetable Oil 1L                |
+normal/left/-B|1 x N3,500                N3,500|
+normal/left/-|- - - - - - - - - - - - - - - - |
+normal/left/B|Lager Beer 60cl Extra Long Name |
+normal/left/B|For Wrapping                    |
+normal/left/-B|2 x N9,600               N19,200|
+normal/left/-|--------------------------------|
+normal/left/--|Subtotal (7 items)       N33,000|
+normal/left/--|Discount                 -N1,000|
+normal/left/--|VAT (7.5%) included       N2,000|
+normal/left/--|Crate deposit             N2,000|
+normal/left/-|================================|
+tall/left/BB|TOTAL                    N36,400|
+normal/left/-|================================|
+normal/left/-B|Paid by                     Cash|
+normal/left/--|Amount paid              N40,000|
+normal/left/-B|Change                    N3,600|
+normal/left/-|--------------------------------|
+normal/left/B|EMPTY CRATES|
+normal/left/B|Lager                           |
+normal/left/-B|Taken: 2   Returned: 1   Owed: 1|
+normal/left/B|Total Lager crates you owe: 6   |
+normal/left/-|The N2,000 deposit is refunded  |
+normal/left/-|when the crates are returned.   |
+normal/left/-|- - - - - - - - - - - - - - - - |
+normal/center/-|Powered by Reebaplus|
+FEED2||
+== mm58 refunded
+big/center/B|REFUNDED N36,400|
+LOGO||
+tall/center/B|FRESHMART SUPERMARKET|
+normal/center/-|Plot 14, Market Road, Wuse II,|
+normal/center/-|Abuja|
+normal/center/-|Tel: 0803 123 4567|
+normal/center/-|hello@freshmart.ng|
+normal/left/-|--------------------------------|
+normal/left/-B|Receipt No.    ORD-000482-AB12CD|
+normal/left/--|Date          31/10/2026 4:52 PM|
+normal/left/--|Cashier              Amina Bello|
+normal/left/--|Customer          Chinedu Okafor|
+normal/left/-|--------------------------------|
+normal/left/BB|ITEM                      AMOUNT|
+normal/left/-|- - - - - - - - - - - - - - - - |
+normal/left/B|Spaghetti 500g                  |
+normal/left/-B|4 x N1,200                N4,800|
+normal/left/-|- - - - - - - - - - - - - - - - |
+normal/left/B|Vegetable Oil 1L                |
+normal/left/-B|1 x N3,500                N3,500|
+normal/left/-|- - - - - - - - - - - - - - - - |
+normal/left/B|Lager Beer 60cl Extra Long Name |
+normal/left/B|For Wrapping                    |
+normal/left/-B|2 x N9,600               N19,200|
+normal/left/-|--------------------------------|
+normal/left/--|Subtotal (7 items)       N33,000|
+normal/left/--|Discount                 -N1,000|
+normal/left/--|VAT (7.5%) included       N2,000|
+normal/left/--|Crate deposit             N2,000|
+normal/left/-|================================|
+tall/left/BB|TOTAL                    N36,400|
+normal/left/-|================================|
+normal/left/-B|Paid by                     Cash|
+normal/left/--|Amount paid              N40,000|
+normal/left/-B|Change                    N3,600|
+normal/left/-|--------------------------------|
+normal/left/B|EMPTY CRATES|
+normal/left/B|Lager                           |
+normal/left/-B|Taken: 2   Returned: 1   Owed: 1|
+normal/left/B|Total Lager crates you owe: 6   |
+normal/left/-|The N2,000 deposit is refunded  |
+normal/left/-|when the crates are returned.   |
+normal/left/-|- - - - - - - - - - - - - - - - |
+normal/center/-|Powered by Reebaplus|
+FEED2||
+== mm80
+LOGO||
+big/center/B|FRESHMART SUPERMARKET|
+normal/center/-|Plot 14, Market Road, Wuse II, Abuja|
+normal/center/-|Tel: 0803 123 4567 | hello@freshmart.ng|
+normal/left/-|------------------------------------------------|
+normal/left/-B|Receipt No.                    ORD-000482-AB12CD|
+normal/left/--|Date                          31/10/2026 4:52 PM|
+normal/left/--|Cashier                              Amina Bello|
+normal/left/--|Customer                          Chinedu Okafor|
+normal/left/-|------------------------------------------------|
+normal/left/BBBB|ITEM                    QTY     PRICE     AMOUNT|
+normal/left/-|- - - - - - - - - - - - - - - - - - - - - - - - |
+normal/left/B--B|Spaghetti 500g            4    N1,200     N4,800|
+normal/left/-|- - - - - - - - - - - - - - - - - - - - - - - - |
+normal/left/B--B|Vegetable Oil 1L          1    N3,500     N3,500|
+normal/left/-|- - - - - - - - - - - - - - - - - - - - - - - - |
+normal/left/B--B|Lager Beer 60cl Extra     2    N9,600    N19,200|
+normal/left/B---|Long Name For                                   |
+normal/left/B---|Wrapping                                        |
+normal/left/-|------------------------------------------------|
+normal/left/---|                Subtotal (7 items)       N33,000|
+normal/left/---|                Discount                 -N1,000|
+normal/left/---|                VAT (7.5%) included       N2,000|
+normal/left/---|                Crate deposit             N2,000|
+normal/left/-|================================================|
+tall/left/BB|TOTAL                                    N36,400|
+normal/left/-|================================================|
+normal/left/---|Paid by         Amount paid               Change|
+normal/left/BBB|Cash            N40,000                   N3,600|
+normal/left/-|------------------------------------------------|
+normal/left/B|EMPTY CRATES|
+normal/left/----|Product                    Taken  Returned  Owed|
+normal/left/B--B|Lager                          2         1     1|
+normal/left/B|Total Lager crates you owe: 6                   |
+normal/left/-|The N2,000 deposit is refunded when the crates  |
+normal/left/-|are returned.                                   |
+normal/left/-|- - - - - - - - - - - - - - - - - - - - - - - - |
+normal/center/-|Powered by Reebaplus|
+FEED2||
+== mm80 refunded
+big/center/B|REFUNDED N36,400|
+LOGO||
+big/center/B|FRESHMART SUPERMARKET|
+normal/center/-|Plot 14, Market Road, Wuse II, Abuja|
+normal/center/-|Tel: 0803 123 4567 | hello@freshmart.ng|
+normal/left/-|------------------------------------------------|
+normal/left/-B|Receipt No.                    ORD-000482-AB12CD|
+normal/left/--|Date                          31/10/2026 4:52 PM|
+normal/left/--|Cashier                              Amina Bello|
+normal/left/--|Customer                          Chinedu Okafor|
+normal/left/-|------------------------------------------------|
+normal/left/BBBB|ITEM                    QTY     PRICE     AMOUNT|
+normal/left/-|- - - - - - - - - - - - - - - - - - - - - - - - |
+normal/left/B--B|Spaghetti 500g            4    N1,200     N4,800|
+normal/left/-|- - - - - - - - - - - - - - - - - - - - - - - - |
+normal/left/B--B|Vegetable Oil 1L          1    N3,500     N3,500|
+normal/left/-|- - - - - - - - - - - - - - - - - - - - - - - - |
+normal/left/B--B|Lager Beer 60cl Extra     2    N9,600    N19,200|
+normal/left/B---|Long Name For                                   |
+normal/left/B---|Wrapping                                        |
+normal/left/-|------------------------------------------------|
+normal/left/---|                Subtotal (7 items)       N33,000|
+normal/left/---|                Discount                 -N1,000|
+normal/left/---|                VAT (7.5%) included       N2,000|
+normal/left/---|                Crate deposit             N2,000|
+normal/left/-|================================================|
+tall/left/BB|TOTAL                                    N36,400|
+normal/left/-|================================================|
+normal/left/---|Paid by         Amount paid               Change|
+normal/left/BBB|Cash            N40,000                   N3,600|
+normal/left/-|------------------------------------------------|
+normal/left/B|EMPTY CRATES|
+normal/left/----|Product                    Taken  Returned  Owed|
+normal/left/B--B|Lager                          2         1     1|
+normal/left/B|Total Lager crates you owe: 6                   |
+normal/left/-|The N2,000 deposit is refunded when the crates  |
+normal/left/-|are returned.                                   |
+normal/left/-|- - - - - - - - - - - - - - - - - - - - - - - - |
+normal/center/-|Powered by Reebaplus|
+FEED2||
