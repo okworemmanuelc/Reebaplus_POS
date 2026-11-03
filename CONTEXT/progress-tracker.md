@@ -7,6 +7,12 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #672: Payroll import from the old POS (2026-11-03, branch `feat/672-payroll-import`)
+- New tool `tool/payroll_import/` (same shape as #623's `tool/legacy_import`: writes `import.sql`, `checks.sql`, `report.md` outside the repo, never connects). Reads the old `Staff*` tables plus a PRIVATE config beside the export (worker list, loan dates, payment methods, the plan's expected totals). No names or amounts in the repo; tests use invented data.
+- Mapping: listed workers only (daily allowance 0, never backdated); SETTLEMENT → `salary_payment` in the month before payday; a cancelled ADVANCE + its offsetting ADJUSTMENT → advance + correction (`corrects_entry_id`); loans → `loan_given` / `loan_repaid` dated from the note (dd/mm/yy), the config, or the entry day; a repayment on the worker's payday is the salary deduction (method other). Signed statements keep both signatures (data-URL prefix stripped). Anything without a faithful mapping (cancelled salary or loan, orphan adjustment, unknown type) stops the build.
+- Salary entries, payday repayments, statements and `staff_pay_totals` use the APP's deterministic ids (test compares with the app functions), so phones never duplicate them. The import writes the combined lines itself, as the app derives them; Payroll phones re-derive the same figures after every pull and skip.
+- Insert-only, `ON CONFLICT DO NOTHING` on fixed ids + `legacy_id` unique indexes; guards stop on a missing business/store, a payroll schema behind 0246, or a worker already added by hand. Dev dry run (fake business on reebaplus-dev, cleaned up): every check PASS, second run changed nothing (row hashes equal). Prod run pending (owner).
+
 ### Issue #696: Payroll till cash, free payday date, staff pay in home profit (2026-11-03, branch `feat/696-payroll-till-cash`)
 - Drift **v104** + cloud **0246_staff_pay_totals_kinds.sql** (NOT applied anywhere; deploy after 0245, before any v104 client pushes): `staff_pay_totals` kind CHECK gains `bonuses`, `advances`, `loans_given`, `loans_repaid` (v104 = `alterTable` rebuild, no column change).
 - `PayrollMoneyEntries.refreshMoneyTotals` (daos_payroll_money.dart): one line per store/kind/day, amount = approved entries, cash = Cash part; payday repayments excluded from `loans_repaid`. Runs on record, approve/reject and after every pull.
