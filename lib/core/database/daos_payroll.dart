@@ -113,6 +113,7 @@ class PayrollDao extends DatabaseAccessor<AppDatabase>
                 (w) => w.id.equals(workerId) & w.businessId.equals(businessId),
               ))
               .getSingle();
+      final salaryChanged = worker.monthlySalaryKobo != monthlySalaryKobo;
       final startDate =
           worker.allowanceStartDate ??
           (dailyAllowanceKobo > 0 ? payrollToday() : null);
@@ -135,6 +136,22 @@ class PayrollDao extends DatabaseAccessor<AppDatabase>
         staffId: currentUserId,
         storeId: storeId,
       );
+      // #688: tell the CEO when a salary changes (name only, never the
+      // amount). Nothing when the CEO made the change themselves.
+      if (salaryChanged && !await currentUserIsPayrollApprover()) {
+        final ceoIds = await db.userBusinessesDao.getUserIdsForRoleSlugs([
+          'ceo',
+        ]);
+        for (final uid in ceoIds) {
+          await db.notificationsDao.fireNotification(
+            type: 'payroll.salary_changed',
+            message: "${worker.name}'s monthly salary was changed",
+            severity: 'warning',
+            linkedRecordId: workerId,
+            recipientUserId: uid,
+          );
+        }
+      }
     });
   }
 
