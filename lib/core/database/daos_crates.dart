@@ -748,7 +748,8 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
       final manufacturerId = r.manufacturerId;
       if (manufacturerId == null) continue;
       if (customerId == null) {
-        if (r.reason == kCheckoutExchangeReversalReason) {
+        if (r.reason == kCheckoutExchangeReversalReason ||
+            r.reason == kOrderReturnedEmptiesReason) {
           await _movePoolProjection(
             manufacturerId,
             storeId: r.storeId,
@@ -783,28 +784,40 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     required String staffId,
     required bool enqueue,
   }) async {
-    final issuedRows =
+    // #711 — what the customer STILL owes for this order, per brand: every
+    // customer row stamped with the order, net. A plain cancel of a Pending
+    // sale has only the 'issued' row, so this is exactly the old inverse. After
+    // Confirm, the empties the customer handed in ('returned', negative) are
+    // already off the debt, so only the rest is cancelled here; a second run
+    // nets to 0 and writes nothing.
+    final orderRows =
         await (select(crateLedger)..where(
               (l) =>
                   whereBusiness(l) &
                   l.referenceOrderId.equals(orderId) &
-                  l.movementType.equals('issued') &
                   l.customerId.isNotNull() &
                   l.manufacturerId.isNotNull(),
             ))
             .get();
+    if (!orderRows.any((r) => r.movementType == 'issued')) return;
+    final owed = <(String, String), double>{};
+    for (final r in orderRows) {
+      final key = (r.customerId!, r.manufacturerId!);
+      owed[key] = (owed[key] ?? 0) + r.quantityDelta;
+    }
     final now = DateTime.now();
-    for (final issued in issuedRows) {
-      final customerId = issued.customerId!;
-      final manufacturerId = issued.manufacturerId!;
+    for (final entry in owed.entries) {
+      if (entry.value <= 0) continue;
+      final (customerId, manufacturerId) = entry.key;
+      final stillOwed = entry.value;
 
-      // Compensating ledger row — the exact inverse of the 'issued' delta.
+      // Compensating ledger row — the inverse of what is still owed.
       final compRow = CrateLedgerCompanion.insert(
         id: Value(UuidV7.generate()),
         businessId: requireBusinessId(),
         customerId: Value(customerId),
         manufacturerId: Value(manufacturerId),
-        quantityDelta: -issued.quantityDelta,
+        quantityDelta: -stillOwed,
         movementType: 'adjusted',
         referenceOrderId: Value(orderId),
         performedBy: Value(staffId),
@@ -821,7 +834,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
         "last_updated_at = CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER) "
         'WHERE business_id = ? AND customer_id = ? AND manufacturer_id = ?',
         variables: [
-          Variable<double>(issued.quantityDelta),
+          Variable<double>(stillOwed),
           Variable<String>(requireBusinessId()),
           Variable<String>(customerId),
           Variable<String>(manufacturerId),
@@ -967,6 +980,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
                       l.reason.isIn(const [
                         kCheckoutExchangeReason,
                         kCheckoutExchangeReversalReason,
+                        kOrderReturnedEmptiesReason,
                       ])),
             ))
             .get();
@@ -1012,6 +1026,64 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
         referenceOrderId: Value(orderId),
         performedBy: Value(staffId),
         reason: const Value(kCheckoutExchangeReversalReason),
+        lastUpdatedAt: Value(now),
+      );
+      await into(crateLedger).insert(compRow);
+      await _movePoolProjection(
+        manufacturerId,
+        storeId: storeId,
+        delta: -entry.value,
+      );
+      if (enqueue) {
+        await db.syncDao.enqueueUpsert('crate_ledger', compRow);
+      }
+    }
+  }
+
+  /// **Hand back the empties** a Completed sale's customer brought in at
+  /// Confirm (#711), for a Return. Nets the order's customer-less Confirm
+  /// credits (`adjusted`, no reason) against earlier hand-backs and writes a
+  /// compensating NEGATIVE pool row per brand and store, so the shop's empty
+  /// count drops by what the cashier gives back. The Checkout exchange rows are
+  /// [reverseExchangeEmpties]'s job, so they are not touched here. The row keeps
+  /// a fresh id (a reversal that loses the first-reversal race is withdrawn) and
+  /// a second run nets to 0. No own transaction: the caller is inside one.
+  Future<void> handBackReturnedEmpties({
+    required String orderId,
+    required String staffId,
+    required bool enqueue,
+  }) async {
+    final rows =
+        await (select(crateLedger)..where(
+              (l) =>
+                  whereBusiness(l) &
+                  l.referenceOrderId.equals(orderId) &
+                  l.customerId.isNull() &
+                  l.manufacturerId.isNotNull() &
+                  l.movementType.equals(kCrateMovementAdjusted) &
+                  (l.reason.isNull() |
+                      l.reason.equals(kOrderReturnedEmptiesReason)),
+            ))
+            .get();
+    final net = <(String, String?), double>{};
+    for (final row in rows) {
+      final key = (row.manufacturerId!, row.storeId);
+      net[key] = (net[key] ?? 0) + row.quantityDelta;
+    }
+    final now = DateTime.now();
+    for (final entry in net.entries) {
+      if (entry.value <= 0) continue;
+      final (manufacturerId, storeId) = entry.key;
+      final compRow = CrateLedgerCompanion.insert(
+        id: Value(UuidV7.generate()),
+        businessId: requireBusinessId(),
+        manufacturerId: Value(manufacturerId),
+        storeId: Value(storeId),
+        quantityDelta: -entry.value,
+        movementType: kCrateMovementAdjusted,
+        referenceOrderId: Value(orderId),
+        performedBy: Value(staffId),
+        reason: const Value(kOrderReturnedEmptiesReason),
         lastUpdatedAt: Value(now),
       );
       await into(crateLedger).insert(compRow);

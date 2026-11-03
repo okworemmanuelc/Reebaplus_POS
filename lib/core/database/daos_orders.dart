@@ -2046,6 +2046,32 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       // method, so a cash tender yields a cash reversal and a transfer a transfer
       // reversal. A `refund` row already on the order (a prior cancel) is never
       // re-reversed.
+      // #711 — the order's deposit already released at Confirm (refunded or
+      // forfeited, deposit family). 0 for an untouched sale.
+      final depositRows = await (select(walletTransactions)..where(
+            (t) =>
+                whereBusiness(t) &
+                t.orderId.equals(orderId) &
+                t.referenceType.isIn(const [
+                  'crate_deposit',
+                  'crate_deposit_refunded',
+                  'crate_deposit_forfeited',
+                ]),
+          ))
+          .get();
+      var depositHeldCreditKobo = 0;
+      var depositReleasedKobo = 0;
+      for (final r in depositRows) {
+        if (r.referenceType == 'crate_deposit') {
+          depositHeldCreditKobo += r.amountKobo;
+        } else {
+          depositReleasedKobo += r.amountKobo;
+        }
+      }
+      final depositStillHeldKobo =
+          depositHeldCreditKobo > depositReleasedKobo
+          ? depositHeldCreditKobo - depositReleasedKobo
+          : 0;
       final orderPayments =
           await (select(paymentTransactions)..where(
                 (p) =>
@@ -2070,6 +2096,14 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         // too: its cash is still in the till AND still the customer's credit.
         // Only the crate_deposit row reverses as ever.
         if (toBalance && (isSale || pay.type == 'wallet_topup')) continue;
+        // #711 — the held deposit is released ONCE, below, from what is still
+        // held (a deposit already settled at Confirm must not be paid twice).
+        // Untouched sale (nothing released yet): each row reverses as ever,
+        // unless the money goes to the balance, where it becomes spendable
+        // credit and the cash stays in the till.
+        if (pay.type == 'crate_deposit' && (depositReleasedKobo > 0 || toBalance)) {
+          continue;
+        }
         await db.paymentTransactionsDao.postReversalPayment(
           original: pay,
           reversalType: isSale ? 'refund' : pay.type,
@@ -2135,6 +2169,9 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         }
         final toCredit = leg.type == 'debit';
         final isHeldDeposit = leg.referenceType == 'crate_deposit';
+        // #711 — the held deposit is released once below, from what is still
+        // held.
+        if (isHeldDeposit) continue;
         final compReverse = WalletTransactionsCompanion.insert(
           id: Value(UuidV7.generate()),
           businessId: requireBusinessId(),
@@ -2154,6 +2191,65 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         await db.syncDao.enqueueUpsert('wallet_transactions', compReverse);
       }
 
+      // #711 — release the deposit still HELD. Whatever Confirm already
+      // refunded or forfeited is not paid again. It goes back as the Refund
+      // destination says: spendable balance credit (`crate_refund`, cash stays
+      // in the till) or a negative `crate_deposit` payment row (cash/transfer
+      // out). Both drop "deposits held" with a `crate_deposit_refunded` debit.
+      if (depositStillHeldKobo > 0) {
+        final heldLeg = depositRows.firstWhere(
+          (r) => r.referenceType == 'crate_deposit',
+        );
+        final release = WalletTransactionsCompanion.insert(
+          id: Value(UuidV7.generate()),
+          businessId: requireBusinessId(),
+          walletId: heldLeg.walletId,
+          customerId: heldLeg.customerId,
+          type: 'debit',
+          amountKobo: depositStillHeldKobo,
+          signedAmountKobo: -depositStillHeldKobo,
+          referenceType: 'crate_deposit_refunded',
+          orderId: Value(orderId),
+          performedBy: Value(staffId),
+          lastUpdatedAt: Value(now),
+        );
+        await into(walletTransactions).insert(release);
+        await db.syncDao.enqueueUpsert('wallet_transactions', release);
+        if (toBalance) {
+          final credit = WalletTransactionsCompanion.insert(
+            id: Value(UuidV7.generate()),
+            businessId: requireBusinessId(),
+            walletId: heldLeg.walletId,
+            customerId: heldLeg.customerId,
+            type: 'credit',
+            amountKobo: depositStillHeldKobo,
+            signedAmountKobo: depositStillHeldKobo,
+            referenceType: 'crate_refund',
+            orderId: Value(orderId),
+            performedBy: Value(staffId),
+            lastUpdatedAt: Value(now),
+          );
+          await into(walletTransactions).insert(credit);
+          await db.syncDao.enqueueUpsert('wallet_transactions', credit);
+        } else if (depositReleasedKobo > 0) {
+          // Partly settled: one row for what is left. (An untouched sale
+          // reversed each original row in the payment loop above.)
+          final depositPay = orderPayments.where(
+            (p) => p.type == 'crate_deposit' && p.amountKobo > 0,
+          );
+          if (depositPay.isNotEmpty) {
+            await db.paymentTransactionsDao.postReversalPayment(
+              original: depositPay.first,
+              reversalType: 'crate_deposit',
+              performedBy: staffId,
+              amountKobo: -depositStillHeldKobo,
+              reason: 'order_cancelled: $reason',
+              at: now,
+            );
+          }
+        }
+      }
+
       // Crates: reverse the rows the sale ISSUED to the customer (§13.4 crate-
       // track brands) so the customer's DERIVED crate debt returns to its
       // pre-sale value — no phantom debt for crates they never kept. Routed
@@ -2169,6 +2265,14 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       // because the cashier hands them back with the refund. Any customer or
       // brand, deposit or not: an exchange writes a pool row for all of them.
       await db.cratePoolDao.reverseExchangeEmpties(
+        orderId: orderId,
+        staffId: staffId,
+        enqueue: true,
+      );
+
+      // #711 — and the empties the customer handed in at Confirm go back to
+      // them too, so the shop's empty count drops by what is handed back.
+      await db.cratePoolDao.handBackReturnedEmpties(
         orderId: orderId,
         staffId: staffId,
         enqueue: true,
@@ -2215,7 +2319,49 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
               p.type.isIn(const ['sale', 'wallet_topup']),
         ))
         .get();
-    return rows.fold<int>(0, (a, p) => a + (p.amountKobo > 0 ? p.amountKobo : 0));
+    final paid = rows.fold<int>(
+      0,
+      (a, p) => a + (p.amountKobo > 0 ? p.amountKobo : 0),
+    );
+    return paid + (await returnPlan(orderId)).depositRefundKobo;
+  }
+
+  /// #711 — what a Return of [orderId] does on the crate side, for the Return
+  /// pop-up: the empties to hand back to the customer (per brand, with the
+  /// brand name) and the deposit still held that will be paid back. Pure read.
+  Future<ReturnCratePlan> returnPlan(String orderId) async {
+    final empties = <String, double>{
+      ...await db.cratePoolDao.cratesReturnedForOrder(orderId),
+    };
+    final names = <ReturnEmpties>[];
+    if (empties.isNotEmpty) {
+      final brands = await (select(db.manufacturers)
+            ..where((m) => m.id.isIn(empties.keys.toList()) & whereBusiness(m)))
+          .get();
+      final nameOf = {for (final m in brands) m.id: m.name};
+      for (final e in empties.entries) {
+        names.add(ReturnEmpties(nameOf[e.key] ?? 'Crates', e.value));
+      }
+    }
+    final rows = await (select(walletTransactions)..where(
+          (t) =>
+              whereBusiness(t) &
+              t.orderId.equals(orderId) &
+              t.referenceType.isIn(const [
+                'crate_deposit',
+                'crate_deposit_refunded',
+                'crate_deposit_forfeited',
+              ]),
+        ))
+        .get();
+    var held = 0;
+    for (final r in rows) {
+      held += r.referenceType == 'crate_deposit' ? r.amountKobo : -r.amountKobo;
+    }
+    return ReturnCratePlan(
+      emptiesToHandBack: names,
+      depositRefundKobo: held > 0 ? held : 0,
+    );
   }
 
   /// Whether [orderId] may be Returned (PRD #337): `completed`, no crate history
@@ -2230,37 +2376,20 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     final order = await findById(orderId);
     if (order == null) return ReturnRefusal.notFound;
     if (order.status != 'completed') return ReturnRefusal.notCompleted;
-    final biz = requireBusinessId();
-    final crateHistory = await customSelect(
-      'SELECT 1 AS x FROM order_crate_lines WHERE business_id = ?1 AND order_id = ?2 '
-      'UNION ALL SELECT 1 FROM crate_ledger WHERE business_id = ?1 AND reference_order_id = ?2 '
-      'UNION ALL SELECT 1 FROM payment_transactions WHERE business_id = ?1 AND order_id = ?2 AND type = \'crate_deposit\' '
-      'UNION ALL SELECT 1 FROM wallet_transactions WHERE business_id = ?1 AND order_id = ?2 '
-      'AND reference_type IN (\'crate_deposit\', \'crate_deposit_refunded\', \'crate_deposit_forfeited\', \'crate_refund\') '
-      'LIMIT 1',
-      variables: [Variable<String>(biz), Variable<String>(orderId)],
-      readsFrom: {
-        db.orderCrateLines,
-        db.crateLedger,
-        paymentTransactions,
-        walletTransactions,
-      },
-    ).get();
-    if (crateHistory.isNotEmpty) return ReturnRefusal.crateBearing;
-    final lines = await (select(orderItems)
-          ..where((i) => i.orderId.equals(orderId) & whereBusiness(i)))
+    // #711 — crate sales can be Returned. The one case the rules cannot
+    // settle on their own: a deposit already KEPT at Confirm (forfeited for
+    // crates that stayed out). Taking the crates back or not, and what the
+    // kept deposit was worth, is the owner's call, not ours.
+    final kept = await (select(walletTransactions)
+          ..where(
+            (t) =>
+                whereBusiness(t) &
+                t.orderId.equals(orderId) &
+                t.referenceType.equals('crate_deposit_forfeited'),
+          )
+          ..limit(1))
         .get();
-    final productIds = lines.map((l) => l.productId).whereType<String>().toSet();
-    if (productIds.isNotEmpty) {
-      final prods = await (select(products)
-            ..where((p) => p.id.isIn(productIds.toList()) & whereBusiness(p)))
-          .get();
-      if (prods.any(
-        (p) => isCrateTrackedBottle((unit: p.unit, trackEmpties: p.trackEmpties)),
-      )) {
-        return ReturnRefusal.crateBearing;
-      }
-    }
+    if (kept.isNotEmpty) return ReturnRefusal.depositKept;
     return null;
   }
 
@@ -3676,9 +3805,9 @@ class GuardedReversal {
 enum ReturnRefusal {
   notFound('That sale could not be found.'),
   notCompleted('Only a Completed sale can be returned.'),
-  crateBearing(
-    'This sale involved crates, so it cannot be returned here. Its crate and '
-    'deposit side was already settled.',
+  depositKept(
+    'The crate deposit on this sale was kept for crates that stayed out, so '
+    'it cannot be returned here.',
   ),
   badDamagedQty('A damaged quantity is more than was sold on that line.'),
   badDamageReason('Pick a valid reason for the damaged items.'),
@@ -3689,6 +3818,23 @@ enum ReturnRefusal {
 
   const ReturnRefusal(this.message);
   final String message;
+}
+
+/// One brand's empties the cashier hands back to the customer on a Return.
+class ReturnEmpties {
+  const ReturnEmpties(this.brandName, this.crates);
+  final String brandName;
+  final double crates;
+}
+
+/// #711 — the crate side of a Return, for the pop-up.
+class ReturnCratePlan {
+  const ReturnCratePlan({
+    required this.emptiesToHandBack,
+    required this.depositRefundKobo,
+  });
+  final List<ReturnEmpties> emptiesToHandBack;
+  final int depositRefundKobo;
 }
 
 /// #710 — where refunded money goes. `balance` = stays on the named customer's

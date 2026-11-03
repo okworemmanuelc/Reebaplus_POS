@@ -1142,8 +1142,11 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
   /// returnability).
   Future<void> _returnCompletedSale(OrderWithItems item) async {
     final order = item.order;
+    final plan = await ref.read(orderServiceProvider).returnPlan(order.id);
+    if (!mounted) return;
     final input = await showReturnSaleDialog(
       context,
+      emptiesToHandBack: plan.emptiesToHandBack,
       orderNumber: order.orderNumber,
       refundLabel: formatCurrency(order.amountPaidKobo / 100.0),
       lines: [

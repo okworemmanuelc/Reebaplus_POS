@@ -21,6 +21,11 @@ const String kCheckoutExchangeReversalReason = 'checkout_exchange_reversal';
 /// issued to the customer (#709). The movement type stays `adjusted`.
 const String kOrderCancelledReason = 'order_cancelled';
 
+/// `crate_ledger.reason` on the pool row a Return of a Completed sale writes to
+/// hand back the empties the customer brought in at Confirm (#711). It lowers
+/// the shop's empty count, the same move as [kCheckoutExchangeReversalReason].
+const String kOrderReturnedEmptiesReason = 'order_returned_empties';
+
 /// Why an Empties Exchange was refused.
 enum CrateExchangeRefusal { unknownBrand, negative, notQuarterStep, moreThanTaken }
 

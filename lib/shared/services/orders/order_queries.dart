@@ -122,6 +122,10 @@ class OrderQueries {
   Future<bool> isReturnable(String orderId) =>
       _ordersDao.isReturnable(orderId);
 
+  /// #711 — empties to hand back and deposit to pay back on a Return.
+  Future<ReturnCratePlan> returnPlan(String orderId) =>
+      _ordersDao.returnPlan(orderId);
+
   static domain.Order fromDb(OrderData data) {
     return domain.Order(
       id: data.id.toString(),
