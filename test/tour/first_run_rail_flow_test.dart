@@ -17,6 +17,16 @@ class _AcknowledgedIntro extends TourIntroAcknowledgedNotifier {
   bool build() => true;
 }
 
+/// Records pushes without building anything for them.
+class _PushRecorder extends NavigatorObserver {
+  final List<Route<dynamic>> pushed = [];
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    pushed.add(route);
+  }
+}
+
 class _OwedCardHandoff extends TourCardHandoffNotifier {
   @override
   bool build() => true;
@@ -38,10 +48,15 @@ List<Override> _baseOverrides({
   ];
 }
 
-Widget _harness(ProviderContainer container, {List<Widget> targets = const []}) {
+Widget _harness(
+  ProviderContainer container, {
+  List<Widget> targets = const [],
+  List<NavigatorObserver> observers = const [],
+}) {
   return UncontrolledProviderScope(
     container: container,
     child: MaterialApp(
+      navigatorObservers: observers,
       home: Scaffold(
         body: Stack(
           children: [
@@ -362,7 +377,7 @@ void main() {
     });
 
     testWidgets(
-        'tapping "Add a product" navigates to inventory and suppresses the product pointer',
+        'tapping "Add a product" navigates to inventory and keeps the product pointer up',
         (tester) async {
       final container = ProviderContainer(
         overrides: _baseOverrides(
@@ -389,9 +404,9 @@ void main() {
       await tester.pump();
 
       expect(container.read(tourHandoffProvider), isFalse);
-      expect(container.read(tourProductPointerDismissedProvider), isTrue);
       expect(NavigationService().currentIndex.value, 2);
-      expect(find.text('Tap to add your first product'), findsNothing);
+      expect(find.text('Tap to add your first product'), findsOneWidget,
+          reason: 'the owner lands on Stock with the "+" circled (#697)');
     });
   });
 
@@ -441,23 +456,71 @@ void main() {
               'failed on this device');
     });
 
-    testWidgets(
-        'tapping caption bubble dismisses the pointer without aborting session',
+    testWidgets('tapping the caption opens Add Product (#697)',
         (tester) async {
-      final container = await pumpPointer(tester);
-      expect(find.text('Tap to add your first product'), findsOneWidget);
+      final observer = _PushRecorder();
+      final container = ProviderContainer(overrides: [
+        firstRunTourStopProvider.overrideWithValue(TourStop.addProduct),
+        tourOwnerFirstNameProvider.overrideWithValue('Okwor'),
+        tourFirstStoreNameProvider.overrideWithValue(null),
+        tourIntroAcknowledgedProvider.overrideWith(_AcknowledgedIntro.new),
+      ]);
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        _harness(
+          container,
+          observers: [observer],
+          targets: const [
+            SpotlightTarget(
+              id: SpotlightTargetId.addProductFab,
+              child: SizedBox(width: 56, height: 56),
+            ),
+          ],
+        ),
+      );
+      await tester.pump();
+      observer.pushed.clear();
 
       await tester.tap(find.text('Tap to add your first product'));
-      await tester.pump();
 
-      expect(find.text('Tap to add your first product'), findsNothing);
-      expect(container.read(tourProductPointerDismissedProvider), isTrue);
+      // Checked before the next frame: the form itself needs a database this
+      // harness does not stand up.
+      expect(observer.pushed, hasLength(1));
       expect(container.read(tourSessionAbortedProvider), isFalse);
       expect(container.read(tourDeviceAbortCountProvider), 0);
     });
 
+    testWidgets('stays hidden while the "+" is built but on another tab (#697)',
+        (tester) async {
+      final container = ProviderContainer(
+        overrides: _baseOverrides(
+          stop: TourStop.addProduct,
+          introAcknowledged: true,
+        ),
+      );
+      addTearDown(container.dispose);
+
+      // MainLayout warms every tab offstage at start-up, so the Stock "+" is
+      // registered while the owner is still on Home.
+      await tester.pumpWidget(
+        _harness(container, targets: const [
+          Offstage(
+            child: SpotlightTarget(
+              id: SpotlightTargetId.addProductFab,
+              child: SizedBox(width: 56, height: 56),
+            ),
+          ),
+        ]),
+      );
+      await tester.pump();
+
+      expect(find.text('Tap to add your first product'), findsNothing);
+      expect(find.text('Not now'), findsNothing);
+    });
+
     testWidgets(
-        'saving product when pointer was dismissed still triggers handoff to GetStartedCard',
+        'saving the first product hands off to the GetStartedCard',
         (tester) async {
       final stopSource = StateProvider<TourStop>((ref) => TourStop.addProduct);
       final container = ProviderContainer(overrides: [
@@ -467,8 +530,6 @@ void main() {
         tourIntroAcknowledgedProvider.overrideWith(_AcknowledgedIntro.new),
       ]);
       addTearDown(container.dispose);
-
-      container.read(tourProductPointerDismissedProvider.notifier).dismiss();
 
       await tester.pumpWidget(
         _harness(container, targets: const [
