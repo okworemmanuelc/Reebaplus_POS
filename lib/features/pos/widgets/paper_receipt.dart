@@ -382,7 +382,9 @@ class PaperReceipt extends StatelessWidget {
   }
 
   List<Widget> _crates() {
-    final empties = ReceiptFormat.emptiesByManufacturer(cart);
+    final empties = tracksCrates
+        ? ReceiptFormat.emptiesByManufacturer(cart)
+        : const <String, double>{};
     if (empties.isEmpty) return const [];
     final rows = buildReceiptCrateRows(
       taken: empties,

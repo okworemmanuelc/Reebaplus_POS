@@ -176,6 +176,7 @@ void main() {
     Map<String, double>? totalOwed,
     double width = 390,
     String? businessName,
+    bool tracks = true,
   }) => MaterialApp(
     home: Scaffold(
       body: SingleChildScrollView(
@@ -197,7 +198,7 @@ void main() {
             cratesTotalOwedByManufacturer: totalOwed,
             manufacturerNames: const {'m1': 'Lager Beer'},
             businessName: businessName,
-            tracksCrates: false,
+            tracksCrates: tracks,
           ),
         ),
       ),
@@ -214,6 +215,17 @@ void main() {
       'manufacturerId': 'm1',
     },
   ];
+
+  testWidgets('tracking off: no empties panel, no deposit wording (#691)',
+      (tester) async {
+    await tester.pumpWidget(
+        hostWith(items: crateItems, crateDeposit: 500, tracks: false));
+    expect(find.textContaining('refunded when'), findsNothing);
+    expect(find.textContaining('Owed'), findsNothing);
+    await tester.pumpWidget(
+        hostWith(items: crateItems, crateDeposit: 500, tracks: true));
+    expect(find.textContaining('refunded when'), findsOneWidget);
+  });
 
   testWidgets('no logo renders no logo box', (tester) async {
     await tester.pumpWidget(hostWith());

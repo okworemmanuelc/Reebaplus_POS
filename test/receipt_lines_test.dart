@@ -1,6 +1,7 @@
 // receipt_lines_test.dart — the pure text layout of the paper receipt.
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:reebaplus_pos/core/crates/crate_bearing_sale.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_lines.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
 
@@ -111,8 +112,10 @@ void main() {
       });
 
       test('details: walk-in hides Customer, named customer shows', () {
-        expect(_lines(size, customer: 'Walk-in Customer').join('\n'),
-            isNot(contains('Customer')));
+        expect(
+          _lines(size, customer: 'Walk-in Customer').join('\n'),
+          isNot(contains('Customer')),
+        );
         expect(_lines(size).join('\n'), contains('Chinedu Okafor'));
         final date = _lines(size).firstWhere((l) => l.startsWith('Date'));
         expect(date, endsWith('31/10/2026 4:52 PM'));
@@ -134,8 +137,10 @@ void main() {
       test('wallet payment reads Credit; wallet balance only when asked', () {
         expect(_lines(size, method: 'Wallet').join('\n'), contains('Credit'));
         expect(_lines(size).join('\n'), isNot(contains('Credits balance')));
-        expect(_lines(size, wallet: true).join('\n'),
-            contains('Credits balance'));
+        expect(
+          _lines(size, wallet: true).join('\n'),
+          contains('Credits balance'),
+        );
       });
 
       test('VAT line only when given', () {
@@ -210,9 +215,9 @@ void main() {
 
     test('80mm: columns carry Returned and Owed; no total for a walk-in', () {
       final l = _lines(ReceiptPaperSize.mm80, cart: five, returned: {'m1': 3});
-      final r = l.skipWhile((x) => x != 'EMPTY CRATES').firstWhere(
-        (x) => x.startsWith('Lager Beer 60cl '),
-      );
+      final r = l
+          .skipWhile((x) => x != 'EMPTY CRATES')
+          .firstWhere((x) => x.startsWith('Lager Beer 60cl '));
       expect(r.substring(24, 32).trim(), '5');
       expect(r.substring(32, 42).trim(), '3');
       expect(r.substring(42).trim(), '2');
@@ -335,6 +340,39 @@ void main() {
     test('totals block sits in the right part of the line', () {
       final s = l.firstWhere((x) => x.contains('Subtotal'));
       expect(s.startsWith(' ' * 16), isTrue);
+    });
+  });
+
+  group('crate gate (#691)', () {
+    List<ReceiptLine> build(bool tracks) => buildReceiptLines(
+      paperSize: ReceiptPaperSize.mm58,
+      orderId: 'X',
+      cart: _cart,
+      subtotal: 100,
+      crateDeposit: 2000,
+      total: 100,
+      paymentMethod: 'Cash',
+      tracksCrates: tracks,
+      manufacturerNames: const {'m1': 'Lager'},
+    );
+    String text(List<ReceiptLine> l) =>
+        l.map((e) => e.segments.map((s) => s.text).join()).join('\n');
+
+    test('tracking off: no empties section, no deposit wording', () {
+      final t = text(build(false)).toUpperCase();
+      expect(t.contains('EMPTY CRATES'), isFalse);
+      expect(t.contains('REFUNDED WHEN'), isFalse);
+    });
+    test('tracking on: section shown', () {
+      expect(text(build(true)).toUpperCase().contains('EMPTY CRATES'), isTrue);
+    });
+    test('crateTrackingOn matches the createOrder rule', () {
+      bool on(String? t, bool? x) =>
+          crateTrackingOn(businessType: t, tracksEmptyCrates: x);
+      expect(on('Bar', false), isFalse);
+      expect(on('Bar', true), isTrue);
+      expect(on('Bar', null), isTrue);
+      expect(on('Supermarket', true), isFalse);
     });
   });
 }

@@ -8,6 +8,7 @@ library;
 import 'dart:async';
 
 import 'package:drift/drift.dart' show innerJoin;
+import 'package:reebaplus_pos/core/crates/crate_bearing_sale.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -554,8 +555,10 @@ final currentBusinessProvider = Provider.autoDispose<BusinessData?>((ref) {
 /// [BusinessData] row from [currentBusinessProvider]. Returns false when null.
 bool businessTracksCrates(BusinessData? business) {
   if (business == null) return false;
-  if (!isCrateBusiness(business.type)) return false;
-  return business.tracksEmptyCrates;
+  return crateTrackingOn(
+    businessType: business.type,
+    tracksEmptyCrates: business.tracksEmptyCrates,
+  );
 }
 
 /// "We sell at one price" (#493, option A): the owner's Business Info

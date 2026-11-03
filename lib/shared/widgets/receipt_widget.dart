@@ -613,6 +613,7 @@ class ReceiptWidget extends StatelessWidget {
         '$h12:${dt.minute.toString().padLeft(2, '0')}\u00A0$ampm';
   }
 
-  Map<String, double> _computeEmpties() =>
-      ReceiptFormat.emptiesByManufacturer(cart);
+  Map<String, double> _computeEmpties() => tracksCrates
+      ? ReceiptFormat.emptiesByManufacturer(cart)
+      : const <String, double>{};
 }

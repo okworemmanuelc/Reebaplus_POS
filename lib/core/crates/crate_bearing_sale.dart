@@ -9,6 +9,15 @@ typedef CrateProductFacts = ({String? unit, bool trackEmpties});
 bool isCrateTrackedBottle(CrateProductFacts p) =>
     p.unit?.toLowerCase() == 'bottle' && p.trackEmpties;
 
+/// **THE business-level crate switch**: crate business type AND the owner has
+/// not turned empties tracking off (`null` = true, the column default).
+/// Shared by `createOrder`, [businessTracksCrates] and every receipt, so the
+/// books and the paper cannot drift apart (#691).
+bool crateTrackingOn({
+  required String? businessType,
+  required bool? tracksEmptyCrates,
+}) => isCrateBusiness(businessType) && (tracksEmptyCrates ?? true);
+
 /// **THE crate-bearing-sale rule** (§13.4 / rule #13, PRD #337).
 ///
 /// A Sale is *crate-bearing* when ALL of these hold:
@@ -32,7 +41,11 @@ bool isCrateBearingSale({
   required bool? tracksEmptyCrates,
   required Iterable<CrateProductFacts> products,
 }) {
-  if (!isCrateBusiness(businessType)) return false;
-  if (!(tracksEmptyCrates ?? true)) return false;
+  if (!crateTrackingOn(
+    businessType: businessType,
+    tracksEmptyCrates: tracksEmptyCrates,
+  )) {
+    return false;
+  }
   return products.any(isCrateTrackedBottle);
 }

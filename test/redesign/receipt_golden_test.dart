@@ -60,7 +60,7 @@ void main() {
                   vatRateBps: 750,
                   vatIncluded: 1342.5,
                   manufacturerNames: const {'m1': 'Lager Beer 60cl'},
-                  tracksCrates: false,
+                  tracksCrates: true,
                 ),
               ),
             ),
