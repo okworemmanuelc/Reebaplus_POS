@@ -202,7 +202,12 @@ class _OnlineOrderDetailScreenState
         if (!await printer.requestPermissions() || !mounted) return false;
         final target = await prepareReceiptPrinter(context, printer);
         if (!target.connected) return false;
-        return printer.printBytes(await s.toBytes(target.paperSize));
+        return printer.printBytes(
+          await s.toBytes(
+            target.paperSize,
+            receiptSize: await printer.currentReceiptSize(),
+          ),
+        );
       },
       share: (text) =>
           Share.share(text, subject: 'Order slip ${order.reference}'),

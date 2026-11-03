@@ -1470,6 +1470,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       Future<List<int>> buildBytes(ReceiptPaperSize paperSize) async =>
           ThermalReceiptService.buildReceipt(
             printStyle: await printer.currentPrintStyle(),
+            receiptSize: await printer.currentReceiptSize(),
             orderId: order.orderNumber,
             cart: receiptMapping,
             subtotal: totals.subtotalKobo / 100.0,

@@ -19,6 +19,8 @@ class PrinterService {
   // Per-printer paper size: `printer_paper_size:<mac>`.
   static const _paperSizeKeyPrefix = 'printer_paper_size:';
   static const _printStyleKeyPrefix = 'printer_print_style:';
+  // Per-printer receipt size (#676): `full` | `compact`.
+  static const _receiptSizeKeyPrefix = 'printer_receipt_size:';
 
   // Settle window for Android Bluetooth SPP link before commands can be processed.
   static const _androidConnectSettle = Duration(milliseconds: 1000);
@@ -205,6 +207,27 @@ class PrinterService {
     await prefs.setString('$_printStyleKeyPrefix$mac', style.name);
   }
 
+  /// The receipt size saved for the printer at [mac]; full when unset (#676).
+  Future<ReceiptSize> receiptSizeFor(String mac) async {
+    final prefs = await SharedPreferences.getInstance();
+    return ReceiptSize.fromStorage(
+      prefs.getString('$_receiptSizeKeyPrefix$mac'),
+    );
+  }
+
+  /// Saves the receipt size for the printer at [mac].
+  Future<void> saveReceiptSizeFor(String mac, ReceiptSize size) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('$_receiptSizeKeyPrefix$mac', size.name);
+  }
+
+  /// The receipt size of the printer receipts go to right now (see
+  /// [currentPrinterId]); full when there is none.
+  Future<ReceiptSize> currentReceiptSize() async {
+    final id = await currentPrinterId();
+    return id == null ? ReceiptSize.full : receiptSizeFor(id);
+  }
+
   /// The print style of the printer receipts go to right now (see
   /// [currentPrinterId]); text when there is none.
   Future<ReceiptPrintStyle> currentPrintStyle() async {
@@ -288,8 +311,30 @@ class PrinterService {
       businessName: businessName,
       paperSize: await paperSizeFor(id) ?? ReceiptPaperSize.mm80,
       printStyle: await printStyleFor(id),
+      receiptSize: await receiptSizeFor(id),
     );
     return _usb.write(id, bytes);
+  }
+
+  /// Sends the same test slip to the Bluetooth printer [mac] (#676), so the
+  /// owner can check Font B / Compact on a real printer. Connects first if
+  /// needed. True when it printed.
+  Future<bool> testPrintBluetooth(String mac, {String? businessName}) async {
+    try {
+      if (!await isConnected || await lastConnectedMac() != mac) {
+        if (!await connect(mac)) return false;
+      }
+      final bytes = buildTestPrintBytes(
+        businessName: businessName,
+        paperSize: await paperSizeFor(mac) ?? ReceiptPaperSize.mm58,
+        printStyle: await printStyleFor(mac),
+        receiptSize: await receiptSizeFor(mac),
+      );
+      return await _writeJob(bytes);
+    } catch (e) {
+      AppLogger.error('Bluetooth test print failed: $e');
+      return false;
+    }
   }
 
   /// A plain ESC/POS test slip: business name, "Test print", paper size and
@@ -299,14 +344,19 @@ class PrinterService {
     String? businessName,
     required ReceiptPaperSize paperSize,
     required ReceiptPrintStyle printStyle,
+    ReceiptSize receiptSize = ReceiptSize.full,
   }) {
     List<int> line(String text) => [
       for (final c in text.codeUnits) (c >= 0x20 && c < 0x7F) ? c : 0x3F,
       0x0A,
     ];
     final name = (businessName ?? '').trim();
+    final compact = receiptSize == ReceiptSize.compact;
+    final fontB = compact && paperSize == ReceiptPaperSize.mm58;
+    final cols = compact ? paperSize.compactCharsPerLine : 0;
     return [
       0x1B, 0x40, // ESC @ initialise
+      if (fontB) ...[0x1B, 0x4D, 0x01], // ESC M 1 Font B (42 columns)
       0x1B, 0x61, 0x01, // ESC a 1 centre
       if (name.isNotEmpty) ...[
         0x1B, 0x45, 0x01, // bold on
@@ -320,6 +370,15 @@ class PrinterService {
       ...line(
         'Style: ${printStyle == ReceiptPrintStyle.text ? 'Text' : 'Picture'}',
       ),
+      if (compact) ...[
+        ...line('Size: Compact'),
+        0x1B, 0x61, 0x00, // ESC a 0 left
+        // A ruler as wide as the receipt: if it wraps, the font is wrong.
+        ...line(
+          List.generate(cols, (i) => (i + 1) % 10 == 0 ? '0' : '${(i + 1) % 10}')
+              .join(),
+        ),
+      ],
       0x1B, 0x64, 0x04, // ESC d 4 feed
       0x1D, 0x56, 0x42, 0x00, // GS V B 0 feed + partial cut
     ];

@@ -1809,6 +1809,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         ReceiptPaperSize paperSize,
       ) async => ThermalReceiptService.buildReceipt(
         printStyle: await printer.currentPrintStyle(),
+            receiptSize: await printer.currentReceiptSize(),
         orderId: _currentOrderId,
         cart: widget.cart,
         subtotal: widget.subtotal,

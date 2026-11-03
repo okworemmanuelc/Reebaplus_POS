@@ -39,6 +39,11 @@ Future<PrinterService> _pump(
   FakeUsbPrinterChannel? usb,
 }) async {
   final printer = _FakePrinterService(usb: usb);
+  // Each card carries more controls now (print size, #676): tall enough
+  // that the lazy list builds every card.
+  tester.view.physicalSize = const Size(800, 4000);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
@@ -71,17 +76,13 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('a printer not set up yet says it will be asked', (
-    tester,
-  ) async {
+  testWidgets('a printer not set up yet says it will be asked', (tester) async {
     await _pump(tester);
 
     expect(find.text('Not set yet. Asked on first print'), findsNWidgets(2));
   });
 
-  testWidgets('choosing a size saves it for that printer only', (
-    tester,
-  ) async {
+  testWidgets('choosing a size saves it for that printer only', (tester) async {
     SharedPreferences.setMockInitialValues({
       'printer_paper_size:$_small': 'mm58',
     });
@@ -95,21 +96,23 @@ void main() {
     expect(await printer.paperSizeFor(_small), ReceiptPaperSize.mm58);
   });
 
-  testWidgets('print style defaults to text and switching saves it per printer',
-      (tester) async {
-    final printer = await _pump(tester);
-    expect(await printer.printStyleFor(_large), ReceiptPrintStyle.text);
-    expect(find.text('Text: fast and sharp (recommended)'), findsNWidgets(2));
+  testWidgets(
+    'print style defaults to text and switching saves it per printer',
+    (tester) async {
+      final printer = await _pump(tester);
+      expect(await printer.printStyleFor(_large), ReceiptPrintStyle.text);
+      expect(find.text('Text: fast and sharp (recommended)'), findsNWidgets(2));
 
-    await tester.ensureVisible(find.text('Picture').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Picture').last);
-    await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Picture').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Picture').last);
+      await tester.pumpAndSettle();
 
-    expect(await printer.printStyleFor(_large), ReceiptPrintStyle.picture);
-    expect(await printer.printStyleFor(_small), ReceiptPrintStyle.text);
-    expect(find.text('Picture: matches the design exactly'), findsOneWidget);
-  });
+      expect(await printer.printStyleFor(_large), ReceiptPrintStyle.picture);
+      expect(await printer.printStyleFor(_small), ReceiptPrintStyle.text);
+      expect(find.text('Picture: matches the design exactly'), findsOneWidget);
+    },
+  );
 
   group('USB printers (#614)', () {
     testWidgets('a plugged-in USB printer is listed first at 80mm + Text', (
@@ -125,7 +128,10 @@ void main() {
       final btY = tester.getTopLeft(find.text('Counter printer')).dy;
       expect(usbY, lessThan(btY));
       expect(await printer.paperSizeFor('usb:1208:514'), ReceiptPaperSize.mm80);
-      expect(await printer.printStyleFor('usb:1208:514'), ReceiptPrintStyle.text);
+      expect(
+        await printer.printStyleFor('usb:1208:514'),
+        ReceiptPrintStyle.text,
+      );
       expect(tester.takeException(), isNull);
     });
 
@@ -157,8 +163,10 @@ void main() {
       await _pump(tester, usb: FakeUsbPrinterChannel());
 
       expect(
-        find.text('Plug an 80mm USB receipt printer into this tablet to use '
-            'it.'),
+        find.text(
+          'Plug an 80mm USB receipt printer into this tablet to use '
+          'it.',
+        ),
         findsOneWidget,
       );
     });
@@ -169,4 +177,19 @@ void main() {
       expect(find.byKey(const Key('usb-printer-help')), findsNothing);
     });
   });
+
+  testWidgets(
+    'print size defaults to Full and switching saves it per printer (#676)',
+    (tester) async {
+      final printer = await _pump(tester);
+      expect(await printer.receiptSizeFor(_small), ReceiptSize.full);
+
+      await tester.tap(find.text('Compact').last);
+      await tester.pumpAndSettle();
+
+      expect(await printer.receiptSizeFor(_large), ReceiptSize.compact);
+      expect(await printer.receiptSizeFor(_small), ReceiptSize.full);
+      expect(find.byKey(const Key('bt-test-print-$_small')), findsOneWidget);
+    },
+  );
 }

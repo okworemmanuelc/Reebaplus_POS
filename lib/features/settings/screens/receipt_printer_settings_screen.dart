@@ -12,6 +12,7 @@ import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
+import 'package:reebaplus_pos/shared/services/printer_service.dart';
 import 'package:reebaplus_pos/shared/services/usb_printer_channel.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
@@ -41,6 +42,7 @@ class _ReceiptPrinterSettingsScreenState
   String? _testingId;
   Map<String, ReceiptPaperSize?> _sizes = {};
   Map<String, ReceiptPrintStyle> _styles = {};
+  Map<String, ReceiptSize> _receiptSizes = {};
   String? _lastMac;
 
   @override
@@ -57,6 +59,7 @@ class _ReceiptPrinterSettingsScreenState
     final supportsUsb = printer.supportsUsb;
     final sizes = <String, ReceiptPaperSize?>{};
     final styles = <String, ReceiptPrintStyle>{};
+    final receiptSizes = <String, ReceiptSize>{};
     String? lastMac;
     if (supportsUsb) {
       // Opening this screen is setting up: ask Android for access to any
@@ -65,6 +68,7 @@ class _ReceiptPrinterSettingsScreenState
       for (final u in usbPrinters) {
         sizes[u.id] = await printer.paperSizeFor(u.id);
         styles[u.id] = await printer.printStyleFor(u.id);
+        receiptSizes[u.id] = await printer.receiptSizeFor(u.id);
       }
     }
     try {
@@ -74,6 +78,7 @@ class _ReceiptPrinterSettingsScreenState
       for (final d in devices) {
         sizes[d.macAdress] = await printer.paperSizeFor(d.macAdress);
         styles[d.macAdress] = await printer.printStyleFor(d.macAdress);
+        receiptSizes[d.macAdress] = await printer.receiptSizeFor(d.macAdress);
       }
     } catch (_) {
       // No Bluetooth adapter / read failed — show the empty state.
@@ -91,6 +96,7 @@ class _ReceiptPrinterSettingsScreenState
       _supportsUsb = supportsUsb;
       _sizes = sizes;
       _styles = styles;
+      _receiptSizes = receiptSizes;
       _lastMac = lastMac;
       _loading = false;
     });
@@ -106,14 +112,31 @@ class _ReceiptPrinterSettingsScreenState
     await ref.read(printerServiceProvider).savePrintStyleFor(mac, style);
   }
 
-  Future<void> _testPrint(UsbPrinterInfo usb) async {
-    setState(() => _testingId = usb.id);
-    final ok = await ref
-        .read(printerServiceProvider)
-        .testPrintUsb(
-          usb.id,
-          businessName: ref.read(currentBusinessNameProvider),
-        );
+  Future<void> _setReceiptSize(String id, ReceiptSize size) async {
+    setState(() => _receiptSizes[id] = size);
+    await ref.read(printerServiceProvider).saveReceiptSizeFor(id, size);
+  }
+
+  Future<void> _testPrint(UsbPrinterInfo usb) => _runTestPrint(
+    usb.id,
+    (printer, name) => printer.testPrintUsb(usb.id, businessName: name),
+  );
+
+  Future<void> _testPrintBluetooth(BluetoothInfo device) => _runTestPrint(
+    device.macAdress,
+    (printer, name) =>
+        printer.testPrintBluetooth(device.macAdress, businessName: name),
+  );
+
+  Future<void> _runTestPrint(
+    String id,
+    Future<bool> Function(PrinterService printer, String? businessName) send,
+  ) async {
+    setState(() => _testingId = id);
+    final ok = await send(
+      ref.read(printerServiceProvider),
+      ref.read(currentBusinessNameProvider),
+    );
     if (!mounted) return;
     setState(() => _testingId = null);
     if (ok) {
@@ -216,6 +239,16 @@ class _ReceiptPrinterSettingsScreenState
           : size == null
           ? 'Not set yet. Asked on first print'
           : device.macAdress,
+      footer: AppButton(
+        key: Key('bt-test-print-${device.macAdress}'),
+        text: 'Test print',
+        variant: AppButtonVariant.outline,
+        icon: AppIcons.print,
+        isLoading: _testingId == device.macAdress,
+        onPressed: _testingId == device.macAdress
+            ? null
+            : () => _testPrintBluetooth(device),
+      ),
     );
   }
 
@@ -234,9 +267,7 @@ class _ReceiptPrinterSettingsScreenState
         variant: AppButtonVariant.outline,
         icon: AppIcons.print,
         isLoading: testing,
-        onPressed: testing || !usb.hasPermission
-            ? null
-            : () => _testPrint(usb),
+        onPressed: testing || !usb.hasPermission ? null : () => _testPrint(usb),
       ),
     );
   }
@@ -250,7 +281,9 @@ class _ReceiptPrinterSettingsScreenState
   }) {
     final size = _sizes[id];
     final style = _styles[id] ?? ReceiptPrintStyle.text;
-    final muted = Theme.of(context).textTheme.bodySmall?.color ??
+    final receiptSize = _receiptSizes[id] ?? ReceiptSize.full;
+    final muted =
+        Theme.of(context).textTheme.bodySmall?.color ??
         Theme.of(context).colorScheme.onSurface;
 
     return SettingsCard(
@@ -315,6 +348,35 @@ class _ReceiptPrinterSettingsScreenState
             style == ReceiptPrintStyle.text
                 ? 'Text: fast and sharp (recommended)'
                 : 'Picture: matches the design exactly',
+            style: context.regularStyle(12).copyWith(color: muted),
+          ),
+          SizedBox(height: context.getRSize(14)),
+          Text('Print size', style: context.regularStyle(13)),
+          SizedBox(height: context.getRSize(6)),
+          SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<ReceiptSize>(
+              key: Key('receipt-size-$id'),
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: ReceiptSize.full, label: Text('Full')),
+                ButtonSegment(
+                  value: ReceiptSize.compact,
+                  label: Text('Compact'),
+                ),
+              ],
+              selected: {receiptSize},
+              onSelectionChanged: (selection) {
+                if (selection.isEmpty) return;
+                _setReceiptSize(id, selection.first);
+              },
+            ),
+          ),
+          SizedBox(height: context.getRSize(6)),
+          Text(
+            receiptSize == ReceiptSize.full
+                ? 'Full: the normal receipt'
+                : 'Compact: smaller text, no logo or address, uses less paper',
             style: context.regularStyle(12).copyWith(color: muted),
           ),
           if (footer != null) ...[

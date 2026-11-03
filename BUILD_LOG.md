@@ -370,3 +370,6 @@ New entries: add a compact bullet at the top of the current month, same format â
 
 ## 2026-11-03 - Receipt hides Empty Crates when business does not track empties (#691)
 - New shared rule crateTrackingOn() in lib/core/crates/crate_bearing_sale.dart, used by createOrder, businessTracksCrates, isCrateBearingSale and (via tracksCrates) the text, paper and phone receipts. Off = no EMPTY CRATES section and no deposit wording. Goldens unchanged.
+
+## 2026-11-03 - Compact receipt size (#676)
+Per-printer Full/Compact print size; Compact is text-only (58mm Font B 42 cols, 80mm 48 cols). Verified with receipt_compact_test, receipt_full_identity_test (Full unchanged), printer_service_test, settings screen test. Real 58mm print still to be confirmed by the owner.

@@ -151,6 +151,28 @@ class _Col {
   });
 }
 
+/// The short type tag printed after an item name on a Compact receipt (#676),
+/// so same-name products of different units never look alike. Null for units
+/// without a tag.
+String? receiptUnitTag(Object? unit) => switch (unit
+    ?.toString()
+    .trim()
+    .toLowerCase()) {
+  'bottle' => 'Btl',
+  'pet' => 'Pet',
+  'can' => 'Can',
+  'carton' => 'Ctn',
+  'pack' => 'Pck',
+  _ => null,
+};
+
+const _unitTagLegend = {
+  'Btl': 'Bottle',
+  'Pet': 'PET',
+  'Ctn': 'Carton',
+  'Pck': 'Pack',
+};
+
 /// Everything a text receipt needs; mirrors `ThermalReceiptService.buildReceipt`
 /// (the logo is reduced to [hasLogo]).
 List<ReceiptLine> buildReceiptLines({
@@ -185,9 +207,13 @@ List<ReceiptLine> buildReceiptLines({
   double? crateDepositFull,
   Map<String, String>? manufacturerNames,
   bool hasLogo = false,
+  ReceiptSize receiptSize = ReceiptSize.full,
 }) {
-  final wide = paperSize == ReceiptPaperSize.mm80;
-  final w = paperSize.charsPerLine;
+  final compact = receiptSize == ReceiptSize.compact;
+  // Compact (#676) always uses the narrow single-column layout, at the
+  // Font-B / Font-A column count.
+  final wide = paperSize == ReceiptPaperSize.mm80 && !compact;
+  final w = compact ? paperSize.compactCharsPerLine : paperSize.charsPerLine;
   final lines = <ReceiptLine>[];
 
   ReceiptSegment seg(String t, {bool bold = false}) =>
@@ -273,7 +299,7 @@ List<ReceiptLine> buildReceiptLines({
     stamp('REFUNDED ${receiptMoney(refundAmount ?? total)}');
   }
 
-  if (hasLogo) lines.add(const ReceiptLine.logo());
+  if (hasLogo && !compact) lines.add(const ReceiptLine.logo());
 
   // Header.
   final name = (businessName ?? '').trim();
@@ -287,9 +313,9 @@ List<ReceiptLine> buildReceiptLines({
     );
   }
   final addr = (storeAddress ?? '').trim();
-  if (addr.isNotEmpty) centered(addr);
+  if (addr.isNotEmpty && !compact) centered(addr);
   final phone = (businessPhone ?? '').trim();
-  final email = (businessEmail ?? '').trim();
+  final email = compact ? '' : (businessEmail ?? '').trim();
   final phoneLine = phone.isEmpty ? '' : 'Tel: $phone';
   if (wide && phoneLine.isNotEmpty && email.isNotEmpty) {
     final one = receiptSafe('$phoneLine | $email');
@@ -320,6 +346,8 @@ List<ReceiptLine> buildReceiptLines({
   const qtyW = 5;
   const priceW = 10;
   const amtW = 11;
+  const cQtyW = 5;
+  const cAmtW = 11;
   if (wide) {
     columns([
       const _Col('ITEM', 22, bold: true),
@@ -327,15 +355,46 @@ List<ReceiptLine> buildReceiptLines({
       const _Col('PRICE', 10, right: true, bold: true),
       const _Col('AMOUNT', 11, right: true, bold: true),
     ]);
+  } else if (compact) {
+    columns([
+      _Col('ITEM', w - cQtyW - cAmtW, bold: true),
+      const _Col('QTY', cQtyW, right: true, bold: true),
+      const _Col('AMOUNT', cAmtW, right: true, bold: true),
+    ]);
   } else {
     lr('ITEM', 'AMOUNT', boldL: true, boldR: true);
   }
+  final usedTags = <String>{};
   for (final item in cart) {
     final qty = ReceiptFormat.num(item['qty']);
     final price = ReceiptFormat.num(item['price']);
     final amount = ReceiptFormat.lineAmount(price, qty);
     final label = productDisplayName(item['name'].toString());
     final q = ReceiptFormat.qty(qty);
+    if (compact) {
+      final tag = receiptUnitTag(item['unit']);
+      if (tag != null && _unitTagLegend.containsKey(tag)) usedTags.add(tag);
+      final nameW = w - cQtyW - cAmtW;
+      // Wrap the name, then keep the type tag on the last name line.
+      final nameLines = wrapReceiptText(receiptSafe(label), nameW - 1);
+      if (nameLines.isEmpty) nameLines.add('');
+      if (tag != null) {
+        if (nameLines.last.length + 1 + tag.length <= nameW - 1) {
+          nameLines.last = '${nameLines.last} $tag'.trim();
+        } else {
+          nameLines.add(tag);
+        }
+      }
+      columns([
+        _Col(nameLines.first, nameW, bold: true),
+        _Col(q, cQtyW, right: true),
+        _Col(receiptMoney(amount), cAmtW, right: true, bold: true),
+      ]);
+      for (final more in nameLines.skip(1)) {
+        columns([_Col(more, nameW, bold: true)]);
+      }
+      continue;
+    }
     dashed();
     if (wide) {
       columns([
@@ -348,6 +407,17 @@ List<ReceiptLine> buildReceiptLines({
       columns([_Col(label, w, bold: true)]);
       lr('$q x ${receiptMoney(price)}', receiptMoney(amount), boldR: true);
     }
+  }
+  if (compact && usedTags.isNotEmpty) {
+    columns([
+      _Col(
+        [
+          for (final e in _unitTagLegend.entries)
+            if (usedTags.contains(e.key)) '${e.key}=${e.value}',
+        ].join(' '),
+        w,
+      ),
+    ]);
   }
   section();
 
@@ -426,7 +496,18 @@ List<ReceiptLine> buildReceiptLines({
         .compareTo(manufacturerNames?[b.manufacturerId] ?? 'Unknown'));
     section();
     lines.add(ReceiptLine.text([seg('EMPTY CRATES', bold: true)]));
-    if (wide) {
+    if (compact) {
+      // #656 figures for THIS sale; same rows and gate as the Full receipt.
+      for (final r in rows) {
+        final nm = manufacturerNames?[r.manufacturerId] ?? 'Unknown';
+        columns([_Col(nm, w, bold: true)]);
+        lr(
+          'Took ${ReceiptFormat.qty(r.taken)}  Ret ${ReceiptFormat.qty(r.returned)}',
+          'Owed ${ReceiptFormat.qty(r.owed)}',
+          boldR: true,
+        );
+      }
+    } else if (wide) {
       columns([
         const _Col('Product', 24),
         const _Col('Taken', 8, right: true),
@@ -434,6 +515,7 @@ List<ReceiptLine> buildReceiptLines({
         const _Col('Owed', 6, right: true),
       ]);
     }
+    if (!compact) {
     for (final r in rows) {
       final nm = manufacturerNames?[r.manufacturerId] ?? 'Unknown';
       if (wide) {
@@ -460,6 +542,7 @@ List<ReceiptLine> buildReceiptLines({
         }
       }
     }
+    }
     for (final r in rows) {
       if (r.totalOwed == null) continue;
       columns([
@@ -482,7 +565,7 @@ List<ReceiptLine> buildReceiptLines({
   }
 
   // Footer.
-  dashed();
+  if (!compact) dashed();
   centered('Powered by Reebaplus');
   lines.add(const ReceiptLine.feed(2));
   return lines;

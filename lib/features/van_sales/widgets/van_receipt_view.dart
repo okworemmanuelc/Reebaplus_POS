@@ -244,6 +244,7 @@ class _VanReceiptViewState extends ConsumerState<VanReceiptView> {
       Future<List<int>> buildBytes(ReceiptPaperSize paperSize) async =>
           ThermalReceiptService.buildReceipt(
             printStyle: await printer.currentPrintStyle(),
+            receiptSize: await printer.currentReceiptSize(),
             orderId: widget.orderNumber,
             cart: widget.cart,
             subtotal: widget.totalKobo / 100.0,

@@ -152,14 +152,23 @@ class OnlineOrderSlip {
   }
 
   /// ESC/POS bytes for the thermal printer, laid out for [paperSize].
-  Future<List<int>> toBytes(ReceiptPaperSize paperSize) async {
+  Future<List<int>> toBytes(
+    ReceiptPaperSize paperSize, {
+    ReceiptSize receiptSize = ReceiptSize.full,
+  }) async {
     final generator = Generator(paperSize.escPos, await CapabilityProfile.load());
-    final width = paperSize.charsPerLine;
+    // Compact (#676): 58mm in Font B at 42 columns, 80mm at its 48.
+    final compact = receiptSize == ReceiptSize.compact;
+    final width =
+        compact ? paperSize.compactCharsPerLine : paperSize.charsPerLine;
     // Thermal fonts have no currency glyphs beyond ASCII: same swap the sale
     // receipt makes.
     String money(int kobo) => _money(kobo).replaceAll('₦', 'N');
     const center = PosStyles(align: PosAlign.center);
     var bytes = <int>[...generator.reset()];
+    if (compact && paperSize == ReceiptPaperSize.mm58) {
+      bytes += generator.setGlobalFont(PosFontType.fontB);
+    }
     bytes += generator.text(
       businessName,
       styles: const PosStyles(
