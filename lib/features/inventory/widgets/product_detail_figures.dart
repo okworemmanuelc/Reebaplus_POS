@@ -9,7 +9,8 @@ import 'package:reebaplus_pos/shared/widgets/redesign/product_tile.dart'
 ///
 /// Built from the manufacturer, the unit ([unitLabel]) and the "how many in
 /// one" count. Parts that are missing are left out. A Bottle product with no
-/// count reads "Bottle Crate"; with one it reads "Crate of 12 bottles". A Pack,
+/// count reads "Bottle" (#675); with one, in a crate shop, it reads "Crate of
+/// 12 bottles". A Pack,
 /// Carton or Box with a count reads "Pack of 24 pieces". The count never
 /// changes any other unit's words. [crates] is whether the shop counts empty
 /// crates: only then is a Bottle a crate; otherwise it reads plain "Bottle".
@@ -40,7 +41,7 @@ String? _kindWords(String? unit, int? count, bool crates) {
       return '$u of $n ${n == 1 ? 'piece' : 'pieces'}';
     }
   }
-  return unitLabel(u, crates: crates);
+  return unitLabel(u);
 }
 
 /// Profit as a whole percent of the selling price: `(price − cost) / price`,

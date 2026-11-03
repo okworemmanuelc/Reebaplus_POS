@@ -3,20 +3,18 @@
 /// preview's detail line and the profit rows. No widgets, no database.
 ///
 /// [crates] is `businessTracksCrates(business)`: only a shop that counts empty
-/// crates reads a Bottle product as "Bottle Crate" / "crates". Anywhere else a
-/// Bottle is a plain bottle.
+/// crates gets the crate pack wording ("Bottles in one crate", "Crate of 12").
+/// The unit itself always reads "Bottle" / "bottles" (#675).
 library;
 
 import 'package:reebaplus_pos/core/utils/product_unit.dart';
 import 'package:reebaplus_pos/features/inventory/models/fast_add_product_model.dart';
 
 /// The on-screen label for [unit] in the form (chips, preview).
-String? formUnitLabel(String? unit, {required bool crates}) =>
-    unitLabel(unit, crates: crates);
+String? formUnitLabel(String? unit) => unitLabel(unit);
 
 /// The count word after a number ("20 crates", "1 bottle", "3 units").
-String formCountNoun(String? unit, num count, {required bool crates}) =>
-    unitCountNoun(unit, count, crates: crates);
+String formCountNoun(String? unit, num count) => unitCountNoun(unit, count);
 
 /// The label of the "how many in one" box for [unit], or null when the unit
 /// has no such box ([unitTakesPackCount]).
@@ -41,7 +39,7 @@ String pricingSubtitle(String? unit, {required bool crates}) =>
 /// is no unit.
 String priceUnitNoun(String? unit, {required bool crates}) {
   final blank = unit == null || unit.trim().isEmpty;
-  return blank ? 'item' : formCountNoun(unit, 1, crates: crates);
+  return blank ? 'item' : formCountNoun(unit, 1);
 }
 
 /// The preview card's detail line: the pack ("Crate of 12", or the unit's
@@ -59,10 +57,13 @@ String previewDetailLine({
 }) {
   final String? pack;
   if (unitsPerPack != null && unitTakesPackCount(unit, crates: crates)) {
-    final noun = formCountNoun(unit, 1, crates: crates);
+    // The pack wording keeps the crate (#675 changes only the unit's name):
+    // a crate shop's Bottle with a count reads "Crate of 12".
+    final isCrate = crates && unit?.trim().toLowerCase() == 'bottle';
+    final noun = isCrate ? 'crate' : formCountNoun(unit, 1);
     pack = '${noun[0].toUpperCase()}${noun.substring(1)} of $unitsPerPack';
   } else {
-    pack = formUnitLabel(unit, crates: crates);
+    pack = formUnitLabel(unit);
   }
   final cat = category?.trim();
   return [

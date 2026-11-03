@@ -64,7 +64,7 @@ abstract final class AddProductKeys {
   static const saveAndNew = ValueKey('add-product-save-and-new');
   static const preview = ValueKey('add-product-preview');
 
-  /// One unit chip, by its SAVED value ("Bottle", shown as "Bottle Crate").
+  /// One unit chip, by its SAVED value ("Bottle").
   static ValueKey<String> unitChip(String unit) =>
       ValueKey('add-product-unit-$unit');
 }
@@ -783,8 +783,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   }
 
   /// §13.4 / rule #13 — empty-crate tracking only exists for Bar / Beer
-  /// Distributor businesses. It also decides the unit words (#487): only such
-  /// a shop reads a Bottle as "Bottle Crate" / "crates". Gate it on the business type — otherwise a
+  /// Distributor businesses. It also decides the crate pack wording (#487):
+  /// only such a shop reads "Bottles in one crate". Gate it on the business type — otherwise a
   /// non-crate business would silently create trackEmpties products (which
   /// leak the crate deposit UI into the cart/checkout and accrue crate-owed
   /// ledger rows).
@@ -1786,15 +1786,14 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
           spacing: context.getRSize(8),
           runSpacing: context.getRSize(8),
           children: [
-            // Plain "Crate" is not offered to a new product (#487); a stored
-            // Bottle reads "Bottle Crate" but saves Bottle.
+            // Plain "Crate" is not offered to a new product (#487).
             for (final u in unitChoices(
               _dynamicUnits,
               keep: [_unit, widget.editProduct?.unit],
             ))
               ProductUnitChip(
                 key: AddProductKeys.unitChip(u),
-                label: formUnitLabel(u, crates: _isCrateBusiness)!,
+                label: formUnitLabel(u)!,
                 selected: _unit == u,
                 onTap: () => _onUnitTapped(u),
               ),
@@ -1985,9 +1984,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
               controller: _initialStockCtrl,
               hintText: '0',
               textAlign: TextAlign.center,
-              suffixText: sideBySide
-                  ? null
-                  : formCountNoun(_unit, quantity, crates: _isCrateBusiness),
+              suffixText: sideBySide ? null : formCountNoun(_unit, quantity),
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             ),
@@ -1996,9 +1993,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
           ),
         ),
         if (sideBySide)
-          InventoryFieldHelper(
-            'Counted in ${formCountNoun(_unit, 2, crates: _isCrateBusiness)}',
-          ),
+          InventoryFieldHelper('Counted in ${formCountNoun(_unit, 2)}'),
         if (widget.receiveMode)
           const InventoryFieldHelper(
             'This amount goes onto the delivery list.',
@@ -2018,9 +2013,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
             size: context.getRSize(20),
             color: Theme.of(context).textTheme.bodySmall?.color,
           ),
-          suffixText: sideBySide
-              ? null
-              : formCountNoun(_unit, lowStock, crates: _isCrateBusiness),
+          suffixText: sideBySide ? null : formCountNoun(_unit, lowStock),
           keyboardType: TextInputType.number,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
         ),

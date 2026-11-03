@@ -732,7 +732,7 @@ class ProductStockByStoreCard extends StatelessWidget {
             icon: AppIcons.warehouse,
             title: 'Stock by Store',
             trailing: Text(
-              '${formatQty(total)} ${unitCountNoun(unit, total, crates: crates)}',
+              '${formatQty(total)} ${unitCountNoun(unit, total)}',
               style: context
                   .extraBoldStyle(16)
                   .copyWith(color: t.colorScheme.onSurface),
@@ -777,7 +777,7 @@ class _StoreRow extends StatelessWidget {
         icon: AppIcons.alertCircle,
       ),
       StockLevel.ok => Text(
-        'Alert at $alertAt ${unitCountNoun(unit, alertAt, crates: crates)}',
+        'Alert at $alertAt ${unitCountNoun(unit, alertAt)}',
         style: context.regularStyle(13).copyWith(color: _muted(context)),
       ),
     };
@@ -843,11 +843,7 @@ class ProductSalesTargetCard extends StatelessWidget {
     final t = Theme.of(context);
     final muted = _muted(context);
     final fg = figures;
-    final soldNoun = unitCountNoun(
-      unit,
-      fg.target > 0 ? fg.target : fg.sold,
-      crates: crates,
-    );
+    final soldNoun = unitCountNoun(unit, fg.target > 0 ? fg.target : fg.sold);
     final String note;
     if (!fg.hasTarget) {
       note = 'No target set';
@@ -855,8 +851,8 @@ class ProductSalesTargetCard extends StatelessWidget {
       note = 'Target reached.';
     } else {
       note =
-          '${formatQty(fg.remaining)} ${unitCountNoun(unit, fg.remaining, crates: crates)} to go. '
-          'That is about ${fg.perDay} ${unitCountNoun(unit, fg.perDay, crates: crates)} a day.';
+          '${formatQty(fg.remaining)} ${unitCountNoun(unit, fg.remaining)} to go. '
+          'That is about ${fg.perDay} ${unitCountNoun(unit, fg.perDay)} a day.';
     }
     return DetailPanel(
       child: Column(
@@ -886,7 +882,7 @@ class ProductSalesTargetCard extends StatelessWidget {
                 child: Text(
                   fg.hasTarget
                       ? 'of ${fg.target} $soldNoun sold'
-                      : '${unitCountNoun(unit, fg.sold, crates: crates)} sold',
+                      : '${unitCountNoun(unit, fg.sold)} sold',
                   style: context.regularStyle(15).copyWith(color: muted),
                 ),
               ),

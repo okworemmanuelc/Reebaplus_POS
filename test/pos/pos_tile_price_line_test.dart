@@ -40,33 +40,20 @@ ProductData _product({String? unit, String? size, String? subtitle}) =>
 
 void main() {
   group('posTileSubtitle', () {
-    test('size then unit', () {
+    // #675: the size lives in the name, so only the unit shows; a Bottle
+    // reads "Bottle" in every shop.
+    test('the unit only, never the stored size', () {
       expect(
         posTileSubtitle(
-          _product(unit: 'Bottle', size: '60cl', subtitle: 'Lager'),
-          crates: true,
+          _product(unit: 'Bottle', size: 'big', subtitle: 'Lager'),
         ),
-        '60cl · Bottle Crate',
+        'Bottle',
       );
-      expect(
-        posTileSubtitle(_product(unit: 'Bottle', size: '60cl'), crates: false),
-        '60cl · Bottle',
-      );
+      expect(posTileSubtitle(_product(unit: 'Can')), 'Can');
     });
-    test('unit only', () {
-      expect(
-        posTileSubtitle(_product(unit: 'Bottle'), crates: true),
-        'Bottle Crate',
-      );
-    });
-    test('size only', () {
-      expect(posTileSubtitle(_product(size: '60cl'), crates: true), '60cl');
-    });
-    test('neither (description is not shown)', () {
-      expect(
-        posTileSubtitle(_product(subtitle: 'Lager'), crates: true),
-        isNull,
-      );
+    test('no unit (description and size are not shown)', () {
+      expect(posTileSubtitle(_product(size: 'big')), isNull);
+      expect(posTileSubtitle(_product(subtitle: 'Lager')), isNull);
     });
   });
 

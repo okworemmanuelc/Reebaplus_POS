@@ -1,8 +1,7 @@
-// #487 PR 1 fix: the "Bottle Crate" wording belongs ONLY to shops that count
-// empty crates (`businessTracksCrates`: a crate business type AND
-// `tracks_empty_crates`). A pharmacy, a supermarket, or a bar that switched
-// crate counting off sells a "Bottle" of something and must read "Bottle":
-// on the Inventory row's unit label. The unit is never put in front of the
+// #675 (supersedes the #487 "Bottle Crate" wording): every shop — a pharmacy,
+// a supermarket, a bar that switched crate counting off, and a drinks
+// distributor that counts crates — reads a stored Bottle as "Bottle" on the
+// Inventory row's unit label. The unit is never put in front of the
 // product name, on the row or on the receipt. Sample data only.
 
 import 'package:drift/drift.dart' show Value;
@@ -21,8 +20,7 @@ import '../helpers/inventory_seed.dart';
 import '../helpers/screen_harness.dart';
 import '../orders/orders_fixture.dart';
 
-/// The shops under test: what each one is, and whether a Bottle reads
-/// "Bottle Crate" there.
+/// The shops under test: what each one is, and whether it counts crates.
 const _shops = <({String label, String type, bool tracksCrates, bool crate})>[
   (label: 'Pharmacy', type: 'Pharmacy', tracksCrates: true, crate: false),
   (label: 'Supermarket', type: 'Supermarket', tracksCrates: true, crate: false),
@@ -49,7 +47,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   for (final shop in _shops) {
-    final expected = shop.crate ? 'Bottle Crate' : 'Bottle';
+    const expected = 'Bottle';
 
     group('${shop.label}: a Bottle reads "$expected" on the Inventory row', () {
       late ScreenTestEnvironment env;
@@ -86,7 +84,7 @@ void main() {
         // Star Lager, Gulder and Guinness Foreign Extra are saved as Bottle.
         final bottleRows = tester
             .widgetList<InventoryProductRow>(find.byType(InventoryProductRow))
-            .where((r) => r.unit == 'Bottle' || r.unit == 'Bottle Crate')
+            .where((r) => r.unit == 'Bottle')
             .toList();
         expect(bottleRows, hasLength(3));
         for (final row in bottleRows) {
@@ -95,9 +93,7 @@ void main() {
           expect(row.name, isNot(startsWith('Bottle')));
         }
         expect(bottleRows.map((r) => r.name), contains('Star Lager'));
-        if (!shop.crate) {
-          expect(find.textContaining('Bottle Crate'), findsNothing);
-        }
+        expect(find.textContaining('Bottle Crate'), findsNothing);
         await disposeScreen(tester);
       });
     });

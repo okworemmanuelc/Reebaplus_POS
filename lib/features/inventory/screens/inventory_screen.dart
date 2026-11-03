@@ -768,7 +768,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
     list = _sortNearExpiryFirst(list);
 
     final categoryNames = {for (final c in _dbCategories) c.id: c.name};
-    // "Bottle Crate" only in a shop that counts empty crates (#487).
+    // Crate wording only in a shop that counts empty crates (#487).
     final crates = businessTracksCrates(ref.watch(currentBusinessProvider));
 
     return [
@@ -1182,7 +1182,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       categoryName: categoryName,
       photoPath: product.imagePath,
       stockLabel: formatQty(currentStock),
-      unit: unitLabel(product.unit, crates: crates),
+      unit: unitLabel(product.unit),
       state: isOut
           ? InventoryStockState.out
           : (isLow ? InventoryStockState.low : InventoryStockState.ok),

@@ -532,11 +532,10 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
       SliverList(
         delegate: SliverChildBuilderDelegate((context, index) {
           final product = products[index].product;
-          final detail = product.size?.isNotEmpty == true
-              ? product.size
-              : (product.subtitle?.isNotEmpty == true
-                    ? product.subtitle
-                    : null);
+          // The size is part of the name (#675); show the subtitle only.
+          final detail = product.subtitle?.isNotEmpty == true
+              ? product.subtitle
+              : null;
           return InventoryDetailRowCard(
             key: ValueKey('$kManufacturerProductKeyPrefix${product.id}'),
             icon: AppIcons.wineBottle,
@@ -585,7 +584,9 @@ class _ManufacturerScreenState extends ConsumerState<ManufacturerScreen>
           final entry = movements[index];
           final delta = entry.quantityDelta;
           final isPositive = delta > 0;
-          final deltaText = isPositive ? '+${formatQty(delta)} crates' : '${formatQty(delta)} crates';
+          final deltaText = isPositive
+              ? '+${formatQty(delta)} crates'
+              : '${formatQty(delta)} crates';
           final deltaColor = isPositive ? f.green : f.danger;
 
           final details = [

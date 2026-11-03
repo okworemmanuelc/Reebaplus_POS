@@ -20,18 +20,18 @@ void main() {
       );
     });
 
-    test('a Bottle with no count reads "Bottle Crate"', () {
+    test('a Bottle with no count reads "Bottle", never "Bottle Crate" (#675)', () {
       expect(
         productKindLine(
           manufacturer: 'Guinness Nigeria',
           unit: 'Bottle',
           crates: true,
         ),
-        'Guinness Nigeria · Bottle Crate',
+        'Guinness Nigeria · Bottle',
       );
       expect(
         productKindLine(unit: 'Bottle', unitsPerPack: 0, crates: true),
-        'Bottle Crate',
+        'Bottle',
       );
     });
 

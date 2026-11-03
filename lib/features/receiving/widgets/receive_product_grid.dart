@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
-import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -45,15 +44,11 @@ double receiveTileExtent(BuildContext context) {
       4; // the in-cart border
 }
 
-/// "60cl · Bottle": the product's size and unit, blanks skipped — the same
-/// two values the receive card showed before (#394). [crates] is
-/// `businessTracksCrates` for the active business (see [unitLabel]).
-String? receiveTileSubtitle(ProductData product, {required bool crates}) {
-  final parts = [
-    product.size,
-    unitLabel(product.unit, crates: crates),
-  ].where((s) => s != null && s.trim().isNotEmpty).map((s) => s!.trim());
-  return parts.isEmpty ? null : parts.join(' · ');
+/// "Bottle": the product's unit, or null when it has none (#394, #675). The
+/// size is part of the name, so the stored `size` is not shown.
+String? receiveTileSubtitle(ProductData product) {
+  final unit = unitLabel(product.unit)?.trim();
+  return (unit == null || unit.isEmpty) ? null : unit;
 }
 
 /// Receive Stock's product grid (#394), as a sliver inside the screen's one
@@ -184,11 +179,10 @@ class _ReceiveProductTileState extends ConsumerState<_ReceiveProductTile> {
     final isOutOfStock = totalStock <= 0;
     return ProductTile(
       name: product.name,
-      subtitle: receiveTileSubtitle(
-        product,
-        crates: businessTracksCrates(ref.watch(currentBusinessProvider)),
-      ),
-      stockLabel: isOutOfStock ? 'No stock' : 'Current: ${formatQty(totalStock)}',
+      subtitle: receiveTileSubtitle(product),
+      stockLabel: isOutOfStock
+          ? 'No stock'
+          : 'Current: ${formatQty(totalStock)}',
       stockLevel: isOutOfStock ? StockLevel.out : StockLevel.ok,
       categoryName: widget.categoryName,
       photoPath: product.imagePath,

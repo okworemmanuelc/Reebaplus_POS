@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
@@ -99,11 +98,8 @@ class _ScanChoiceRow extends ConsumerWidget {
     final text = t.colorScheme.onSurface;
     final muted = t.textTheme.bodySmall?.color ?? text;
     final product = choice.product;
-    // Same size + unit descriptor the POS grid tile shows under the name.
-    final crates = businessTracksCrates(ref.watch(currentBusinessProvider));
-    final size =
-        '${product.size ?? ''} ${unitLabel(product.unit, crates: crates) ?? ''}'
-            .trim();
+    // Same unit descriptor the POS grid tile shows under the name (#675).
+    final size = unitLabel(product.unit)?.trim() ?? '';
     final reason = _reasonOf(choice.outcome);
     final radius = BorderRadius.circular(AppSpacing.borderRadiusL);
 

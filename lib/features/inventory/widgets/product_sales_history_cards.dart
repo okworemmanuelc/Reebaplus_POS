@@ -99,7 +99,7 @@ class _ProductSalesCardState extends State<ProductSalesCard> {
               SizedBox(width: context.getRSize(6)),
               Expanded(
                 child: Text(
-                  '${unitCountNoun(widget.unit, units, crates: widget.crates)} sold',
+                  '${unitCountNoun(widget.unit, units)} sold',
                   style: context.regularStyle(15).copyWith(color: muted),
                 ),
               ),
@@ -521,7 +521,7 @@ class StockMovementRow extends StatelessWidget {
                       .copyWith(color: q > 0 ? f.green : f.danger),
                 ),
                 Text(
-                  unitCountNoun(unit, q.abs(), crates: crates),
+                  unitCountNoun(unit, q.abs()),
                   style: context
                       .regularStyle(12)
                       .copyWith(color: _muted(context)),

@@ -22,19 +22,19 @@ void main() {
   });
 
   group('unit words', () {
-    test('a crate shop reads a Bottle as a crate', () {
-      expect(formUnitLabel('Bottle', crates: true), 'Bottle Crate');
-      expect(formCountNoun('Bottle', 20, crates: true), 'crates');
+    test('a crate shop reads a Bottle as a bottle too (#675)', () {
+      expect(formUnitLabel('Bottle'), 'Bottle');
+      expect(formCountNoun('Bottle', 20), 'bottles');
       expect(
         pricingSubtitle('Bottle', crates: true),
-        'All prices are per crate.',
+        'All prices are per bottle.',
       );
     });
 
     test('any other shop reads a Bottle as a bottle', () {
-      expect(formUnitLabel('Bottle', crates: false), 'Bottle');
-      expect(formCountNoun('Bottle', 1, crates: false), 'bottle');
-      expect(formCountNoun('Bottle', 3, crates: false), 'bottles');
+      expect(formUnitLabel('Bottle'), 'Bottle');
+      expect(formCountNoun('Bottle', 1), 'bottle');
+      expect(formCountNoun('Bottle', 3), 'bottles');
       expect(
         pricingSubtitle('Bottle', crates: false),
         'All prices are per bottle.',
@@ -71,7 +71,7 @@ void main() {
     test('no count: the unit label; nothing at all: empty', () {
       expect(
         previewDetailLine(unit: 'Bottle', category: 'Beer', crates: true),
-        'Bottle Crate · Beer',
+        'Bottle · Beer',
       );
       expect(previewDetailLine(unit: 'Can', crates: true), 'Can');
       expect(previewDetailLine(unit: null, crates: true), '');

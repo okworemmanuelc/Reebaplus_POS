@@ -3,97 +3,68 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/utils/product_name.dart';
 import 'package:reebaplus_pos/core/utils/product_unit.dart';
 
-/// #487: in a shop that counts empty crates (`crates: true`) a stored `Bottle`
-/// reads "Bottle Crate" everywhere a unit is shown; every other shop
-/// (`crates: false`: a pharmacy's bottle of syrup, a supermarket's bottle of
-/// oil) keeps "Bottle". The saved value never changes either way, and plain
+/// #675 (supersedes the #487 "Bottle Crate" wording): a stored unit is shown
+/// and counted by its own name in every shop — "Bottle" / "3 bottles", never
+/// "Bottle Crate" / "3 crates". The saved value never changes, and plain
 /// `Crate` is not offered to a new product.
 void main() {
-  group('unitLabel, a shop that counts crates', () {
-    test('a stored Bottle reads "Bottle Crate", in any case', () {
-      expect(unitLabel('Bottle', crates: true), 'Bottle Crate');
-      expect(unitLabel('bottle', crates: true), 'Bottle Crate');
-      expect(unitLabel('BOTTLE', crates: true), 'Bottle Crate');
-    });
-
-    test('every other unit is unchanged', () {
-      for (final u in kProductUnits.where((u) => u != 'Bottle')) {
-        expect(unitLabel(u, crates: true), u, reason: u);
-      }
-      expect(unitLabel('Plate', crates: true), 'Plate');
-    });
-
-    test('no unit stays no unit', () {
-      expect(unitLabel(null, crates: true), isNull);
-      expect(unitLabel('', crates: true), '');
-    });
-  });
-
-  group('unitLabel, a shop that does not count crates', () {
-    test('a stored Bottle stays "Bottle"', () {
-      expect(unitLabel('Bottle', crates: false), 'Bottle');
-      expect(unitLabel('bottle', crates: false), 'bottle');
+  group('unitLabel', () {
+    test('a stored Bottle reads "Bottle", never "Bottle Crate"', () {
+      expect(unitLabel('Bottle'), 'Bottle');
+      expect(unitLabel('bottle'), 'bottle');
     });
 
     test('every unit is unchanged', () {
       for (final u in kProductUnits) {
-        expect(unitLabel(u, crates: false), u, reason: u);
+        expect(unitLabel(u), u, reason: u);
       }
+      expect(unitLabel('Plate'), 'Plate');
     });
 
     test('no unit stays no unit', () {
-      expect(unitLabel(null, crates: false), isNull);
-      expect(unitLabel('', crates: false), '');
+      expect(unitLabel(null), isNull);
+      expect(unitLabel(''), '');
     });
   });
 
   group('unitCountNoun', () {
-    test('a Bottle product counts in crates in a crate shop', () {
-      expect(unitCountNoun('Bottle', 1, crates: true), 'crate');
-      expect(unitCountNoun('Bottle', 0, crates: true), 'crates');
-      expect(unitCountNoun('Bottle', 12, crates: true), 'crates');
-      expect(unitCountNoun('bottle', 2, crates: true), 'crates');
+    test('a Bottle product counts in bottles, never crates', () {
+      expect(unitCountNoun('Bottle', 1), 'bottle');
+      expect(unitCountNoun('Bottle', 0), 'bottles');
+      expect(unitCountNoun('Bottle', 12), 'bottles');
+      expect(unitCountNoun('bottle', 2), 'bottles');
     });
 
-    test('a Bottle product counts in bottles everywhere else', () {
-      expect(unitCountNoun('Bottle', 1, crates: false), 'bottle');
-      expect(unitCountNoun('Bottle', 0, crates: false), 'bottles');
-      expect(unitCountNoun('Bottle', 12, crates: false), 'bottles');
-      expect(unitCountNoun('bottle', 2, crates: false), 'bottles');
-    });
-
-    test('other units are their own lower-case name, in either shop', () {
-      for (final crates in [true, false]) {
-        expect(unitCountNoun('Pack', 1, crates: crates), 'pack');
-        expect(unitCountNoun('Pack', 3, crates: crates), 'packs');
-        expect(unitCountNoun('PET', 2, crates: crates), 'pets');
-        expect(unitCountNoun('Crate', 1, crates: crates), 'crate');
-        expect(unitCountNoun('Crate', 4, crates: crates), 'crates');
-      }
+    test('other units are their own lower-case name', () {
+      expect(unitCountNoun('Pack', 1), 'pack');
+      expect(unitCountNoun('Pack', 3), 'packs');
+      expect(unitCountNoun('Can', 3), 'cans');
+      expect(unitCountNoun('PET', 2), 'pets');
+      expect(unitCountNoun('Carton', 2), 'cartons');
+      expect(unitCountNoun('Crate', 1), 'crate');
+      expect(unitCountNoun('Crate', 4), 'crates');
     });
 
     test('-s, -x, -ch and -sh units take "es"', () {
-      expect(unitCountNoun('Box', 2, crates: true), 'boxes');
-      expect(unitCountNoun('Glass', 2, crates: true), 'glasses');
-      expect(unitCountNoun('Pouch', 2, crates: false), 'pouches');
-      expect(unitCountNoun('Dish', 2, crates: false), 'dishes');
-      expect(unitCountNoun('Box', 1, crates: true), 'box');
+      expect(unitCountNoun('Box', 2), 'boxes');
+      expect(unitCountNoun('Glass', 2), 'glasses');
+      expect(unitCountNoun('Pouch', 2), 'pouches');
+      expect(unitCountNoun('Dish', 2), 'dishes');
+      expect(unitCountNoun('Box', 1), 'box');
     });
 
     test('a fraction is plural', () {
-      expect(unitCountNoun('Keg', 1.5, crates: true), 'kegs');
-      expect(unitCountNoun('Keg', 1.0, crates: true), 'keg');
-      expect(unitCountNoun('Bottle', 1.5, crates: false), 'bottles');
+      expect(unitCountNoun('Keg', 1.5), 'kegs');
+      expect(unitCountNoun('Keg', 1.0), 'keg');
+      expect(unitCountNoun('Bottle', 1.5), 'bottles');
     });
 
     test('no unit (null, blank or Other) counts in units', () {
-      for (final crates in [true, false]) {
-        expect(unitCountNoun(null, 1, crates: crates), 'unit');
-        expect(unitCountNoun(null, 5, crates: crates), 'units');
-        expect(unitCountNoun('', 2, crates: crates), 'units');
-        expect(unitCountNoun('  ', 1, crates: crates), 'unit');
-        expect(unitCountNoun('Other', 3, crates: crates), 'units');
-      }
+      expect(unitCountNoun(null, 1), 'unit');
+      expect(unitCountNoun(null, 5), 'units');
+      expect(unitCountNoun('', 2), 'units');
+      expect(unitCountNoun('  ', 1), 'unit');
+      expect(unitCountNoun('Other', 3), 'units');
     });
   });
 
