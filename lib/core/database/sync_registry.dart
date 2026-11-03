@@ -1786,6 +1786,9 @@ final List<SyncedTable> kSyncRegistry = [
       (db) => db.payrollEntries,
       PayrollEntryData.fromJson,
       resilient: true,
+      // #670: a row from a cloud without 0244 has no status; it was never
+      // waiting, so it counts as approved (the column default).
+      defaults: const {'status': 'approved'},
     ),
   ),
   SyncedTable(

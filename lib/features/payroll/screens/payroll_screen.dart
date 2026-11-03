@@ -12,6 +12,7 @@ import 'package:reebaplus_pos/core/utils/name_case.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/payroll/screens/payroll_worker_money_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
@@ -68,6 +69,7 @@ class _PayrollScreenState extends ConsumerState<PayrollScreen> {
       title: 'Payroll',
       body: Column(
         children: [
+          const PayrollPendingApprovalsCard(),
           if (removedCount > 0)
             Align(
               alignment: Alignment.centerRight,
@@ -119,6 +121,12 @@ class _PayrollScreenState extends ConsumerState<PayrollScreen> {
                       onTap: shown[i].isRemoved
                           ? null
                           : () => _openEditor(worker: shown[i]),
+                      onOpenMoney: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) =>
+                              PayrollWorkerMoneyScreen(workerId: shown[i].id),
+                        ),
+                      ),
                     ),
                   ),
           ),
@@ -154,11 +162,15 @@ class _WorkerCard extends StatelessWidget {
     required this.worker,
     required this.storeName,
     required this.onTap,
+    this.onOpenMoney,
   });
 
   final PayrollWorkerData worker;
   final String storeName;
   final VoidCallback? onTap;
+
+  /// Opens the worker's bonus, advance and loans (#670).
+  final VoidCallback? onOpenMoney;
 
   @override
   Widget build(BuildContext context) {
@@ -202,6 +214,16 @@ class _WorkerCard extends StatelessWidget {
                 '  •  Allowance ${formatCurrency(worker.dailyAllowanceKobo / 100)} a day',
                 style: context.regularStyle(13),
               ),
+              if (onOpenMoney != null)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    key: PayrollMoneyKeys.openMoney(worker.id),
+                    onPressed: onOpenMoney,
+                    icon: const Icon(AppIcons.cash, size: 18),
+                    label: const Text('Bonus, advance and loans'),
+                  ),
+                ),
             ],
           ),
         ),

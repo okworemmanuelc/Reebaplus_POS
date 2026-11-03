@@ -35786,6 +35786,55 @@ class $PayrollEntriesTable extends PayrollEntries
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    check: () => const CustomExpression<bool>(
+      "status IN ('approved', 'pending', 'rejected')",
+    ),
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('approved'),
+  );
+  static const VerificationMeta _approvedByMeta = const VerificationMeta(
+    'approvedBy',
+  );
+  @override
+  late final GeneratedColumn<String> approvedBy = GeneratedColumn<String>(
+    'approved_by',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES users (id)',
+    ),
+  );
+  static const VerificationMeta _approvedAtMeta = const VerificationMeta(
+    'approvedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> approvedAt = GeneratedColumn<DateTime>(
+    'approved_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _rejectionReasonMeta = const VerificationMeta(
+    'rejectionReason',
+  );
+  @override
+  late final GeneratedColumn<String> rejectionReason = GeneratedColumn<String>(
+    'rejection_reason',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -35826,6 +35875,10 @@ class $PayrollEntriesTable extends PayrollEntries
     correctsEntryId,
     recordedBy,
     legacyId,
+    status,
+    approvedBy,
+    approvedAt,
+    rejectionReason,
     createdAt,
     lastUpdatedAt,
   ];
@@ -35937,6 +35990,33 @@ class $PayrollEntriesTable extends PayrollEntries
         legacyId.isAcceptableOrUnknown(data['legacy_id']!, _legacyIdMeta),
       );
     }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('approved_by')) {
+      context.handle(
+        _approvedByMeta,
+        approvedBy.isAcceptableOrUnknown(data['approved_by']!, _approvedByMeta),
+      );
+    }
+    if (data.containsKey('approved_at')) {
+      context.handle(
+        _approvedAtMeta,
+        approvedAt.isAcceptableOrUnknown(data['approved_at']!, _approvedAtMeta),
+      );
+    }
+    if (data.containsKey('rejection_reason')) {
+      context.handle(
+        _rejectionReasonMeta,
+        rejectionReason.isAcceptableOrUnknown(
+          data['rejection_reason']!,
+          _rejectionReasonMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -36013,6 +36093,22 @@ class $PayrollEntriesTable extends PayrollEntries
         DriftSqlType.string,
         data['${effectivePrefix}legacy_id'],
       ),
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      approvedBy: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}approved_by'],
+      ),
+      approvedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}approved_at'],
+      ),
+      rejectionReason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}rejection_reason'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -36045,6 +36141,10 @@ class PayrollEntryData extends DataClass
   final String? correctsEntryId;
   final String? recordedBy;
   final String? legacyId;
+  final String status;
+  final String? approvedBy;
+  final DateTime? approvedAt;
+  final String? rejectionReason;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
   const PayrollEntryData({
@@ -36061,6 +36161,10 @@ class PayrollEntryData extends DataClass
     this.correctsEntryId,
     this.recordedBy,
     this.legacyId,
+    required this.status,
+    this.approvedBy,
+    this.approvedAt,
+    this.rejectionReason,
     required this.createdAt,
     required this.lastUpdatedAt,
   });
@@ -36090,6 +36194,16 @@ class PayrollEntryData extends DataClass
     if (!nullToAbsent || legacyId != null) {
       map['legacy_id'] = Variable<String>(legacyId);
     }
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || approvedBy != null) {
+      map['approved_by'] = Variable<String>(approvedBy);
+    }
+    if (!nullToAbsent || approvedAt != null) {
+      map['approved_at'] = Variable<DateTime>(approvedAt);
+    }
+    if (!nullToAbsent || rejectionReason != null) {
+      map['rejection_reason'] = Variable<String>(rejectionReason);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
     return map;
@@ -36118,6 +36232,16 @@ class PayrollEntryData extends DataClass
       legacyId: legacyId == null && nullToAbsent
           ? const Value.absent()
           : Value(legacyId),
+      status: Value(status),
+      approvedBy: approvedBy == null && nullToAbsent
+          ? const Value.absent()
+          : Value(approvedBy),
+      approvedAt: approvedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(approvedAt),
+      rejectionReason: rejectionReason == null && nullToAbsent
+          ? const Value.absent()
+          : Value(rejectionReason),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
     );
@@ -36142,6 +36266,10 @@ class PayrollEntryData extends DataClass
       correctsEntryId: serializer.fromJson<String?>(json['correctsEntryId']),
       recordedBy: serializer.fromJson<String?>(json['recordedBy']),
       legacyId: serializer.fromJson<String?>(json['legacyId']),
+      status: serializer.fromJson<String>(json['status']),
+      approvedBy: serializer.fromJson<String?>(json['approvedBy']),
+      approvedAt: serializer.fromJson<DateTime?>(json['approvedAt']),
+      rejectionReason: serializer.fromJson<String?>(json['rejectionReason']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
     );
@@ -36163,6 +36291,10 @@ class PayrollEntryData extends DataClass
       'correctsEntryId': serializer.toJson<String?>(correctsEntryId),
       'recordedBy': serializer.toJson<String?>(recordedBy),
       'legacyId': serializer.toJson<String?>(legacyId),
+      'status': serializer.toJson<String>(status),
+      'approvedBy': serializer.toJson<String?>(approvedBy),
+      'approvedAt': serializer.toJson<DateTime?>(approvedAt),
+      'rejectionReason': serializer.toJson<String?>(rejectionReason),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
     };
@@ -36182,6 +36314,10 @@ class PayrollEntryData extends DataClass
     Value<String?> correctsEntryId = const Value.absent(),
     Value<String?> recordedBy = const Value.absent(),
     Value<String?> legacyId = const Value.absent(),
+    String? status,
+    Value<String?> approvedBy = const Value.absent(),
+    Value<DateTime?> approvedAt = const Value.absent(),
+    Value<String?> rejectionReason = const Value.absent(),
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
   }) => PayrollEntryData(
@@ -36200,6 +36336,12 @@ class PayrollEntryData extends DataClass
         : this.correctsEntryId,
     recordedBy: recordedBy.present ? recordedBy.value : this.recordedBy,
     legacyId: legacyId.present ? legacyId.value : this.legacyId,
+    status: status ?? this.status,
+    approvedBy: approvedBy.present ? approvedBy.value : this.approvedBy,
+    approvedAt: approvedAt.present ? approvedAt.value : this.approvedAt,
+    rejectionReason: rejectionReason.present
+        ? rejectionReason.value
+        : this.rejectionReason,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
   );
@@ -36230,6 +36372,16 @@ class PayrollEntryData extends DataClass
           ? data.recordedBy.value
           : this.recordedBy,
       legacyId: data.legacyId.present ? data.legacyId.value : this.legacyId,
+      status: data.status.present ? data.status.value : this.status,
+      approvedBy: data.approvedBy.present
+          ? data.approvedBy.value
+          : this.approvedBy,
+      approvedAt: data.approvedAt.present
+          ? data.approvedAt.value
+          : this.approvedAt,
+      rejectionReason: data.rejectionReason.present
+          ? data.rejectionReason.value
+          : this.rejectionReason,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       lastUpdatedAt: data.lastUpdatedAt.present
           ? data.lastUpdatedAt.value
@@ -36253,6 +36405,10 @@ class PayrollEntryData extends DataClass
           ..write('correctsEntryId: $correctsEntryId, ')
           ..write('recordedBy: $recordedBy, ')
           ..write('legacyId: $legacyId, ')
+          ..write('status: $status, ')
+          ..write('approvedBy: $approvedBy, ')
+          ..write('approvedAt: $approvedAt, ')
+          ..write('rejectionReason: $rejectionReason, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
           ..write(')'))
@@ -36274,6 +36430,10 @@ class PayrollEntryData extends DataClass
     correctsEntryId,
     recordedBy,
     legacyId,
+    status,
+    approvedBy,
+    approvedAt,
+    rejectionReason,
     createdAt,
     lastUpdatedAt,
   );
@@ -36294,6 +36454,10 @@ class PayrollEntryData extends DataClass
           other.correctsEntryId == this.correctsEntryId &&
           other.recordedBy == this.recordedBy &&
           other.legacyId == this.legacyId &&
+          other.status == this.status &&
+          other.approvedBy == this.approvedBy &&
+          other.approvedAt == this.approvedAt &&
+          other.rejectionReason == this.rejectionReason &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
 }
@@ -36312,6 +36476,10 @@ class PayrollEntriesCompanion extends UpdateCompanion<PayrollEntryData> {
   final Value<String?> correctsEntryId;
   final Value<String?> recordedBy;
   final Value<String?> legacyId;
+  final Value<String> status;
+  final Value<String?> approvedBy;
+  final Value<DateTime?> approvedAt;
+  final Value<String?> rejectionReason;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
   final Value<int> rowid;
@@ -36329,6 +36497,10 @@ class PayrollEntriesCompanion extends UpdateCompanion<PayrollEntryData> {
     this.correctsEntryId = const Value.absent(),
     this.recordedBy = const Value.absent(),
     this.legacyId = const Value.absent(),
+    this.status = const Value.absent(),
+    this.approvedBy = const Value.absent(),
+    this.approvedAt = const Value.absent(),
+    this.rejectionReason = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -36347,6 +36519,10 @@ class PayrollEntriesCompanion extends UpdateCompanion<PayrollEntryData> {
     this.correctsEntryId = const Value.absent(),
     this.recordedBy = const Value.absent(),
     this.legacyId = const Value.absent(),
+    this.status = const Value.absent(),
+    this.approvedBy = const Value.absent(),
+    this.approvedAt = const Value.absent(),
+    this.rejectionReason = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -36370,6 +36546,10 @@ class PayrollEntriesCompanion extends UpdateCompanion<PayrollEntryData> {
     Expression<String>? correctsEntryId,
     Expression<String>? recordedBy,
     Expression<String>? legacyId,
+    Expression<String>? status,
+    Expression<String>? approvedBy,
+    Expression<DateTime>? approvedAt,
+    Expression<String>? rejectionReason,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
     Expression<int>? rowid,
@@ -36388,6 +36568,10 @@ class PayrollEntriesCompanion extends UpdateCompanion<PayrollEntryData> {
       if (correctsEntryId != null) 'corrects_entry_id': correctsEntryId,
       if (recordedBy != null) 'recorded_by': recordedBy,
       if (legacyId != null) 'legacy_id': legacyId,
+      if (status != null) 'status': status,
+      if (approvedBy != null) 'approved_by': approvedBy,
+      if (approvedAt != null) 'approved_at': approvedAt,
+      if (rejectionReason != null) 'rejection_reason': rejectionReason,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -36408,6 +36592,10 @@ class PayrollEntriesCompanion extends UpdateCompanion<PayrollEntryData> {
     Value<String?>? correctsEntryId,
     Value<String?>? recordedBy,
     Value<String?>? legacyId,
+    Value<String>? status,
+    Value<String?>? approvedBy,
+    Value<DateTime?>? approvedAt,
+    Value<String?>? rejectionReason,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
     Value<int>? rowid,
@@ -36426,6 +36614,10 @@ class PayrollEntriesCompanion extends UpdateCompanion<PayrollEntryData> {
       correctsEntryId: correctsEntryId ?? this.correctsEntryId,
       recordedBy: recordedBy ?? this.recordedBy,
       legacyId: legacyId ?? this.legacyId,
+      status: status ?? this.status,
+      approvedBy: approvedBy ?? this.approvedBy,
+      approvedAt: approvedAt ?? this.approvedAt,
+      rejectionReason: rejectionReason ?? this.rejectionReason,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
       rowid: rowid ?? this.rowid,
@@ -36474,6 +36666,18 @@ class PayrollEntriesCompanion extends UpdateCompanion<PayrollEntryData> {
     if (legacyId.present) {
       map['legacy_id'] = Variable<String>(legacyId.value);
     }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (approvedBy.present) {
+      map['approved_by'] = Variable<String>(approvedBy.value);
+    }
+    if (approvedAt.present) {
+      map['approved_at'] = Variable<DateTime>(approvedAt.value);
+    }
+    if (rejectionReason.present) {
+      map['rejection_reason'] = Variable<String>(rejectionReason.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -36502,6 +36706,10 @@ class PayrollEntriesCompanion extends UpdateCompanion<PayrollEntryData> {
           ..write('correctsEntryId: $correctsEntryId, ')
           ..write('recordedBy: $recordedBy, ')
           ..write('legacyId: $legacyId, ')
+          ..write('status: $status, ')
+          ..write('approvedBy: $approvedBy, ')
+          ..write('approvedAt: $approvedAt, ')
+          ..write('rejectionReason: $rejectionReason, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
           ..write('rowid: $rowid')
@@ -69577,24 +69785,6 @@ final class $$UsersTableReferences
     );
   }
 
-  static MultiTypedResultKey<$PayrollEntriesTable, List<PayrollEntryData>>
-  _payrollEntriesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
-    db.payrollEntries,
-    aliasName: $_aliasNameGenerator(db.users.id, db.payrollEntries.recordedBy),
-  );
-
-  $$PayrollEntriesTableProcessedTableManager get payrollEntriesRefs {
-    final manager = $$PayrollEntriesTableTableManager(
-      $_db,
-      $_db.payrollEntries,
-    ).filter((f) => f.recordedBy.id.sqlEquals($_itemColumn<String>('id')!));
-
-    final cache = $_typedResult.readTableOrNull(_payrollEntriesRefsTable($_db));
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: cache),
-    );
-  }
-
   static MultiTypedResultKey<
     $PayrollStatementsTable,
     List<PayrollStatementData>
@@ -70022,31 +70212,6 @@ class $$UsersTableFilterComposer extends Composer<_$AppDatabase, $UsersTable> {
           }) => $$OrderCrateLinesTableFilterComposer(
             $db: $db,
             $table: $db.orderCrateLines,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
-  Expression<bool> payrollEntriesRefs(
-    Expression<bool> Function($$PayrollEntriesTableFilterComposer f) f,
-  ) {
-    final $$PayrollEntriesTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.payrollEntries,
-      getReferencedColumn: (t) => t.recordedBy,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$PayrollEntriesTableFilterComposer(
-            $db: $db,
-            $table: $db.payrollEntries,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -70654,31 +70819,6 @@ class $$UsersTableAnnotationComposer
     return f(composer);
   }
 
-  Expression<T> payrollEntriesRefs<T extends Object>(
-    Expression<T> Function($$PayrollEntriesTableAnnotationComposer a) f,
-  ) {
-    final $$PayrollEntriesTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.payrollEntries,
-      getReferencedColumn: (t) => t.recordedBy,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$PayrollEntriesTableAnnotationComposer(
-            $db: $db,
-            $table: $db.payrollEntries,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
   Expression<T> payrollStatementsRefs<T extends Object>(
     Expression<T> Function($$PayrollStatementsTableAnnotationComposer a) f,
   ) {
@@ -70953,7 +71093,6 @@ class $$UsersTableTableManager
             bool crateShortfallWriteoffsRefs,
             bool stockAdjustmentsRefs,
             bool orderCrateLinesRefs,
-            bool payrollEntriesRefs,
             bool payrollStatementsRefs,
             bool stockCountsRefs,
             bool dailyClosingsRefs,
@@ -71071,7 +71210,6 @@ class $$UsersTableTableManager
                 crateShortfallWriteoffsRefs = false,
                 stockAdjustmentsRefs = false,
                 orderCrateLinesRefs = false,
-                payrollEntriesRefs = false,
                 payrollStatementsRefs = false,
                 stockCountsRefs = false,
                 dailyClosingsRefs = false,
@@ -71090,7 +71228,6 @@ class $$UsersTableTableManager
                     if (crateShortfallWriteoffsRefs) db.crateShortfallWriteoffs,
                     if (stockAdjustmentsRefs) db.stockAdjustments,
                     if (orderCrateLinesRefs) db.orderCrateLines,
-                    if (payrollEntriesRefs) db.payrollEntries,
                     if (payrollStatementsRefs) db.payrollStatements,
                     if (stockCountsRefs) db.stockCounts,
                     if (dailyClosingsRefs) db.dailyClosings,
@@ -71230,27 +71367,6 @@ class $$UsersTableTableManager
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.settledBy == item.id,
-                              ),
-                          typedResults: items,
-                        ),
-                      if (payrollEntriesRefs)
-                        await $_getPrefetchedData<
-                          UserData,
-                          $UsersTable,
-                          PayrollEntryData
-                        >(
-                          currentTable: table,
-                          referencedTable: $$UsersTableReferences
-                              ._payrollEntriesRefsTable(db),
-                          managerFromTypedResult: (p0) =>
-                              $$UsersTableReferences(
-                                db,
-                                table,
-                                p0,
-                              ).payrollEntriesRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.recordedBy == item.id,
                               ),
                           typedResults: items,
                         ),
@@ -71491,7 +71607,6 @@ typedef $$UsersTableProcessedTableManager =
         bool crateShortfallWriteoffsRefs,
         bool stockAdjustmentsRefs,
         bool orderCrateLinesRefs,
-        bool payrollEntriesRefs,
         bool payrollStatementsRefs,
         bool stockCountsRefs,
         bool dailyClosingsRefs,
@@ -107150,6 +107265,10 @@ typedef $$PayrollEntriesTableCreateCompanionBuilder =
       Value<String?> correctsEntryId,
       Value<String?> recordedBy,
       Value<String?> legacyId,
+      Value<String> status,
+      Value<String?> approvedBy,
+      Value<DateTime?> approvedAt,
+      Value<String?> rejectionReason,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
       Value<int> rowid,
@@ -107169,6 +107288,10 @@ typedef $$PayrollEntriesTableUpdateCompanionBuilder =
       Value<String?> correctsEntryId,
       Value<String?> recordedBy,
       Value<String?> legacyId,
+      Value<String> status,
+      Value<String?> approvedBy,
+      Value<DateTime?> approvedAt,
+      Value<String?> rejectionReason,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
       Value<int> rowid,
@@ -107257,6 +107380,24 @@ final class $$PayrollEntriesTableReferences
     );
   }
 
+  static $UsersTable _approvedByTable(_$AppDatabase db) => db.users.createAlias(
+    $_aliasNameGenerator(db.payrollEntries.approvedBy, db.users.id),
+  );
+
+  $$UsersTableProcessedTableManager? get approvedBy {
+    final $_column = $_itemColumn<String>('approved_by');
+    if ($_column == null) return null;
+    final manager = $$UsersTableTableManager(
+      $_db,
+      $_db.users,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_approvedByTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
   static MultiTypedResultKey<
     $PayrollStatementsTable,
     List<PayrollStatementData>
@@ -107336,6 +107477,21 @@ class $$PayrollEntriesTableFilterComposer
 
   ColumnFilters<String> get legacyId => $composableBuilder(
     column: $table.legacyId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get approvedAt => $composableBuilder(
+    column: $table.approvedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get rejectionReason => $composableBuilder(
+    column: $table.rejectionReason,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -107441,6 +107597,29 @@ class $$PayrollEntriesTableFilterComposer
     return composer;
   }
 
+  $$UsersTableFilterComposer get approvedBy {
+    final $$UsersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.approvedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableFilterComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   Expression<bool> payrollStatementsRefs(
     Expression<bool> Function($$PayrollStatementsTableFilterComposer f) f,
   ) {
@@ -107518,6 +107697,21 @@ class $$PayrollEntriesTableOrderingComposer
 
   ColumnOrderings<String> get legacyId => $composableBuilder(
     column: $table.legacyId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get approvedAt => $composableBuilder(
+    column: $table.approvedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get rejectionReason => $composableBuilder(
+    column: $table.rejectionReason,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -107622,6 +107816,29 @@ class $$PayrollEntriesTableOrderingComposer
     );
     return composer;
   }
+
+  $$UsersTableOrderingComposer get approvedBy {
+    final $$UsersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.approvedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableOrderingComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$PayrollEntriesTableAnnotationComposer
@@ -107667,6 +107884,19 @@ class $$PayrollEntriesTableAnnotationComposer
 
   GeneratedColumn<String> get legacyId =>
       $composableBuilder(column: $table.legacyId, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get approvedAt => $composableBuilder(
+    column: $table.approvedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get rejectionReason => $composableBuilder(
+    column: $table.rejectionReason,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -107768,6 +107998,29 @@ class $$PayrollEntriesTableAnnotationComposer
     return composer;
   }
 
+  $$UsersTableAnnotationComposer get approvedBy {
+    final $$UsersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.approvedBy,
+      referencedTable: $db.users,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   Expression<T> payrollStatementsRefs<T extends Object>(
     Expression<T> Function($$PayrollStatementsTableAnnotationComposer a) f,
   ) {
@@ -107813,6 +108066,7 @@ class $$PayrollEntriesTableTableManager
             bool workerId,
             bool storeId,
             bool recordedBy,
+            bool approvedBy,
             bool payrollStatementsRefs,
           })
         > {
@@ -107844,6 +108098,10 @@ class $$PayrollEntriesTableTableManager
                 Value<String?> correctsEntryId = const Value.absent(),
                 Value<String?> recordedBy = const Value.absent(),
                 Value<String?> legacyId = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<String?> approvedBy = const Value.absent(),
+                Value<DateTime?> approvedAt = const Value.absent(),
+                Value<String?> rejectionReason = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -107861,6 +108119,10 @@ class $$PayrollEntriesTableTableManager
                 correctsEntryId: correctsEntryId,
                 recordedBy: recordedBy,
                 legacyId: legacyId,
+                status: status,
+                approvedBy: approvedBy,
+                approvedAt: approvedAt,
+                rejectionReason: rejectionReason,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
                 rowid: rowid,
@@ -107880,6 +108142,10 @@ class $$PayrollEntriesTableTableManager
                 Value<String?> correctsEntryId = const Value.absent(),
                 Value<String?> recordedBy = const Value.absent(),
                 Value<String?> legacyId = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<String?> approvedBy = const Value.absent(),
+                Value<DateTime?> approvedAt = const Value.absent(),
+                Value<String?> rejectionReason = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -107897,6 +108163,10 @@ class $$PayrollEntriesTableTableManager
                 correctsEntryId: correctsEntryId,
                 recordedBy: recordedBy,
                 legacyId: legacyId,
+                status: status,
+                approvedBy: approvedBy,
+                approvedAt: approvedAt,
+                rejectionReason: rejectionReason,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
                 rowid: rowid,
@@ -107915,6 +108185,7 @@ class $$PayrollEntriesTableTableManager
                 workerId = false,
                 storeId = false,
                 recordedBy = false,
+                approvedBy = false,
                 payrollStatementsRefs = false,
               }) {
                 return PrefetchHooks(
@@ -107998,6 +108269,21 @@ class $$PayrollEntriesTableTableManager
                                   )
                                   as T;
                         }
+                        if (approvedBy) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.approvedBy,
+                                    referencedTable:
+                                        $$PayrollEntriesTableReferences
+                                            ._approvedByTable(db),
+                                    referencedColumn:
+                                        $$PayrollEntriesTableReferences
+                                            ._approvedByTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
 
                         return state;
                       },
@@ -108049,6 +108335,7 @@ typedef $$PayrollEntriesTableProcessedTableManager =
         bool workerId,
         bool storeId,
         bool recordedBy,
+        bool approvedBy,
         bool payrollStatementsRefs,
       })
     >;
