@@ -29,13 +29,30 @@ int computeTotalSalesKobo(
   Iterable<OrderWithItems> orders, {
   bool Function(DateTime createdAt) inSpan = _always,
   bool Function(String? storeId) inScope = _anyStore,
+}) => computeSalesSplitKobo(orders, inSpan: inSpan, inScope: inScope).netKobo;
+
+/// [computeTotalSalesKobo] split for display (#708): [salesKobo] is the +1
+/// entries of the period, [returnsKobo] the −1 cancel entries (zero or
+/// NEGATIVE), and [netKobo] their sum — exactly the figure
+/// [computeTotalSalesKobo] returns. The sign comes from [saleDayEntries], so
+/// the rules live in one place.
+({int salesKobo, int returnsKobo, int netKobo}) computeSalesSplitKobo(
+  Iterable<OrderWithItems> orders, {
+  bool Function(DateTime createdAt) inSpan = _always,
+  bool Function(String? storeId) inScope = _anyStore,
 }) {
-  var total = 0;
+  var sales = 0;
+  var returns = 0;
   for (final e in saleDayEntries(orders)) {
     if (!inSpan(e.day)) continue;
-    total += e.sign * orderGoodsNetKobo(e.o, inScope: inScope);
+    final v = e.sign * orderGoodsNetKobo(e.o, inScope: inScope);
+    if (e.sign > 0) {
+      sales += v;
+    } else {
+      returns += v;
+    }
   }
-  return total;
+  return (salesKobo: sales, returnsKobo: returns, netKobo: sales + returns);
 }
 
 /// The report entries of [orders] under the original-day rule (#549): see

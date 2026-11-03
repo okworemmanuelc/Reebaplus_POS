@@ -96,7 +96,10 @@ OrderWithItems _order({
         lastUpdatedAt: createdAt,
       );
   return OrderWithItems(order, [
-    OrderItemDataWithProductData(line('a', product.id, 3, 10000, 5000), product),
+    OrderItemDataWithProductData(
+      line('a', product.id, 3, 10000, 5000),
+      product,
+    ),
     OrderItemDataWithProductData(line('b', null, 2, 3000, 0), null),
   ], null);
 }
@@ -112,7 +115,8 @@ OrderWithItems _cancelledOn(int day, {String? reason}) => _order(
 );
 
 bool Function(DateTime) _spanDays(int from, int toInclusive) =>
-    (t) => !t.isBefore(DateTime(2026, 7, from)) &&
+    (t) =>
+        !t.isBefore(DateTime(2026, 7, from)) &&
         t.isBefore(DateTime(2026, 7, toInclusive + 1));
 
 ReconData _recon(List<OrderWithItems> orders, int from, int toInclusive) =>
@@ -161,18 +165,21 @@ void main() {
       expect(stamps(status: 'completed'), [(1, 1)]);
     });
 
-    test('a cancel on the same day is +1 and -1 on that day (nets to zero)', () {
-      expect(
-        stamps(status: 'cancelled', cancelledAt: _d(1, 18)),
-        [(1, 1), (1, -1)],
-      );
-    });
+    test(
+      'a cancel on the same day is +1 and -1 on that day (nets to zero)',
+      () {
+        expect(stamps(status: 'cancelled', cancelledAt: _d(1, 18)), [
+          (1, 1),
+          (1, -1),
+        ]);
+      },
+    );
 
     test('a cancel on a later day is +1 on day 1 and -1 on the cancel day', () {
-      expect(
-        stamps(status: 'cancelled', cancelledAt: _d(3, 9).toUtc()),
-        [(1, 1), (3, -1)],
-      );
+      expect(stamps(status: 'cancelled', cancelledAt: _d(3, 9).toUtc()), [
+        (1, 1),
+        (3, -1),
+      ]);
     });
 
     test('a sale the server rejected is excluded entirely', () {
@@ -205,19 +212,13 @@ void main() {
         before,
       );
       expect(before, 34000);
-      expect(
-        computeTotalSalesKobo([cancelled], inSpan: _spanDays(2, 2)),
-        0,
-      );
+      expect(computeTotalSalesKobo([cancelled], inSpan: _spanDays(2, 2)), 0);
       expect(
         computeTotalSalesKobo([cancelled], inSpan: _spanDays(3, 3)),
         -34000,
       );
       // A span covering both nets to zero.
-      expect(
-        computeTotalSalesKobo([cancelled], inSpan: _spanDays(1, 3)),
-        0,
-      );
+      expect(computeTotalSalesKobo([cancelled], inSpan: _spanDays(1, 3)), 0);
     });
 
     test('a same-day cancel nets to zero on that day', () {
@@ -229,16 +230,67 @@ void main() {
 
     test('rejected_by_server and legacy (no cancelledAt) count nowhere', () {
       final rejected = _cancelledOn(3, reason: kRejectedByServerReason);
-      final legacy = _order(
-        id: 'o1',
-        status: 'cancelled',
-        createdAt: _d(1),
-      );
+      final legacy = _order(id: 'o1', status: 'cancelled', createdAt: _d(1));
       for (final o in [rejected, legacy]) {
         expect(computeTotalSalesKobo([o]), 0);
         expect(computeTotalSalesKobo([o], inSpan: _spanDays(1, 1)), 0);
         expect(computeTotalSalesKobo([o], inSpan: _spanDays(3, 3)), 0);
       }
+    });
+  });
+
+  group('computeSalesSplitKobo / returns line (#708)', () {
+    ({int salesKobo, int returnsKobo, int netKobo}) split(
+      List<OrderWithItems> o,
+      int day,
+    ) => computeSalesSplitKobo(o, inSpan: _spanDays(day, day));
+
+    test('day-1 sale cancelled day 2: day 2 Sales 0 / Returns -X / Net -X', () {
+      final c = _cancelledOn(2);
+      expect(split([c], 1), (salesKobo: 34000, returnsKobo: 0, netKobo: 34000));
+      expect(split([c], 2), (
+        salesKobo: 0,
+        returnsKobo: -34000,
+        netKobo: -34000,
+      ));
+    });
+
+    test('same-day cancel shows Sales X / Returns -X / Net 0', () {
+      expect(split([_cancelledOn(1)], 1), (
+        salesKobo: 34000,
+        returnsKobo: -34000,
+        netKobo: 0,
+      ));
+    });
+
+    test('net equals computeTotalSalesKobo on a mixed fixture', () {
+      final orders = [
+        _live(),
+        _cancelledOn(1),
+        _order(id: 'o2', status: 'pending', createdAt: _d(1)),
+        _order(
+          id: 'o3',
+          status: 'cancelled',
+          createdAt: _d(1),
+          cancelledAt: _d(2, 9).toUtc(),
+          reason: 'x',
+        ),
+      ];
+      for (final d in [1, 2]) {
+        final sp = split(orders, d);
+        expect(
+          sp.netKobo,
+          computeTotalSalesKobo(orders, inSpan: _spanDays(d, d)),
+        );
+        expect(sp.salesKobo + sp.returnsKobo, sp.netKobo);
+      }
+    });
+
+    test('ReconData carries returnsKobo without changing the total', () {
+      final c = _cancelledOn(2);
+      expect(_recon([c], 2, 2).returnsKobo, -34000);
+      expect(_recon([c], 2, 2).totalSalesKobo, -34000);
+      expect(_recon([c], 1, 1).returnsKobo, 0);
     });
   });
 
@@ -255,29 +307,31 @@ void main() {
       expect(before['totalSalesKobo'], 34000);
     });
 
-    test('the cancel day books the exact negative; a span over both is zero',
-        () {
-      final cancelled = _cancelledOn(3);
-      final day3 = _recon([cancelled], 3, 3);
-      expect(day3.costedRevenueKobo, -30000);
-      expect(day3.cogsKobo, -15000);
-      expect(day3.discountsKobo, -2000);
-      expect(day3.uncostedTakingsKobo, -6000);
-      expect(day3.totalSalesKobo, -34000);
-      expect(day3.itemsSold, -5);
-      expect(day3.salesPaidNowKobo, -34000);
-      expect(day3.grossProfitKobo, -13000); // -(30000 - 15000 - 2000)
-      // Profit counts the return once: net profit is the sign-flipped day-1
-      // profit, with no extra refund deduction.
-      expect(day3.netProfitKobo, -_recon([_live()], 1, 1).netProfitKobo);
-      expect(day3.refundsKobo, 0);
+    test(
+      'the cancel day books the exact negative; a span over both is zero',
+      () {
+        final cancelled = _cancelledOn(3);
+        final day3 = _recon([cancelled], 3, 3);
+        expect(day3.costedRevenueKobo, -30000);
+        expect(day3.cogsKobo, -15000);
+        expect(day3.discountsKobo, -2000);
+        expect(day3.uncostedTakingsKobo, -6000);
+        expect(day3.totalSalesKobo, -34000);
+        expect(day3.itemsSold, -5);
+        expect(day3.salesPaidNowKobo, -34000);
+        expect(day3.grossProfitKobo, -13000); // -(30000 - 15000 - 2000)
+        // Profit counts the return once: net profit is the sign-flipped day-1
+        // profit, with no extra refund deduction.
+        expect(day3.netProfitKobo, -_recon([_live()], 1, 1).netProfitKobo);
+        expect(day3.refundsKobo, 0);
 
-      final both = _recon([cancelled], 1, 3);
-      expect(both.costedRevenueKobo, 0);
-      expect(both.cogsKobo, 0);
-      expect(both.netProfitKobo, 0);
-      expect(both.totalSalesKobo, 0);
-    });
+        final both = _recon([cancelled], 1, 3);
+        expect(both.costedRevenueKobo, 0);
+        expect(both.cogsKobo, 0);
+        expect(both.netProfitKobo, 0);
+        expect(both.totalSalesKobo, 0);
+      },
+    );
 
     test('a day between the sale and the cancel is untouched', () {
       final d2 = _recon([_cancelledOn(3)], 2, 2);

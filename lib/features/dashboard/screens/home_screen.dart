@@ -319,13 +319,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final cashierOrders = isCashier
         ? _allOrdersWithItems.where((o) => o.order.staffId == userId)
         : _allOrdersWithItems;
-    final totalSales =
-        computeTotalSalesKobo(
-          cashierOrders,
-          inSpan: (d) => _isDateInPeriod(d, _selectedPeriod),
-          inScope: inScope,
-        ) /
-        100.0;
+    final salesSplit = computeSalesSplitKobo(
+      cashierOrders,
+      inSpan: (d) => _isDateInPeriod(d, _selectedPeriod),
+      inScope: inScope,
+    );
+    final totalSales = salesSplit.netKobo / 100.0;
+    // #708 — display-only: returns inside the net figure (zero or negative).
+    final returnsTotal = salesSplit.returnsKobo / 100.0;
     final totalExpenses = filteredExpenses.fold<double>(
       0,
       (sum, e) => sum + e.expense.amountKobo / 100.0,
@@ -368,6 +369,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ),
     );
     double? netProfit;
+    // #708 — the goods margin of the −1 cancel entries, inside [netProfit].
+    var profitReturned = 0.0;
     if (hasBuyingPrices) {
       double pricedRevenue = 0;
       double cogs = 0;
@@ -389,6 +392,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           }
         }
         discounts += sign * orderDiscountKobo(o, inScope: inScope) / 100.0;
+        if (sign < 0) {
+          for (final i in o.items) {
+            if (!inScope(i.item.storeId) || i.item.buyingPriceKobo <= 0) {
+              continue;
+            }
+            profitReturned +=
+                sign *
+                (lineTotalKobo(i.item.unitPriceKobo, i.item.quantity) -
+                    lineTotalKobo(i.item.buyingPriceKobo, i.item.quantity)) /
+                100.0;
+          }
+          profitReturned -=
+              sign * orderDiscountKobo(o, inScope: inScope) / 100.0;
+        }
       }
       // #696 — staff pay (Daily allowances, Salaries, Bonuses; never
       // advances or loans) comes off too, the same combined lines Daily
@@ -527,6 +544,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         cardsFor: (cell) => _buildCards(
                           cell: cell,
                           sales: totalSales,
+                          returns: returnsTotal,
+                          profitReturned: profitReturned,
                           pending: pendingOrdersCount,
                           profit: netProfit,
                           credit: totalCredit,
@@ -783,6 +802,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   List<Widget> _buildCards({
     required HomeGridCell cell,
     required double sales,
+    required double returns,
+    required double profitReturned,
     required int pending,
     required double? profit,
     required double credit,
@@ -806,10 +827,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         StatCard(
           key: HomeKeys.sales,
           density: density,
-          title: 'Total Sales',
+          title: returns != 0 ? 'Net Sales' : 'Total Sales',
           value: _money(sales),
-          subtitle:
-              'Generated from ${formatPeriodLabel(_selectedPeriod)} transactions',
+          // #708 — Sales / Returns shown beside the net figure when the
+          // period has returns; otherwise the card reads as before.
+          subtitle: returns != 0
+              ? 'Sales ${_money(sales - returns)} · Returns −${_money(-returns)}'
+              : 'Generated from ${formatPeriodLabel(_selectedPeriod)} transactions',
           icon: AppIcons.naira,
           tone: IconTileTone.info,
           pillLabel: sales > 0 ? 'Active' : 'No sales',
@@ -825,7 +849,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           density: density,
           title: 'Net Profit',
           value: profit != null ? _money(profit) : '—',
-          subtitle: profit != null
+          subtitle: profit != null && profitReturned != 0
+              ? 'Profit ${_money(profit - profitReturned)} · Returned −${_money(-profitReturned)}'
+              : profit != null
               ? 'Revenue minus cost of goods & expenses'
               : 'Add buying prices to '
                     '${ref.watch(industryLexiconProvider).itemPluralLower} to '
