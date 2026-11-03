@@ -696,7 +696,7 @@ class _MoneyEntryDialogState extends ConsumerState<_MoneyEntryDialog> {
               child: InputDecorator(
                 decoration: const InputDecoration(
                   labelText: 'Date',
-                  suffixIcon: Icon(Icons.calendar_today, size: 18),
+                  suffixIcon: Icon(AppIcons.calendar, size: 18),
                 ),
                 child: Text(_dateText(_date)),
               ),

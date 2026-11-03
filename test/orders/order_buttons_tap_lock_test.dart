@@ -7,11 +7,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/features/orders/screens/orders_screen.dart';
 import 'package:reebaplus_pos/features/orders/widgets/orders_parts.dart';
+import 'package:reebaplus_pos/features/orders/widgets/refund_destination_dialog.dart';
 import 'package:reebaplus_pos/shared/services/orders/order_service.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 
@@ -24,12 +26,19 @@ class _SlowRefund extends OrderService {
   int refunds = 0;
   final gate = Completer<void>();
 
+  // The seeded order has no payment rows; pretend money was paid so the
+  // destination pop-up (#710) shows.
+  @override
+  Future<int> refundablePaidKobo(String orderId) async => 100000;
+
   @override
   Future<void> markAsCancelled(
     String orderId,
     String reason,
     String staffId, {
     required GateContext gateContext,
+    RefundDestination destination = RefundDestination.cashOrTransfer,
+    String? refundMethod,
   }) {
     refunds++;
     return gate.future;
@@ -79,6 +88,11 @@ void main() {
       );
       await tester.pump();
       await tester.tap(find.widgetWithText(AppButton, 'Issue Refund'));
+      await settleOrders(tester);
+      // #710 — a paid order asks where the money goes.
+      await tester.tap(find.byKey(RefundDestinationKeys.cash));
+      await tester.pump();
+      await tester.tap(find.byKey(RefundDestinationKeys.confirm));
       await settleOrders(tester);
       expect(service.refunds, 1);
 

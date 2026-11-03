@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -268,7 +269,7 @@ class _PayrollPaydayScreenState extends ConsumerState<PayrollPaydayScreen> {
             child: InputDecorator(
               decoration: const InputDecoration(
                 labelText: 'Payday',
-                suffixIcon: Icon(Icons.calendar_today, size: 18),
+                suffixIcon: Icon(AppIcons.calendar, size: 18),
               ),
               child: Text(payrollDayKey(_payday)),
             ),

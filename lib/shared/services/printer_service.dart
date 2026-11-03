@@ -3,6 +3,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reebaplus_pos/core/utils/logger.dart';
+import 'package:reebaplus_pos/features/pos/services/paper_end.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_builder.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
 import 'package:reebaplus_pos/features/pos/services/sample_receipt.dart';
@@ -23,6 +24,8 @@ class PrinterService {
   static const _printStyleKeyPrefix = 'printer_print_style:';
   // Per-printer receipt size (#676): `full` | `compact`.
   static const _receiptSizeKeyPrefix = 'printer_receipt_size:';
+  // Per-printer blank lines after each receipt (#717).
+  static const _paperEndKeyPrefix = 'printer_paper_end:';
 
   // Settle window for Android Bluetooth SPP link before commands can be processed.
   static const _androidConnectSettle = Duration(milliseconds: 1000);
@@ -37,12 +40,13 @@ class PrinterService {
     Future<void> Function(Duration duration)? wait,
     bool? isAndroid,
     UsbPrinterChannel? usb,
-  })  : _usb = usb ?? UsbPrinterChannel(),
-        _writeBytes = writeBytes ?? PrintBluetoothThermal.writeBytes,
-        _connectToPrinter = connectToPrinter ??
-            ((mac) => PrintBluetoothThermal.connect(macPrinterAddress: mac)),
-        _wait = wait ?? ((d) => Future<void>.delayed(d)),
-        _isAndroid = isAndroid ?? Platform.isAndroid;
+  }) : _usb = usb ?? UsbPrinterChannel(),
+       _writeBytes = writeBytes ?? PrintBluetoothThermal.writeBytes,
+       _connectToPrinter =
+           connectToPrinter ??
+           ((mac) => PrintBluetoothThermal.connect(macPrinterAddress: mac)),
+       _wait = wait ?? ((d) => Future<void>.delayed(d)),
+       _isAndroid = isAndroid ?? Platform.isAndroid;
 
   final Future<bool> Function(List<int> bytes) _writeBytes;
   final Future<bool> Function(String mac) _connectToPrinter;
@@ -223,6 +227,28 @@ class PrinterService {
     await prefs.setString('$_receiptSizeKeyPrefix$mac', size.name);
   }
 
+  /// Blank lines fed after each receipt on printer [id] (#717);
+  /// [kDefaultPaperEndLines] when unset.
+  Future<int> paperEndLinesFor(String id) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt('$_paperEndKeyPrefix$id') ?? kDefaultPaperEndLines;
+  }
+
+  /// Saves the blank lines after each receipt for printer [id].
+  Future<void> savePaperEndLinesFor(String id, int lines) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('$_paperEndKeyPrefix$id', lines);
+  }
+
+  /// [bytes] plus the paper end of printer [id] (default when null). Every
+  /// write of a print job goes through here, so builders never feed or cut.
+  Future<List<int>> _withPaperEnd(String? id, List<int> bytes) async {
+    final lines = id == null
+        ? kDefaultPaperEndLines
+        : await paperEndLinesFor(id);
+    return [...bytes, ...paperEnd(lines)];
+  }
+
   /// The receipt size of the printer receipts go to right now (see
   /// [currentPrinterId]); full when there is none.
   Future<ReceiptSize> currentReceiptSize() async {
@@ -288,7 +314,9 @@ class PrinterService {
   /// The USB printer to print on, or null. Takes the first attached printer;
   /// when Android has not allowed it yet, asks once per app run (unless
   /// [askPermission] is false) and returns it only if allowed.
-  Future<UsbPrinterInfo?> attachedUsbPrinter({bool askPermission = true}) async {
+  Future<UsbPrinterInfo?> attachedUsbPrinter({
+    bool askPermission = true,
+  }) async {
     try {
       final listed = (await _usb.list()).where((p) => p.id.isNotEmpty);
       if (listed.isEmpty) return null;
@@ -322,7 +350,7 @@ class PrinterService {
         receiptSize: await receiptSizeFor(id),
         saleDate: saleDate,
       );
-      return await _usb.write(id, bytes);
+      return await _usb.write(id, await _withPaperEnd(id, bytes));
     } catch (e) {
       AppLogger.error('USB test print failed: $e');
       return false;
@@ -348,7 +376,7 @@ class PrinterService {
         receiptSize: await receiptSizeFor(mac),
         saleDate: saleDate,
       );
-      return await _writeJob(bytes);
+      return await _writeJob(await _withPaperEnd(mac, bytes));
     } catch (e) {
       AppLogger.error('Bluetooth test print failed: $e');
       return false;
@@ -490,7 +518,7 @@ class PrinterService {
   Future<bool> printBytes(List<int> bytes) async {
     final usb = await attachedUsbPrinter();
     if (usb != null) {
-      if (await _usb.write(usb.id, bytes)) {
+      if (await _usb.write(usb.id, await _withPaperEnd(usb.id, bytes))) {
         AppLogger.info('Printed on USB printer ${usb.name}');
         return true;
       }
@@ -501,7 +529,9 @@ class PrinterService {
         final connected = await autoConnect();
         if (!connected) return false;
       }
-      final ok = await _writeJob(bytes);
+      final ok = await _writeJob(
+        await _withPaperEnd(await lastConnectedMac(), bytes),
+      );
       if (ok) AppLogger.info('Printed on Bluetooth printer');
       return ok;
     } catch (e) {
@@ -516,7 +546,9 @@ class PrinterService {
   Future<bool> printBytesDirectly(List<int> bytes) async {
     try {
       if (!await isConnected) return false;
-      return await _writeJob(bytes);
+      return await _writeJob(
+        await _withPaperEnd(await lastConnectedMac(), bytes),
+      );
     } catch (e) {
       AppLogger.error('Direct printing failed: $e');
       return false;

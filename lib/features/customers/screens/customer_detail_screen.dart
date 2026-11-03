@@ -21,6 +21,7 @@ import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
+import 'package:reebaplus_pos/core/utils/reversal_labels.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/store_address.dart';
@@ -119,6 +120,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
 
     _historySub = db.customersDao.watchWalletHistory(id).listen((hist) {
       if (mounted) setState(() => _creditHistory = hist);
+      _loadReversalOrderNumbers(hist);
     });
 
     _ordersSub = ref
@@ -207,6 +209,25 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
       return _selectedPeriod;
     }
     return _periodOptions.first;
+  }
+
+  /// Order numbers for the statement's cancel reversal legs (#709).
+  Map<String, String> _reversalOrderNumbers = const {};
+
+  Future<void> _loadReversalOrderNumbers(
+    List<WalletTransactionData> hist,
+  ) async {
+    final ids = <String>{
+      for (final t in hist)
+        if (t.orderId != null &&
+            (t.referenceType == 'refund' || t.referenceType == 'void'))
+          t.orderId!,
+    };
+    final numbers = await ref
+        .read(databaseProvider)
+        .walletTransactionsDao
+        .orderNumbersFor(ids);
+    if (mounted) setState(() => _reversalOrderNumbers = numbers);
   }
 
   List<WalletTransactionData> get _filteredHistory {
@@ -1533,7 +1554,13 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                     tone: isCredit ? IconTileTone.green : IconTileTone.danger,
                     size: 40,
                   ),
-                  title: _friendlyRefType(txn.referenceType),
+                  title:
+                      walletReversalLabel(
+                        referenceType: txn.referenceType,
+                        orderId: txn.orderId,
+                        orderNumber: _reversalOrderNumbers[txn.orderId],
+                      ) ??
+                      _friendlyRefType(txn.referenceType),
                   subtitle: DateFormat(
                     'd MMM yyyy, h:mm a',
                   ).format(txn.createdAt),

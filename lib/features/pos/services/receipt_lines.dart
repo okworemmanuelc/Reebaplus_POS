@@ -567,6 +567,5 @@ List<ReceiptLine> buildReceiptLines({
   // Footer.
   if (!compact) dashed();
   centered('Powered by Reebaplus');
-  lines.add(const ReceiptLine.feed(2));
   return lines;
 }

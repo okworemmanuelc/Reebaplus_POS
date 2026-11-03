@@ -10,6 +10,7 @@ import 'package:reebaplus_pos/features/settings/screens/settings_page_parts.dart
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/pos/services/paper_end.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
 import 'package:reebaplus_pos/features/settings/screens/test_print_preview_screen.dart';
 import 'package:reebaplus_pos/shared/services/usb_printer_channel.dart';
@@ -41,6 +42,7 @@ class _ReceiptPrinterSettingsScreenState
   Map<String, ReceiptPaperSize?> _sizes = {};
   Map<String, ReceiptPrintStyle> _styles = {};
   Map<String, ReceiptSize> _receiptSizes = {};
+  Map<String, int> _paperEnds = {};
   String? _lastMac;
 
   @override
@@ -58,6 +60,7 @@ class _ReceiptPrinterSettingsScreenState
     final sizes = <String, ReceiptPaperSize?>{};
     final styles = <String, ReceiptPrintStyle>{};
     final receiptSizes = <String, ReceiptSize>{};
+    final paperEnds = <String, int>{};
     String? lastMac;
     if (supportsUsb) {
       // Opening this screen is setting up: ask Android for access to any
@@ -67,6 +70,7 @@ class _ReceiptPrinterSettingsScreenState
         sizes[u.id] = await printer.paperSizeFor(u.id);
         styles[u.id] = await printer.printStyleFor(u.id);
         receiptSizes[u.id] = await printer.receiptSizeFor(u.id);
+        paperEnds[u.id] = await printer.paperEndLinesFor(u.id);
       }
     }
     try {
@@ -77,6 +81,7 @@ class _ReceiptPrinterSettingsScreenState
         sizes[d.macAdress] = await printer.paperSizeFor(d.macAdress);
         styles[d.macAdress] = await printer.printStyleFor(d.macAdress);
         receiptSizes[d.macAdress] = await printer.receiptSizeFor(d.macAdress);
+        paperEnds[d.macAdress] = await printer.paperEndLinesFor(d.macAdress);
       }
     } catch (_) {
       // No Bluetooth adapter / read failed — show the empty state.
@@ -95,6 +100,7 @@ class _ReceiptPrinterSettingsScreenState
       _sizes = sizes;
       _styles = styles;
       _receiptSizes = receiptSizes;
+      _paperEnds = paperEnds;
       _lastMac = lastMac;
       _loading = false;
     });
@@ -113,6 +119,11 @@ class _ReceiptPrinterSettingsScreenState
   Future<void> _setReceiptSize(String id, ReceiptSize size) async {
     setState(() => _receiptSizes[id] = size);
     await ref.read(printerServiceProvider).saveReceiptSizeFor(id, size);
+  }
+
+  Future<void> _setPaperEnd(String id, int lines) async {
+    setState(() => _paperEnds[id] = lines);
+    await ref.read(printerServiceProvider).savePaperEndLinesFor(id, lines);
   }
 
   void _openPreview(String id, String name, TestPrintSender send) {
@@ -271,6 +282,7 @@ class _ReceiptPrinterSettingsScreenState
     final size = _sizes[id];
     final style = _styles[id] ?? ReceiptPrintStyle.text;
     final receiptSize = _receiptSizes[id] ?? ReceiptSize.full;
+    final paperEndLines = _paperEnds[id] ?? kDefaultPaperEndLines;
     final muted =
         Theme.of(context).textTheme.bodySmall?.color ??
         Theme.of(context).colorScheme.onSurface;
@@ -366,6 +378,31 @@ class _ReceiptPrinterSettingsScreenState
             receiptSize == ReceiptSize.full
                 ? 'Full: the normal receipt'
                 : 'Compact: smaller text, no logo or address, uses less paper',
+            style: context.regularStyle(12).copyWith(color: muted),
+          ),
+          SizedBox(height: context.getRSize(14)),
+          Text('Blank paper after receipt', style: context.regularStyle(13)),
+          SizedBox(height: context.getRSize(6)),
+          SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<int>(
+              key: Key('paper-end-$id'),
+              showSelectedIcon: false,
+              segments: [
+                for (final n in kPaperEndLineChoices)
+                  ButtonSegment(value: n, label: Text('$n')),
+              ],
+              selected: {paperEndLines},
+              onSelectionChanged: (selection) {
+                if (selection.isEmpty) return;
+                _setPaperEnd(id, selection.first);
+              },
+            ),
+          ),
+          SizedBox(height: context.getRSize(6)),
+          Text(
+            'Lines of blank paper after each receipt. Lower saves paper; '
+            'raise it if the last line gets torn off.',
             style: context.regularStyle(12).copyWith(color: muted),
           ),
           if (footer != null) ...[

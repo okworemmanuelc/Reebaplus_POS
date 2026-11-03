@@ -808,6 +808,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
         movementType: 'adjusted',
         referenceOrderId: Value(orderId),
         performedBy: Value(staffId),
+        reason: const Value(kOrderCancelledReason),
         lastUpdatedAt: Value(now),
       );
       await into(crateLedger).insert(compRow);
@@ -3662,14 +3663,24 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
         final entry = row.readTable(crateLedger);
         final user = row.readTableOrNull(db.users);
         final store = row.readTableOrNull(db.stores);
+        final order = row.readTableOrNull(db.orders);
         final reason = entry.reason;
         final kind = labelForCrateMovement(entry.movementType);
+        final cancelLabel = crateReversalLabel(
+          movementType: entry.movementType,
+          reason: reason,
+          customerId: entry.customerId,
+          referenceOrderId: entry.referenceOrderId,
+          orderNumber: order?.orderNumber,
+          orderStatus: order?.status,
+        );
         return CrateMovementHistoryEntry(
           id: entry.id,
           movementType: entry.movementType,
-          movementLabel: reason == null || reason.isEmpty
-              ? kind
-              : '$kind · ${labelForCrateDamageReason(reason)}',
+          movementLabel: cancelLabel ??
+              (reason == null || reason.isEmpty
+                  ? kind
+                  : '$kind · ${labelForCrateDamageReason(reason)}'),
           quantityDelta: entry.quantityDelta,
           createdAt: entry.createdAt,
           performedByName: user?.name,

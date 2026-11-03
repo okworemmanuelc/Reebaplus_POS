@@ -116,6 +116,9 @@ class OrderQueries {
 
   /// Whether a Completed sale may be Returned (#551, PRD #337): completed, no
   /// crate history, no crate-tracked bottle line. Business-scoped reads.
+  Future<int> refundablePaidKobo(String orderId) =>
+      _ordersDao.refundablePaidKobo(orderId);
+
   Future<bool> isReturnable(String orderId) =>
       _ordersDao.isReturnable(orderId);
 

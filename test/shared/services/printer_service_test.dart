@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:reebaplus_pos/features/pos/services/paper_end.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
 import 'package:reebaplus_pos/shared/services/printer_service.dart';
 
@@ -27,6 +29,42 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
+  /// What a job looks like on the wire: [b] plus the default paper end (#717).
+  List<int> ended(List<int> b) => [...b, ...paperEnd(kDefaultPaperEndLines)];
+
+  group('paper end (#717)', () {
+    test('paperEnd = ESC d n, then GS V 65 0 (feed to cutter, cut)', () {
+      expect(paperEnd(3), [0x1B, 0x64, 3, 0x1D, 0x56, 0x41, 0x00]);
+      expect(paperEnd(0), [0x1B, 0x64, 0, 0x1D, 0x56, 0x41, 0x00]);
+    });
+
+    test('defaults to 3 lines and remembers a choice per printer', () async {
+      final service = PrinterService(isAndroid: false);
+      expect(await service.paperEndLinesFor('AA'), kDefaultPaperEndLines);
+      await service.savePaperEndLinesFor('AA', 1);
+      expect(await service.paperEndLinesFor('AA'), 1);
+      expect(await service.paperEndLinesFor('BB'), kDefaultPaperEndLines);
+    });
+
+    test('a Bluetooth job ends with the connected printer\'s choice', () async {
+      SharedPreferences.setMockInitialValues({
+        'last_printer_mac': 'AA',
+        'printer_paper_end:AA': 1,
+      });
+      final written = <List<int>>[];
+      final service = _FakePrinterService(
+        connected: true,
+        isAndroid: false,
+        writeBytes: (b) async {
+          written.add(b);
+          return true;
+        },
+      );
+      expect(await service.printBytesDirectly([0x01]), isTrue);
+      expect(written.single, [0x01, ...paperEnd(1)]);
+    });
+  });
+
   group('PrinterService', () {
     test(
       '1. Android printBytesDirectly(body): writes [1B 40], then wait(500ms), then body unsplit',
@@ -52,7 +90,7 @@ void main() {
         expect(written.length, 2);
         expect(written[0], [0x1B, 0x40]);
         expect(waited, [const Duration(milliseconds: 500)]);
-        expect(written[1], body);
+        expect(written[1], ended(body));
       },
     );
 
@@ -103,7 +141,7 @@ void main() {
 
       expect(result, isTrue);
       expect(written.length, 1);
-      expect(written[0], body);
+      expect(written[0], ended(body));
       expect(waited, isEmpty);
     });
 
@@ -165,7 +203,7 @@ void main() {
         expect(written.length, 2);
         expect(written[0], [0x1B, 0x40]);
         expect(waited, [const Duration(milliseconds: 500)]);
-        expect(written[1], body);
+        expect(written[1], ended(body));
       },
     );
   });
@@ -294,7 +332,7 @@ void main() {
         expect(await r.service.printBytes(body), isTrue);
         expect(usb.writes.single.$1, 'usb:1208:514');
         // No ESC @ wake write and no wake gap: the job goes over unchanged.
-        expect(usb.writes.single.$2, body);
+        expect(usb.writes.single.$2, ended(body));
         expect(r.btWrites, isEmpty);
       },
     );
@@ -310,7 +348,7 @@ void main() {
       expect(usb.writes, hasLength(1));
       expect(r.btWrites, [
         [0x1B, 0x40],
-        body,
+        ended(body),
       ]);
     });
 
@@ -320,7 +358,7 @@ void main() {
 
       expect(await r.service.printBytes(body), isTrue);
       expect(usb.writes, isEmpty);
-      expect(r.btWrites.last, body);
+      expect(r.btWrites.last, ended(body));
     });
 
     test('USB access denied prints on Bluetooth and asks only once', () async {
@@ -334,7 +372,7 @@ void main() {
       expect(await r.service.printBytes(body), isTrue);
       expect(usb.permissionRequests, ['usb:1208:514']);
       expect(usb.writes, isEmpty);
-      expect(r.btWrites.where((b) => b == body), hasLength(2));
+      expect(r.btWrites.where((b) => listEquals(b, ended(body))), hasLength(2));
     });
 
     test('USB access granted on the prompt prints on USB', () async {
@@ -433,10 +471,10 @@ void main() {
 
       expect(await r.service.printBytesDirectly(body), isTrue);
       expect(usb.writes, isEmpty);
-      expect(r.btWrites.last, body);
+      expect(r.btWrites.last, ended(body));
     });
 
-    test('test print writes a cut slip to the USB printer', () async {
+    test('test print ends the USB slip with the paper end', () async {
       final usb = FakeUsbPrinterChannel(printers: [fakeUsbPrinter()]);
       final service = build(usb).service;
 
@@ -446,7 +484,7 @@ void main() {
       );
       final bytes = usb.writes.single.$2;
       expect(bytes.take(2), [0x1B, 0x40]);
-      expect(bytes.skip(bytes.length - 3), [0x1D, 0x56, 0x30]);
+      expect(bytes.skip(bytes.length - 7), paperEnd(kDefaultPaperEndLines));
       final text = String.fromCharCodes(bytes);
       expect(text, contains('ADA BAR'));
       expect(text, contains('Spaghetti 500g'));
@@ -503,7 +541,10 @@ void main() {
         final ok = await service.testPrintBluetooth('aa', businessName: 'Ada');
         expect(ok, isTrue);
         expect(connected, ['aa']);
-        expect(String.fromCharCodes(written.single), contains('Spaghetti 500g'));
+        expect(
+          String.fromCharCodes(written.single),
+          contains('Spaghetti 500g'),
+        );
       },
     );
   });

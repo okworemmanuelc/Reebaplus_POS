@@ -17,6 +17,10 @@ const String kCheckoutExchangeReason = 'checkout_exchange';
 /// the sale is refunded or rejected.
 const String kCheckoutExchangeReversalReason = 'checkout_exchange_reversal';
 
+/// `crate_ledger.reason` on the row that undoes a cancelled sale's crates
+/// issued to the customer (#709). The movement type stays `adjusted`.
+const String kOrderCancelledReason = 'order_cancelled';
+
 /// Why an Empties Exchange was refused.
 enum CrateExchangeRefusal { unknownBrand, negative, notQuarterStep, moreThanTaken }
 
