@@ -32,6 +32,54 @@ void main() {
   /// What a job looks like on the wire: [b] plus the default paper end (#717).
   List<int> ended(List<int> b) => [...b, ...paperEnd(kDefaultPaperEndLines)];
 
+  group('recently used printers (#724)', () {
+    test('an old install starts from its last Bluetooth printer', () async {
+      SharedPreferences.setMockInitialValues({'last_printer_mac': 'AA'});
+      expect(await PrinterService(isAndroid: false).recentPrinterIds(), ['AA']);
+    });
+
+    test('marking a printer moves it to the front, no duplicates', () async {
+      final service = PrinterService(isAndroid: false);
+      await service.markPrinterUsed('AA');
+      await service.markPrinterUsed('BB');
+      await service.markPrinterUsed('AA');
+      expect(await service.recentPrinterIds(), ['AA', 'BB']);
+    });
+
+    test('sortByRecent: recent first, the rest keep their order', () {
+      expect(
+        PrinterService.sortByRecent(['a', 'b', 'c', 'd'], (s) => s, ['c', 'a']),
+        ['c', 'a', 'b', 'd'],
+      );
+    });
+
+    test('a USB print marks the USB printer', () async {
+      final usb = FakeUsbPrinterChannel(printers: [fakeUsbPrinter()]);
+      final service = _FakePrinterService(
+        connected: false,
+        isAndroid: false,
+        usb: usb,
+        writeBytes: (_) async => true,
+      );
+      expect(await service.printBytes([0x01]), isTrue);
+      expect(await service.recentPrinterIds(), ['usb:1208:514']);
+    });
+
+    test('a Bluetooth print marks the connected printer', () async {
+      SharedPreferences.setMockInitialValues({
+        'last_printer_mac': 'AA',
+        'printer_recent_ids': ['BB'],
+      });
+      final service = _FakePrinterService(
+        connected: true,
+        isAndroid: false,
+        writeBytes: (_) async => true,
+      );
+      expect(await service.printBytesDirectly([0x01]), isTrue);
+      expect(await service.recentPrinterIds(), ['AA', 'BB']);
+    });
+  });
+
   group('paper end (#717)', () {
     test('paperEnd = ESC d n, then GS V 65 0 (feed to cutter, cut)', () {
       expect(paperEnd(3), [0x1B, 0x64, 3, 0x1D, 0x56, 0x41, 0x00]);

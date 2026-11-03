@@ -26,6 +26,9 @@ class PrinterService {
   static const _receiptSizeKeyPrefix = 'printer_receipt_size:';
   // Per-printer blank lines after each receipt (#717).
   static const _paperEndKeyPrefix = 'printer_paper_end:';
+  // Printer ids (USB id or Bluetooth MAC), most recently printed on first.
+  static const _recentKey = 'printer_recent_ids';
+  static const _recentMax = 20;
 
   // Settle window for Android Bluetooth SPP link before commands can be processed.
   static const _androidConnectSettle = Duration(milliseconds: 1000);
@@ -240,6 +243,49 @@ class PrinterService {
     await prefs.setInt('$_paperEndKeyPrefix$id', lines);
   }
 
+  /// Printer ids, most recently printed on first (#724). An install that
+  /// predates the list starts from its last connected Bluetooth printer.
+  Future<List<String>> recentPrinterIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    final recent = prefs.getStringList(_recentKey);
+    if (recent != null) return recent;
+    final mac = await lastConnectedMac();
+    return mac == null ? const [] : [mac];
+  }
+
+  /// Moves printer [id] to the front of [recentPrinterIds].
+  Future<void> markPrinterUsed(String id) async {
+    final recent = [id, ...(await recentPrinterIds()).where((r) => r != id)];
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_recentKey, recent.take(_recentMax).toList());
+  }
+
+  /// [items] reordered so the most recently used printers come first; those
+  /// never used keep their order below.
+  static List<T> sortByRecent<T>(
+    List<T> items,
+    String Function(T) idOf,
+    List<String> recent,
+  ) {
+    int rank(T item) {
+      final i = recent.indexOf(idOf(item));
+      return i < 0 ? recent.length : i;
+    }
+
+    final indexed = items.indexed.toList()
+      ..sort((a, b) {
+        final byRank = rank(a.$2).compareTo(rank(b.$2));
+        return byRank != 0 ? byRank : a.$1.compareTo(b.$1);
+      });
+    return [for (final e in indexed) e.$2];
+  }
+
+  /// [ok] after recording printer [id] as used when the print went through.
+  Future<bool> _used(String? id, bool ok) async {
+    if (ok && id != null) await markPrinterUsed(id);
+    return ok;
+  }
+
   /// [bytes] plus the paper end of printer [id] (default when null). Every
   /// write of a print job goes through here, so builders never feed or cut.
   Future<List<int>> _withPaperEnd(String? id, List<int> bytes) async {
@@ -350,7 +396,10 @@ class PrinterService {
         receiptSize: await receiptSizeFor(id),
         saleDate: saleDate,
       );
-      return await _usb.write(id, await _withPaperEnd(id, bytes));
+      return await _used(
+        id,
+        await _usb.write(id, await _withPaperEnd(id, bytes)),
+      );
     } catch (e) {
       AppLogger.error('USB test print failed: $e');
       return false;
@@ -376,7 +425,7 @@ class PrinterService {
         receiptSize: await receiptSizeFor(mac),
         saleDate: saleDate,
       );
-      return await _writeJob(await _withPaperEnd(mac, bytes));
+      return await _used(mac, await _writeJob(await _withPaperEnd(mac, bytes)));
     } catch (e) {
       AppLogger.error('Bluetooth test print failed: $e');
       return false;
@@ -519,6 +568,7 @@ class PrinterService {
     final usb = await attachedUsbPrinter();
     if (usb != null) {
       if (await _usb.write(usb.id, await _withPaperEnd(usb.id, bytes))) {
+        await markPrinterUsed(usb.id);
         AppLogger.info('Printed on USB printer ${usb.name}');
         return true;
       }
@@ -529,8 +579,10 @@ class PrinterService {
         final connected = await autoConnect();
         if (!connected) return false;
       }
-      final ok = await _writeJob(
-        await _withPaperEnd(await lastConnectedMac(), bytes),
+      final mac = await lastConnectedMac();
+      final ok = await _used(
+        mac,
+        await _writeJob(await _withPaperEnd(mac, bytes)),
       );
       if (ok) AppLogger.info('Printed on Bluetooth printer');
       return ok;
@@ -546,9 +598,8 @@ class PrinterService {
   Future<bool> printBytesDirectly(List<int> bytes) async {
     try {
       if (!await isConnected) return false;
-      return await _writeJob(
-        await _withPaperEnd(await lastConnectedMac(), bytes),
-      );
+      final mac = await lastConnectedMac();
+      return await _used(mac, await _writeJob(await _withPaperEnd(mac, bytes)));
     } catch (e) {
       AppLogger.error('Direct printing failed: $e');
       return false;

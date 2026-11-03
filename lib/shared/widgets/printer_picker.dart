@@ -6,6 +6,7 @@ import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/shared/services/printer_service.dart';
 
 class PrinterPicker extends ConsumerStatefulWidget {
   final Function(BluetoothInfo) onSelected;
@@ -35,7 +36,11 @@ class _PrinterPickerState extends ConsumerState<PrinterPicker> {
     List<BluetoothInfo> devices = [];
     try {
       await printer.requestPermissions();
-      devices = await printer.getPairedDevices();
+      devices = PrinterService.sortByRecent(
+        await printer.getPairedDevices(),
+        (d) => d.macAdress,
+        await printer.recentPrinterIds(),
+      );
     } catch (_) {
       // No Bluetooth adapter / read failed — fall through to the empty state
       // rather than spinning forever.

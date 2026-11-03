@@ -55,7 +55,10 @@ BEGIN
     SELECT conname FROM pg_constraint
      WHERE conrelid = 'public.order_items'::regclass
        AND contype = 'c'
-       AND pg_get_constraintdef(oid) ILIKE '%quantity%> 0%'
+       AND (conname = 'order_items_quantity_check'
+            -- Postgres renders the literal as "(0)::double precision", so match
+            -- both spellings of "quantity > 0".
+            OR pg_get_constraintdef(oid) ~* 'quantity\s*>\s*\(?0\)?')
        AND pg_get_constraintdef(oid) NOT ILIKE '%qty_is_quarter%'
   LOOP
     EXECUTE format('ALTER TABLE public.order_items DROP CONSTRAINT %I', c.conname);
