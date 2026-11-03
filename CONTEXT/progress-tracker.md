@@ -7,6 +7,9 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #708: Reports show Sales / Returns / Net separately (2026-11-03, branch `feat/708-returns-line`)
+- Home, Profit report and Daily Recon split the figure into Sales / Returns / Net (and Profit / Profit returned) only when the period has cancel entries; `computeSalesSplitKobo` in `report_revenue.dart` is the one source, Net == old total, day-close snapshot untouched.
+
 ### Issue #672: Payroll import from the old POS (2026-11-03, branch `feat/672-payroll-import`)
 - New tool `tool/payroll_import/` (same shape as #623's `tool/legacy_import`: writes `import.sql`, `checks.sql`, `report.md` outside the repo, never connects). Reads the old `Staff*` tables plus a PRIVATE config beside the export (worker list, loan dates, payment methods, the plan's expected totals). No names or amounts in the repo; tests use invented data.
 - Mapping: listed workers only (daily allowance 0, never backdated); SETTLEMENT → `salary_payment` in the month before payday; a cancelled ADVANCE + its offsetting ADJUSTMENT → advance + correction (`corrects_entry_id`); loans → `loan_given` / `loan_repaid` dated from the note (dd/mm/yy), the config, or the entry day; a repayment on the worker's payday is the salary deduction (method other). Signed statements keep both signatures (data-URL prefix stripped). Anything without a faithful mapping (cancelled salary or loan, orphan adjustment, unknown type) stops the build.
