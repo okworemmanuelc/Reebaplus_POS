@@ -229,14 +229,29 @@ void main() {
       await expectLater(pay(month: '2026-12'), violation('not started'));
     });
 
+    test('#704: a month after the chosen payday is refused', () async {
+      await expectLater(
+        pay(month: '2026-11', payday: '2026-10-28'),
+        violation('not started'),
+      );
+      final s = await pay(month: '2026-10', payday: '2026-10-28');
+      expect(s.salaryMonth, '2026-10');
+    });
+
+    test('#704: the picker never offers a month after the payday', () {
+      final months = payrollPayableMonths(DateTime(2026, 11, 20), count: 3);
+      expect(months, ['2026-11', '2026-10', '2026-09']);
+      expect(months, isNot(contains('2026-12')));
+    });
+
     test('#696: payday is free up to today, never in the future', () async {
       await expectLater(
         pay(month: '2026-11', payday: '2026-11-04'),
         violation('future'),
       );
-      // An earlier payday for a later month is allowed (picked freely).
-      final s = await pay(month: '2026-11', payday: '2026-10-28');
-      expect(s.salaryMonth, '2026-11');
+      // An earlier payday for an earlier month is allowed (picked freely).
+      final s = await pay(month: '2026-09', payday: '2026-10-28');
+      expect(s.salaryMonth, '2026-09');
     });
 
     test('payable months include the payday month, newest first', () {

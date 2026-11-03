@@ -145,6 +145,17 @@ void main() {
       db.payrollDao.entriesForWorker(workerId);
 
   group('advance cap', () {
+    test('#704: an advance for a month not started yet is refused', () async {
+      final n = DateTime.now();
+      final next = DateTime(n.year, n.month + 1);
+      final key = '${next.year}-${next.month.toString().padLeft(2, '0')}';
+      await expectLater(
+        give('advance', 100000, month: key),
+        throwsA(isA<PayrollRuleViolation>()),
+      );
+      await give('advance', 100000); // this month is fine
+    });
+
     test('an advance up to what is left of the month is allowed', () async {
       await give('advance', 6000000, month: '2026-10');
       await give('advance', 4000000, month: '2026-10');

@@ -278,6 +278,12 @@ extension PayrollMoneyEntries on PayrollDao {
 
       if (type == 'advance') {
         month ??= PayrollMoneyEntries.payrollThisMonth();
+        // #704: never against a month that has not started on the entry date.
+        if (!isCorrection && month.compareTo(date.substring(0, 7)) > 0) {
+          throw PayrollRuleViolation(
+            '${payrollMonthLabel(month)} has not started yet.',
+          );
+        }
         if (await _monthPaid(workerId, month)) {
           throw PayrollRuleViolation(
             '${payrollMonthLabel(month)} salary is already paid. '
