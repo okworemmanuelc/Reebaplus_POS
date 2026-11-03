@@ -171,6 +171,52 @@ void main() {
     } finally { await db.close(); }
   });
 
+  test('v101 to v102 adds approval to Payroll Entries, old ones approved',
+      () async {
+    var db = await openAndInit();
+    final businessId = UuidV7.generate();
+    final storeId = UuidV7.generate();
+    final workerId = UuidV7.generate();
+    await db.into(db.businesses).insert(
+      BusinessesCompanion.insert(id: Value(businessId), name: 'Test Shop'));
+    await db.into(db.stores).insert(StoresCompanion.insert(
+        id: Value(storeId), businessId: businessId, name: 'Main Store'));
+    await db.into(db.payrollWorkers).insert(PayrollWorkersCompanion.insert(
+        id: Value(workerId), businessId: businessId, storeId: storeId,
+        name: 'Test Worker'));
+    // Rebuild payroll_entries as v101 had it (no approval columns).
+    await db.customStatement('DROP TABLE payroll_entries');
+    await db.customStatement(
+      'CREATE TABLE payroll_entries (id TEXT NOT NULL PRIMARY KEY, '
+      'business_id TEXT NOT NULL, worker_id TEXT NOT NULL, '
+      'store_id TEXT NOT NULL, type TEXT NOT NULL, '
+      'amount_kobo INTEGER NOT NULL, entry_date TEXT NOT NULL, '
+      'salary_month TEXT, payment_method TEXT NOT NULL DEFAULT \'cash\', '
+      'note TEXT, corrects_entry_id TEXT, recorded_by TEXT, legacy_id TEXT, '
+      'created_at INTEGER NOT NULL DEFAULT (CAST(strftime(\'%s\', '
+      'CURRENT_TIMESTAMP) AS INTEGER)), last_updated_at INTEGER NOT NULL '
+      'DEFAULT (CAST(strftime(\'%s\', CURRENT_TIMESTAMP) AS INTEGER)))');
+    await db.customStatement(
+      "INSERT INTO payroll_entries (id, business_id, worker_id, store_id, "
+      "type, amount_kobo, entry_date) VALUES ('e1', '$businessId', "
+      "'$workerId', '$storeId', 'bonus', 100, '2026-11-01')");
+    await db.customStatement('PRAGMA user_version = 101');
+    await db.close();
+    db = await openAndInit();
+    try {
+      expect(await columnsOf(db, 'payroll_entries'), containsAll([
+        'status', 'approved_by', 'approved_at', 'rejection_reason',
+      ]));
+      final row = await db.select(db.payrollEntries).getSingle();
+      expect(row.status, 'approved');
+      // Re-running the step is idempotent.
+      await db.customStatement('PRAGMA user_version = 101');
+      await db.close();
+      db = await openAndInit();
+      expect((await db.select(db.payrollEntries).get()).single.id, 'e1');
+    } finally { await db.close(); }
+  });
+
   test('v90 to v91 adds product_photos with its trigger and live-slot index',
       () async {
     var db = await openAndInit();

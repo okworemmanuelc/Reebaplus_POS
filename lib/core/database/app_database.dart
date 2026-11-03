@@ -2374,6 +2374,13 @@ const Set<String> kPayrollEntryTypes = {
 /// How a Payroll Entry was paid. Only till cash reduces the drawer figure.
 const Set<String> kPayrollPaymentMethods = {'cash', 'transfer', 'other'};
 
+/// The approval state of a Payroll Entry (#670). 'approved' is the default
+/// (allowances, salary payments, CEO entries, a Manager within their expense
+/// limit); a Manager's bonus, advance or loan above that limit lands
+/// 'pending' until the CEO approves or rejects it. A rejected entry counts
+/// for nothing. The cloud lets only `pending` move on (0244).
+const Set<String> kPayrollEntryStatuses = {'approved', 'pending', 'rejected'};
+
 /// A worker on Payroll. Added deliberately by a permitted user; a login
 /// ([userId]) is optional. Removal stops future allowances and keeps history
 /// ([isRemoved], never hard-deleted).
@@ -2429,6 +2436,19 @@ class PayrollEntries extends Table {
   TextColumn get correctsEntryId => text().nullable()();
   TextColumn get recordedBy => text().nullable().references(Users, #id)();
   TextColumn get legacyId => text().nullable()();
+  // #670 (v102 / cloud 0244): CEO approval for a Manager's over-limit bonus,
+  // advance or loan ([kPayrollEntryStatuses]). The only fields that may
+  // change after insert, and only away from 'pending'.
+  TextColumn get status => text()
+      .withDefault(const Constant('approved'))
+      .check(
+        const CustomExpression<bool>(
+          "status IN ('approved', 'pending', 'rejected')",
+        ),
+      )();
+  TextColumn get approvedBy => text().nullable().references(Users, #id)();
+  DateTimeColumn get approvedAt => dateTime().nullable()();
+  TextColumn get rejectionReason => text().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
       dateTime().withDefault(currentDateAndTime)();
@@ -3308,7 +3328,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 101;
+  int get schemaVersion => 102;
 
   /// The v90 (#473) listing columns, pinned to their defaults in every older
   /// products rebuild: TableMigration copies from the CURRENT schema, so a
@@ -7122,6 +7142,34 @@ class AppDatabase extends _$AppDatabase {
           "VALUES ('$kPayrollPermissionKey', "
           "'${_sqlEscape(_payrollPermissionDescription)}', 'Payroll')",
         );
+      }
+
+      if (from < 102) {
+        // ── v102 — #670: approval on Payroll Entries ──────────────────────
+        //
+        // Mirrors supabase/migrations/0244_payroll_entry_approval.sql: status
+        // (default 'approved', so every existing entry stays counted),
+        // approved_by, approved_at, rejection_reason. The v101 step creates
+        // payroll_entries from the CURRENT definition, so a DB stepped up from
+        // < 101 already has them: guard each with pragma_table_info.
+        final have = {
+          for (final r in await customSelect(
+            "SELECT name FROM pragma_table_info('payroll_entries')",
+          ).get())
+            r.read<String>('name'),
+        };
+        if (!have.contains('status')) {
+          await m.addColumn(payrollEntries, payrollEntries.status);
+        }
+        if (!have.contains('approved_by')) {
+          await m.addColumn(payrollEntries, payrollEntries.approvedBy);
+        }
+        if (!have.contains('approved_at')) {
+          await m.addColumn(payrollEntries, payrollEntries.approvedAt);
+        }
+        if (!have.contains('rejection_reason')) {
+          await m.addColumn(payrollEntries, payrollEntries.rejectionReason);
+        }
       }
     },
     beforeOpen: (details) async {
