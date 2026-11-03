@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
-import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/fly_to_cart.dart';
@@ -124,10 +123,7 @@ class _RequestProductTileState extends ConsumerState<_RequestProductTile> {
     // "60cl · Bottle": the product's own subtitle, then its unit.
     final subtitle = [
       product.subtitle,
-      unitLabel(
-        product.unit,
-        crates: businessTracksCrates(ref.watch(currentBusinessProvider)),
-      ),
+      unitLabel(product.unit),
     ].where((s) => s != null && s.trim().isNotEmpty).join(' · ');
     return ProductTile(
       name: product.name,

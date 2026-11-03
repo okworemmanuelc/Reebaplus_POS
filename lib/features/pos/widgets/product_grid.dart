@@ -81,16 +81,13 @@ double posTileExtent(BuildContext context) {
       4; // the in-cart border
 }
 
-/// "60cl · Bottle Crate": the product's size then its unit, the blanks
-/// skipped, joined with " · " (#641). The description no longer shows on the
-/// tile (it stays on Product Details). [crates] is `businessTracksCrates` for
-/// the active business (see [unitLabel]).
-String? posTileSubtitle(ProductData product, {required bool crates}) {
-  final parts = [product.size, unitLabel(product.unit, crates: crates)]
-      .where((s) => s != null && s.trim().isNotEmpty && s != 'null')
-      .map((s) => s!.trim())
-      .toList();
-  return parts.isEmpty ? null : parts.join(' · ');
+/// "Bottle": the product's unit, or null when it has none (#641, #675). The
+/// size is part of the name ("Coca-Cola 50cl"), so the stored `size` is not
+/// shown. The description no longer shows on the tile (it stays on Product
+/// Details).
+String? posTileSubtitle(ProductData product) {
+  final unit = unitLabel(product.unit)?.trim();
+  return (unit == null || unit.isEmpty || unit == 'null') ? null : unit;
 }
 
 /// The cart-badge text for [qty]: whole numbers bare, fractions as decimals.
@@ -333,10 +330,7 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
     final level = isOutOfStock
         ? StockLevel.out
         : (isLowStock ? StockLevel.low : StockLevel.ok);
-    final subtitle = posTileSubtitle(
-      product,
-      crates: businessTracksCrates(ref.watch(currentBusinessProvider)),
-    );
+    final subtitle = posTileSubtitle(product);
 
     return ValueListenableBuilder<List<Map<String, dynamic>>>(
       valueListenable: ref.watch(cartProvider),

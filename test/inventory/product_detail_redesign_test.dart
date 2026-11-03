@@ -338,13 +338,13 @@ void main() {
       // Hero.
       expect(find.text('Gulder'), findsOneWidget);
       expect(find.text('Beer'), findsOneWidget);
-      expect(find.text('32 crates in stock'), findsOneWidget);
+      expect(find.text('32 bottles in stock'), findsOneWidget);
       expect(
         find.text('Nigerian Breweries · Crate of 12 bottles'),
         findsOneWidget,
       );
       expect(find.text('No barcode yet'), findsOneWidget);
-      expect(find.text('retail, per crate'), findsOneWidget);
+      expect(find.text('retail, per bottle'), findsOneWidget);
       expect(find.text('List Online'), findsNothing);
       // Cards, top to bottom.
       final titles = [
@@ -400,11 +400,11 @@ void main() {
     });
 
     testWidgets(
-      '"Bottle Crate" with no count, "Crate of 12 bottles" with one',
+      '"Bottle" with no count, "Crate of 12 bottles" with one',
       (tester) async {
         detail = await seedDetailSample(env, sample, unitsPerPack: null);
         await pump(tester, seeded: detail);
-        expect(find.text('Nigerian Breweries · Bottle Crate'), findsOneWidget);
+        expect(find.text('Nigerian Breweries · Bottle'), findsOneWidget);
         expect(find.textContaining('Crate of'), findsNothing);
         await disposeScreen(tester);
       },
@@ -452,7 +452,7 @@ void main() {
       tester,
     ) async {
       await pump(tester);
-      expect(find.text('All prices are per crate.'), findsOneWidget);
+      expect(find.text('All prices are per bottle.'), findsOneWidget);
       for (final l in ['Cost', 'Retail', 'Wholesale']) {
         expect(find.text(l), findsOneWidget, reason: l);
       }
@@ -509,11 +509,11 @@ void main() {
       tester,
     ) async {
       await pump(tester);
-      expect(find.text('32 crates'), findsOneWidget);
+      expect(find.text('32 bottles'), findsOneWidget);
       expect(find.text('Abuja HQ'), findsOneWidget);
       expect(find.text('Low stock, alert at 5'), findsOneWidget);
       expect(find.text('Warehouse'), findsOneWidget);
-      expect(find.text('Alert at 5 crates'), findsOneWidget);
+      expect(find.text('Alert at 5 bottles'), findsOneWidget);
       await disposeScreen(tester);
     });
 
@@ -527,8 +527,8 @@ void main() {
       await deliver(tester);
       // Warehouse 0 + Abuja HQ 4: the page stays live without a reopen.
       expect(find.text('Out of stock'), findsWidgets);
-      expect(find.text('4 crates'), findsOneWidget);
-      expect(find.text('4 crates in stock'), findsOneWidget);
+      expect(find.text('4 bottles'), findsOneWidget);
+      expect(find.text('4 bottles in stock'), findsOneWidget);
       await disposeScreen(tester);
     });
 
@@ -539,25 +539,25 @@ void main() {
           .write(const InventoryCompanion(quantity: Value(9)));
       await deliver(tester);
       expect(find.text('Low stock, alert at 5'), findsNothing);
-      expect(find.text('Alert at 5 crates'), findsNWidgets(2));
+      expect(find.text('Alert at 5 bottles'), findsNWidgets(2));
       await disposeScreen(tester);
     });
   });
 
   group('Sales Target', () {
-    testWidgets('no sales yet: 0 of the target, crates to go', (tester) async {
+    testWidgets('no sales yet: 0 of the target, bottles to go', (tester) async {
       await pump(tester);
-      expect(find.text('of 200 crates sold'), findsOneWidget);
+      expect(find.text('of 200 bottles sold'), findsOneWidget);
       expect(find.text('0%'), findsOneWidget);
       expect(
-        find.textContaining('200 crates to go. That is about'),
+        find.textContaining('200 bottles to go. That is about'),
         findsOneWidget,
       );
       expect(find.byType(LinearProgressIndicator), findsOneWidget);
       await disposeScreen(tester);
     });
 
-    testWidgets('counts the crates sold this month', (tester) async {
+    testWidgets('counts the bottles sold this month', (tester) async {
       final productId = sample.productIds['Gulder']!;
       final orderId = UuidV7.generate();
       await env.db
@@ -592,7 +592,7 @@ void main() {
       await pump(tester);
       expect(find.text('5'), findsWidgets);
       expect(find.text('3%'), findsOneWidget);
-      expect(find.textContaining('195 crates to go'), findsOneWidget);
+      expect(find.textContaining('195 bottles to go'), findsOneWidget);
       await disposeScreen(tester);
     });
 
@@ -633,7 +633,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect((await product()).monthlyTargetUnits, 300);
-      expect(find.text('of 300 crates sold'), findsOneWidget);
+      expect(find.text('of 300 bottles sold'), findsOneWidget);
       await disposeScreen(tester);
     });
   });
@@ -1177,7 +1177,7 @@ void main() {
       await showAllCards(tester);
       expect(find.text('Last 7 days'), findsOneWidget);
       expect(find.text('5'), findsWidgets);
-      expect(find.text('crates sold'), findsOneWidget);
+      expect(find.text('bottles sold'), findsOneWidget);
       expect(find.text('Today'), findsOneWidget);
       await tester.drag(
         find.byType(SingleChildScrollView).first,
@@ -1245,7 +1245,7 @@ void main() {
       expect(find.text('-2'), findsOneWidget);
       expect(find.text('+30'), findsOneWidget);
       expect(find.text('-9'), findsNothing);
-      expect(find.text('crates'), findsWidgets);
+      expect(find.text('bottles'), findsWidgets);
       expect(find.textContaining('Today, '), findsWidgets);
       await disposeScreen(tester);
     });
@@ -1278,7 +1278,7 @@ void main() {
       await pump(tester);
       await showAllCards(tester);
       expect(find.text('0'), findsWidgets);
-      expect(find.text('crates sold'), findsOneWidget);
+      expect(find.text('bottles sold'), findsOneWidget);
       expect(find.text('No stock movements yet'), findsOneWidget);
       await disposeScreen(tester);
     });

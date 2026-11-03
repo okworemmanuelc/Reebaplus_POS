@@ -78,8 +78,8 @@ class ReceiptWidget extends StatelessWidget {
   final double? crateDepositFull;
 
   /// Whether the business counts empty crates —
-  /// `businessTracksCrates(currentBusiness)`. Only then does a `Bottle` line
-  /// read "Bottle Crate <name>" (#487); every other shop prints "Bottle".
+  /// `businessTracksCrates(currentBusiness)`. A line never reads "Bottle
+  /// Crate" (#675); the unit is never put in front of the name.
   final bool tracksCrates;
 
   const ReceiptWidget({

@@ -222,11 +222,8 @@ class _ScanLinkRow extends ConsumerWidget {
     final t = Theme.of(context);
     final text = t.colorScheme.onSurface;
     final muted = t.textTheme.bodySmall?.color ?? text;
-    // Same size + unit descriptor the POS grid tile shows under the name.
-    final crates = businessTracksCrates(ref.watch(currentBusinessProvider));
-    final size =
-        '${product.size ?? ''} ${unitLabel(product.unit, crates: crates) ?? ''}'
-            .trim();
+    // Same unit descriptor the POS grid tile shows under the name (#675).
+    final size = unitLabel(product.unit)?.trim() ?? '';
     final barcode = product.barcode?.trim() ?? '';
     final radius = BorderRadius.circular(AppSpacing.borderRadiusL);
 

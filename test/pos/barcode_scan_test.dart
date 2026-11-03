@@ -178,7 +178,7 @@ void main() {
         authProvider.overrideWith((ref) => auth),
         cartProvider.overrideWith((ref) => cart),
         barcodeScannerProvider.overrideWithValue(fake),
-        // A plain shop (#487: "Bottle", not "Bottle Crate"). Fixed, so the
+        // A plain shop. Fixed, so the
         // "Which one?" rows don't open a Drift business stream this
         // in-memory database can't close inside the test.
         currentBusinessProvider.overrideWithValue(null),
@@ -586,7 +586,8 @@ void main() {
       expect(find.byType(EditItemModal), findsNothing);
       expect(cart.value, isEmpty);
       expect(find.text('Which one?'), findsOneWidget);
-      expect(find.text('Panadol Extra · big'), findsOneWidget);
+      // The stored size is not shown: it lives in the name (#675).
+      expect(find.text('Panadol Extra'), findsOneWidget);
       expect(find.text('Panadol Junior'), findsOneWidget);
       expect(find.text('10 in stock here'), findsOneWidget);
       expect(find.text('4 in stock here'), findsOneWidget);

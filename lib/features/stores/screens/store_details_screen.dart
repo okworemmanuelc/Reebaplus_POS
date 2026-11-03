@@ -358,7 +358,6 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
   // ── Inventory List ──────────────────────────────────────────────────────────
   Widget _buildInventoryList() {
     final t = Theme.of(context);
-    final crates = businessTracksCrates(ref.watch(currentBusinessProvider));
     final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     final stocked = _inventory.where((p) => p.totalStock > 0).toList()
       ..sort((a, b) => b.totalStock.compareTo(a.totalStock));
@@ -431,7 +430,7 @@ class _StoreDetailsScreenState extends ConsumerState<StoreDetailsScreen> {
                                   ),
                                   if ((item.product.unit ?? '').isNotEmpty)
                                     Text(
-                                      unitLabel(item.product.unit, crates: crates)!,
+                                      unitLabel(item.product.unit)!,
                                       style: context
                                           .regularStyle(12)
                                           .copyWith(color: muted),

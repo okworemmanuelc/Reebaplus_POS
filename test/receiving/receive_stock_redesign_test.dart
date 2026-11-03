@@ -104,10 +104,11 @@ void main() {
     expect(find.text('Tap and hold a product to edit it.'), findsNothing);
     expect(find.byKey(ReceiveKeys.newProduct), findsOneWidget);
     expect(find.text('New Product'), findsOneWidget);
-    // Name, "size · unit" (the crate size and unit, as before), "Current: N"
-    // — no price.
+    // Name, the unit (the stored size is not shown — it lives in the name,
+    // #675), "Current: N" — no price.
     expect(find.text('Star Lager'), findsOneWidget);
-    expect(find.text('big · Bottle'), findsWidgets);
+    expect(find.text('Bottle'), findsWidgets);
+    expect(find.text('big · Bottle'), findsNothing);
     expect(find.text('Can'), findsOneWidget);
     expect(find.text('Current: 48'), findsOneWidget);
     expect(find.textContaining('₦'), findsNothing);

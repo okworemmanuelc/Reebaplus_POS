@@ -115,8 +115,9 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   // target — explicit user requirement).
   bool get _isCeo => ref.read(currentUserRoleProvider)?.slug == 'ceo';
 
-  /// Whether a stored `Bottle` reads "Bottle Crate" / "crates" (#487): only in
-  /// a shop that counts empty crates. Watched, for the build-time labels.
+  /// Whether the shop counts empty crates (#487), for the crate pack wording
+  /// ("Crate of 12 bottles"). The unit always reads "Bottle" (#675). Watched,
+  /// for the build-time labels.
   bool get _crates => businessTracksCrates(ref.watch(currentBusinessProvider));
 
   DateTime get _now => (widget.clock ?? DateTime.now)();
@@ -515,11 +516,11 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       ),
       barcode: p?.barcode,
       retailPrice: formatCurrency(retailKobo / 100),
-      perNoun: unitCountNoun(_unit, 1, crates: _crates),
+      perNoun: unitCountNoun(_unit, 1),
       categoryName: categoryName,
       stockLabel: level == StockLevel.out
           ? 'Out of stock'
-          : '${formatQty(total)} ${unitCountNoun(_unit, total, crates: _crates)} in stock',
+          : '${formatQty(total)} ${unitCountNoun(_unit, total)} in stock',
       stockLevel: level,
       imagePath: _imagePath,
       // The same category picture as the POS and Receive Stock tiles.
@@ -547,7 +548,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       ref.watch(currentBusinessProvider),
     );
     return ProductPricesCard(
-      perNoun: unitCountNoun(_unit, 1, crates: _crates),
+      perNoun: unitCountNoun(_unit, 1),
       retailKobo: retailKobo,
       wholesaleKobo: wholesaleKobo,
       costKobo: canSeeCost ? costKobo : null,
@@ -674,9 +675,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         AppFixedColors.light;
     Widget placeholder() => ColoredBox(
       color: f.neutralTile,
-      child: Center(
-        child: AppIcon(AppIcons.image, size: context.getRSize(22)),
-      ),
+      child: Center(child: AppIcon(AppIcons.image, size: context.getRSize(22))),
     );
     return ProductPhotosCard(
       hasCover: hasCover,
@@ -1214,10 +1213,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               final note = isRemove
                   ? '${reason!}${notes.isEmpty ? '' : ': $notes'}'
                   : (notes.isEmpty ? 'Stock added by $actorName' : notes);
-              final unitWord = unitLabel(
-                product.unit,
-                crates: businessTracksCrates(ref.read(currentBusinessProvider)),
-              );
+              final unitWord = unitLabel(product.unit);
               final summary =
                   '$actorName ${isRemove ? 'removed' : 'added'} ${formatQty(qty)} '
                   '${unitWord != null ? '$unitWord(s) ' : ''}of ${product.name} '

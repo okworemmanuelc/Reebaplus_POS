@@ -153,7 +153,7 @@ class _ReceiveCartLineCard extends ConsumerWidget {
         : 'Price: ${formatCurrency(line.retailKobo / 100)}';
     // A unitless product (#108) shows no unit label — just its prices.
     final detail = (line.unit ?? '').isNotEmpty
-        ? '${unitLabel(line.unit, crates: businessTracksCrates(ref.watch(currentBusinessProvider)))} · $prices'
+        ? '${unitLabel(line.unit)} · $prices'
         : prices;
     final radius = BorderRadius.circular(AppSpacing.borderRadiusXL);
     return Dismissible(

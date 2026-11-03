@@ -179,14 +179,15 @@ void main() {
       await finish(tester);
     });
 
-    testWidgets('unit chips: "Bottle Crate" is shown, Bottle is saved, with '
+    testWidgets('unit chips: "Bottle" is shown (#675), Bottle is saved, with '
         'the bottles in one crate', (tester) async {
       await pump(tester);
       final bottle = find.byKey(AddProductKeys.unitChip('Bottle'));
       expect(
-        find.descendant(of: bottle, matching: find.text('Bottle Crate')),
+        find.descendant(of: bottle, matching: find.text('Bottle')),
         findsOneWidget,
       );
+      expect(find.text('Bottle Crate'), findsNothing);
       // No plain Crate for a new product.
       expect(find.byKey(AddProductKeys.unitChip('Crate')), findsNothing);
       // No unit picked by default, so no "how many in one" box.
@@ -195,7 +196,7 @@ void main() {
       await type(tester, AddProductKeys.name, 'Hero Lager');
       await tapKey(tester, AddProductKeys.unitChip('Bottle'));
       expect(find.text('Bottles in one crate'), findsOneWidget);
-      expect(find.text('All prices are per crate.'), findsOneWidget);
+      expect(find.text('All prices are per bottle.'), findsOneWidget);
       await type(tester, AddProductKeys.unitsPerPack, '12');
       await type(tester, AddProductKeys.retail, '9000');
       await type(tester, AddProductKeys.quantity, '3');

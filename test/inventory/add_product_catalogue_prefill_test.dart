@@ -625,7 +625,7 @@ void main() {
       },
     );
 
-    // #487: "Bottle" reads "Bottle Crate" (the saved value stays Bottle), and
+    // #675: "Bottle" reads "Bottle" (never "Bottle Crate"), and
     // plain "Crate" is not offered to a new product.
     Future<void> addCrateProduct() => db
         .into(db.products)
@@ -639,13 +639,13 @@ void main() {
         );
 
     testWidgets('a new product is not offered plain Crate, even when another '
-        'product uses it; Bottle reads "Bottle Crate"', (tester) async {
+        'product uses it; Bottle reads "Bottle"', (tester) async {
       await addCrateProduct();
       await pumpScreen(tester);
 
       expect(chipUnits(tester), isNot(contains('Crate')));
       expect(chipUnits(tester), contains('Bottle'));
-      expect(chipLabel(tester, 'Bottle'), 'Bottle Crate');
+      expect(chipLabel(tester, 'Bottle'), 'Bottle');
       expect(chipLabel(tester, 'Can'), 'Can');
 
       await unmount(tester);

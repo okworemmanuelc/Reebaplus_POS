@@ -1153,7 +1153,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
       // Request Stock tiles). The unit moved here from the front of the name.
       final detail = [
         item['subtitle'] as String?,
-        unitLabel(item['unit'] as String?, crates: crates),
+        unitLabel(item['unit'] as String?),
       ].where((s) => s != null && s.trim().isNotEmpty).join(' · ');
       final card = CartLine(
         key: cartLineKey(

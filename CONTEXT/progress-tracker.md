@@ -7,6 +7,12 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #675: "Bottle" not "Bottle Crate", count in the type, size lives in the name (2026-11-03, branch `fix/675-bottle-label-type-count`)
+- `unitLabel(unit)` returns the unit as stored; `unitCountNoun(unit, n)` counts a Bottle in bottles in every shop (both lost their `crates:` flag; `formUnitLabel` / `formCountNoun` too). Pack wording keeps the crate in crate shops ("Bottles in one crate", "Crate of 12").
+- `posTileSubtitle` / `receiveTileSubtitle` show only the unit; the scan sheets and Manufacturer screen stop showing `products.size`. No size picker existed in the POS forms; the web console's was removed (web #222, PR #223 merged).
+- Data (prod, same day, owner-approved list): C C Okwor's 225 products renamed to "product + flavour + size" with type Bottle/Can/PET/Pack/Carton and proper categories (220 rows changed via one guarded UPDATE; backup JSON kept in the session scratchpad); Trophy Lager 50cl Old soft-deleted. Igboya Bitters Old (IGB-001, 95 sale lines, 63.5 stock) left untouched pending the owner's stock decision.
+- 57 goldens regenerated (wording only). Follow-up: Full / Compact receipt #676.
+
 ### Issue #659 PR 2 + 3: first-tap lock everywhere else (2026-11-02, PRs #663, #664)
 Customers, supplier crate and float sheets stay open with a spinner until saved and stay open on failure. Orders Confirm, Refund, Return and Mark as paid spin until done. Log Out spins in the drawer and is single-flight. Product photo locks through the picker and upload. Record Return is now one transaction. No database, status or money rule changes, so no `pos-parity` issue. Left open: the database still runs on the screen's thread (`NativeDatabase`), which is why taps can pile up during sync; that is separate work. Owner phone check pending.
 
