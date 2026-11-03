@@ -46,16 +46,17 @@ List<StaffPayTotalData> dailyAllowanceLinesInScope(
 }
 
 /// #671 — every combined pay line the Expenses screen shows for
-/// [scopeStoreId] (null = All Stores): "Daily allowances" (#669) and
-/// "Salaries" per payday, non-zero, newest day first. They name no worker
-/// (ADR 0034).
+/// [scopeStoreId] (null = All Stores): "Daily allowances" (#669),
+/// "Salaries" per payday and, #696, "Bonuses" — the cost kinds only
+/// ([kStaffPayCostKinds]; advances and staff loans are never an expense) —
+/// non-zero, newest day first. They name no worker (ADR 0034).
 List<StaffPayTotalData> staffPayLinesInScope(
   Iterable<StaffPayTotalData> totals,
   String? scopeStoreId,
 ) {
   return [
     for (final t in totals)
-      if (kStaffPayKinds.contains(t.kind) &&
+      if (kStaffPayCostKinds.contains(t.kind) &&
           t.amountKobo != 0 &&
           (scopeStoreId == null || t.storeId == scopeStoreId))
         t,
@@ -63,8 +64,11 @@ List<StaffPayTotalData> staffPayLinesInScope(
 }
 
 /// The title of a combined pay line on the Expenses screen.
-String staffPayLineTitle(StaffPayTotalData t) =>
-    t.kind == kStaffPayKindSalaries ? 'Salaries' : 'Daily allowances';
+String staffPayLineTitle(StaffPayTotalData t) => switch (t.kind) {
+  kStaffPayKindSalaries => 'Salaries',
+  kStaffPayKindBonuses => 'Bonuses',
+  _ => 'Daily allowances',
+};
 
 /// The calendar day a combined pay line is dated, at local midnight.
 DateTime staffPayLineDay(StaffPayTotalData t) =>
@@ -73,7 +77,8 @@ DateTime staffPayLineDay(StaffPayTotalData t) =>
 /// Builds the summary from the viewer's (store-scoped) expenses and, #669, the
 /// combined Daily allowances lines in the same scope (already-spent money,
 /// counted like an approved expense) — and, #671, the combined Salaries
-/// lines passed in the same list.
+/// lines and, #696, Bonuses lines passed in the same list (advances and
+/// staff loans are skipped: never an expense).
 ExpenseSummary summarizeExpenses(
   Iterable<ExpenseData> expenses, {
   DateTime? now,
@@ -101,7 +106,7 @@ ExpenseSummary summarizeExpenses(
     }
   }
   for (final t in allowanceLines) {
-    if (!kStaffPayKinds.contains(t.kind)) continue;
+    if (!kStaffPayCostKinds.contains(t.kind)) continue;
     final date = staffPayLineDay(t);
     if (isDateInPeriod(date, 'Today', now: now)) today += t.amountKobo;
     if (isDateInPeriod(date, 'This Week', now: now)) week += t.amountKobo;

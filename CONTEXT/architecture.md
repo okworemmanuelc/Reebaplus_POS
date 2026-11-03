@@ -645,6 +645,19 @@ every payday and pull. The salary entry and the payday repayment use
 deterministic ids (`payrollSalaryEntryId`, `payrollSalaryRepaymentId`) like the
 statement, so two phones paying the same month offline converge on one row.
 
+**Bonus, advance and loan lines (#696).** Kinds `bonuses`, `advances`,
+`loans_given`, `loans_repaid` (Drift v104 / cloud 0246 widened the CHECK): one
+row per store, kind and day; `amount_kobo` = every APPROVED entry of that type
+dated that day, `cash_kobo` = the Cash part (pending/rejected never count;
+Transfer/Other never touch the drawer). `loans_repaid` leaves out the payday
+repayment (kept back from salary). Recomputed (`refreshMoneyTotals`) on every
+entry, approval decision and pull. Recon: cash bonuses, advances and loans
+given are cash out, loans repaid cash in; only bonuses are a cost (net profit,
+net result, Expenses) — payday already counts the full salary and a loan is
+owed back (`kStaffPayCostKinds`). The home-screen profit takes off the same
+cost kinds (`staffPayCostInPeriod`). Payday may settle any unpaid month up to
+the current one, dated any day up to today.
+
 ### Ordering, idempotency, and crash capture
 
 - **Ordering & idempotency:** outbox entries are ordered and carry client-generated UUIDv7 IDs so replays are idempotent — re-sending a batch after a dropped connection can never double-apply a sale.

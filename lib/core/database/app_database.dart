@@ -2517,9 +2517,31 @@ String payrollStatementId(String workerId, String salaryMonth) =>
 /// payday line (#671) so it needs no CHECK change later.
 const String kStaffPayKindDailyAllowances = 'daily_allowances';
 const String kStaffPayKindSalaries = 'salaries';
+
+/// #696 — the bonus / advance / staff loan lines (Drift v104, cloud 0246).
+/// amount = every approved entry of that type that day; cash = the part paid
+/// in till cash. `loans_repaid` counts only repayments made at the till
+/// (outside payday — a payday repayment is kept back from the salary).
+const String kStaffPayKindBonuses = 'bonuses';
+const String kStaffPayKindAdvances = 'advances';
+const String kStaffPayKindLoansGiven = 'loans_given';
+const String kStaffPayKindLoansRepaid = 'loans_repaid';
 const Set<String> kStaffPayKinds = {
   kStaffPayKindDailyAllowances,
   kStaffPayKindSalaries,
+  kStaffPayKindBonuses,
+  kStaffPayKindAdvances,
+  kStaffPayKindLoansGiven,
+  kStaffPayKindLoansRepaid,
+};
+
+/// #696 — the kinds that are a COST (Expenses, Profit). Advances and staff
+/// loans only move drawer cash: payday already counts the full salary, and a
+/// loan is owed back.
+const Set<String> kStaffPayCostKinds = {
+  kStaffPayKindDailyAllowances,
+  kStaffPayKindSalaries,
+  kStaffPayKindBonuses,
 };
 
 /// #669 (ADR 0034) — ONE combined pay line per store, day and [kind]: the
@@ -2553,7 +2575,9 @@ class StaffPayTotals extends Table {
 
   @override
   List<String> get customConstraints => [
-    "CHECK (kind IN ('daily_allowances', 'salaries'))",
+    // #696 (v104) widened it with the bonus / advance / loan kinds.
+    "CHECK (kind IN ('daily_allowances', 'salaries', 'bonuses', 'advances', "
+        "'loans_given', 'loans_repaid'))",
   ];
 }
 
@@ -3386,7 +3410,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 103;
+  int get schemaVersion => 104;
 
   /// The v90 (#473) listing columns, pinned to their defaults in every older
   /// products rebuild: TableMigration copies from the CURRENT schema, so a
@@ -7245,6 +7269,17 @@ class AppDatabase extends _$AppDatabase {
         for (final stmt in _staffPayTotalsUpgradeStatements) {
           await customStatement(stmt);
         }
+      }
+
+      if (from < 104) {
+        // ── v104 — #696: bonus / advance / staff loan pay lines ───────────
+        //
+        // Mirrors supabase/migrations/0246_staff_pay_totals_kinds.sql: the
+        // kind CHECK gains 'bonuses', 'advances', 'loans_given' and
+        // 'loans_repaid'. SQLite cannot ALTER a CHECK, so the table is
+        // rebuilt from the current definition (alterTable keeps its indexes
+        // and triggers). No column changed, so no stale-column pins.
+        await m.alterTable(TableMigration(staffPayTotals));
       }
     },
     beforeOpen: (details) async {

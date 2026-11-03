@@ -2789,6 +2789,12 @@ class SupabaseSyncService {
       } catch (e) {
         debugPrint('[SyncService] salaries line refresh skipped: $e');
       }
+      // #696 — and the bonus / advance / staff loan lines.
+      try {
+        await _db.payrollDao.refreshMoneyTotals();
+      } catch (e) {
+        debugPrint('[SyncService] staff money lines refresh skipped: $e');
+      }
       pullStatus.value = pullStatus.value.copyWith(stage: PullStage.completed);
     } catch (e, st) {
       debugPrint('[SyncService] pullChanges failed: $e\n$st');

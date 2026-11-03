@@ -378,6 +378,8 @@ extension PayrollMoneyEntries on PayrollDao {
           );
         }
       }
+      // #696 — the combined till-cash line for this kind and day.
+      await _refreshMoneyTotals(businessId);
       return (select(
         payrollEntries,
       )..where((e) => e.id.equals(id))).getSingle();
@@ -432,6 +434,8 @@ extension PayrollMoneyEntries on PayrollDao {
         payrollEntries,
       )..where((e) => e.id.equals(entryId))).getSingle();
       await db.syncDao.enqueueUpsert('payroll_entries', row.toCompanion(true));
+      // #696 — an approved entry now counts in its combined line.
+      await _refreshMoneyTotals(businessId);
       final label = payrollEntryLabel(entry.type);
       await db.activityLogDao.log(
         action: approve ? 'payroll_entry_approved' : 'payroll_entry_rejected',
@@ -452,6 +456,91 @@ extension PayrollMoneyEntries on PayrollDao {
         linkedRecordId: entryId,
         recipientUserId: recordedBy,
       );
+    }
+  }
+
+  /// #696 — rewrites the combined bonus / advance / staff loan lines from this
+  /// phone's entries. A silent no-op without the permission. Runs after every
+  /// pull, so a line another phone wrote from fewer entries converges.
+  Future<void> refreshMoneyTotals() async {
+    final businessId = currentBusinessId;
+    if (businessId == null) return;
+    if (!await currentUserHoldsPayroll()) return;
+    await transaction(() => _refreshMoneyTotals(businessId));
+  }
+
+  /// One combined line per store, day and kind (no worker named): amount =
+  /// every APPROVED entry of that type dated that day (a correction counts on
+  /// its own day), cash = the part paid in Cash. Pending and rejected entries
+  /// never count. A loan repayment kept back from a salary on payday is not
+  /// till money, so it is left out of `loans_repaid`. Only lines whose figures
+  /// moved are written and queued.
+  Future<void> _refreshMoneyTotals(String businessId) async {
+    const kindOf = {
+      'bonus': kStaffPayKindBonuses,
+      'advance': kStaffPayKindAdvances,
+      'loan_given': kStaffPayKindLoansGiven,
+      'loan_repaid': kStaffPayKindLoansRepaid,
+    };
+    final entries =
+        await (select(payrollEntries)..where(
+              (e) =>
+                  e.businessId.equals(businessId) &
+                  e.status.equals('approved') &
+                  e.type.isIn(kindOf.keys),
+            ))
+            .get();
+    final paydayRepayments = {
+      for (final s in await (select(
+        payrollStatements,
+      )..where((s) => s.businessId.equals(businessId))).get())
+        payrollSalaryRepaymentId(s.workerId, s.salaryMonth),
+    };
+    final lines = <String, ({String kind, String storeId, String day})>{};
+    final amounts = <String, int>{};
+    final cash = <String, int>{};
+    for (final e in entries) {
+      if (e.type == 'loan_repaid' && paydayRepayments.contains(e.id)) continue;
+      final kind = kindOf[e.type]!;
+      final id = staffPayTotalId(businessId, e.storeId, kind, e.entryDate);
+      lines[id] = (kind: kind, storeId: e.storeId, day: e.entryDate);
+      amounts[id] = (amounts[id] ?? 0) + e.amountKobo;
+      if (e.paymentMethod == 'cash') cash[id] = (cash[id] ?? 0) + e.amountKobo;
+    }
+    final existing = {
+      for (final t
+          in await (select(db.staffPayTotals)..where(
+                (t) =>
+                    t.businessId.equals(businessId) &
+                    t.kind.isIn(kindOf.values),
+              ))
+              .get())
+        t.id: t,
+    };
+    final at = DateTime.now();
+    for (final MapEntry(key: id, value: line) in lines.entries) {
+      final total = amounts[id] ?? 0;
+      final cashTotal = cash[id] ?? 0;
+      final current = existing[id];
+      if (current == null && total == 0 && cashTotal == 0) continue;
+      if (current != null &&
+          current.amountKobo == total &&
+          current.cashKobo == cashTotal) {
+        continue;
+      }
+      final row = StaffPayTotalsCompanion.insert(
+        id: Value(id),
+        businessId: businessId,
+        storeId: line.storeId,
+        kind: line.kind,
+        totalDate: line.day,
+        amountKobo: Value(total),
+        cashKobo: Value(cashTotal),
+        createdAt: Value(current?.createdAt ?? at),
+        lastUpdatedAt: Value(at),
+      );
+      await into(db.staffPayTotals).insertOnConflictUpdate(row);
+      await db.syncDao.enqueueUpsert('staff_pay_totals', row);
     }
   }
 

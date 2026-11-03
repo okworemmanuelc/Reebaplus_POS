@@ -338,7 +338,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // reconciliation's `netRevenueKobo` does. Before that, a discount given was
     // reported as profit the business never made.
     //
-    // This is the goods margin less expenses, so it is deliberately NOT the
+    // This is the goods margin less expenses and staff pay (#696), so it is
+    // deliberately NOT the
     // reconciliation's `netProfitKobo` (which also nets damages, shortages,
     // write-offs and forfeit income). The Profit & Loss card is the full P&L;
     // this tile is the at-a-glance version, and its subtitle says so.
@@ -389,7 +390,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         }
         discounts += sign * orderDiscountKobo(o, inScope: inScope) / 100.0;
       }
-      netProfit = pricedRevenue - discounts - cogs - totalExpenses;
+      // #696 — staff pay (Daily allowances, Salaries, Bonuses; never
+      // advances or loans) comes off too, the same combined lines Daily
+      // Reconciliation and Expenses count, in the same period and scope.
+      final staffPayCost =
+          staffPayCostInPeriod(
+            ref.watch(allStaffPayTotalsProvider).valueOrNull ?? const [],
+            inSpan: (d) => _isDateInPeriod(d, _selectedPeriod),
+            inScope: inScope,
+          ) /
+          100.0;
+      netProfit =
+          pricedRevenue - discounts - cogs - totalExpenses - staffPayCost;
     }
 
     final pendingOrdersCount = _allOrdersWithItems

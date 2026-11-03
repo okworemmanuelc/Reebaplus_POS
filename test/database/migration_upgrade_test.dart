@@ -251,6 +251,77 @@ void main() {
     } finally { await db.close(); }
   });
 
+  test('v103 to v104 widens the staff_pay_totals kind CHECK, rows kept',
+      () async {
+    var db = await openAndInit();
+    final businessId = UuidV7.generate();
+    final storeId = UuidV7.generate();
+    await db.into(db.businesses).insert(
+      BusinessesCompanion.insert(id: Value(businessId), name: 'Test Shop'));
+    await db.into(db.stores).insert(StoresCompanion.insert(
+        id: Value(storeId), businessId: businessId, name: 'Main Store'));
+    // Rebuild staff_pay_totals as v103 had it (two kinds only), keeping its
+    // indexes and trigger.
+    final objects = await db.customSelect(
+      "SELECT type, sql FROM sqlite_master WHERE tbl_name = 'staff_pay_totals' "
+      'AND sql IS NOT NULL',
+    ).get();
+    final tableSql = objects
+        .firstWhere((r) => r.read<String>('type') == 'table')
+        .read<String>('sql');
+    final oldSql = tableSql.replaceFirst(
+      RegExp(r"CHECK \(kind IN \([^)]*\)\)"),
+      "CHECK (kind IN ('daily_allowances', 'salaries'))",
+    );
+    expect(oldSql, isNot(tableSql));
+    await db.customStatement('DROP TABLE staff_pay_totals');
+    await db.customStatement(oldSql);
+    for (final r in objects.where((r) => r.read<String>('type') != 'table')) {
+      await db.customStatement(r.read<String>('sql'));
+    }
+    await db.customStatement(
+      "INSERT INTO staff_pay_totals (id, business_id, store_id, kind, "
+      "total_date, amount_kobo, cash_kobo) VALUES ('t1', '$businessId', "
+      "'$storeId', 'daily_allowances', '2026-11-02', 500, 500)");
+    // The old CHECK refuses a bonus line.
+    await expectLater(
+      db.customStatement(
+        "INSERT INTO staff_pay_totals (id, business_id, store_id, kind, "
+        "total_date) VALUES ('t0', '$businessId', '$storeId', 'bonuses', "
+        "'2026-11-02')"),
+      throwsA(anything),
+    );
+    await db.customStatement('PRAGMA user_version = 103');
+    await db.close();
+    db = await openAndInit();
+    try {
+      expect((await db.select(db.staffPayTotals).get()).single.id, 't1');
+      for (final kind in ['bonuses', 'advances', 'loans_given', 'loans_repaid']) {
+        await db.customStatement(
+          "INSERT INTO staff_pay_totals (id, business_id, store_id, kind, "
+          "total_date) VALUES ('$kind', '$businessId', '$storeId', '$kind', "
+          "'2026-11-02')");
+      }
+      await expectLater(
+        db.customStatement(
+          "INSERT INTO staff_pay_totals (id, business_id, store_id, kind, "
+          "total_date) VALUES ('bad', '$businessId', '$storeId', 'wages', "
+          "'2026-11-02')"),
+        throwsA(anything),
+      );
+      final names = {
+        for (final r in await db.customSelect(
+          "SELECT name FROM sqlite_master WHERE tbl_name = 'staff_pay_totals'",
+        ).get())
+          r.read<String>('name'),
+      };
+      expect(names, containsAll([
+        'idx_staff_pay_totals_business_lua',
+        'bump_staff_pay_totals_last_updated_at',
+      ]));
+    } finally { await db.close(); }
+  });
+
   test('v90 to v91 adds product_photos with its trigger and live-slot index',
       () async {
     var db = await openAndInit();
