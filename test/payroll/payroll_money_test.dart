@@ -130,6 +130,7 @@ void main() {
     int kobo, {
     String? month,
     String? corrects,
+    String? date,
   }) => db.payrollDao.recordMoneyEntry(
     workerId: workerId,
     type: type,
@@ -137,6 +138,7 @@ void main() {
     paymentMethod: 'cash',
     salaryMonth: month,
     correctsEntryId: corrects,
+    entryDate: date,
   );
 
   Future<List<PayrollEntryData>> entries() =>
@@ -348,5 +350,76 @@ void main() {
         )
         .getSingle();
     expect(queued.read<int>('c'), 0);
+  });
+
+  group('entry date (#688)', () {
+    String iso(DateTime d) =>
+        '${d.year}-${d.month.toString().padLeft(2, '0')}-'
+        '${d.day.toString().padLeft(2, '0')}';
+
+    test('defaults to today', () async {
+      final e = await give('bonus', 1000);
+      expect(e.entryDate, PayrollDao.payrollToday());
+    });
+
+    test('an earlier date is saved, for every manual type', () async {
+      const d = '2026-01-15';
+      await give('bonus', 1000, date: d);
+      final loan = await give('loan_given', 5000, date: d);
+      final repaid = await give('loan_repaid', 2000, date: d);
+      final adv = await give('advance', 3000, month: '2026-01', date: d);
+      for (final e in [loan, repaid, adv]) {
+        expect(e.entryDate, d);
+      }
+      // Caps still hold with backdated entries.
+      await expectLater(
+        give('loan_repaid', 3001, date: d),
+        throwsA(isA<PayrollRuleViolation>()),
+      );
+      await expectLater(
+        give('advance', 10000000, month: '2026-01', date: d),
+        throwsA(isA<PayrollRuleViolation>()),
+      );
+    });
+
+    test('a future date is rejected and nothing is written', () async {
+      final tomorrow = iso(DateTime.now().add(const Duration(days: 1)));
+      await expectLater(
+        give('bonus', 1000, date: tomorrow),
+        throwsA(isA<PayrollRuleViolation>()),
+      );
+      expect(await entries(), isEmpty);
+    });
+  });
+
+  group('salary change alert (#688)', () {
+    Future<void> setSalary(int kobo) => db.payrollDao.updateWorker(
+      workerId: workerId,
+      storeId: storeId,
+      monthlySalaryKobo: kobo,
+      dailyAllowanceKobo: 0,
+    );
+
+    test('a Manager changing the salary notifies the CEO, no amount', () async {
+      signedIn = managerId;
+      await setSalary(12345600);
+      final notes = await db.select(db.notifications).get();
+      expect(notes, hasLength(1));
+      expect(notes.single.recipientUserId, ceoId);
+      expect(notes.single.message, contains('Ada Example'));
+      expect(notes.single.message, isNot(matches(RegExp(r'\d'))));
+    });
+
+    test('the CEO changing it notifies nobody', () async {
+      signedIn = ceoId;
+      await setSalary(12345600);
+      expect(await db.select(db.notifications).get(), isEmpty);
+    });
+
+    test('an unchanged salary notifies nobody', () async {
+      signedIn = managerId;
+      await setSalary(10000000);
+      expect(await db.select(db.notifications).get(), isEmpty);
+    });
   });
 }

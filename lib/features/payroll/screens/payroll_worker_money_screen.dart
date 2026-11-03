@@ -22,6 +22,7 @@ import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
 class PayrollMoneyKeys {
   static const amountField = Key('payroll-money-amount');
   static const noteField = Key('payroll-money-note');
+  static const dateField = Key('payroll-money-date');
   static const saveButton = Key('payroll-money-save');
   static const loanOwed = Key('payroll-money-loan-owed');
   static const advanceLeft = Key('payroll-money-advance-left');
@@ -452,6 +453,8 @@ class _MoneyEntryDialogState extends ConsumerState<_MoneyEntryDialog> {
   String _method = 'cash';
   late String _month;
   late final List<String> _months;
+  // #688: dated today unless the person picks an earlier day.
+  DateTime _date = DateTime.now();
 
   bool get _isFix => widget.correcting != null;
 
@@ -472,6 +475,25 @@ class _MoneyEntryDialogState extends ConsumerState<_MoneyEntryDialog> {
     _amount.dispose();
     _note.dispose();
     super.dispose();
+  }
+
+  static String _dateText(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _date,
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now(),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _date = picked;
+      final m = _dateText(picked).substring(0, 7);
+      if (_months.contains(m)) _month = m;
+    });
   }
 
   Future<void> _save() async {
@@ -496,6 +518,7 @@ class _MoneyEntryDialogState extends ConsumerState<_MoneyEntryDialog> {
             salaryMonth: widget.type == 'advance' ? _month : null,
             note: _note.text,
             correctsEntryId: widget.correcting?.id,
+            entryDate: _isFix ? null : _dateText(_date),
           );
       if (!mounted) return;
       Navigator.pop(context);
@@ -547,6 +570,20 @@ class _MoneyEntryDialogState extends ConsumerState<_MoneyEntryDialog> {
               'The difference is saved as a new entry dated today. The old '
               'entry is kept.',
               style: context.regularStyle(12).copyWith(color: muted),
+            ),
+          ],
+          if (!_isFix) ...[
+            SizedBox(height: context.getRSize(12)),
+            InkWell(
+              key: PayrollMoneyKeys.dateField,
+              onTap: _pickDate,
+              child: InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'Date',
+                  suffixIcon: Icon(Icons.calendar_today, size: 18),
+                ),
+                child: Text(_dateText(_date)),
+              ),
             ),
           ],
           SizedBox(height: context.getRSize(12)),

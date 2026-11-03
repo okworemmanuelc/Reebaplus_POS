@@ -7,6 +7,12 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #688: Payroll entry date + CEO salary-change alert (2026-11-03, branch `feat/688-payroll-date-and-salary-alert`)
+
+- `recordMoneyEntry` takes optional `entryDate` ('YYYY-MM-DD'; default today; future rejected with `PayrollRuleViolation`). The entry dialog has a tappable Date field (`showDatePicker`, lastDate today); picking a date in the offered months moves the advance Salary Month dropdown. Corrections stay dated today. Caps unchanged.
+- `PayrollDao.updateWorker` notifies the CEO (`payroll.salary_changed`, name only, no amount) when the salary value changes and the editor is not the CEO.
+- No schema change. Tests in `test/payroll/payroll_money_test.dart`.
+
 ### Issue #670: Payroll bonus, advance and staff loan (2026-11-03, branch `feat/670-payroll-bonus-advance-loan`)
 - Drift **v102** + cloud **0244_payroll_entry_approval.sql** (NOT applied anywhere): `payroll_entries` gains `status` ('approved' default / 'pending' / 'rejected'), `approved_by`, `approved_at`, `rejection_reason`. The cloud freeze (`_payroll_freeze_row`) now lets only a 'pending' entry move to approved/rejected, and only for the CEO (`caller_role_slug`) or service role; a decided entry never moves again, so a Manager's replay keeps the CEO's decision. Restore default `status: 'approved'` for rows from a cloud without 0244. Deploy 0244 before any v102 client pushes.
 - `PayrollMoneyEntries` extension (`lib/core/database/daos_payroll_money.dart`, kept apart from `daos_payroll.dart` for #669): `recordMoneyEntry` (bonus / advance / loan_given / loan_repaid, dated today, Cash/Transfer/Other, optional note; correction = new entry carrying the difference via `corrects_entry_id`), `approveEntry` / `rejectEntry` (CEO only, else `PayrollApprovalDenied`), `watchEntriesForWorker`, `watchPendingEntries`. Pure `PayrollMoneyPosition`: advance room = salary − that month's non-rejected advances (pending count); outstanding loan = approved loans − repayments; repayment ≤ owed. Broken rules throw `PayrollRuleViolation` (message for the screen).

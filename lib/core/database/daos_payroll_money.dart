@@ -216,6 +216,7 @@ extension PayrollMoneyEntries on PayrollDao {
     String? salaryMonth,
     String? note,
     String? correctsEntryId,
+    String? entryDate,
   }) async {
     if (!kPayrollManualEntryTypes.contains(type)) {
       throw ArgumentError.value(type, 'type', 'not a bonus, advance or loan');
@@ -225,6 +226,16 @@ extension PayrollMoneyEntries on PayrollDao {
     }
     final businessId = await _requireAccess();
     final isCorrection = correctsEntryId != null;
+    // #688: today by default; any earlier day may be chosen, never a future one.
+    final today = PayrollDao.payrollToday();
+    final date = entryDate ?? today;
+    if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(date) ||
+        DateTime.tryParse(date) == null) {
+      throw ArgumentError.value(entryDate, 'entryDate', 'not YYYY-MM-DD');
+    }
+    if (date.compareTo(today) > 0) {
+      throw const PayrollRuleViolation('The date cannot be in the future.');
+    }
     if (amountKobo == 0 || (!isCorrection && amountKobo < 0)) {
       throw const PayrollRuleViolation('Enter an amount.');
     }
@@ -318,7 +329,7 @@ extension PayrollMoneyEntries on PayrollDao {
         storeId: worker.storeId,
         type: type,
         amountKobo: amountKobo,
-        entryDate: PayrollDao.payrollToday(),
+        entryDate: date,
         salaryMonth: Value(month),
         paymentMethod: Value(paymentMethod),
         note: Value(
