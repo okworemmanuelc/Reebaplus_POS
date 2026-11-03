@@ -900,9 +900,10 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
                 ..where((b) => b.id.equals(requireBusinessId()))
                 ..limit(1))
               .getSingleOrNull();
-      final tracksCrates =
-          isCrateBusiness(crateBiz?.type) &&
-          (crateBiz?.tracksEmptyCrates ?? true);
+      final tracksCrates = crateTrackingOn(
+        businessType: crateBiz?.type,
+        tracksEmptyCrates: crateBiz?.tracksEmptyCrates,
+      );
       if (cratesReturnedByManufacturer.isNotEmpty ||
           (tracksCrates && customerId != null)) {
         final cratesTaken = tracksCrates

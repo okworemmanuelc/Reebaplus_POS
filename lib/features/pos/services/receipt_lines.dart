@@ -413,7 +413,9 @@ List<ReceiptLine> buildReceiptLines({
   }
 
   // Empty crates.
-  final empties = ReceiptFormat.emptiesByManufacturer(cart);
+  final empties = tracksCrates
+      ? ReceiptFormat.emptiesByManufacturer(cart)
+      : const <String, double>{};
   if (empties.isNotEmpty) {
     final rows = buildReceiptCrateRows(
       taken: empties,
