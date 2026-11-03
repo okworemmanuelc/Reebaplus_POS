@@ -186,7 +186,7 @@ class _PayrollPaydayScreenState extends ConsumerState<PayrollPaydayScreen> {
         body: Center(
           child: Padding(
             padding: EdgeInsets.all(pad),
-            child: const Text('Every month before this payday is paid.'),
+            child: const Text('Every month up to this payday is paid.'),
           ),
         ),
       );

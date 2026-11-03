@@ -9,7 +9,8 @@ part of 'daos.dart';
 //
 // THE RULES (owner, 2026-11-03)
 //   * One salary payment per worker per Salary Month (the calendar month
-//     worked, paid after it ends). The statement id ([payrollStatementId]) and
+//     worked). #696: any unpaid month, the current one included, may be paid
+//     — the old "month must have ended" rule is gone. The statement id ([payrollStatementId]) and
 //     the salary entry id ([payrollSalaryEntryId]) are deterministic, so two
 //     phones paying the same month offline land as ONE row in the cloud.
 //   * The full monthly salary by default; a different amount for that one
@@ -19,8 +20,8 @@ part of 'daos.dart';
 //     must be decided first. The repayment is a `loan_repaid` entry.
 //   * Total Pay = salary + that month's approved Daily Allowances + approved
 //     Bonuses. Advances and loans are never added.
-//   * Payday defaults to today; an earlier day may be picked, never a future
-//     one.
+//   * Payday defaults to today; any earlier day may be picked freely, never
+//     a future one.
 //   * Both the worker and the payer sign before anything is saved.
 //   * Goes straight through (no approval). The CEO is told when someone else
 //     paid (name only).
@@ -44,11 +45,11 @@ String payrollSalaryRepaymentId(String workerId, String salaryMonth) =>
 String payrollMonthKey(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}';
 
-/// The Salary Months a payday on [payday] can settle, newest first: the
-/// [count] calendar months before [payday]'s month (a month is paid after it
-/// ends).
+/// The Salary Months a payday on [payday] can settle, newest first:
+/// [payday]'s own month and the [count] − 1 calendar months before it (#696:
+/// the current month may be paid before it ends).
 List<String> payrollPayableMonths(DateTime payday, {int count = 12}) => [
-  for (var i = 1; i <= count; i++)
+  for (var i = 0; i < count; i++)
     payrollMonthKey(DateTime(payday.year, payday.month - i)),
 ];
 
@@ -222,10 +223,11 @@ extension PayrollPayday on PayrollDao {
     if (payday.compareTo(today) > 0) {
       throw const PayrollRuleViolation('The payday cannot be in the future.');
     }
-    if (salaryMonth.compareTo(payrollMonthKey(paydayDay)) >= 0) {
+    // #696: the current month may be paid before it ends; only a month that
+    // has not started yet is refused.
+    if (salaryMonth.compareTo(payrollMonthKey(now ?? DateTime.now())) > 0) {
       throw PayrollRuleViolation(
-        '${payrollMonthLabel(salaryMonth)} salary can only be paid after the '
-        'month ends.',
+        '${payrollMonthLabel(salaryMonth)} has not started yet.',
       );
     }
     if (salaryKobo != null && salaryKobo < 0) {

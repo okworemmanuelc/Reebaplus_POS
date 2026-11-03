@@ -218,12 +218,30 @@ void main() {
       expect(await db.select(db.payrollStatements).get(), hasLength(2));
     });
 
-    test('a month that has not ended cannot be paid', () async {
-      await expectLater(pay(month: '2026-11'), violation('after the month'));
+    test('#696: the current month can be paid before it ends', () async {
+      final s = await pay(month: '2026-11', payday: '2026-11-02');
+      expect(s.salaryMonth, '2026-11');
+      // Still one payment per month.
+      await expectLater(pay(month: '2026-11'), violation('already been paid'));
     });
 
-    test('payable months are the ones before payday, newest first', () {
-      expect(payrollPayableMonths(DateTime(2026, 1, 5), count: 2), [
+    test('#696: a month not started yet is refused', () async {
+      await expectLater(pay(month: '2026-12'), violation('not started'));
+    });
+
+    test('#696: payday is free up to today, never in the future', () async {
+      await expectLater(
+        pay(month: '2026-11', payday: '2026-11-04'),
+        violation('future'),
+      );
+      // An earlier payday for a later month is allowed (picked freely).
+      final s = await pay(month: '2026-11', payday: '2026-10-28');
+      expect(s.salaryMonth, '2026-11');
+    });
+
+    test('payable months include the payday month, newest first', () {
+      expect(payrollPayableMonths(DateTime(2026, 1, 5), count: 3), [
+        '2026-01',
         '2025-12',
         '2025-11',
       ]);

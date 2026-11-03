@@ -356,6 +356,12 @@ class ReconData {
     // #671 — optional-defaulted like the other additive fields.
     this.salariesKobo = 0,
     this.cashSalariesKobo = 0,
+    // #696 — optional-defaulted like the other additive fields.
+    this.bonusesKobo = 0,
+    this.cashBonusesKobo = 0,
+    this.cashAdvancesKobo = 0,
+    this.cashLoansGivenKobo = 0,
+    this.cashLoansRepaidKobo = 0,
     required this.showCrates,
     required this.crateUnits,
     required this.crateDepositKobo,
@@ -567,6 +573,21 @@ class ReconData {
   /// named.
   final int salariesKobo;
   final int cashSalariesKobo;
+
+  /// #696 (ADR 0034) — the period's combined bonus / advance / staff loan
+  /// lines (`staff_pay_totals` kinds `bonuses`, `advances`, `loans_given`,
+  /// `loans_repaid`) in store scope, on their own day. Only approved entries
+  /// are in them. [bonusesKobo] is every approved bonus (a cost, in
+  /// [netProfitKobo] and [periodNetResultKobo]); the `cash…` figures are the
+  /// parts paid in till cash. Advances and loans move the drawer only, never
+  /// Profit: payday already counts the full salary, and a loan is owed back.
+  /// A loan repaid at the till brings cash back ([cashInKobo]). No worker is
+  /// named.
+  final int bonusesKobo;
+  final int cashBonusesKobo;
+  final int cashAdvancesKobo;
+  final int cashLoansGivenKobo;
+  final int cashLoansRepaidKobo;
   final double damageUnits;
   final int damageCostKobo;
   final int damageRetailKobo;
@@ -849,6 +870,7 @@ class ReconData {
       expensesKobo -
       dailyAllowancesKobo -
       salariesKobo -
+      bonusesKobo -
       damageCostKobo -
       crateDamageDepositKobo -
       crateShortfallWrittenOffKobo -
@@ -870,12 +892,20 @@ class ReconData {
   int get cashFromDriversKobo => van.cashRemittedKobo;
 
   int get cashInKobo =>
-      cashSalesKobo + cashDebtsCollectedKobo + cashFromDriversKobo;
+      cashSalesKobo +
+      cashDebtsCollectedKobo +
+      cashFromDriversKobo +
+      // #696 — a staff loan repaid in cash at the till (outside payday).
+      cashLoansRepaidKobo;
   int get cashOutKobo =>
       cashRefundsKobo +
       cashExpensesKobo +
       dailyAllowancesKobo +
       cashSalariesKobo +
+      // #696 — bonuses, advances and staff loans handed over in till cash.
+      cashBonusesKobo +
+      cashAdvancesKobo +
+      cashLoansGivenKobo +
       cashSupplierPaidKobo;
   /// Expected net cash movement for the period (in − out). Not a cash balance —
   /// there is no opening float to add it to (Hard Rule #8).
@@ -964,6 +994,7 @@ class ReconData {
       expensesKobo -
       dailyAllowancesKobo -
       salariesKobo -
+      bonusesKobo -
       damageCostKobo -
       crateDamageDepositKobo -
       // #216 — an accepted crate loss is realized, on the day it was accepted.
@@ -1030,6 +1061,10 @@ class ReconData {
       expensesKobo == 0 &&
       dailyAllowancesKobo == 0 &&
       salariesKobo == 0 &&
+      bonusesKobo == 0 &&
+      cashAdvancesKobo == 0 &&
+      cashLoansGivenKobo == 0 &&
+      cashLoansRepaidKobo == 0 &&
       damageUnits == 0 &&
       shortageUnits == 0 &&
       !hasStockCount &&
@@ -1202,6 +1237,48 @@ int dailyAllowancesInPeriod(
   var cash = 0;
   for (final t in totals) {
     if (t.kind != kStaffPayKindSalaries) continue;
+    final day = DateTime.tryParse(t.totalDate);
+    if (day == null || !inSpan(day) || !inScope(t.storeId)) continue;
+    amount += t.amountKobo;
+    cash += t.cashKobo;
+  }
+  return (amountKobo: amount, cashKobo: cash);
+}
+
+/// #696 — the staff pay that is a COST in a period ([kStaffPayCostKinds]:
+/// Daily allowances, Salaries and Bonuses), in store scope. The same figure
+/// [ReconData.netProfitKobo] takes off, so the home-screen profit matches
+/// Daily Reconciliation and Expenses. Advances and staff loans never count.
+int staffPayCostInPeriod(
+  Iterable<StaffPayTotalData> totals, {
+  required bool Function(DateTime) inSpan,
+  required bool Function(String?) inScope,
+}) {
+  var sum = 0;
+  for (final t in totals) {
+    if (!kStaffPayCostKinds.contains(t.kind)) continue;
+    final day = DateTime.tryParse(t.totalDate);
+    if (day == null || !inSpan(day) || !inScope(t.storeId)) continue;
+    // Daily allowances are wholly till cash (cash == amount); salaries and
+    // bonuses cost their full amount whatever the method.
+    sum += t.kind == kStaffPayKindDailyAllowances ? t.cashKobo : t.amountKobo;
+  }
+  return sum;
+}
+
+/// #696 — one staff-pay [kind]'s money in a period (the combined lines whose
+/// day is in span and whose store is in scope): the approved total and the
+/// part paid in till cash. No worker is named.
+({int amountKobo, int cashKobo}) staffPayKindInPeriod(
+  Iterable<StaffPayTotalData> totals,
+  String kind, {
+  required bool Function(DateTime) inSpan,
+  required bool Function(String?) inScope,
+}) {
+  var amount = 0;
+  var cash = 0;
+  for (final t in totals) {
+    if (t.kind != kind) continue;
     final day = DateTime.tryParse(t.totalDate);
     if (day == null || !inSpan(day) || !inScope(t.storeId)) continue;
     amount += t.amountKobo;
@@ -1536,6 +1613,18 @@ ReconData reconDataFrom(ReconInputs input) {
     inSpan: inSpan,
     inScope: inScope,
   );
+  // #696 — bonuses, advances and staff loans (approved, combined lines).
+  ({int amountKobo, int cashKobo}) staffPay(String kind) =>
+      staffPayKindInPeriod(
+        input.staffPayTotals,
+        kind,
+        inSpan: inSpan,
+        inScope: inScope,
+      );
+  final bonuses = staffPay(kStaffPayKindBonuses);
+  final advances = staffPay(kStaffPayKindAdvances);
+  final loansGiven = staffPay(kStaffPayKindLoansGiven);
+  final loansRepaid = staffPay(kStaffPayKindLoansRepaid);
 
   // ── Damages (reason names a loss; a removal) ─────────────────────────────
   // §17.2 crate-aware: a damage flagged +cratelost / +crateempty also forfeits
@@ -2015,6 +2104,11 @@ ReconData reconDataFrom(ReconInputs input) {
     dailyAllowancesKobo: dailyAllowancesKobo,
     salariesKobo: salaries.amountKobo,
     cashSalariesKobo: salaries.cashKobo,
+    bonusesKobo: bonuses.amountKobo,
+    cashBonusesKobo: bonuses.cashKobo,
+    cashAdvancesKobo: advances.cashKobo,
+    cashLoansGivenKobo: loansGiven.cashKobo,
+    cashLoansRepaidKobo: loansRepaid.cashKobo,
     damageUnits: damageUnitsQty,
     damageCostKobo: damageCostKobo,
     damageRetailKobo: damageRetailKobo,

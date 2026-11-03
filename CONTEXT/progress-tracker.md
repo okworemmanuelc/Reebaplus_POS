@@ -7,6 +7,13 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #696: Payroll till cash, free payday date, staff pay in home profit (2026-11-03, branch `feat/696-payroll-till-cash`)
+- Drift **v104** + cloud **0246_staff_pay_totals_kinds.sql** (NOT applied anywhere; deploy after 0245, before any v104 client pushes): `staff_pay_totals` kind CHECK gains `bonuses`, `advances`, `loans_given`, `loans_repaid` (v104 = `alterTable` rebuild, no column change).
+- `PayrollMoneyEntries.refreshMoneyTotals` (daos_payroll_money.dart): one line per store/kind/day, amount = approved entries, cash = Cash part; payday repayments excluded from `loans_repaid`. Runs on record, approve/reject and after every pull.
+- Recon: `bonusesKobo` (net profit, net result, CSV), cash out += cash bonuses/advances/loans given, cash in += loans repaid at the till; detail-screen + CSV lines. Expenses lists "Bonuses" only (`kStaffPayCostKinds`). Home Net Profit subtracts `staffPayCostInPeriod` (allowances + salaries + bonuses) so it matches recon.
+- Payday: "month must have ended" removed; payable months include the payday's month; only a month after the current one is refused; payday any day up to today. One payment per month kept.
+- Tests: `test/payroll/payroll_till_cash_test.dart` (13), payday month tests updated, v103→v104 in `migration_upgrade_test.dart`. pos-parity: reebaplus-web#228.
+
 ### Menu button squashed on Orders + Activity Logs (2026-11-03, branch `fix/menu-button-self-sized`)
 - `MenuButton` now owns its 48dp box; the 9 `SizedBox.square(kMinInteractiveDimension)` wrappers are gone. Orders + Activity Logs goldens re-recorded (390x844 only).
 

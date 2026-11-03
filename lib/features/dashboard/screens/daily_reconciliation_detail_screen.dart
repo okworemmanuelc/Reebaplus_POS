@@ -649,6 +649,14 @@ class _DailyReconciliationDetailScreenState
           'Salaries',
           '− ${formatCurrency(d.salariesKobo / 100.0)}',
         ),
+      // #696 — approved bonuses are a cost (advances and loans are not).
+      if (d.bonusesKobo != 0)
+        _line(
+          context,
+          theme,
+          'Bonuses',
+          '− ${formatCurrency(d.bonusesKobo / 100.0)}',
+        ),
       _line(
         context,
         theme,
@@ -860,6 +868,14 @@ class _DailyReconciliationDetailScreenState
             'Cash from drivers',
             '+ ${formatCurrency(d.cashFromDriversKobo / 100.0)}',
           ),
+        // #696 — staff loans repaid in cash at the till (outside payday).
+        if (d.cashLoansRepaidKobo != 0)
+          _line(
+            context,
+            theme,
+            'Staff loans repaid (cash)',
+            '+ ${formatCurrency(d.cashLoansRepaidKobo / 100.0)}',
+          ),
         _line(
           context,
           theme,
@@ -895,6 +911,28 @@ class _DailyReconciliationDetailScreenState
             theme,
             'Salaries (cash)',
             '− ${formatCurrency(d.cashSalariesKobo / 100.0)}',
+          ),
+        // #696 — bonuses, advances and staff loans handed over in till cash.
+        if (d.cashBonusesKobo != 0)
+          _line(
+            context,
+            theme,
+            'Bonuses (cash)',
+            '− ${formatCurrency(d.cashBonusesKobo / 100.0)}',
+          ),
+        if (d.cashAdvancesKobo != 0)
+          _line(
+            context,
+            theme,
+            'Salary advances (cash)',
+            '− ${formatCurrency(d.cashAdvancesKobo / 100.0)}',
+          ),
+        if (d.cashLoansGivenKobo != 0)
+          _line(
+            context,
+            theme,
+            'Staff loans given (cash)',
+            '− ${formatCurrency(d.cashLoansGivenKobo / 100.0)}',
           ),
         _line(
           context,
@@ -1391,6 +1429,13 @@ class _DailyReconciliationDetailScreenState
             theme,
             'Salaries',
             formatCurrency(d.salariesKobo / 100.0),
+          ),
+        if (d.bonusesKobo != 0)
+          _line(
+            context,
+            theme,
+            'Bonuses',
+            formatCurrency(d.bonusesKobo / 100.0),
           ),
       ],
       badges: badges,
@@ -2022,6 +2067,7 @@ class _DailyReconciliationDetailScreenState
         if (d.dailyAllowancesKobo != 0)
           ['Daily allowances', money(d.dailyAllowancesKobo)],
         if (d.salariesKobo != 0) ['Salaries', money(d.salariesKobo)],
+        if (d.bonusesKobo != 0) ['Bonuses', money(d.bonusesKobo)],
         ['Damages (at cost)', money(d.damageCostKobo)],
         if (d.crateDamageDepositKobo > 0)
           ['Crate deposit loss (at deposit)', money(d.crateDamageDepositKobo)],
@@ -2143,12 +2189,20 @@ class _DailyReconciliationDetailScreenState
         ['Debts collected (cash)', money(d.cashDebtsCollectedKobo)],
         if (d.cashFromDriversKobo != 0)
           ['Cash from drivers', money(d.cashFromDriversKobo)],
+        if (d.cashLoansRepaidKobo != 0)
+          ['Staff loans repaid (cash)', money(d.cashLoansRepaidKobo)],
         ['Refunds paid (cash)', money(d.cashRefundsKobo)],
         ['Expenses paid (cash)', money(d.cashExpensesKobo)],
         if (d.dailyAllowancesKobo != 0)
           ['Daily allowances (cash)', money(d.dailyAllowancesKobo)],
         if (d.cashSalariesKobo != 0)
           ['Salaries (cash)', money(d.cashSalariesKobo)],
+        if (d.cashBonusesKobo != 0)
+          ['Bonuses (cash)', money(d.cashBonusesKobo)],
+        if (d.cashAdvancesKobo != 0)
+          ['Salary advances (cash)', money(d.cashAdvancesKobo)],
+        if (d.cashLoansGivenKobo != 0)
+          ['Staff loans given (cash)', money(d.cashLoansGivenKobo)],
         ['Paid to suppliers (cash)', money(d.cashSupplierPaidKobo)],
         ['Net cash movement', money(d.netCashMovementKobo)],
         ['Crate deposits held (cash)', money(d.cashCrateDepositsKobo)],

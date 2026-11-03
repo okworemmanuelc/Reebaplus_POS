@@ -462,12 +462,11 @@ class _ExpensesScreenState extends ConsumerState<ExpensesScreen> {
       subtitle: ['Payroll', when, ?storeName].join(' · '),
       amountKobo: line.amountKobo,
       status: 'approved',
-      onTap: () => AppNotification.showInfo(
-        context,
-        line.kind == kStaffPayKindSalaries
-            ? 'Salaries are paid in Payroll.'
-            : 'Daily allowances are recorded automatically in Payroll.',
-      ),
+      onTap: () => AppNotification.showInfo(context, switch (line.kind) {
+        kStaffPayKindSalaries => 'Salaries are paid in Payroll.',
+        kStaffPayKindBonuses => 'Bonuses are given in Payroll.',
+        _ => 'Daily allowances are recorded automatically in Payroll.',
+      }),
     );
   }
 
