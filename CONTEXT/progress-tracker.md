@@ -13,6 +13,7 @@ The human updates it when resolving open questions or making architectural decis
 - Reports: negative adjustment entries land under Returns; order lists/counts/stats exclude adjustments; parent card shows "Returned: …"; labels "Returned — ORD-…".
 - Tests: `test/orders/sale_adjustment_test.dart` (13), v104→v105 in `migration_upgrade_test.dart`. pos-parity issue to open on merge.
 - Deferred: order-details/receipt sheet lists adjustments only via the card line; no per-line crate deposit split (deposit released pro rata by crates).
+- 2026-11-03 #709 (PRD #707 S2): a cancelled sale's reversal rows read "Sale cancelled — ORD-…" in crate history (new `crate_ledger.reason = order_cancelled`, movement stays `adjusted`; old reason-less rows on cancelled orders also labelled), stock history (`return` rows with an order) and the customer statement (`refund`/`void` legs with an order). Labels in `core/utils/reversal_labels.dart`. The #551 Return writes the same rows as a cancel so both read "Sale cancelled". No cloud CHECK on `crate_ledger.reason`, no migration.
 
 ### Issue #708: Reports show Sales / Returns / Net separately (2026-11-03, branch `feat/708-returns-line`)
 - Home, Profit report and Daily Recon split the figure into Sales / Returns / Net (and Profit / Profit returned) only when the period has cancel entries; `computeSalesSplitKobo` in `report_revenue.dart` is the one source, Net == old total, day-close snapshot untouched.
