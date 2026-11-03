@@ -867,7 +867,9 @@ class ManufacturerCrateStats {
   double get totalCrateAssets => totalBottles + emptyCrates;
 }
 
-@DriftAccessor(tables: [StockTransactions, Products, Users, Stores, Inventory])
+@DriftAccessor(
+  tables: [StockTransactions, Products, Users, Stores, Inventory, Orders],
+)
 class StockLedgerDao extends DatabaseAccessor<AppDatabase>
     with _$StockLedgerDaoMixin, BusinessScopedDao<AppDatabase> {
   StockLedgerDao(super.db);
@@ -973,6 +975,7 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
         stockAdjustments,
         stockAdjustments.id.equalsExp(stockTransactions.adjustmentId),
       ),
+      leftOuterJoin(orders, orders.id.equalsExp(stockTransactions.orderId)),
     ]);
     query.where(
       whereBusiness(stockTransactions) & stockTransactions.voidedAt.isNull(),
@@ -1027,6 +1030,9 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
       createdAt: s.createdAt,
       unitPriceKobo: p.retailerPriceKobo,
       adjustmentReason: row.readTableOrNull(stockAdjustments)?.reason,
+      orderNumber: s.orderId == null
+          ? null
+          : row.readTableOrNull(orders)?.orderNumber,
     );
   }
 
@@ -1353,6 +1359,10 @@ class StockTransactionWithDetails {
   /// The reason of the adjustment this movement came from (null otherwise).
   final String? adjustmentReason;
 
+  /// The number of the order this movement belongs to (null when it has none).
+  /// A `return` row with an order is a cancelled sale's reversal (#709).
+  final String? orderNumber;
+
   StockTransactionWithDetails({
     required this.transactionId,
     required this.productId,
@@ -1366,6 +1376,7 @@ class StockTransactionWithDetails {
     required this.createdAt,
     required this.unitPriceKobo,
     this.adjustmentReason,
+    this.orderNumber,
   });
 
   int get valueKobo => lineTotalKobo(unitPriceKobo, quantityDelta.abs());
@@ -1378,7 +1389,9 @@ class StockTransactionWithDetails {
       case 'sale':
         return 'Sale';
       case 'return':
-        return 'Return';
+        // Cancel and the #551 Return write the same row and the data cannot
+        // tell them apart, so both read "Sale cancelled".
+        return orderNumber == null ? 'Return' : saleCancelledLabel(orderNumber);
       case 'damage':
         return 'Damaged';
       case 'transfer_out':
