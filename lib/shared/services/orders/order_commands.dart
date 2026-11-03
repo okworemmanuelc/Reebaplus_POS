@@ -481,6 +481,59 @@ class OrderCommands {
     );
   }
 
+  /// **Part return** (#712, ADR 0035): the picked quantities come back as a sale
+  /// adjustment, behind the same `sales.cancel` Gate as the full Return (enforced
+  /// here at the write boundary). Everything is one DAO transaction
+  /// ([OrdersDao.returnPartOfSale]); the activity log and CEO + Manager alert
+  /// afterwards are best-effort. A return that takes EVERYTHING of a sale with
+  /// no earlier part return is the full [returnCompletedSale]; the screen picks.
+  Future<PartReturnOutcome> returnPartOfSale({
+    required String orderId,
+    required Map<String, double> qtyByLineId,
+    required String reason,
+    required String staffId,
+    required GateContext gateContext,
+    String damageReasonKey = 'other',
+    Map<String, double> damagedQtyByLine = const {},
+    RefundDestination destination = RefundDestination.cashOrTransfer,
+    String? refundMethod,
+  }) async {
+    const gate = Gates.refundOrder;
+    if (!gate.evaluate(gateContext)) {
+      throw GateDeniedError(gateName: gate.name, action: gate.action);
+    }
+    final outcome = await _ordersDao.returnPartOfSale(
+      orderId: orderId,
+      qtyByLineId: qtyByLineId,
+      reason: reason,
+      staffId: staffId,
+      deviceTag: await _orderDeviceTag(),
+      destination: destination,
+      refundMethod: refundMethod,
+      damagedQtyByLine: damagedQtyByLine,
+      damageReasonKey: damageReasonKey,
+    );
+    try {
+      final msg =
+          'Part of sale ${outcome.parentOrderNumber} returned '
+          '(${outcome.adjustmentOrderNumber}): '
+          '${formatCurrency(outcome.goodsKobo / 100)} of goods, '
+          '${formatCurrency(outcome.refundKobo / 100)} refunded, '
+          '${formatQty(outcome.damagedUnits)} unit(s) written off. '
+          'Reason: $reason';
+      await _db.activityLogDao.log(
+        action: 'sale_part_returned',
+        description: msg,
+        staffId: staffId,
+        storeId: outcome.storeId,
+        orderId: outcome.adjustmentOrderId,
+      );
+    } catch (e) {
+      debugPrint('[OrderCommands] part-return audit failed: $e');
+    }
+    return outcome;
+  }
+
   /// Activity-log entry + `sale_returned` warning to CEO + Manager. Best-effort:
   /// the Return is already committed and this can never fail it.
   Future<void> _auditReturn({

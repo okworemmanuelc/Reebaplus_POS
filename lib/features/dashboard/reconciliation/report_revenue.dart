@@ -46,7 +46,9 @@ int computeTotalSalesKobo(
   for (final e in saleDayEntries(orders)) {
     if (!inSpan(e.day)) continue;
     final v = e.sign * orderGoodsNetKobo(e.o, inScope: inScope);
-    if (e.sign > 0) {
+    // #712 — a sale adjustment is +1 on its own day with MINUS lines, so its
+    // value is negative: it belongs under Returns, not Sales.
+    if (e.sign > 0 && e.o.order.kind != 'adjustment') {
       sales += v;
     } else {
       returns += v;

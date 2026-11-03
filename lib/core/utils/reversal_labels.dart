@@ -5,13 +5,25 @@
 library;
 
 import 'package:reebaplus_pos/core/crates/crate_exchange.dart'
-    show kOrderCancelledReason;
+    show kOrderCancelledReason, kOrderPartReturnedReason;
 
 /// "Sale cancelled — ORD-…"; just "Sale cancelled" when the number is unknown.
 String saleCancelledLabel(String? orderNumber) =>
     (orderNumber == null || orderNumber.isEmpty)
     ? 'Sale cancelled'
     : 'Sale cancelled — $orderNumber';
+
+/// "Returned — ORD-…" (#712): the row belongs to a sale ADJUSTMENT, a part
+/// return. [orderNumber] is the adjustment's own number.
+String saleReturnedLabel(String? orderNumber) =>
+    (orderNumber == null || orderNumber.isEmpty)
+    ? 'Returned'
+    : 'Returned — $orderNumber';
+
+/// The reversal wording for a row stamped with [orderNumber]: a part return
+/// ([isAdjustment]) reads "Returned — ORD-…", a cancel "Sale cancelled — ORD-…".
+String reversalLabelFor(String? orderNumber, {bool isAdjustment = false}) =>
+    isAdjustment ? saleReturnedLabel(orderNumber) : saleCancelledLabel(orderNumber);
 
 /// The crate-history label for a cancel's reversal row, or null when the row is
 /// not one. New rows carry [kOrderCancelledReason]; rows written before #709
@@ -24,8 +36,12 @@ String? crateReversalLabel({
   required String? referenceOrderId,
   required String? orderNumber,
   required String? orderStatus,
+  String? orderKind,
 }) {
   if (movementType != 'adjusted') return null;
+  if (reason == kOrderPartReturnedReason || orderKind == 'adjustment') {
+    return saleReturnedLabel(orderNumber);
+  }
   final isNew = reason == kOrderCancelledReason;
   final isOld =
       (reason == null || reason.isEmpty) &&
@@ -42,8 +58,9 @@ String? walletReversalLabel({
   required String referenceType,
   required String? orderId,
   required String? orderNumber,
+  bool isAdjustment = false,
 }) {
   if (orderId == null) return null;
   if (referenceType != 'refund' && referenceType != 'void') return null;
-  return saleCancelledLabel(orderNumber);
+  return reversalLabelFor(orderNumber, isAdjustment: isAdjustment);
 }

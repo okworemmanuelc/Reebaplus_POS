@@ -481,6 +481,19 @@ class WalletTransactionsDao extends DatabaseAccessor<AppDatabase>
     return {for (final o in rows) o.id: o.orderNumber};
   }
 
+  /// The subset of [orderIds] that are sale adjustments (part returns, #712),
+  /// so their wallet legs read "Returned — ORD-…". Business scoped.
+  Future<Set<String>> adjustmentIdsAmong(Set<String> orderIds) async {
+    if (orderIds.isEmpty) return const {};
+    final rows = await (select(orders)
+          ..where((o) =>
+              whereBusiness(o) &
+              o.id.isIn(orderIds) &
+              o.kind.equals('adjustment')))
+        .get();
+    return {for (final o in rows) o.id};
+  }
+
   Stream<List<WalletTransactionData>> watchHistory(String customerId) {
     return (select(walletTransactions)
           ..where((t) => whereBusiness(t) & t.customerId.equals(customerId))

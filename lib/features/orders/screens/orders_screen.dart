@@ -1142,7 +1142,10 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
   /// returnability).
   Future<void> _returnCompletedSale(OrderWithItems item) async {
     final order = item.order;
-    final plan = await ref.read(orderServiceProvider).returnPlan(order.id);
+    final svc = ref.read(orderServiceProvider);
+    final plan = await svc.returnPlan(order.id);
+    // #712 — units still returnable per line ("up to N").
+    final returnable = await svc.returnableQtyByLine(order.id);
     if (!mounted) return;
     final input = await showReturnSaleDialog(
       context,
@@ -1155,16 +1158,35 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
             lineId: l.item.id,
             name: l.displayName,
             quantity: l.item.quantity,
+            returnable: returnable[l.item.id] ?? l.item.quantity,
             canBeDamaged: l.item.productId != null,
           ),
       ],
     );
     if (input == null || !mounted) return;
+    // A sale never part-returned and returned whole is the full Return
+    // (markCancelled); anything else is a sale adjustment (#712).
+    final earlierPartReturn = item.items.any(
+      (l) => (returnable[l.item.id] ?? l.item.quantity) < l.item.quantity,
+    );
+    final isPart = earlierPartReturn || !input.returnsEverythingLeft;
+
     // #710 — money was paid: ask where it goes (skipped for a pure credit sale).
-    RefundChoice? choice;
-    final paidKobo =
-        await ref.read(orderServiceProvider).refundablePaidKobo(order.id);
+    PartReturnPlan? partPlan;
+    var paidKobo = 0;
+    if (isPart) {
+      try {
+        partPlan = await svc.planPartReturn(order.id, input.returnQtyByLine);
+      } on ReturnRefusedException catch (e) {
+        if (mounted) AppNotification.showError(context, e.message);
+        return;
+      }
+      paidKobo = partPlan.refundableKobo;
+    } else {
+      paidKobo = await svc.refundablePaidKobo(order.id);
+    }
     if (!mounted) return;
+    RefundChoice? choice;
     if (paidKobo > 0) {
       choice = await showRefundDestinationDialog(
         context,
@@ -1180,18 +1202,47 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       return;
     }
     final staffId = ref.read(authProvider).currentUser?.id ?? '';
+    final destination = choice?.destination ?? RefundDestination.cashOrTransfer;
     try {
-      await ref.read(orderServiceProvider).returnCompletedSale(
-            orderId: order.id,
-            reason: input.reason,
-            staffId: staffId,
-            gateContext: ref.read(gateContextProvider),
-            damageReasonKey: input.damageReasonKey,
-            damagedQtyByLine: input.damagedQtyByLine,
-            destination:
-                choice?.destination ?? RefundDestination.cashOrTransfer,
-            refundMethod: choice?.method,
+      if (isPart) {
+        await svc.returnPartOfSale(
+          orderId: order.id,
+          qtyByLineId: input.returnQtyByLine,
+          reason: input.reason,
+          staffId: staffId,
+          gateContext: ref.read(gateContextProvider),
+          damageReasonKey: input.damageReasonKey,
+          damagedQtyByLine: input.damagedQtyByLine,
+          destination: destination,
+          refundMethod: choice?.method,
+        );
+        if (mounted) {
+          // #711 — tell the cashier which empties go back to the customer.
+          final empties = partPlan!.emptiesToHandBack;
+          final note = empties.isEmpty
+              ? ''
+              : ' Give the customer back: ${[
+                  for (final e in empties)
+                    '${formatQty(e.crates)} ${e.brandName} '
+                        '${e.crates == 1 ? 'crate' : 'crates'}',
+                ].join(', ')}.';
+          AppNotification.showSuccess(
+            context,
+            'Items returned from ${order.orderNumber}.$note',
           );
+        }
+        return;
+      }
+      await svc.returnCompletedSale(
+        orderId: order.id,
+        reason: input.reason,
+        staffId: staffId,
+        gateContext: ref.read(gateContextProvider),
+        damageReasonKey: input.damageReasonKey,
+        damagedQtyByLine: input.damagedQtyByLine,
+        destination: destination,
+        refundMethod: choice?.method,
+      );
       if (mounted) {
         AppNotification.showSuccess(
           context,
@@ -1734,6 +1785,52 @@ class _ReturnableCardState extends ConsumerState<_ReturnableCard> {
   }
 }
 
+/// #712 — "Returned: …" lines on the parent sale: one per part return, with the
+/// adjustment's own number. Renders nothing for a sale with no part return, so
+/// an ordinary card is unchanged.
+class _ReturnedLines extends ConsumerWidget {
+  final String orderId;
+  final bool showMoney;
+
+  const _ReturnedLines({required this.orderId, required this.showMoney});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = Theme.of(context);
+    final subtextCol = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
+    return StreamBuilder<
+      List<({OrderData adjustment, List<OrderItemDataWithProductData> lines})>
+    >(
+      stream: ref.read(orderServiceProvider).watchAdjustmentsWithLines(orderId),
+      builder: (context, snap) {
+        final adjs = snap.data ?? const [];
+        if (adjs.isEmpty) return const SizedBox.shrink();
+        return Padding(
+          padding: EdgeInsets.only(
+            left: context.getRSize(13),
+            top: context.getRSize(4),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final a in adjs)
+                Text(
+                  'Returned: ${[
+                    for (final l in a.lines)
+                      '${formatQty(-l.item.quantity)} × ${l.displayName}',
+                  ].join(', ')}'
+                  '${showMoney ? ' · ${formatCurrency(-a.adjustment.netAmountKobo / 100.0)}' : ''}'
+                  ' · ${a.adjustment.orderNumber}',
+                  style: context.regularStyle(12).copyWith(color: subtextCol),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _OrderCard extends ConsumerWidget {
   final OrderWithItems orderWithItems;
   final String status;
@@ -2166,6 +2263,11 @@ class _OrderCard extends ConsumerWidget {
                                     ),
                                   );
                                 }),
+                                if (order.kind == 'sale')
+                                  _ReturnedLines(
+                                    orderId: order.id,
+                                    showMoney: canSeeMoney,
+                                  ),
                                 if (extraCount > 0)
                                   Align(
                                     alignment: Alignment.centerLeft,

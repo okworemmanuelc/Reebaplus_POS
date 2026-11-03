@@ -7,6 +7,13 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #712: Sale adjustment record + part return (2026-11-03, branch `feat/712-sale-adjustment`)
+- Drift **v105** + cloud **0247_sale_adjustments.sql** (NOT applied; deploy before any v105 client pushes): `orders.kind` (sale|adjustment) + `orders.adjusts_order_id`; `order_items.quantity` CHECK `<> 0`; cloud-only `sale_adjustment_claims` + `pos_claim_sale_adjustment` (over-return guard); full-cancel claim refuses a sale with an adjustment; recost ignores adjustment orders. ADR 0035.
+- `OrdersDao.returnPartOfSale` / `planPartReturn` / `returnableQtyByLine` (`daos_sale_adjustments.dart`), `CratePoolDao.returnCratesForAdjustment` / `emptiesBackFor`; Return pop-up has per-line "up to N" steppers; whole-sale return with no earlier part return still uses `markCancelled`.
+- Reports: negative adjustment entries land under Returns; order lists/counts/stats exclude adjustments; parent card shows "Returned: …"; labels "Returned — ORD-…".
+- Tests: `test/orders/sale_adjustment_test.dart` (13), v104→v105 in `migration_upgrade_test.dart`. pos-parity issue to open on merge.
+- Deferred: order-details/receipt sheet lists adjustments only via the card line; no per-line crate deposit split (deposit released pro rata by crates).
+- 2026-11-03 #709 (PRD #707 S2): a cancelled sale's reversal rows read "Sale cancelled — ORD-…" in crate history (new `crate_ledger.reason = order_cancelled`, movement stays `adjusted`; old reason-less rows on cancelled orders also labelled), stock history (`return` rows with an order) and the customer statement (`refund`/`void` legs with an order). Labels in `core/utils/reversal_labels.dart`. The #551 Return writes the same rows as a cancel so both read "Sale cancelled". No cloud CHECK on `crate_ledger.reason`, no migration.
 ### Issue #724: Most recently used printers at the top (2026-11-03, branch `feat/724-printer-recent-first`)
 - `PrinterService` keeps `printer_recent_ids` (newest first, max 20; seeded from `last_printer_mac`), updated after every successful print (USB, Bluetooth auto/direct, test prints).
 - Receipt printer settings: USB + Bluetooth in ONE list ordered by recency (`PrinterService.sortByRecent`); never-used keep old order below. Printer picker sorted the same way.

@@ -21,6 +21,11 @@ const String kCheckoutExchangeReversalReason = 'checkout_exchange_reversal';
 /// issued to the customer (#709). The movement type stays `adjusted`.
 const String kOrderCancelledReason = 'order_cancelled';
 
+/// `crate_ledger.reason` on the customer row a PART return (#712) writes to
+/// cancel crates the customer still owes for the returned goods. The movement
+/// type stays `adjusted`; the row references the sale adjustment's order id.
+const String kOrderPartReturnedReason = 'order_part_returned';
+
 /// `crate_ledger.reason` on the pool row a Return of a Completed sale writes to
 /// hand back the empties the customer brought in at Confirm (#711). It lowers
 /// the shop's empty count, the same move as [kCheckoutExchangeReversalReason].

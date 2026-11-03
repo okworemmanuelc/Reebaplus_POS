@@ -25,6 +25,22 @@ enum SaleEnvelopeState {
 /// accepts ONE reversal per order (`pos_claim_order_reversal`, migration 0227).
 const String kReversalClaimAction = 'domain:pos_claim_order_reversal';
 
+/// #712 — the claim a part return (sale adjustment) enqueues instead of
+/// [kReversalClaimAction]: it holds the adjustment's rows until the cloud
+/// confirms they fit what was sold (`pos_claim_sale_adjustment`, 0247).
+const String kAdjustmentClaimAction = 'domain:pos_claim_sale_adjustment';
+
+/// P0001 message of a part return the cloud refused (more returned than sold).
+const String kAdjustmentExceedsError = 'adjustment_exceeds_returnable';
+
+/// P0001 message when the sale was cancelled / reversed before the part return
+/// reached the cloud.
+const String kOrderNotReturnableError = 'order_not_returnable';
+
+/// Both claim envelopes, for the "is a claim still queued" checks.
+const String kClaimActionsSql =
+    "('$kReversalClaimAction', '$kAdjustmentClaimAction')";
+
 /// #550 — the P0001 message the claim raises when another reversal won.
 const String kReversalAlreadyAppliedError = 'reversal_already_applied';
 
@@ -210,7 +226,7 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
   Future<bool> _reversalClaimQueued(String reversalId) async {
     final rows = await customSelect(
       "SELECT 1 FROM sync_queue "
-      "WHERE action_type = '$kReversalClaimAction' "
+      "WHERE action_type IN $kClaimActionsSql "
       "AND is_synced = 0 "
       "AND json_extract(payload, '\$.p_reversal_id') = ?1 LIMIT 1",
       variables: [Variable.withString(reversalId)],
@@ -223,7 +239,7 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
   Future<bool> _reversalClaimOrphaned(String reversalId) async {
     final rows = await customSelect(
       "SELECT 1 FROM sync_queue_orphans "
-      "WHERE action_type = '$kReversalClaimAction' "
+      "WHERE action_type IN $kClaimActionsSql "
       "AND json_extract(payload, '\$.p_reversal_id') = ?1 LIMIT 1",
       variables: [Variable.withString(reversalId)],
     ).get();

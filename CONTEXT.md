@@ -217,6 +217,22 @@ from another phone is rejected whole: that phone undoes its own reversal, lists
 it under Sync Issues, and alerts the CEO and Managers (`sale_refund_rejected`).
 _Avoid_: void, delete; dropping a cancelled sale from its creation day.
 
+**Sale adjustment** (#712, ADR 0035):
+The record a part return writes: a new `orders` row (`kind = 'adjustment'`,
+`adjusts_order_id` = the sale), born `completed` today, with MINUS lines at the
+original price and cost. Its stock, money and crate rows reference it; the sale
+is never changed. Never its own row in the Orders list: it shows as "Returned:
+…" inside the sale. Reports count it on its own day under Returns. Returnable
+per line = sold minus everything already returned; a cloud claim
+(`pos_claim_sale_adjustment`) stops two phones returning more than was sold.
+_Avoid_: edit, amend, partial cancel.
+
+**Refund destination** (#710):
+Where refunded money goes: back out as cash or transfer (a `refund` row, method
+picked), or "Add to customer's balance" (no cash-out row; the paid amount stays
+as credit; named customers only). Asked by one pop-up shared by Refund, Return
+and part return, only when money was actually paid.
+
 **Return**:
 A Cancel of a `completed` Order for goods the customer brought back (#551, PRD
 #337). Only a crate-free Completed sale is returnable: no crate history on the
@@ -229,7 +245,7 @@ damaged units are written off as `damage:<key>` stock adjustments, inside the
 same guarded reversal. Money collected after Checkout (Mark as paid / Record
 Payment) stays as customer credit, never a cash refund. Writes an activity-log
 entry and a `sale_returned` warning to CEO and Managers (best-effort). Partial
-returns and Online Order handling are out of scope.
+returns are a **Sale adjustment** (#712); Online Order handling is out of scope.
 _Avoid_: "refund" for the Completed-sale action in code; a partial return.
 
 **Cart**:

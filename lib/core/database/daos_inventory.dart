@@ -1033,6 +1033,8 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
       orderNumber: s.orderId == null
           ? null
           : row.readTableOrNull(orders)?.orderNumber,
+      orderIsAdjustment: s.orderId != null &&
+          row.readTableOrNull(orders)?.kind == 'adjustment',
     );
   }
 
@@ -1363,6 +1365,10 @@ class StockTransactionWithDetails {
   /// A `return` row with an order is a cancelled sale's reversal (#709).
   final String? orderNumber;
 
+  /// #712: the order is a sale adjustment (a part return), so a `return` row
+  /// reads "Returned — ORD-…" instead of "Sale cancelled — ORD-…".
+  final bool orderIsAdjustment;
+
   StockTransactionWithDetails({
     required this.transactionId,
     required this.productId,
@@ -1377,6 +1383,7 @@ class StockTransactionWithDetails {
     required this.unitPriceKobo,
     this.adjustmentReason,
     this.orderNumber,
+    this.orderIsAdjustment = false,
   });
 
   int get valueKobo => lineTotalKobo(unitPriceKobo, quantityDelta.abs());
@@ -1391,7 +1398,9 @@ class StockTransactionWithDetails {
       case 'return':
         // Cancel and the #551 Return write the same row and the data cannot
         // tell them apart, so both read "Sale cancelled".
-        return orderNumber == null ? 'Return' : saleCancelledLabel(orderNumber);
+        return orderNumber == null
+            ? 'Return'
+            : reversalLabelFor(orderNumber, isAdjustment: orderIsAdjustment);
       case 'damage':
         return 'Damaged';
       case 'transfer_out':

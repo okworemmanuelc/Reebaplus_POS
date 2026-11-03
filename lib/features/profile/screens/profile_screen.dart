@@ -238,7 +238,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   List<ProfileStat> _buildStats() {
-    final orders = _staffOrders;
+    final allOrders = _staffOrders;
+    // #712 — a part return nets the sales money below but is not an order.
+    final orders = allOrders.where((o) => o.order.kind != 'adjustment').toList();
     final completed = orders
         .where((o) => o.order.status == 'completed')
         .toList();
@@ -250,7 +252,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     // deposit-exclusive). It used to sum the order header's `netAmountKobo`,
     // which bundles the refundable crate deposit (contra US 5), so this stat
     // disagreed with every other "sales" figure in the app.
-    final totalSales = computeTotalSalesKobo(orders) / 100.0;
+    final totalSales = computeTotalSalesKobo(allOrders) / 100.0;
     return [
       ProfileStat(
         label: 'Total Orders',

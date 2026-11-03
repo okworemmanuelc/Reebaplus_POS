@@ -95,6 +95,7 @@ OrderWithItems _sale({
   final ts = at ?? _dayStart.add(const Duration(hours: 10));
   return OrderWithItems(
     OrderData(
+      kind: 'sale',
       id: id,
       businessId: _biz,
       orderNumber: id,

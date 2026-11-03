@@ -107,6 +107,7 @@ OrderWithItems _sale({
   final product = _product('prod-1');
   return OrderWithItems(
     OrderData(
+      kind: 'sale',
       id: id,
       businessId: _biz,
       orderNumber: id,

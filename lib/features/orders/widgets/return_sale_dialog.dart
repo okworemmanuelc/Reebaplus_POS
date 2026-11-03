@@ -14,6 +14,10 @@ class ReturnLineInput {
   final String name;
   final double quantity;
 
+  /// Units that can still come back ("up to N"): the quantity sold minus what
+  /// earlier part returns already took (#712). Null = all of [quantity].
+  final double? returnable;
+
   /// False for a Quick Sale line (no product): shown without a stepper.
   final bool canBeDamaged;
 
@@ -22,7 +26,10 @@ class ReturnLineInput {
     required this.name,
     required this.quantity,
     required this.canBeDamaged,
+    this.returnable,
   });
+
+  double get upTo => returnable ?? quantity;
 }
 
 /// What the Return dialog collected. The dialog performs no writes.
@@ -33,10 +40,19 @@ class ReturnSaleInput {
   /// Keyed by order-item id; only lines with a damaged quantity above 0.
   final Map<String, double> damagedQtyByLine;
 
+  /// Keyed by order-item id; only lines with a quantity above 0 (#712).
+  final Map<String, double> returnQtyByLine;
+
+  /// True when every unit still returnable comes back: the sale is reversed
+  /// whole (and, with no earlier part return, through the full Return).
+  final bool returnsEverythingLeft;
+
   const ReturnSaleInput({
     required this.reason,
     required this.damageReasonKey,
     required this.damagedQtyByLine,
+    this.returnQtyByLine = const {},
+    this.returnsEverythingLeft = true,
   });
 }
 
@@ -87,6 +103,9 @@ class _ReturnSaleDialog extends StatefulWidget {
 class _ReturnSaleDialogState extends State<_ReturnSaleDialog> {
   final _reason = TextEditingController();
   final _damaged = <String, double>{};
+  late final Map<String, double> _return = {
+    for (final l in widget.lines) l.lineId: l.upTo,
+  };
   String _damageKey = 'broken';
 
   @override
@@ -98,9 +117,23 @@ class _ReturnSaleDialogState extends State<_ReturnSaleDialog> {
   bool get _anyDamaged => _damaged.values.any((v) => v > 0);
 
   void _step(ReturnLineInput l, int by) => setState(() {
-    final next = ((_damaged[l.lineId] ?? 0) + by).clamp(0.0, l.quantity);
+    final max = _return[l.lineId] ?? 0;
+    final next = ((_damaged[l.lineId] ?? 0) + by).clamp(0.0, max);
     _damaged[l.lineId] = next;
   });
+
+  void _stepReturn(ReturnLineInput l, int by) => setState(() {
+    final next = ((_return[l.lineId] ?? 0) + by).clamp(0.0, l.upTo);
+    _return[l.lineId] = next;
+    // Damaged can never exceed what comes back.
+    if ((_damaged[l.lineId] ?? 0) > next) _damaged[l.lineId] = next;
+  });
+
+  bool get _anyReturned => _return.values.any((v) => v > 0);
+
+  bool get _everythingLeft => widget.lines.every(
+    (l) => (_return[l.lineId] ?? 0) == l.upTo,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -117,9 +150,14 @@ class _ReturnSaleDialogState extends State<_ReturnSaleDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'The whole sale is reversed and ${widget.refundLabel} goes back '
-            'the way it was paid. Stock is restored; mark anything that came '
-            'back damaged below and it is written off.',
+            _everythingLeft
+                ? 'The whole sale is reversed and ${widget.refundLabel} goes '
+                      'back the way it was paid. Stock is restored; mark '
+                      'anything that came back damaged below and it is '
+                      'written off.'
+                : 'Only what you pick below comes back. Stock for those items '
+                      'is restored and their money goes back the way it was '
+                      'paid. The rest of the sale stays as it was.',
             style: context.regularStyle(13).copyWith(
               color: cs.onSurfaceVariant,
             ),
@@ -150,23 +188,60 @@ class _ReturnSaleDialogState extends State<_ReturnSaleDialog> {
           ),
           SizedBox(height: context.getRSize(16)),
           Text(
+            'What comes back',
+            style: context.regularStyle(13).copyWith(color: cs.onSurface),
+          ),
+          for (final l in widget.lines)
+            if (l.upTo > 0)
+              Padding(
+                padding: EdgeInsets.only(top: context.getRSize(8)),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${l.name} (up to ${formatQty(l.upTo)})',
+                        style: context.regularStyle(13).copyWith(
+                          color: cs.onSurface,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      key: Key('return-qty-dec-${l.lineId}'),
+                      icon: const Icon(AppIcons.removeCircle),
+                      onPressed: (_return[l.lineId] ?? 0) > 0
+                          ? () => _stepReturn(l, -1)
+                          : null,
+                    ),
+                    Text(formatQty(_return[l.lineId] ?? 0)),
+                    IconButton(
+                      key: Key('return-qty-inc-${l.lineId}'),
+                      icon: const Icon(AppIcons.addCircle),
+                      onPressed: (_return[l.lineId] ?? 0) < l.upTo
+                          ? () => _stepReturn(l, 1)
+                          : null,
+                    ),
+                  ],
+                ),
+              ),
+          SizedBox(height: context.getRSize(16)),
+          Text(
             'Damaged on return',
             style: context.regularStyle(13).copyWith(color: cs.onSurface),
           ),
           for (final l in widget.lines)
-            Padding(
-              padding: EdgeInsets.only(top: context.getRSize(8)),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '${formatQty(l.quantity)} × ${l.name}',
-                      style: context.regularStyle(13).copyWith(
-                        color: cs.onSurface,
+            if (l.canBeDamaged && (_return[l.lineId] ?? 0) > 0)
+              Padding(
+                padding: EdgeInsets.only(top: context.getRSize(8)),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${formatQty(_return[l.lineId] ?? 0)} × ${l.name}',
+                        style: context.regularStyle(13).copyWith(
+                          color: cs.onSurface,
+                        ),
                       ),
                     ),
-                  ),
-                  if (l.canBeDamaged) ...[
                     IconButton(
                       key: Key('return-dec-${l.lineId}'),
                       icon: const Icon(AppIcons.removeCircle),
@@ -178,14 +253,14 @@ class _ReturnSaleDialogState extends State<_ReturnSaleDialog> {
                     IconButton(
                       key: Key('return-inc-${l.lineId}'),
                       icon: const Icon(AppIcons.addCircle),
-                      onPressed: (_damaged[l.lineId] ?? 0) < l.quantity
+                      onPressed:
+                          (_damaged[l.lineId] ?? 0) < (_return[l.lineId] ?? 0)
                           ? () => _step(l, 1)
                           : null,
                     ),
                   ],
-                ],
+                ),
               ),
-            ),
           if (_anyDamaged) ...[
             SizedBox(height: context.getRSize(16)),
             AppDropdown<String>(
@@ -209,11 +284,11 @@ class _ReturnSaleDialogState extends State<_ReturnSaleDialog> {
           onPressed: () => Navigator.pop(context),
         ),
         AppButton(
-          text: 'Return sale',
+          text: _everythingLeft ? 'Return sale' : 'Return items',
           icon: AppIcons.refresh,
           variant: AppButtonVariant.danger,
           isFullWidth: false,
-          onPressed: reason.isEmpty
+          onPressed: reason.isEmpty || !_anyReturned
               ? null
               : () => Navigator.pop(
                   context,
@@ -224,6 +299,11 @@ class _ReturnSaleDialogState extends State<_ReturnSaleDialog> {
                       for (final e in _damaged.entries)
                         if (e.value > 0) e.key: e.value,
                     },
+                    returnQtyByLine: {
+                      for (final e in _return.entries)
+                        if (e.value > 0) e.key: e.value,
+                    },
+                    returnsEverythingLeft: _everythingLeft,
                   ),
                 ),
         ),

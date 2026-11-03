@@ -152,6 +152,46 @@ class OrderService {
   Future<ReturnCratePlan> returnPlan(String orderId) =>
       _queries.returnPlan(orderId);
 
+  /// #712 — units still returnable per line.
+  Future<Map<String, double>> returnableQtyByLine(String orderId) =>
+      _queries.returnableQtyByLine(orderId);
+
+  /// #712 — preview of a part return (money, deposit, empties). No writes.
+  Future<PartReturnPlan> planPartReturn(
+    String orderId,
+    Map<String, double> qtyByLineId,
+  ) => _queries.planPartReturn(orderId, qtyByLineId);
+
+  /// #712 — a sale's part returns with their minus lines, live.
+  Stream<List<({OrderData adjustment, List<OrderItemDataWithProductData> lines})>>
+  watchAdjustmentsWithLines(String orderId) =>
+      _queries.watchAdjustmentsWithLines(orderId);
+
+  /// **Part return** (#712). See [OrderCommands.returnPartOfSale].
+  Future<PartReturnOutcome> returnPartOfSale({
+    required String orderId,
+    required Map<String, double> qtyByLineId,
+    required String reason,
+    required String staffId,
+    required GateContext gateContext,
+    String damageReasonKey = 'other',
+    Map<String, double> damagedQtyByLine = const {},
+    RefundDestination destination = RefundDestination.cashOrTransfer,
+    String? refundMethod,
+  }) {
+    return _commands.returnPartOfSale(
+      orderId: orderId,
+      qtyByLineId: qtyByLineId,
+      reason: reason,
+      staffId: staffId,
+      gateContext: gateContext,
+      damageReasonKey: damageReasonKey,
+      damagedQtyByLine: damagedQtyByLine,
+      destination: destination,
+      refundMethod: refundMethod,
+    );
+  }
+
   /// **Cancel a server-REJECTED sale** — the cashier tapped Cancel on the
   /// `sale_rejected` alert (an oversell: a concurrent till took the last unit).
   /// Rebuilds the sold lines from the orphaned `pos_record_sale_v2` envelope and

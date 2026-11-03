@@ -122,6 +122,21 @@ class OrderQueries {
   Future<bool> isReturnable(String orderId) =>
       _ordersDao.isReturnable(orderId);
 
+  /// #712 — units still returnable per line ("up to N").
+  Future<Map<String, double>> returnableQtyByLine(String orderId) =>
+      _ordersDao.returnableQtyByLine(orderId);
+
+  /// #712 — what a part return of [qtyByLineId] would do, without writing.
+  Future<PartReturnPlan> planPartReturn(
+    String orderId,
+    Map<String, double> qtyByLineId,
+  ) => _ordersDao.planPartReturn(orderId, qtyByLineId);
+
+  /// #712 — the part returns of a sale with their minus lines, live.
+  Stream<List<({OrderData adjustment, List<OrderItemDataWithProductData> lines})>>
+  watchAdjustmentsWithLines(String orderId) =>
+      _ordersDao.watchAdjustmentsWithLines(orderId);
+
   /// #711 — empties to hand back and deposit to pay back on a Return.
   Future<ReturnCratePlan> returnPlan(String orderId) =>
       _ordersDao.returnPlan(orderId);

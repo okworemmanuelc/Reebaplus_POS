@@ -1536,7 +1536,8 @@ class SupabaseSyncService {
         // #550 — this phone's reversal WON (or is the winner retrying: the claim
         // replays idempotently). Release its held rows; they upload as ordinary
         // rows on the next drain, scheduled now rather than on the next tick.
-        if (item.actionType == kReversalClaimAction) {
+        if (item.actionType == kReversalClaimAction ||
+            item.actionType == kAdjustmentClaimAction) {
           final rid = payload['p_reversal_id'];
           if (rid is String) {
             await _db.syncDao.releaseHeldByOrder(rid);
@@ -1572,12 +1573,23 @@ class SupabaseSyncService {
             item.actionType == kReversalClaimAction &&
             code == 'P0001' &&
             e.message.contains(kReversalAlreadyAppliedError);
+        // #712 — a part return the cloud refused (more than was sold, or the
+        // sale was cancelled first): withdraw its held rows the same way.
+        final adjustmentLost =
+            item.actionType == kAdjustmentClaimAction &&
+            code == 'P0001' &&
+            (e.message.contains(kAdjustmentExceedsError) ||
+                e.message.contains(kOrderNotReturnableError));
         if (reversalLost) await _undoLostReversal(payload, e.details);
+        if (adjustmentLost) await _undoLostAdjustment(payload);
         await _db.syncDao.markFailed(
           item.id,
           reversalLost
               ? 'pg_$code: ${e.message} — this sale was already refunded on '
                     'another phone; the refund made here was undone'
+              : adjustmentLost
+              ? 'pg_$code: ${e.message} — this return no longer fits the sale '
+                    '(returned on another phone first); it was undone here'
               : 'pg_$code: ${e.message}',
           permanent: isPermanent,
           fkDeferred: isFkViolation,
@@ -1640,6 +1652,37 @@ class SupabaseSyncService {
         errorType: 'sync.reversal_undo_failed',
         message: 'Undo of rejected reversal $reversalId failed: $e',
         context: '_undoLostReversal',
+        businessId: _db.currentBusinessId,
+      );
+    }
+  }
+
+  /// #712 — the losing phone's side of a refused part return: withdraw the
+  /// held rows (stock, money, crates, cost layer, the adjustment's own header
+  /// and lines) and alert the CEO / Managers. Best-effort, like
+  /// [_undoLostReversal].
+  Future<void> _undoLostAdjustment(Map<String, dynamic> payload) async {
+    final reversalId = payload['p_reversal_id'];
+    final parentId = payload['p_parent_order_id'];
+    final adjustmentId = payload['p_adjustment_order_id'];
+    if (reversalId is! String || parentId is! String || adjustmentId is! String) {
+      return;
+    }
+    try {
+      final undone = await _db.ordersDao.undoRejectedReversal(
+        reversalId: reversalId,
+        orderId: parentId,
+        adjustmentOrderId: adjustmentId,
+      );
+      if (undone) {
+        await _db.ordersDao.alertRefundRejected(parentId, partReturn: true);
+      }
+    } catch (e) {
+      debugPrint('[SyncService] lost-adjustment undo failed: $e');
+      await _db.errorLogDao.logError(
+        errorType: 'sync.adjustment_undo_failed',
+        message: 'Undo of rejected part return $reversalId failed: $e',
+        context: '_undoLostAdjustment',
         businessId: _db.currentBusinessId,
       );
     }
