@@ -471,6 +471,16 @@ class WalletTransactionsDao extends DatabaseAccessor<AppDatabase>
         .watch();
   }
 
+  /// Order number by order id for [orderIds], business scoped. Labels a
+  /// cancelled sale's wallet legs on the statement (#709).
+  Future<Map<String, String>> orderNumbersFor(Set<String> orderIds) async {
+    if (orderIds.isEmpty) return const {};
+    final rows = await (select(orders)
+          ..where((o) => whereBusiness(o) & o.id.isIn(orderIds)))
+        .get();
+    return {for (final o in rows) o.id: o.orderNumber};
+  }
+
   Stream<List<WalletTransactionData>> watchHistory(String customerId) {
     return (select(walletTransactions)
           ..where((t) => whereBusiness(t) & t.customerId.equals(customerId))
