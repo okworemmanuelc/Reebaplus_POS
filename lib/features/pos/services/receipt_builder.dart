@@ -175,6 +175,13 @@ class ThermalReceiptService {
     return bytes;
   }
 
+  /// Prints ready-made text [lines] (no logo) — the payslip (#671) reuses the
+  /// receipt's text printing.
+  static Future<List<int>> buildFromLines(
+    List<ReceiptLine> lines,
+    ReceiptPaperSize paperSize,
+  ) => _emitText(lines, paperSize, null);
+
   @visibleForTesting
   static Future<List<int>> emitTextForTest(
     List<ReceiptLine> lines,

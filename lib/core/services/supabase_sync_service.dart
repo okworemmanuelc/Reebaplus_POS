@@ -2783,6 +2783,12 @@ class SupabaseSyncService {
       } catch (e) {
         debugPrint('[SyncService] daily allowance run skipped: $e');
       }
+      // #671 — converge the combined "Salaries" lines the same way.
+      try {
+        await _db.payrollDao.refreshSalaryTotals();
+      } catch (e) {
+        debugPrint('[SyncService] salaries line refresh skipped: $e');
+      }
       pullStatus.value = pullStatus.value.copyWith(stage: PullStage.completed);
     } catch (e, st) {
       debugPrint('[SyncService] pullChanges failed: $e\n$st');

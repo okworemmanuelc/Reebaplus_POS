@@ -641,6 +641,14 @@ class _DailyReconciliationDetailScreenState
           'Daily allowances',
           '− ${formatCurrency(d.dailyAllowancesKobo / 100.0)}',
         ),
+      // #671 — one combined line per payday, no worker named (ADR 0034).
+      if (d.salariesKobo != 0)
+        _line(
+          context,
+          theme,
+          'Salaries',
+          '− ${formatCurrency(d.salariesKobo / 100.0)}',
+        ),
       _line(
         context,
         theme,
@@ -879,6 +887,14 @@ class _DailyReconciliationDetailScreenState
             theme,
             'Daily allowances (cash)',
             '− ${formatCurrency(d.dailyAllowancesKobo / 100.0)}',
+          ),
+        // #671 — only the till-cash part of the salaries paid.
+        if (d.cashSalariesKobo != 0)
+          _line(
+            context,
+            theme,
+            'Salaries (cash)',
+            '− ${formatCurrency(d.cashSalariesKobo / 100.0)}',
           ),
         _line(
           context,
@@ -1368,6 +1384,13 @@ class _DailyReconciliationDetailScreenState
             theme,
             'Daily allowances',
             formatCurrency(d.dailyAllowancesKobo / 100.0),
+          ),
+        if (d.salariesKobo != 0)
+          _line(
+            context,
+            theme,
+            'Salaries',
+            formatCurrency(d.salariesKobo / 100.0),
           ),
       ],
       badges: badges,
@@ -1998,6 +2021,7 @@ class _DailyReconciliationDetailScreenState
         ['Expenses', money(d.expensesKobo)],
         if (d.dailyAllowancesKobo != 0)
           ['Daily allowances', money(d.dailyAllowancesKobo)],
+        if (d.salariesKobo != 0) ['Salaries', money(d.salariesKobo)],
         ['Damages (at cost)', money(d.damageCostKobo)],
         if (d.crateDamageDepositKobo > 0)
           ['Crate deposit loss (at deposit)', money(d.crateDamageDepositKobo)],
@@ -2123,6 +2147,8 @@ class _DailyReconciliationDetailScreenState
         ['Expenses paid (cash)', money(d.cashExpensesKobo)],
         if (d.dailyAllowancesKobo != 0)
           ['Daily allowances (cash)', money(d.dailyAllowancesKobo)],
+        if (d.cashSalariesKobo != 0)
+          ['Salaries (cash)', money(d.cashSalariesKobo)],
         ['Paid to suppliers (cash)', money(d.cashSupplierPaidKobo)],
         ['Net cash movement', money(d.netCashMovementKobo)],
         ['Crate deposits held (cash)', money(d.cashCrateDepositsKobo)],

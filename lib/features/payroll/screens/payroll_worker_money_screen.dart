@@ -13,6 +13,8 @@ import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/payroll/payroll_money_providers.dart';
+import 'package:reebaplus_pos/features/payroll/screens/payroll_payday_screen.dart';
+import 'package:reebaplus_pos/features/payroll/screens/payroll_payslip_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
@@ -26,6 +28,8 @@ class PayrollMoneyKeys {
   static const saveButton = Key('payroll-money-save');
   static const loanOwed = Key('payroll-money-loan-owed');
   static const advanceLeft = Key('payroll-money-advance-left');
+  static const totalPay = Key('payroll-money-total-pay');
+  static const paySalary = Key('payroll-money-pay-salary');
   static Key action(String type) => Key('payroll-money-action-$type');
   static Key entryRow(String id) => Key('payroll-money-entry-$id');
   static Key approve(String id) => Key('payroll-money-approve-$id');
@@ -94,6 +98,19 @@ class PayrollWorkerMoneyScreen extends ConsumerWidget {
       salaryMonth: thisMonth,
     );
     final isApprover = ref.watch(payrollIsApproverProvider);
+    final statements =
+        ref.watch(payrollWorkerStatementsProvider(workerId)).valueOrNull ??
+        const <PayrollStatementData>[];
+    final salaryRepaymentIds = {
+      for (final st in statements)
+        payrollSalaryRepaymentId(workerId, st.salaryMonth),
+    };
+    // #671 — Total Pay so far this month (salary + allowances + bonuses).
+    final soFar = PaydayFigures.from(
+      worker: worker,
+      entries: entries,
+      salaryMonth: thisMonth,
+    );
     final t = Theme.of(context);
     final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
     final types = worker.isRemoved
@@ -102,7 +119,7 @@ class PayrollWorkerMoneyScreen extends ConsumerWidget {
 
     return GlassyScaffold(
       title: toNameCase(worker.name),
-      subtitle: 'Bonus, advance and loans',
+      subtitle: 'Pay, bonus, advance and loans',
       body: ListView(
         padding: EdgeInsets.fromLTRB(
           context.getRSize(16),
@@ -127,6 +144,26 @@ class PayrollWorkerMoneyScreen extends ConsumerWidget {
             value: formatCurrency(left / 100),
             note: 'An advance cannot be more than this. Give a loan instead.',
           ),
+          SizedBox(height: context.getRSize(10)),
+          _Figure(
+            key: PayrollMoneyKeys.totalPay,
+            label: 'Total Pay for ${payrollMonthLabel(thisMonth)} so far',
+            value: formatCurrency(soFar.totalPayKobo / 100),
+            note:
+                'Salary + daily allowances + bonuses. Advances and loans are '
+                'not added.',
+          ),
+          SizedBox(height: context.getRSize(16)),
+          AppButton(
+            key: PayrollMoneyKeys.paySalary,
+            text: 'Pay salary',
+            icon: AppIcons.cash,
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => PayrollPaydayScreen(workerId: workerId),
+              ),
+            ),
+          ),
           SizedBox(height: context.getRSize(16)),
           Wrap(
             spacing: context.getRSize(8),
@@ -147,6 +184,16 @@ class PayrollWorkerMoneyScreen extends ConsumerWidget {
                 ),
             ],
           ),
+          if (statements.isNotEmpty) ...[
+            SizedBox(height: context.getRSize(20)),
+            Text('Salary payments', style: context.boldStyle(15)),
+            SizedBox(height: context.getRSize(8)),
+            for (final st in statements)
+              Padding(
+                padding: EdgeInsets.only(bottom: context.getRSize(8)),
+                child: _StatementTile(statement: st, workerId: workerId),
+              ),
+          ],
           SizedBox(height: context.getRSize(20)),
           Text('History', style: context.boldStyle(15)),
           SizedBox(height: context.getRSize(8)),
@@ -164,7 +211,10 @@ class PayrollWorkerMoneyScreen extends ConsumerWidget {
                 onCorrect:
                     e.status == 'approved' &&
                         e.correctsEntryId == null &&
-                        !worker.isRemoved
+                        !worker.isRemoved &&
+                        // #671: a repayment taken on payday is part of a
+                        // signed statement, so it is never corrected here.
+                        !salaryRepaymentIds.contains(e.id)
                     ? () => showDialog<void>(
                         context: context,
                         builder: (_) => _MoneyEntryDialog(
@@ -181,6 +231,72 @@ class PayrollWorkerMoneyScreen extends ConsumerWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// One signed salary payment; opens its payslip.
+class _StatementTile extends StatelessWidget {
+  const _StatementTile({required this.statement, required this.workerId});
+
+  final PayrollStatementData statement;
+  final String workerId;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final muted = t.textTheme.bodySmall?.color ?? t.colorScheme.onSurface;
+    final s = statement;
+    return Material(
+      key: PayslipKeys.statementRow(s.id),
+      color: t.colorScheme.surface,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) =>
+                PayrollPayslipScreen(workerId: workerId, statementId: s.id),
+          ),
+        ),
+        child: Padding(
+          padding: EdgeInsets.all(context.getRSize(12)),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${payrollMonthLabel(s.salaryMonth)} salary',
+                      style: context.boldStyle(14),
+                    ),
+                    SizedBox(height: context.getRSize(4)),
+                    Text(
+                      'Paid ${formatCurrency(s.cashPaidKobo / 100)}  •  '
+                      'Tap for payslip',
+                      style: context.regularStyle(12).copyWith(color: muted),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'Total Pay',
+                    style: context.regularStyle(11).copyWith(color: muted),
+                  ),
+                  Text(
+                    formatCurrency(s.totalPayKobo / 100),
+                    style: context.boldStyle(14),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

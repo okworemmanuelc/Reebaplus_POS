@@ -353,6 +353,9 @@ class ReconData {
     this.payOnDeliveryUncollectedKobo = 0,
     // #669 — optional-defaulted like the other additive fields.
     this.dailyAllowancesKobo = 0,
+    // #671 — optional-defaulted like the other additive fields.
+    this.salariesKobo = 0,
+    this.cashSalariesKobo = 0,
     required this.showCrates,
     required this.crateUnits,
     required this.crateDepositKobo,
@@ -554,6 +557,16 @@ class ReconData {
   /// [cashOutKobo]). It names no worker. A day no Payroll phone has opened yet
   /// reads 0 until that phone fills the day in.
   final int dailyAllowancesKobo;
+
+  /// #671 (ADR 0034) — the period's combined "Salaries" lines
+  /// (`staff_pay_totals`, kind `salaries`) in store scope, on their payday.
+  /// [salariesKobo] is the salaries paid (a cost, in [netProfitKobo] and
+  /// [periodNetResultKobo]); [cashSalariesKobo] is the part handed over in
+  /// till cash (in [cashOutKobo]) — a transfer, advances already given and a
+  /// loan repayment kept back never leave the drawer that day. No worker is
+  /// named.
+  final int salariesKobo;
+  final int cashSalariesKobo;
   final double damageUnits;
   final int damageCostKobo;
   final int damageRetailKobo;
@@ -835,6 +848,7 @@ class ReconData {
       forfeitIncomeKobo -
       expensesKobo -
       dailyAllowancesKobo -
+      salariesKobo -
       damageCostKobo -
       crateDamageDepositKobo -
       crateShortfallWrittenOffKobo -
@@ -861,6 +875,7 @@ class ReconData {
       cashRefundsKobo +
       cashExpensesKobo +
       dailyAllowancesKobo +
+      cashSalariesKobo +
       cashSupplierPaidKobo;
   /// Expected net cash movement for the period (in − out). Not a cash balance —
   /// there is no opening float to add it to (Hard Rule #8).
@@ -948,6 +963,7 @@ class ReconData {
       refundsKobo -
       expensesKobo -
       dailyAllowancesKobo -
+      salariesKobo -
       damageCostKobo -
       crateDamageDepositKobo -
       // #216 — an accepted crate loss is realized, on the day it was accepted.
@@ -1013,6 +1029,7 @@ class ReconData {
       totalRevenueKobo == 0 &&
       expensesKobo == 0 &&
       dailyAllowancesKobo == 0 &&
+      salariesKobo == 0 &&
       damageUnits == 0 &&
       shortageUnits == 0 &&
       !hasStockCount &&
@@ -1171,6 +1188,26 @@ int dailyAllowancesInPeriod(
     sum += t.cashKobo;
   }
   return sum;
+}
+
+/// #671 — the "Salaries" money in a period: the combined lines of kind
+/// `salaries` whose payday is in span and whose store is in scope, as the
+/// salaries paid (cost) and the till cash handed over. No worker is named.
+({int amountKobo, int cashKobo}) salariesInPeriod(
+  Iterable<StaffPayTotalData> totals, {
+  required bool Function(DateTime) inSpan,
+  required bool Function(String?) inScope,
+}) {
+  var amount = 0;
+  var cash = 0;
+  for (final t in totals) {
+    if (t.kind != kStaffPayKindSalaries) continue;
+    final day = DateTime.tryParse(t.totalDate);
+    if (day == null || !inSpan(day) || !inScope(t.storeId)) continue;
+    amount += t.amountKobo;
+    cash += t.cashKobo;
+  }
+  return (amountKobo: amount, cashKobo: cash);
 }
 
 /// The reconciliation roll-up itself — **pure** over [ReconInputs] (#195), so
@@ -1490,6 +1527,11 @@ ReconData reconDataFrom(ReconInputs input) {
   final expensesKobo = periodExpenses.totalKobo;
   final expensesCount = periodExpenses.count;
   final dailyAllowancesKobo = dailyAllowancesInPeriod(
+    input.staffPayTotals,
+    inSpan: inSpan,
+    inScope: inScope,
+  );
+  final salaries = salariesInPeriod(
     input.staffPayTotals,
     inSpan: inSpan,
     inScope: inScope,
@@ -1971,6 +2013,8 @@ ReconData reconDataFrom(ReconInputs input) {
     expensesKobo: expensesKobo,
     expensesCount: expensesCount,
     dailyAllowancesKobo: dailyAllowancesKobo,
+    salariesKobo: salaries.amountKobo,
+    cashSalariesKobo: salaries.cashKobo,
     damageUnits: damageUnitsQty,
     damageCostKobo: damageCostKobo,
     damageRetailKobo: damageRetailKobo,
