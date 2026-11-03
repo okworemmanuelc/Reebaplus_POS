@@ -89,6 +89,7 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
     var cogsKobo = 0;
     var uncostedItems = 0.0;
     var concessionKobo = 0;
+    var returnedProfitKobo = 0;
 
     // #549 — recognized at checkout ('pending'), not at the ceremonial Confirm
     // ('completed'). A cancelled sale still counts on its creation day and
@@ -129,12 +130,10 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
           i.item.unitPriceKobo,
           i.item.quantity,
         );
-        final lineCogs = lineTotalKobo(
-          i.item.buyingPriceKobo,
-          i.item.quantity,
-        );
+        final lineCogs = lineTotalKobo(i.item.buyingPriceKobo, i.item.quantity);
         revenueKobo += sign * lineRevenue;
         cogsKobo += sign * lineCogs;
+        if (sign < 0) returnedProfitKobo += sign * (lineRevenue - lineCogs);
         final acc = byProduct.putIfAbsent(
           product.id,
           () => _ProductAccum(product.name),
@@ -145,6 +144,14 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
         acc.concessionKobo += sign * lineConcession;
       }
     }
+
+    // #708 — the #176 shared Total Sales, split for display. Same predicates
+    // as before; #195: the SAME store predicate the figures above apply.
+    final split = computeSalesSplitKobo(
+      orders,
+      inSpan: (createdAt) => isDateInPeriod(createdAt, period),
+      inScope: inScope,
+    );
 
     final products =
         byProduct.values
@@ -172,16 +179,9 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
       // dashboard and the Daily Reconciliation (deposit-exclusive item lines
       // minus discounts, ALL lines incl. quick sales). Distinct from
       // [revenueKobo], which is costed-only so Revenue − COGS == Gross Profit.
-      totalSalesKobo: computeTotalSalesKobo(
-        orders,
-        inSpan: (createdAt) => isDateInPeriod(createdAt, period),
-        // #195 — the SAME store predicate the Revenue / COGS / Gross Profit
-        // figures above apply, and the same one the reconciliation applies.
-        // Without it this tile counted stores (and, per #142 / van-sales spec
-        // §8.1, road sales) that everything under it did not, and the one
-        // screen contradicted itself.
-        inScope: inScope,
-      ),
+      totalSalesKobo: split.netKobo,
+      returnsKobo: split.returnsKobo,
+      returnedProfitKobo: returnedProfitKobo,
     );
   }
 
@@ -423,19 +423,37 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
     final f = theme.extension<AppFixedColors>() ?? AppFixedColors.light;
     final profit = data.profitKobo;
     final color = profit >= 0 ? f.green : f.danger;
+    // #708 — returns get their own lines only when the period has cancel
+    // entries; otherwise the card is unchanged.
+    final hasReturns = data.returnsKobo != 0 || data.returnedProfitKobo != 0;
     return ReportHeadlineCard(
       icon: AppIcons.analytics,
       tone: profit >= 0 ? IconTileTone.green : IconTileTone.danger,
-      label: 'Gross Profit',
+      label: hasReturns ? 'Net Profit' : 'Gross Profit',
       figure: formatCurrency(profit / 100.0),
       figureColor: color,
       chips: [
         // #176 — the shared "Total Sales" (all lines − discounts,
         // deposit-exclusive), identical to the Home dashboard and the
         // Daily Reconciliation for the same period.
-        ReportChip(
-          'Total sales: ${formatCurrency(data.totalSalesKobo / 100.0)}',
-        ),
+        if (hasReturns) ...[
+          ReportChip(
+            'Sales: ${formatCurrency((data.totalSalesKobo - data.returnsKobo) / 100.0)}',
+          ),
+          ReportChip('Returns: − ${formatCurrency(-data.returnsKobo / 100.0)}'),
+          ReportChip(
+            'Net sales: ${formatCurrency(data.totalSalesKobo / 100.0)}',
+          ),
+          ReportChip(
+            'Profit: ${formatCurrency((data.profitKobo - data.returnedProfitKobo) / 100.0)}',
+          ),
+          ReportChip(
+            'Profit returned: − ${formatCurrency(-data.returnedProfitKobo / 100.0)}',
+          ),
+        ] else
+          ReportChip(
+            'Total sales: ${formatCurrency(data.totalSalesKobo / 100.0)}',
+          ),
         ReportChip(
           'Costed revenue: ${formatCurrency(data.revenueKobo / 100.0)}',
         ),
@@ -533,7 +551,16 @@ class _ProfitData {
     required this.uncostedItems,
     required this.concessionKobo,
     required this.totalSalesKobo,
+    this.returnedProfitKobo = 0,
+    this.returnsKobo = 0,
   });
+
+  /// #708 — the costed profit of the −1 cancel entries (zero or negative),
+  /// already inside [profitKobo]. Profit = `profitKobo − returnedProfitKobo`.
+  final int returnedProfitKobo;
+
+  /// #708 — the −1 cancel entries inside [totalSalesKobo] (zero or negative).
+  final int returnsKobo;
 
   /// Revenue of the cost-known lines only (matches [cogsKobo]'s line set so the
   /// headline stays self-consistent: Revenue − COGS == Gross Profit).

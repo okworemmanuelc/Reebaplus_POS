@@ -492,13 +492,36 @@ class _DailyReconciliationDetailScreenState
       [
         _line(context, theme, 'Items sold', formatQtyGrouped(d.itemsSold)),
         _line(context, theme, 'Products (SKUs) sold', fmtNumber(d.skus)),
-        _line(
-          context,
-          theme,
-          'Total sales',
-          formatCurrency(d.totalSalesKobo / 100.0),
-          strong: true,
-        ),
+        // #708 — returns on their own line when the day has cancel entries.
+        // Net sales is the same figure Total sales shows without returns.
+        if (d.returnsKobo != 0) ...[
+          _line(
+            context,
+            theme,
+            'Sales',
+            formatCurrency((d.totalSalesKobo - d.returnsKobo) / 100.0),
+          ),
+          _line(
+            context,
+            theme,
+            'Returns',
+            '− ${formatCurrency(-d.returnsKobo / 100.0)}',
+          ),
+          _line(
+            context,
+            theme,
+            'Net sales',
+            formatCurrency(d.totalSalesKobo / 100.0),
+            strong: true,
+          ),
+        ] else
+          _line(
+            context,
+            theme,
+            'Total sales',
+            formatCurrency(d.totalSalesKobo / 100.0),
+            strong: true,
+          ),
         // #176 — paid-now vs on-credit split so the drawer isn't over-expected
         // by the credit amount. Shown only when some sale was on credit.
         if (d.salesOnCreditKobo != 0) ...[
