@@ -1801,6 +1801,21 @@ final List<SyncedTable> kSyncRegistry = [
       resilient: true,
     ),
   ),
+  // #669 (ADR 0034) — the combined pay lines ("Daily allowances" per store per
+  // day, no worker named). NOT permission-gated: every phone needs them for
+  // Daily Reconciliation, Expenses and Profit, so they ride pos_pull_snapshot
+  // like any business table (0245). A derived total, not a ledger: only a
+  // Payroll phone writes it, always as the full recomputed figure, so a plain
+  // last-write-wins upsert converges once every allowance entry has synced.
+  SyncedTable(
+    name: 'staff_pay_totals',
+    tenantScoped: true,
+    restore: Restore.plain(
+      (db) => db.staffPayTotals,
+      StaffPayTotalData.fromJson,
+      resilient: true,
+    ),
+  ),
 ];
 
 // ---------------------------------------------------------------------------

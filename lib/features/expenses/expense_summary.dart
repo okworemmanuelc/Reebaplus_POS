@@ -29,10 +29,33 @@ class ExpenseSummary {
   final int budgetPendingKobo;
 }
 
-/// Builds the summary from the viewer's (store-scoped) expenses.
+/// #669 — the combined "Daily allowances" lines the Expenses screen shows for
+/// [scopeStoreId] (null = All Stores): kind `daily_allowances`, non-zero,
+/// newest day first. They name no worker (ADR 0034).
+List<StaffPayTotalData> dailyAllowanceLinesInScope(
+  Iterable<StaffPayTotalData> totals,
+  String? scopeStoreId,
+) {
+  return [
+    for (final t in totals)
+      if (t.kind == kStaffPayKindDailyAllowances &&
+          t.amountKobo != 0 &&
+          (scopeStoreId == null || t.storeId == scopeStoreId))
+        t,
+  ]..sort((a, b) => b.totalDate.compareTo(a.totalDate));
+}
+
+/// The calendar day a combined pay line is dated, at local midnight.
+DateTime staffPayLineDay(StaffPayTotalData t) =>
+    DateTime.tryParse(t.totalDate) ?? t.createdAt;
+
+/// Builds the summary from the viewer's (store-scoped) expenses and, #669, the
+/// combined Daily allowances lines in the same scope (already-spent money,
+/// counted like an approved expense).
 ExpenseSummary summarizeExpenses(
   Iterable<ExpenseData> expenses, {
   DateTime? now,
+  Iterable<StaffPayTotalData> allowanceLines = const [],
 }) {
   var today = 0;
   var week = 0;
@@ -53,6 +76,15 @@ ExpenseSummary summarizeExpenses(
       } else {
         budgetPending += e.amountKobo;
       }
+    }
+  }
+  for (final t in allowanceLines) {
+    if (t.kind != kStaffPayKindDailyAllowances) continue;
+    final date = staffPayLineDay(t);
+    if (isDateInPeriod(date, 'Today', now: now)) today += t.amountKobo;
+    if (isDateInPeriod(date, 'This Week', now: now)) week += t.amountKobo;
+    if (isDateInPeriod(date, 'This Month', now: now)) {
+      budgetSpent += t.amountKobo;
     }
   }
   return ExpenseSummary(

@@ -13,6 +13,7 @@ import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/payroll/screens/payroll_worker_money_screen.dart';
+import 'package:reebaplus_pos/features/payroll/screens/payroll_allowances_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
@@ -67,6 +68,8 @@ class _PayrollScreenState extends ConsumerState<PayrollScreen> {
 
     return GlassyScaffold(
       title: 'Payroll',
+      // #669 — today's Daily Allowances (change or cancel one).
+      actions: const [PayrollAllowancesButton()],
       body: Column(
         children: [
           const PayrollPendingApprovalsCard(),

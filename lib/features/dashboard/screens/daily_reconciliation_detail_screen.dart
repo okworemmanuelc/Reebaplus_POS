@@ -108,6 +108,8 @@ class _DailyReconciliationDetailScreenState
     return ready(allOrdersProvider) &&
         ready(allPaymentTransactionsProvider) &&
         ready(allExpensesProvider) &&
+        // #669 — Daily allowances are in the frozen net profit and cash out.
+        ready(allStaffPayTotalsProvider) &&
         ready(allStockAdjustmentsProvider) &&
         ready(allStockTransactionsProvider) &&
         ready(allStockCountsProvider) &&
@@ -631,6 +633,14 @@ class _DailyReconciliationDetailScreenState
         'Expenses (${d.expensesCount})',
         '− ${formatCurrency(d.expensesKobo / 100.0)}',
       ),
+      // #669 — one combined line, no worker named (ADR 0034).
+      if (d.dailyAllowancesKobo != 0)
+        _line(
+          context,
+          theme,
+          'Daily allowances',
+          '− ${formatCurrency(d.dailyAllowancesKobo / 100.0)}',
+        ),
       _line(
         context,
         theme,
@@ -862,6 +872,14 @@ class _DailyReconciliationDetailScreenState
           'Expenses paid (cash)',
           '− ${formatCurrency(d.cashExpensesKobo / 100.0)}',
         ),
+        // #669 — Daily allowances are till cash, inside Cash out below.
+        if (d.dailyAllowancesKobo != 0)
+          _line(
+            context,
+            theme,
+            'Daily allowances (cash)',
+            '− ${formatCurrency(d.dailyAllowancesKobo / 100.0)}',
+          ),
         _line(
           context,
           theme,
@@ -1344,6 +1362,13 @@ class _DailyReconciliationDetailScreenState
           'Expenses recorded (${d.expensesCount})',
           formatCurrency(d.expensesKobo / 100.0),
         ),
+        if (d.dailyAllowancesKobo != 0)
+          _line(
+            context,
+            theme,
+            'Daily allowances',
+            formatCurrency(d.dailyAllowancesKobo / 100.0),
+          ),
       ],
       badges: badges,
     );
@@ -1971,6 +1996,8 @@ class _DailyReconciliationDetailScreenState
         ['Paid to suppliers', money(d.supplierPaidKobo)],
         ['Refunds', money(d.refundsKobo)],
         ['Expenses', money(d.expensesKobo)],
+        if (d.dailyAllowancesKobo != 0)
+          ['Daily allowances', money(d.dailyAllowancesKobo)],
         ['Damages (at cost)', money(d.damageCostKobo)],
         if (d.crateDamageDepositKobo > 0)
           ['Crate deposit loss (at deposit)', money(d.crateDamageDepositKobo)],
@@ -2094,6 +2121,8 @@ class _DailyReconciliationDetailScreenState
           ['Cash from drivers', money(d.cashFromDriversKobo)],
         ['Refunds paid (cash)', money(d.cashRefundsKobo)],
         ['Expenses paid (cash)', money(d.cashExpensesKobo)],
+        if (d.dailyAllowancesKobo != 0)
+          ['Daily allowances (cash)', money(d.dailyAllowancesKobo)],
         ['Paid to suppliers (cash)', money(d.cashSupplierPaidKobo)],
         ['Net cash movement', money(d.netCashMovementKobo)],
         ['Crate deposits held (cash)', money(d.cashCrateDepositsKobo)],

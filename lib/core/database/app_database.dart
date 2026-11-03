@@ -2512,6 +2512,62 @@ String payrollAllowanceId(String workerId, String entryDate) =>
 String payrollStatementId(String workerId, String salaryMonth) =>
     UuidV7.deterministic('payroll_statement:$workerId:$salaryMonth');
 
+/// #669 (ADR 0034) — the kinds of combined pay line [StaffPayTotals] holds.
+/// 'daily_allowances' is written by #669; 'salaries' is reserved for the
+/// payday line (#671) so it needs no CHECK change later.
+const String kStaffPayKindDailyAllowances = 'daily_allowances';
+const String kStaffPayKindSalaries = 'salaries';
+const Set<String> kStaffPayKinds = {
+  kStaffPayKindDailyAllowances,
+  kStaffPayKindSalaries,
+};
+
+/// #669 (ADR 0034) — ONE combined pay line per store, day and [kind]: the
+/// money Payroll took from that store's till that day, with NO worker named.
+/// It is the only payroll figure every phone receives (an ordinary
+/// business-wide synced table), so Daily Reconciliation, Expenses and Profit
+/// can count the cash without the permission-gated payroll rows.
+///
+/// A derived figure, not a ledger: only a phone holding Payroll writes it,
+/// always as the full total recomputed from that phone's payroll entries, so
+/// it converges by last-write-wins once every entry has synced. The id is
+/// deterministic ([staffPayTotalId]) so two phones write the SAME row.
+@DataClassName('StaffPayTotalData')
+class StaffPayTotals extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get storeId => text().references(Stores, #id)();
+  // [kStaffPayKinds].
+  TextColumn get kind => text()();
+  // 'YYYY-MM-DD' — the day the money left that store's till.
+  TextColumn get totalDate => text()();
+  IntColumn get amountKobo => integer().withDefault(const Constant(0))();
+  // The part paid in till cash (all of it for Daily Allowances).
+  IntColumn get cashKobo => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => [
+    "CHECK (kind IN ('daily_allowances', 'salaries'))",
+  ];
+}
+
+/// The deterministic id of [businessId]'s combined [kind] line for [storeId]
+/// on [totalDate] ('YYYY-MM-DD') — the same on every phone.
+String staffPayTotalId(
+  String businessId,
+  String storeId,
+  String kind,
+  String totalDate,
+) => UuidV7.deterministic(
+  'staff_pay_total:$businessId:$storeId:$kind:$totalDate',
+);
+
 @DataClassName('DriverData')
 class Drivers extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
@@ -3214,6 +3270,7 @@ class MigrationEvents extends Table {
     PayrollWorkers,
     PayrollEntries,
     PayrollStatements,
+    StaffPayTotals,
     Drivers,
     DeliveryReceipts,
     SavedCarts,
@@ -3294,6 +3351,7 @@ class MigrationEvents extends Table {
     UserStoresDao,
     OnlineOrdersDao,
     PayrollDao,
+    StaffPayTotalsDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -3328,7 +3386,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 102;
+  int get schemaVersion => 103;
 
   /// The v90 (#473) listing columns, pinned to their defaults in every older
   /// products rebuild: TableMigration copies from the CURRENT schema, so a
@@ -7171,6 +7229,23 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(payrollEntries, payrollEntries.rejectionReason);
         }
       }
+
+      if (from < 103) {
+        // ── v103 — #669: staff_pay_totals (combined pay lines) ─────────────
+        //
+        // Mirrors supabase/migrations/0245_staff_pay_totals.sql. One new
+        // business-wide table (no existing table changes). Guarded so a
+        // re-upgrade is idempotent; the sync index and bump trigger match what
+        // onCreate builds for a fresh install.
+        final exists = await customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table' "
+          "AND name = 'staff_pay_totals'",
+        ).get();
+        if (exists.isEmpty) await m.createTable(staffPayTotals);
+        for (final stmt in _staffPayTotalsUpgradeStatements) {
+          await customStatement(stmt);
+        }
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -8019,6 +8094,21 @@ List<String> get _payrollUpgradeStatements => [
         'END',
   ],
   ..._payrollIndexStatements,
+];
+
+/// The v103 upgrade's extras for `staff_pay_totals` (#669) — the same sync
+/// index and bump trigger the onCreate loops build for every synced tenant
+/// table. All IF NOT EXISTS (re-upgrade safe).
+const List<String> _staffPayTotalsUpgradeStatements = [
+  'CREATE INDEX IF NOT EXISTS idx_staff_pay_totals_business_lua '
+      'ON staff_pay_totals (business_id, last_updated_at)',
+  'CREATE TRIGGER IF NOT EXISTS bump_staff_pay_totals_last_updated_at '
+      'AFTER UPDATE ON staff_pay_totals '
+      'FOR EACH ROW '
+      'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+      'BEGIN '
+      "UPDATE staff_pay_totals SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+      'END',
 ];
 
 const List<String> _crateShortfallIndexStatements = [

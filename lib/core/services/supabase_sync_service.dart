@@ -2774,6 +2774,15 @@ class SupabaseSyncService {
       // #667 (ADR 0034): this pull may have changed what the user is allowed
       // to see. Non-fatal like the sweep above; the next pull retries it.
       await _enforcePermissionGatedAccess(businessId);
+      // #669 — on a Payroll phone, fill in any missed Daily Allowance and
+      // converge the combined "Daily allowances" lines with what this pull
+      // brought from other phones. A no-op without the permission; non-fatal
+      // like the sweeps above.
+      try {
+        await _db.payrollDao.runDailyAllowances();
+      } catch (e) {
+        debugPrint('[SyncService] daily allowance run skipped: $e');
+      }
       pullStatus.value = pullStatus.value.copyWith(stage: PullStage.completed);
     } catch (e, st) {
       debugPrint('[SyncService] pullChanges failed: $e\n$st');

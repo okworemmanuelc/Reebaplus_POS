@@ -37880,6 +37880,571 @@ class PayrollStatementsCompanion extends UpdateCompanion<PayrollStatementData> {
   }
 }
 
+class $StaffPayTotalsTable extends StaffPayTotals
+    with TableInfo<$StaffPayTotalsTable, StaffPayTotalData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $StaffPayTotalsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: () => UuidV7.generate(),
+  );
+  static const VerificationMeta _businessIdMeta = const VerificationMeta(
+    'businessId',
+  );
+  @override
+  late final GeneratedColumn<String> businessId = GeneratedColumn<String>(
+    'business_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES businesses (id)',
+    ),
+  );
+  static const VerificationMeta _storeIdMeta = const VerificationMeta(
+    'storeId',
+  );
+  @override
+  late final GeneratedColumn<String> storeId = GeneratedColumn<String>(
+    'store_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES stores (id)',
+    ),
+  );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _totalDateMeta = const VerificationMeta(
+    'totalDate',
+  );
+  @override
+  late final GeneratedColumn<String> totalDate = GeneratedColumn<String>(
+    'total_date',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _amountKoboMeta = const VerificationMeta(
+    'amountKobo',
+  );
+  @override
+  late final GeneratedColumn<int> amountKobo = GeneratedColumn<int>(
+    'amount_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _cashKoboMeta = const VerificationMeta(
+    'cashKobo',
+  );
+  @override
+  late final GeneratedColumn<int> cashKobo = GeneratedColumn<int>(
+    'cash_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _lastUpdatedAtMeta = const VerificationMeta(
+    'lastUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'last_updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    businessId,
+    storeId,
+    kind,
+    totalDate,
+    amountKobo,
+    cashKobo,
+    createdAt,
+    lastUpdatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'staff_pay_totals';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<StaffPayTotalData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('business_id')) {
+      context.handle(
+        _businessIdMeta,
+        businessId.isAcceptableOrUnknown(data['business_id']!, _businessIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_businessIdMeta);
+    }
+    if (data.containsKey('store_id')) {
+      context.handle(
+        _storeIdMeta,
+        storeId.isAcceptableOrUnknown(data['store_id']!, _storeIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_storeIdMeta);
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_kindMeta);
+    }
+    if (data.containsKey('total_date')) {
+      context.handle(
+        _totalDateMeta,
+        totalDate.isAcceptableOrUnknown(data['total_date']!, _totalDateMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_totalDateMeta);
+    }
+    if (data.containsKey('amount_kobo')) {
+      context.handle(
+        _amountKoboMeta,
+        amountKobo.isAcceptableOrUnknown(data['amount_kobo']!, _amountKoboMeta),
+      );
+    }
+    if (data.containsKey('cash_kobo')) {
+      context.handle(
+        _cashKoboMeta,
+        cashKobo.isAcceptableOrUnknown(data['cash_kobo']!, _cashKoboMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('last_updated_at')) {
+      context.handle(
+        _lastUpdatedAtMeta,
+        lastUpdatedAt.isAcceptableOrUnknown(
+          data['last_updated_at']!,
+          _lastUpdatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  StaffPayTotalData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return StaffPayTotalData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      businessId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}business_id'],
+      )!,
+      storeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}store_id'],
+      )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      totalDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}total_date'],
+      )!,
+      amountKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}amount_kobo'],
+      )!,
+      cashKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}cash_kobo'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $StaffPayTotalsTable createAlias(String alias) {
+    return $StaffPayTotalsTable(attachedDatabase, alias);
+  }
+}
+
+class StaffPayTotalData extends DataClass
+    implements Insertable<StaffPayTotalData> {
+  final String id;
+  final String businessId;
+  final String storeId;
+  final String kind;
+  final String totalDate;
+  final int amountKobo;
+  final int cashKobo;
+  final DateTime createdAt;
+  final DateTime lastUpdatedAt;
+  const StaffPayTotalData({
+    required this.id,
+    required this.businessId,
+    required this.storeId,
+    required this.kind,
+    required this.totalDate,
+    required this.amountKobo,
+    required this.cashKobo,
+    required this.createdAt,
+    required this.lastUpdatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['business_id'] = Variable<String>(businessId);
+    map['store_id'] = Variable<String>(storeId);
+    map['kind'] = Variable<String>(kind);
+    map['total_date'] = Variable<String>(totalDate);
+    map['amount_kobo'] = Variable<int>(amountKobo);
+    map['cash_kobo'] = Variable<int>(cashKobo);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    return map;
+  }
+
+  StaffPayTotalsCompanion toCompanion(bool nullToAbsent) {
+    return StaffPayTotalsCompanion(
+      id: Value(id),
+      businessId: Value(businessId),
+      storeId: Value(storeId),
+      kind: Value(kind),
+      totalDate: Value(totalDate),
+      amountKobo: Value(amountKobo),
+      cashKobo: Value(cashKobo),
+      createdAt: Value(createdAt),
+      lastUpdatedAt: Value(lastUpdatedAt),
+    );
+  }
+
+  factory StaffPayTotalData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return StaffPayTotalData(
+      id: serializer.fromJson<String>(json['id']),
+      businessId: serializer.fromJson<String>(json['businessId']),
+      storeId: serializer.fromJson<String>(json['storeId']),
+      kind: serializer.fromJson<String>(json['kind']),
+      totalDate: serializer.fromJson<String>(json['totalDate']),
+      amountKobo: serializer.fromJson<int>(json['amountKobo']),
+      cashKobo: serializer.fromJson<int>(json['cashKobo']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'businessId': serializer.toJson<String>(businessId),
+      'storeId': serializer.toJson<String>(storeId),
+      'kind': serializer.toJson<String>(kind),
+      'totalDate': serializer.toJson<String>(totalDate),
+      'amountKobo': serializer.toJson<int>(amountKobo),
+      'cashKobo': serializer.toJson<int>(cashKobo),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+    };
+  }
+
+  StaffPayTotalData copyWith({
+    String? id,
+    String? businessId,
+    String? storeId,
+    String? kind,
+    String? totalDate,
+    int? amountKobo,
+    int? cashKobo,
+    DateTime? createdAt,
+    DateTime? lastUpdatedAt,
+  }) => StaffPayTotalData(
+    id: id ?? this.id,
+    businessId: businessId ?? this.businessId,
+    storeId: storeId ?? this.storeId,
+    kind: kind ?? this.kind,
+    totalDate: totalDate ?? this.totalDate,
+    amountKobo: amountKobo ?? this.amountKobo,
+    cashKobo: cashKobo ?? this.cashKobo,
+    createdAt: createdAt ?? this.createdAt,
+    lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+  );
+  StaffPayTotalData copyWithCompanion(StaffPayTotalsCompanion data) {
+    return StaffPayTotalData(
+      id: data.id.present ? data.id.value : this.id,
+      businessId: data.businessId.present
+          ? data.businessId.value
+          : this.businessId,
+      storeId: data.storeId.present ? data.storeId.value : this.storeId,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      totalDate: data.totalDate.present ? data.totalDate.value : this.totalDate,
+      amountKobo: data.amountKobo.present
+          ? data.amountKobo.value
+          : this.amountKobo,
+      cashKobo: data.cashKobo.present ? data.cashKobo.value : this.cashKobo,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastUpdatedAt: data.lastUpdatedAt.present
+          ? data.lastUpdatedAt.value
+          : this.lastUpdatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StaffPayTotalData(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('storeId: $storeId, ')
+          ..write('kind: $kind, ')
+          ..write('totalDate: $totalDate, ')
+          ..write('amountKobo: $amountKobo, ')
+          ..write('cashKobo: $cashKobo, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    businessId,
+    storeId,
+    kind,
+    totalDate,
+    amountKobo,
+    cashKobo,
+    createdAt,
+    lastUpdatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is StaffPayTotalData &&
+          other.id == this.id &&
+          other.businessId == this.businessId &&
+          other.storeId == this.storeId &&
+          other.kind == this.kind &&
+          other.totalDate == this.totalDate &&
+          other.amountKobo == this.amountKobo &&
+          other.cashKobo == this.cashKobo &&
+          other.createdAt == this.createdAt &&
+          other.lastUpdatedAt == this.lastUpdatedAt);
+}
+
+class StaffPayTotalsCompanion extends UpdateCompanion<StaffPayTotalData> {
+  final Value<String> id;
+  final Value<String> businessId;
+  final Value<String> storeId;
+  final Value<String> kind;
+  final Value<String> totalDate;
+  final Value<int> amountKobo;
+  final Value<int> cashKobo;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> lastUpdatedAt;
+  final Value<int> rowid;
+  const StaffPayTotalsCompanion({
+    this.id = const Value.absent(),
+    this.businessId = const Value.absent(),
+    this.storeId = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.totalDate = const Value.absent(),
+    this.amountKobo = const Value.absent(),
+    this.cashKobo = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  StaffPayTotalsCompanion.insert({
+    this.id = const Value.absent(),
+    required String businessId,
+    required String storeId,
+    required String kind,
+    required String totalDate,
+    this.amountKobo = const Value.absent(),
+    this.cashKobo = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : businessId = Value(businessId),
+       storeId = Value(storeId),
+       kind = Value(kind),
+       totalDate = Value(totalDate);
+  static Insertable<StaffPayTotalData> custom({
+    Expression<String>? id,
+    Expression<String>? businessId,
+    Expression<String>? storeId,
+    Expression<String>? kind,
+    Expression<String>? totalDate,
+    Expression<int>? amountKobo,
+    Expression<int>? cashKobo,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastUpdatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (businessId != null) 'business_id': businessId,
+      if (storeId != null) 'store_id': storeId,
+      if (kind != null) 'kind': kind,
+      if (totalDate != null) 'total_date': totalDate,
+      if (amountKobo != null) 'amount_kobo': amountKobo,
+      if (cashKobo != null) 'cash_kobo': cashKobo,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  StaffPayTotalsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? businessId,
+    Value<String>? storeId,
+    Value<String>? kind,
+    Value<String>? totalDate,
+    Value<int>? amountKobo,
+    Value<int>? cashKobo,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? lastUpdatedAt,
+    Value<int>? rowid,
+  }) {
+    return StaffPayTotalsCompanion(
+      id: id ?? this.id,
+      businessId: businessId ?? this.businessId,
+      storeId: storeId ?? this.storeId,
+      kind: kind ?? this.kind,
+      totalDate: totalDate ?? this.totalDate,
+      amountKobo: amountKobo ?? this.amountKobo,
+      cashKobo: cashKobo ?? this.cashKobo,
+      createdAt: createdAt ?? this.createdAt,
+      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (businessId.present) {
+      map['business_id'] = Variable<String>(businessId.value);
+    }
+    if (storeId.present) {
+      map['store_id'] = Variable<String>(storeId.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (totalDate.present) {
+      map['total_date'] = Variable<String>(totalDate.value);
+    }
+    if (amountKobo.present) {
+      map['amount_kobo'] = Variable<int>(amountKobo.value);
+    }
+    if (cashKobo.present) {
+      map['cash_kobo'] = Variable<int>(cashKobo.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lastUpdatedAt.present) {
+      map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StaffPayTotalsCompanion(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('storeId: $storeId, ')
+          ..write('kind: $kind, ')
+          ..write('totalDate: $totalDate, ')
+          ..write('amountKobo: $amountKobo, ')
+          ..write('cashKobo: $cashKobo, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $DriversTable extends Drivers with TableInfo<$DriversTable, DriverData> {
   @override
   final GeneratedDatabase attachedDatabase;
@@ -55710,6 +56275,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $PayrollEntriesTable payrollEntries = $PayrollEntriesTable(this);
   late final $PayrollStatementsTable payrollStatements =
       $PayrollStatementsTable(this);
+  late final $StaffPayTotalsTable staffPayTotals = $StaffPayTotalsTable(this);
   late final $DriversTable drivers = $DriversTable(this);
   late final $DeliveryReceiptsTable deliveryReceipts = $DeliveryReceiptsTable(
     this,
@@ -55853,6 +56419,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     this as AppDatabase,
   );
   late final PayrollDao payrollDao = PayrollDao(this as AppDatabase);
+  late final StaffPayTotalsDao staffPayTotalsDao = StaffPayTotalsDao(
+    this as AppDatabase,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -55904,6 +56473,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     payrollWorkers,
     payrollEntries,
     payrollStatements,
+    staffPayTotals,
     drivers,
     deliveryReceipts,
     savedCarts,
@@ -57006,6 +57576,27 @@ final class $$BusinessesTableReferences
     final cache = $_typedResult.readTableOrNull(
       _payrollStatementsRefsTable($_db),
     );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$StaffPayTotalsTable, List<StaffPayTotalData>>
+  _staffPayTotalsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.staffPayTotals,
+    aliasName: $_aliasNameGenerator(
+      db.businesses.id,
+      db.staffPayTotals.businessId,
+    ),
+  );
+
+  $$StaffPayTotalsTableProcessedTableManager get staffPayTotalsRefs {
+    final manager = $$StaffPayTotalsTableTableManager(
+      $_db,
+      $_db.staffPayTotals,
+    ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_staffPayTotalsRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -58737,6 +59328,31 @@ class $$BusinessesTableFilterComposer
           }) => $$PayrollStatementsTableFilterComposer(
             $db: $db,
             $table: $db.payrollStatements,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> staffPayTotalsRefs(
+    Expression<bool> Function($$StaffPayTotalsTableFilterComposer f) f,
+  ) {
+    final $$StaffPayTotalsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.staffPayTotals,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StaffPayTotalsTableFilterComposer(
+            $db: $db,
+            $table: $db.staffPayTotals,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -60662,6 +61278,31 @@ class $$BusinessesTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> staffPayTotalsRefs<T extends Object>(
+    Expression<T> Function($$StaffPayTotalsTableAnnotationComposer a) f,
+  ) {
+    final $$StaffPayTotalsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.staffPayTotals,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StaffPayTotalsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.staffPayTotals,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> driversRefs<T extends Object>(
     Expression<T> Function($$DriversTableAnnotationComposer a) f,
   ) {
@@ -61302,6 +61943,7 @@ class $$BusinessesTableTableManager
             bool payrollWorkersRefs,
             bool payrollEntriesRefs,
             bool payrollStatementsRefs,
+            bool staffPayTotalsRefs,
             bool driversRefs,
             bool deliveryReceiptsRefs,
             bool savedCartsRefs,
@@ -61481,6 +62123,7 @@ class $$BusinessesTableTableManager
                 payrollWorkersRefs = false,
                 payrollEntriesRefs = false,
                 payrollStatementsRefs = false,
+                staffPayTotalsRefs = false,
                 driversRefs = false,
                 deliveryReceiptsRefs = false,
                 savedCartsRefs = false,
@@ -61555,6 +62198,7 @@ class $$BusinessesTableTableManager
                     if (payrollWorkersRefs) db.payrollWorkers,
                     if (payrollEntriesRefs) db.payrollEntries,
                     if (payrollStatementsRefs) db.payrollStatements,
+                    if (staffPayTotalsRefs) db.staffPayTotals,
                     if (driversRefs) db.drivers,
                     if (deliveryReceiptsRefs) db.deliveryReceipts,
                     if (savedCartsRefs) db.savedCarts,
@@ -62527,6 +63171,27 @@ class $$BusinessesTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (staffPayTotalsRefs)
+                        await $_getPrefetchedData<
+                          BusinessData,
+                          $BusinessesTable,
+                          StaffPayTotalData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$BusinessesTableReferences
+                              ._staffPayTotalsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$BusinessesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).staffPayTotalsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.businessId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (driversRefs)
                         await $_getPrefetchedData<
                           BusinessData,
@@ -63076,6 +63741,7 @@ typedef $$BusinessesTableProcessedTableManager =
         bool payrollWorkersRefs,
         bool payrollEntriesRefs,
         bool payrollStatementsRefs,
+        bool staffPayTotalsRefs,
         bool driversRefs,
         bool deliveryReceiptsRefs,
         bool savedCartsRefs,
@@ -66071,6 +66737,24 @@ final class $$StoresTableReferences
     );
   }
 
+  static MultiTypedResultKey<$StaffPayTotalsTable, List<StaffPayTotalData>>
+  _staffPayTotalsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.staffPayTotals,
+    aliasName: $_aliasNameGenerator(db.stores.id, db.staffPayTotals.storeId),
+  );
+
+  $$StaffPayTotalsTableProcessedTableManager get staffPayTotalsRefs {
+    final manager = $$StaffPayTotalsTableTableManager(
+      $_db,
+      $_db.staffPayTotals,
+    ).filter((f) => f.storeId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_staffPayTotalsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<$SavedCartsTable, List<SavedCartData>>
   _savedCartsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.savedCarts,
@@ -66934,6 +67618,31 @@ class $$StoresTableFilterComposer
           }) => $$PayrollStatementsTableFilterComposer(
             $db: $db,
             $table: $db.payrollStatements,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> staffPayTotalsRefs(
+    Expression<bool> Function($$StaffPayTotalsTableFilterComposer f) f,
+  ) {
+    final $$StaffPayTotalsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.staffPayTotals,
+      getReferencedColumn: (t) => t.storeId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StaffPayTotalsTableFilterComposer(
+            $db: $db,
+            $table: $db.staffPayTotals,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -67935,6 +68644,31 @@ class $$StoresTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> staffPayTotalsRefs<T extends Object>(
+    Expression<T> Function($$StaffPayTotalsTableAnnotationComposer a) f,
+  ) {
+    final $$StaffPayTotalsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.staffPayTotals,
+      getReferencedColumn: (t) => t.storeId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StaffPayTotalsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.staffPayTotals,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> savedCartsRefs<T extends Object>(
     Expression<T> Function($$SavedCartsTableAnnotationComposer a) f,
   ) {
@@ -68177,6 +68911,7 @@ class $$StoresTableTableManager
             bool payrollWorkersRefs,
             bool payrollEntriesRefs,
             bool payrollStatementsRefs,
+            bool staffPayTotalsRefs,
             bool savedCartsRefs,
             bool paymentTransactionsRefs,
             bool stockCountsRefs,
@@ -68299,6 +69034,7 @@ class $$StoresTableTableManager
                 payrollWorkersRefs = false,
                 payrollEntriesRefs = false,
                 payrollStatementsRefs = false,
+                staffPayTotalsRefs = false,
                 savedCartsRefs = false,
                 paymentTransactionsRefs = false,
                 stockCountsRefs = false,
@@ -68336,6 +69072,7 @@ class $$StoresTableTableManager
                     if (payrollWorkersRefs) db.payrollWorkers,
                     if (payrollEntriesRefs) db.payrollEntries,
                     if (payrollStatementsRefs) db.payrollStatements,
+                    if (staffPayTotalsRefs) db.staffPayTotals,
                     if (savedCartsRefs) db.savedCarts,
                     if (paymentTransactionsRefs) db.paymentTransactions,
                     if (stockCountsRefs) db.stockCounts,
@@ -68875,6 +69612,27 @@ class $$StoresTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (staffPayTotalsRefs)
+                        await $_getPrefetchedData<
+                          StoreData,
+                          $StoresTable,
+                          StaffPayTotalData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$StoresTableReferences
+                              ._staffPayTotalsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$StoresTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).staffPayTotalsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.storeId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (savedCartsRefs)
                         await $_getPrefetchedData<
                           StoreData,
@@ -69089,6 +69847,7 @@ typedef $$StoresTableProcessedTableManager =
         bool payrollWorkersRefs,
         bool payrollEntriesRefs,
         bool payrollStatementsRefs,
+        bool staffPayTotalsRefs,
         bool savedCartsRefs,
         bool paymentTransactionsRefs,
         bool stockCountsRefs,
@@ -109364,6 +110123,501 @@ typedef $$PayrollStatementsTableProcessedTableManager =
         bool signedBy,
       })
     >;
+typedef $$StaffPayTotalsTableCreateCompanionBuilder =
+    StaffPayTotalsCompanion Function({
+      Value<String> id,
+      required String businessId,
+      required String storeId,
+      required String kind,
+      required String totalDate,
+      Value<int> amountKobo,
+      Value<int> cashKobo,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+typedef $$StaffPayTotalsTableUpdateCompanionBuilder =
+    StaffPayTotalsCompanion Function({
+      Value<String> id,
+      Value<String> businessId,
+      Value<String> storeId,
+      Value<String> kind,
+      Value<String> totalDate,
+      Value<int> amountKobo,
+      Value<int> cashKobo,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+
+final class $$StaffPayTotalsTableReferences
+    extends
+        BaseReferences<_$AppDatabase, $StaffPayTotalsTable, StaffPayTotalData> {
+  $$StaffPayTotalsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $BusinessesTable _businessIdTable(_$AppDatabase db) =>
+      db.businesses.createAlias(
+        $_aliasNameGenerator(db.staffPayTotals.businessId, db.businesses.id),
+      );
+
+  $$BusinessesTableProcessedTableManager get businessId {
+    final $_column = $_itemColumn<String>('business_id')!;
+
+    final manager = $$BusinessesTableTableManager(
+      $_db,
+      $_db.businesses,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $StoresTable _storeIdTable(_$AppDatabase db) => db.stores.createAlias(
+    $_aliasNameGenerator(db.staffPayTotals.storeId, db.stores.id),
+  );
+
+  $$StoresTableProcessedTableManager get storeId {
+    final $_column = $_itemColumn<String>('store_id')!;
+
+    final manager = $$StoresTableTableManager(
+      $_db,
+      $_db.stores,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_storeIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$StaffPayTotalsTableFilterComposer
+    extends Composer<_$AppDatabase, $StaffPayTotalsTable> {
+  $$StaffPayTotalsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get totalDate => $composableBuilder(
+    column: $table.totalDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get amountKobo => $composableBuilder(
+    column: $table.amountKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get cashKobo => $composableBuilder(
+    column: $table.cashKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$BusinessesTableFilterComposer get businessId {
+    final $$BusinessesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableFilterComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableFilterComposer get storeId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableFilterComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$StaffPayTotalsTableOrderingComposer
+    extends Composer<_$AppDatabase, $StaffPayTotalsTable> {
+  $$StaffPayTotalsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get totalDate => $composableBuilder(
+    column: $table.totalDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get amountKobo => $composableBuilder(
+    column: $table.amountKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get cashKobo => $composableBuilder(
+    column: $table.cashKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$BusinessesTableOrderingComposer get businessId {
+    final $$BusinessesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableOrderingComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableOrderingComposer get storeId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableOrderingComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$StaffPayTotalsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $StaffPayTotalsTable> {
+  $$StaffPayTotalsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get totalDate =>
+      $composableBuilder(column: $table.totalDate, builder: (column) => column);
+
+  GeneratedColumn<int> get amountKobo => $composableBuilder(
+    column: $table.amountKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get cashKobo =>
+      $composableBuilder(column: $table.cashKobo, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => column,
+  );
+
+  $$BusinessesTableAnnotationComposer get businessId {
+    final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableAnnotationComposer get storeId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.storeId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableAnnotationComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$StaffPayTotalsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $StaffPayTotalsTable,
+          StaffPayTotalData,
+          $$StaffPayTotalsTableFilterComposer,
+          $$StaffPayTotalsTableOrderingComposer,
+          $$StaffPayTotalsTableAnnotationComposer,
+          $$StaffPayTotalsTableCreateCompanionBuilder,
+          $$StaffPayTotalsTableUpdateCompanionBuilder,
+          (StaffPayTotalData, $$StaffPayTotalsTableReferences),
+          StaffPayTotalData,
+          PrefetchHooks Function({bool businessId, bool storeId})
+        > {
+  $$StaffPayTotalsTableTableManager(
+    _$AppDatabase db,
+    $StaffPayTotalsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$StaffPayTotalsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$StaffPayTotalsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$StaffPayTotalsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> businessId = const Value.absent(),
+                Value<String> storeId = const Value.absent(),
+                Value<String> kind = const Value.absent(),
+                Value<String> totalDate = const Value.absent(),
+                Value<int> amountKobo = const Value.absent(),
+                Value<int> cashKobo = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => StaffPayTotalsCompanion(
+                id: id,
+                businessId: businessId,
+                storeId: storeId,
+                kind: kind,
+                totalDate: totalDate,
+                amountKobo: amountKobo,
+                cashKobo: cashKobo,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String businessId,
+                required String storeId,
+                required String kind,
+                required String totalDate,
+                Value<int> amountKobo = const Value.absent(),
+                Value<int> cashKobo = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => StaffPayTotalsCompanion.insert(
+                id: id,
+                businessId: businessId,
+                storeId: storeId,
+                kind: kind,
+                totalDate: totalDate,
+                amountKobo: amountKobo,
+                cashKobo: cashKobo,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$StaffPayTotalsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({businessId = false, storeId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (businessId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.businessId,
+                                referencedTable: $$StaffPayTotalsTableReferences
+                                    ._businessIdTable(db),
+                                referencedColumn:
+                                    $$StaffPayTotalsTableReferences
+                                        ._businessIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+                    if (storeId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.storeId,
+                                referencedTable: $$StaffPayTotalsTableReferences
+                                    ._storeIdTable(db),
+                                referencedColumn:
+                                    $$StaffPayTotalsTableReferences
+                                        ._storeIdTable(db)
+                                        .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$StaffPayTotalsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $StaffPayTotalsTable,
+      StaffPayTotalData,
+      $$StaffPayTotalsTableFilterComposer,
+      $$StaffPayTotalsTableOrderingComposer,
+      $$StaffPayTotalsTableAnnotationComposer,
+      $$StaffPayTotalsTableCreateCompanionBuilder,
+      $$StaffPayTotalsTableUpdateCompanionBuilder,
+      (StaffPayTotalData, $$StaffPayTotalsTableReferences),
+      StaffPayTotalData,
+      PrefetchHooks Function({bool businessId, bool storeId})
+    >;
 typedef $$DriversTableCreateCompanionBuilder =
     DriversCompanion Function({
       Value<String> id,
@@ -125762,6 +127016,8 @@ class $AppDatabaseManager {
       $$PayrollEntriesTableTableManager(_db, _db.payrollEntries);
   $$PayrollStatementsTableTableManager get payrollStatements =>
       $$PayrollStatementsTableTableManager(_db, _db.payrollStatements);
+  $$StaffPayTotalsTableTableManager get staffPayTotals =>
+      $$StaffPayTotalsTableTableManager(_db, _db.staffPayTotals);
   $$DriversTableTableManager get drivers =>
       $$DriversTableTableManager(_db, _db.drivers);
   $$DeliveryReceiptsTableTableManager get deliveryReceipts =>

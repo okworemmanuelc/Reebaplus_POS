@@ -142,6 +142,8 @@ void main() {
     'payroll_workers',
     'payroll_entries',
     'payroll_statements',
+    // #669: the combined pay lines (business-wide, not gated).
+    'staff_pay_totals',
   ];
 
   // 2) The synced tenant tables (membership set; order not significant).
@@ -150,6 +152,7 @@ void main() {
     'payroll_workers',
     'payroll_entries',
     'payroll_statements',
+    'staff_pay_totals', // #669
     'users',
     'sessions',
     'stores',

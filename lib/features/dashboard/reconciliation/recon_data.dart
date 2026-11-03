@@ -351,6 +351,8 @@ class ReconData {
     required this.totalOwedKobo,
     // #432 — report-only, optional-defaulted like the other additive fields.
     this.payOnDeliveryUncollectedKobo = 0,
+    // #669 — optional-defaulted like the other additive fields.
+    this.dailyAllowancesKobo = 0,
     required this.showCrates,
     required this.crateUnits,
     required this.crateDepositKobo,
@@ -544,6 +546,14 @@ class ReconData {
   final int bestStaffKobo;
   final int expensesKobo;
   final int expensesCount;
+
+  /// #669 (ADR 0034) — the period's combined "Daily allowances" lines
+  /// (`staff_pay_totals`, kind `daily_allowances`) in store scope, on their own
+  /// day. Every Daily Allowance is till cash, so this one figure is both a
+  /// cost (in [netProfitKobo] and [periodNetResultKobo]) and cash out (in
+  /// [cashOutKobo]). It names no worker. A day no Payroll phone has opened yet
+  /// reads 0 until that phone fills the day in.
+  final int dailyAllowancesKobo;
   final double damageUnits;
   final int damageCostKobo;
   final int damageRetailKobo;
@@ -824,6 +834,7 @@ class ReconData {
       uncostedTakingsKobo +
       forfeitIncomeKobo -
       expensesKobo -
+      dailyAllowancesKobo -
       damageCostKobo -
       crateDamageDepositKobo -
       crateShortfallWrittenOffKobo -
@@ -847,7 +858,10 @@ class ReconData {
   int get cashInKobo =>
       cashSalesKobo + cashDebtsCollectedKobo + cashFromDriversKobo;
   int get cashOutKobo =>
-      cashRefundsKobo + cashExpensesKobo + cashSupplierPaidKobo;
+      cashRefundsKobo +
+      cashExpensesKobo +
+      dailyAllowancesKobo +
+      cashSupplierPaidKobo;
   /// Expected net cash movement for the period (in − out). Not a cash balance —
   /// there is no opening float to add it to (Hard Rule #8).
   int get netCashMovementKobo => cashInKobo - cashOutKobo;
@@ -933,6 +947,7 @@ class ReconData {
       supplierPaidKobo -
       refundsKobo -
       expensesKobo -
+      dailyAllowancesKobo -
       damageCostKobo -
       crateDamageDepositKobo -
       // #216 — an accepted crate loss is realized, on the day it was accepted.
@@ -997,6 +1012,7 @@ class ReconData {
   bool get isEmpty =>
       totalRevenueKobo == 0 &&
       expensesKobo == 0 &&
+      dailyAllowancesKobo == 0 &&
       damageUnits == 0 &&
       shortageUnits == 0 &&
       !hasStockCount &&
@@ -1048,6 +1064,7 @@ class ReconInputs {
     this.crateShortages = CrateShortageRollup.empty,
     this.crateShortfallWriteOffs = const [],
     this.payOnDelivery = const [],
+    this.staffPayTotals = const [],
     this.isCeo = false,
     this.inScope = _everyStore,
     this.start,
@@ -1113,6 +1130,10 @@ class ReconInputs {
   /// (point-in-time, business-wide). Feeds the report-only line only.
   final List<PayOnDeliveryOrder> payOnDelivery;
 
+  /// #669 — the combined pay lines, UNWINDOWED; [reconDataFrom] applies the
+  /// period and store filters ([dailyAllowancesInPeriod]).
+  final List<StaffPayTotalData> staffPayTotals;
+
   /// Gates the supplier-ledger flows only; every other figure is computed
   /// either way and the screen decides what to show per the cost wall.
   final bool isCeo;
@@ -1132,6 +1153,25 @@ class ReconInputs {
 }
 
 bool _everyStore(String? _) => true;
+
+/// #669 — the "Daily allowances" money in a period: the combined lines of kind
+/// `daily_allowances` whose day ('YYYY-MM-DD', at local midnight — the same
+/// basis [reconDayKey] and the day buckets use) is in span and whose store is
+/// in scope. No worker is named anywhere on these rows (ADR 0034).
+int dailyAllowancesInPeriod(
+  Iterable<StaffPayTotalData> totals, {
+  required bool Function(DateTime) inSpan,
+  required bool Function(String?) inScope,
+}) {
+  var sum = 0;
+  for (final t in totals) {
+    if (t.kind != kStaffPayKindDailyAllowances) continue;
+    final day = DateTime.tryParse(t.totalDate);
+    if (day == null || !inSpan(day) || !inScope(t.storeId)) continue;
+    sum += t.cashKobo;
+  }
+  return sum;
+}
 
 /// The reconciliation roll-up itself — **pure** over [ReconInputs] (#195), so
 /// every figure it derives can be pinned by a unit test with no widget, no
@@ -1449,6 +1489,11 @@ ReconData reconDataFrom(ReconInputs input) {
   );
   final expensesKobo = periodExpenses.totalKobo;
   final expensesCount = periodExpenses.count;
+  final dailyAllowancesKobo = dailyAllowancesInPeriod(
+    input.staffPayTotals,
+    inSpan: inSpan,
+    inScope: inScope,
+  );
 
   // ── Damages (reason names a loss; a removal) ─────────────────────────────
   // §17.2 crate-aware: a damage flagged +cratelost / +crateempty also forfeits
@@ -1925,6 +1970,7 @@ ReconData reconDataFrom(ReconInputs input) {
     bestStaffKobo: bestStaffKobo,
     expensesKobo: expensesKobo,
     expensesCount: expensesCount,
+    dailyAllowancesKobo: dailyAllowancesKobo,
     damageUnits: damageUnitsQty,
     damageCostKobo: damageCostKobo,
     damageRetailKobo: damageRetailKobo,
@@ -2122,6 +2168,11 @@ final changedReviewedDaysProvider = Provider<Set<String>>((ref) {
     (c) => [c.createdAt],
     wanted,
   );
+  final staffPayByDay = _byCandidateDay<StaffPayTotalData>(
+    ref.watch(allStaffPayTotalsProvider).valueOrNull ?? const [],
+    (t) => [?DateTime.tryParse(t.totalDate)],
+    wanted,
+  );
   final forfeitsByDay = _byCandidateDay<WalletTransactionData>(
     showCrates
         ? (ref.watch(crateForfeitRowsProvider).valueOrNull ?? const [])
@@ -2148,6 +2199,7 @@ final changedReviewedDaysProvider = Provider<Set<String>>((ref) {
         manufacturers: manufacturers,
         crateDamages: crateDamagesByDay[day] ?? const [],
         crateForfeitRows: forfeitsByDay[day] ?? const [],
+        staffPayTotals: staffPayByDay[day] ?? const [],
         showCrates: showCrates,
         // The frozen record is opener-independent (#192): compute the supplier
         // flows here exactly as the capture does, so the sweep and the day's own

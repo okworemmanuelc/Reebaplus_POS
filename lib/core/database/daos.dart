@@ -78,6 +78,7 @@ part 'daos_reports.dart';
 part 'daos_online_orders.dart';
 part 'daos_payroll.dart';
 part 'daos_payroll_money.dart';
+part 'daos_payroll_allowances.dart';
 
 /// Sentinel for "argument was not provided" on optional setter parameters,
 /// distinct from "argument was provided as null". Used by methods that
