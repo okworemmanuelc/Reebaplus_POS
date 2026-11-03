@@ -148,6 +148,10 @@ class OrderService {
 
   Future<bool> isReturnable(String orderId) => _queries.isReturnable(orderId);
 
+  /// #711 — the crate side of a Return, for the pop-up.
+  Future<ReturnCratePlan> returnPlan(String orderId) =>
+      _queries.returnPlan(orderId);
+
   /// **Cancel a server-REJECTED sale** — the cashier tapped Cancel on the
   /// `sale_rejected` alert (an oversell: a concurrent till took the last unit).
   /// Rebuilds the sold lines from the orphaned `pos_record_sale_v2` envelope and

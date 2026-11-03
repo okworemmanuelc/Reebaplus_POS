@@ -182,38 +182,24 @@ void main() {
       expect(await svc.isReturnable(plain), isFalse);
     });
 
-    test('false for a confirmed crate sale, even after track empties is '
-        'switched off', () async {
+    test('a confirmed crate sale is returnable (#711)', () async {
       await (db.update(db.businesses)..where((b) => b.id.equals(businessId)))
           .write(const BusinessesCompanion(type: Value('Bar')));
       final bottle = await seedProduct(unit: 'Bottle', trackEmpties: true);
-      final mfr = UuidV7.generate();
-      await db.into(db.manufacturers).insert(ManufacturersCompanion.insert(
-          id: Value(mfr), businessId: businessId, name: 'Brewery'));
-      await (db.update(db.products)..where((p) => p.id.equals(bottle)))
-          .write(ProductsCompanion(manufacturerId: Value(mfr)));
       final id = await sell([line(bottle, 1)], customer: customerId);
-      expect(await db.select(db.orderCrateLines).get(), isNotEmpty);
       await svc.markAsCompleted(id, staffId, customerId: customerId,
           storeId: storeId);
       expect((await order(id)).status, 'completed');
-      expect(await svc.isReturnable(id), isFalse);
-
-      await (db.update(db.products)..where((p) => p.id.equals(bottle)))
-          .write(const ProductsCompanion(trackEmpties: Value(false)));
-      await (db.update(db.businesses)..where((b) => b.id.equals(businessId)))
-          .write(const BusinessesCompanion(tracksEmptyCrates: Value(false)));
-      expect(await svc.isReturnable(id), isFalse,
-          reason: 'recorded crate history keeps it locked');
+      expect(await svc.isReturnable(id), isTrue);
     });
 
-    test('false for a walk-in crate sale', () async {
+    test('a walk-in crate sale is returnable (#711)', () async {
       await (db.update(db.businesses)..where((b) => b.id.equals(businessId)))
           .write(const BusinessesCompanion(type: Value('Bar')));
       final bottle = await seedProduct(unit: 'Bottle', trackEmpties: true);
       final id = await sell([line(bottle, 1)]);
       await svc.markAsCompleted(id, staffId, storeId: storeId);
-      expect(await svc.isReturnable(id), isFalse);
+      expect(await svc.isReturnable(id), isTrue);
     });
   });
 

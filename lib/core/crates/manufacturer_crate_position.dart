@@ -364,6 +364,8 @@ String labelForCrateDamageReason(String reason) {
       return 'Returned at checkout';
     case kCheckoutExchangeReversalReason:
       return 'Returned at checkout, sale refunded';
+    case kOrderReturnedEmptiesReason:
+      return 'Handed back, sale returned';
     default:
       if (reason.isEmpty) return reason;
       final spaced = reason.replaceAll('_', ' ');

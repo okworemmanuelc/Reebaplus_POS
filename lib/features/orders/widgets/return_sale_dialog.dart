@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -53,6 +54,7 @@ Future<ReturnSaleInput?> showReturnSaleDialog(
   required String orderNumber,
   required String refundLabel,
   required List<ReturnLineInput> lines,
+  List<ReturnEmpties> emptiesToHandBack = const [],
 }) {
   return showDialog<ReturnSaleInput>(
     context: context,
@@ -60,6 +62,7 @@ Future<ReturnSaleInput?> showReturnSaleDialog(
       orderNumber: orderNumber,
       refundLabel: refundLabel,
       lines: lines,
+      emptiesToHandBack: emptiesToHandBack,
     ),
   );
 }
@@ -68,11 +71,13 @@ class _ReturnSaleDialog extends StatefulWidget {
   final String orderNumber;
   final String refundLabel;
   final List<ReturnLineInput> lines;
+  final List<ReturnEmpties> emptiesToHandBack;
 
   const _ReturnSaleDialog({
     required this.orderNumber,
     required this.refundLabel,
     required this.lines,
+    required this.emptiesToHandBack,
   });
 
   @override
@@ -119,6 +124,20 @@ class _ReturnSaleDialogState extends State<_ReturnSaleDialog> {
               color: cs.onSurfaceVariant,
             ),
           ),
+          if (widget.emptiesToHandBack.isNotEmpty) ...[
+            SizedBox(height: context.getRSize(12)),
+            Text(
+              'Give the customer back their empties:',
+              key: const Key('orders-return-empties'),
+              style: context.regularStyle(13).copyWith(color: cs.onSurface),
+            ),
+            for (final e in widget.emptiesToHandBack)
+              Text(
+                '${formatQty(e.crates)} ${e.brandName} '
+                '${e.crates == 1 ? 'crate' : 'crates'}',
+                style: context.regularStyle(13).copyWith(color: cs.onSurface),
+              ),
+          ],
           SizedBox(height: context.getRSize(16)),
           AppInput(
             key: const Key('orders-return-reason'),

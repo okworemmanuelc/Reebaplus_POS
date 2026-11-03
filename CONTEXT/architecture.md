@@ -302,6 +302,24 @@ and top-up rows reverse in their own family as before. A non-default choice
 always uses the local reversal (never the v2 domain RPC). All inside the #550
 guarded reversal.
 
+**Return a Completed crate sale (#711).** `ReturnRefusal.crateBearing` is gone.
+Inside the same guarded reversal, per brand: (1) the customer's crate debt is
+cancelled for what is STILL owed only (`_reverseIssuedByCustomer` now nets every
+customer row stamped with the order: issued minus Confirm's `returned`), so debt
+ends at its pre-sale value; (2) the empties handed in at Confirm go back through
+`CratePoolDao.handBackReturnedEmpties` (customer-less negative `adjusted` pool
+row, `reason = order_returned_empties`, same shape as
+`reverseExchangeEmpties`, which still handles the Checkout exchange rows), so the
+shop's empty count drops; (3) the deposit still HELD (`crate_deposit` credits
+minus `crate_deposit_refunded`/`_forfeited`) is released once with
+`crate_deposit_refunded` and paid by the Refund destination: cash/transfer = a
+negative `crate_deposit` payment row, balance = a spendable `crate_refund` credit
+and no cash out. A deposit already refunded at Confirm is never paid twice. A
+deposit already forfeited at Confirm (`crate_deposit_forfeited`, crates stayed
+out) is refused with `ReturnRefusal.depositKept`. `OrdersDao.returnPlan` feeds
+the Return pop-up (empties to hand back per brand, deposit to pay back);
+`refundablePaidKobo` now includes the held deposit. v2 `cancel_order` stays off.
+
 **Pay on delivery + Mark as paid (#432).** No new payment type, status or
 column. A Cart tagged with an Online Order offers Pay on delivery, which is the
 existing credit sale (`payment_type = 'credit'`). An order IS Pay on delivery
