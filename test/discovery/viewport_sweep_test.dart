@@ -138,7 +138,7 @@ class _Subjects {
   final RoleData role;
   final UserData staff;
   final String membershipId;
-  final String driverUserId;
+  final String vanDriverId;
   final StoreData vanStore;
   final VanTripData trip;
   final BusinessData business;
@@ -151,7 +151,7 @@ class _Subjects {
     required this.role,
     required this.staff,
     required this.membershipId,
-    required this.driverUserId,
+    required this.vanDriverId,
     required this.vanStore,
     required this.trip,
     required this.business,
@@ -252,7 +252,7 @@ final List<_Screen> _screens = [
   // Van sales.
   _Screen('VanSalesHubScreen', (_) => const VanSalesHubScreen()),
   _Screen('DriversListScreen', (_) => const DriversListScreen()),
-  _Screen('DriverProfileScreen', (s) => DriverProfileScreen(driverUserId: s.driverUserId)),
+  _Screen('DriverProfileScreen', (s) => DriverProfileScreen(vanDriverId: s.vanDriverId)),
   _Screen('DriverTerminalScreen', (_) => const DriverTerminalScreen()),
   _Screen('DriverRunScreen', (s) => DriverRunScreen(tripId: s.trip.id)),
   _Screen(
@@ -351,13 +351,20 @@ Future<_Subjects> _seedSubjects(ScreenTestEnvironment env, {required bool popula
           kind: const Value(kStoreKindVan),
         ),
       );
+  await db.into(db.vanDrivers).insert(
+        VanDriversCompanion.insert(
+          id: Value(driver.id),
+          businessId: b,
+          name: driver.name,
+        ),
+      );
   final tripId = UuidV7.generate();
   await db.into(db.vanTrips).insert(
         VanTripsCompanion.insert(
           id: Value(tripId),
           businessId: b,
           vanStoreId: vanStoreId,
-          driverUserId: driver.id,
+          vanDriverId: Value(driver.id),
           sourceStoreId: env.storeId,
         ),
       );
@@ -373,7 +380,7 @@ Future<_Subjects> _seedSubjects(ScreenTestEnvironment env, {required bool popula
     role: await (db.select(db.roles)..where((t) => t.id.equals(ceoRoleId))).getSingle(),
     staff: staff,
     membershipId: membershipId,
-    driverUserId: driver.id,
+    vanDriverId: driver.id,
     vanStore: (await db.storesDao.getStore(vanStoreId))!,
     trip: await (db.select(db.vanTrips)..where((t) => t.id.equals(tripId))).getSingle(),
     business: await (db.select(db.businesses)..where((t) => t.id.equals(b))).getSingle(),

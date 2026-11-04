@@ -44,6 +44,7 @@ VanTripData trip({String status = kVanTripStatusOpen}) => VanTripData(
   businessId: 'biz',
   vanStoreId: 'van',
   driverUserId: 'driver',
+  vanDriverId: null,
   sourceStoreId: 'wh',
   status: status,
   openedAt: DateTime(2026, 7, 26),

@@ -4827,4 +4827,162 @@ void main() {
       expect(await columnsOf(db, 'orders'), contains('kind'));
     } finally { await db.close(); }
   });
+
+  // ── v107 → v108 (#748): van_drivers, nullable driver_user_id, backfill ─────
+  // NOTE: written for #748 but NOT executed in the authoring session (owner
+  // instruction: no tests run).
+  group('onUpgrade v107 → v108 (van drivers, #748)', () {
+    // Rebuild [table] in its pre-v108 shape: new columns gone and
+    // driver_user_id NOT NULL again. A real table rebuild, because SQLite
+    // cannot drop a column that carries a REFERENCES clause.
+    Future<void> revertToV107(AppDatabase db, String table, List<String> drop) async {
+      await db.customStatement('PRAGMA foreign_keys = OFF');
+      final row = await db
+          .customSelect(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='$table'",
+          )
+          .getSingle();
+      var ddl = row.read<String>('sql');
+      ddl = ddl.replaceAll(
+        RegExp(r'"driver_user_id"\s+TEXT\s+NULL'),
+        '"driver_user_id" TEXT NOT NULL',
+      );
+      for (final col in drop) {
+        ddl = ddl.replaceAll(
+          RegExp('\\s*"$col"\\s+TEXT\\s+NULL\\s+REFERENCES\\s+\\w+\\s*\\(\\s*id\\s*\\)\\s*,'),
+          '',
+        );
+      }
+      final oldCols = (await db.customSelect('PRAGMA table_info($table)').get())
+          .map((r) => r.read<String>('name'))
+          .where((c) => !drop.contains(c))
+          .toList();
+      final cols = oldCols.map((c) => '"$c"').join(', ');
+      await db.customStatement('ALTER TABLE $table RENAME TO ${table}_v108');
+      await db.customStatement(
+        ddl.replaceFirst(RegExp('CREATE TABLE "?$table"?'), 'CREATE TABLE $table'),
+      );
+      await db.customStatement(
+        'INSERT INTO $table ($cols) SELECT $cols FROM ${table}_v108',
+      );
+      await db.customStatement('DROP TABLE ${table}_v108');
+      await db.customStatement('PRAGMA foreign_keys = ON');
+    }
+
+    test('old rows keep their driver as a van_drivers row; debts stay with the '
+        'same person; nothing is deleted', () async {
+      var db = await openAndInit();
+      final biz = UuidV7.generate();
+      final user = UuidV7.generate();
+      final van1 = UuidV7.generate();
+      final van2 = UuidV7.generate();
+      final wh = UuidV7.generate();
+      final trip1 = UuidV7.generate();
+      final trip2 = UuidV7.generate();
+      await db.customStatement(
+        "INSERT INTO businesses (id, name) VALUES (?, 'Biz')", [biz]);
+      await db.customStatement(
+        "INSERT INTO users (id, business_id, name, phone, pin) "
+        "VALUES (?, ?, 'Driver Dan', '0801', '0000')",
+        [user, biz],
+      );
+      for (final (id, name, kind) in [
+        (wh, 'WH', 'store'),
+        (van1, 'Van 1', 'van'),
+        (van2, 'Van 2', 'van'),
+      ]) {
+        await db.customStatement(
+          'INSERT INTO stores (id, business_id, name, kind) VALUES (?, ?, ?, ?)',
+          [id, biz, name, kind],
+        );
+      }
+      // Two trips by the same driver on two vans; van 2 is the most recent.
+      await db.customStatement(
+        'INSERT INTO van_trips (id, business_id, van_store_id, driver_user_id, '
+        "source_store_id, status, opened_at, closed_at) "
+        "VALUES (?, ?, ?, ?, ?, 'closed', 1000, 2000)",
+        [trip1, biz, van1, user, wh],
+      );
+      await db.customStatement(
+        'INSERT INTO van_trips (id, business_id, van_store_id, driver_user_id, '
+        "source_store_id, status, opened_at) "
+        "VALUES (?, ?, ?, ?, ?, 'open', 5000)",
+        [trip2, biz, van2, user, wh],
+      );
+      // One ledger row per trip plus one with NO trip (a stray payment).
+      for (final (id, trip, signed) in [
+        (UuidV7.generate(), trip1 as String?, -50000),
+        (UuidV7.generate(), trip2 as String?, -30000),
+        (UuidV7.generate(), null, 10000),
+      ]) {
+        await db.customStatement(
+          'INSERT INTO driver_ledger_entries (id, business_id, driver_user_id, '
+          'trip_id, type, amount_kobo, signed_amount_kobo, reference_type, '
+          'activity_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)',
+          [
+            id, biz, user, trip,
+            signed < 0 ? 'load' : 'payment_cash',
+            signed.abs(), signed,
+            signed < 0 ? 'van_trip_lot' : 'payment_transaction',
+          ],
+        );
+      }
+
+      await db.customStatement('DROP TABLE van_drivers');
+      await db.customStatement('ALTER TABLE stores DROP COLUMN van_driver_id');
+      await revertToV107(db, 'van_trips', ['van_driver_id']);
+      await revertToV107(
+          db, 'driver_ledger_entries', ['van_store_id', 'van_driver_id']);
+      await db.customStatement('PRAGMA user_version = 107');
+      await db.close();
+
+      db = await openAndInit();
+      try {
+        // The driver became a van_drivers row with the user's id, name, phone.
+        final drivers = await db.select(db.vanDrivers).get();
+        expect(drivers.single.id, user);
+        expect(drivers.single.name, 'Driver Dan');
+        expect(drivers.single.phone, '0801');
+
+        // Trips link to it and keep their old user id.
+        final trips = await db.select(db.vanTrips).get();
+        expect(trips, hasLength(2));
+        for (final t in trips) {
+          expect(t.vanDriverId, user);
+          expect(t.driverUserId, user);
+        }
+
+        // Ledger rows: linked to the driver, van backfilled from the trip; the
+        // trip-less row takes the driver's most recent trip's van.
+        final rows = await db.select(db.driverLedgerEntries).get();
+        expect(rows, hasLength(3));
+        for (final r in rows) {
+          expect(r.vanDriverId, user);
+          expect(r.driverUserId, user);
+        }
+        expect(rows.firstWhere((r) => r.tripId == trip1).vanStoreId, van1);
+        expect(rows.firstWhere((r) => r.tripId == trip2).vanStoreId, van2);
+        expect(rows.firstWhere((r) => r.tripId == null).vanStoreId, van2);
+
+        // The old debt is intact and now reads per driver.
+        final sum = await db
+            .customSelect(
+              'SELECT SUM(signed_amount_kobo) AS s FROM driver_ledger_entries '
+              'WHERE van_driver_id = ?',
+              variables: [Variable<String>(user)],
+            )
+            .getSingle();
+        expect(sum.read<int>('s'), -70000);
+        // Append-only still bites after the rebuild.
+        await expectLater(
+          db.customStatement(
+            'UPDATE driver_ledger_entries SET amount_kobo = 1',
+          ),
+          throwsA(anything),
+        );
+      } finally {
+        await db.close();
+      }
+    });
+  });
 }

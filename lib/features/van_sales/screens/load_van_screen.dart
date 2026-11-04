@@ -16,6 +16,7 @@ import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/van_sales/widgets/van_driver_pickers.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
@@ -78,7 +79,9 @@ class LoadVanScreen extends ConsumerStatefulWidget {
 }
 
 class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
-  UserData? _driver;
+  /// The driver answering for this trip (#748). Optional: a van can load with
+  /// no driver at all.
+  VanDriverData? _driver;
   StoreData? _sourceStore;
   final List<_DraftLine> _lines = [];
 
@@ -113,17 +116,13 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
       final warehouses = withoutVans(
         ref.read(allStoresProvider).valueOrNull ?? const <StoreData>[],
       );
-      final drivers = ref.read(vanDriversProvider);
       final trip = widget.trip;
       setState(() {
         if (trip != null) {
           // Restock: both axes are decided by the trip already on the road.
           // Reading them from the trip (not a picker) is what stops a restock
           // silently loading from a second warehouse, which v1 does not model.
-          final users =
-              ref.read(usersByBusinessProvider).valueOrNull ??
-              const <String, UserData>{};
-          _driver = users[trip.driverUserId];
+          _driver = _driverById(trip.vanDriverId);
           for (final s in ref.read(allStoresProvider).valueOrNull ??
               const <StoreData>[]) {
             if (s.id == trip.sourceStoreId) _sourceStore = s;
@@ -131,9 +130,27 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
           return;
         }
         if (warehouses.length == 1) _sourceStore = warehouses.first;
-        if (drivers.length == 1) _driver = drivers.first;
+        // Pre-fill from the van's assigned driver; the manager may change or
+        // clear it.
+        final van = ref.read(storeByIdProvider(widget.vanStoreId)).valueOrNull;
+        _driver = _driverById(van?.vanDriverId);
       });
     });
+  }
+
+  VanDriverData? _driverById(String? id) {
+    if (id == null) return null;
+    for (final d in ref.read(vanDriversProvider)) {
+      if (d.id == id) return d;
+    }
+    return null;
+  }
+
+  /// "Add a driver" inline; selects the new driver on this load.
+  Future<void> _addDriver() async {
+    final created = await showAddVanDriverDialog(context, ref);
+    if (created == null || !mounted) return;
+    setState(() => _driver = created);
   }
 
   /// Re-ask which lines are underwater. Cheap and side-effect-free — the DAO
@@ -198,10 +215,6 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
     }
     final driver = _driver;
     final source = _sourceStore;
-    if (driver == null) {
-      AppNotification.showError(context, 'Choose which driver is taking it.');
-      return;
-    }
     if (source == null) {
       AppNotification.showError(context, 'Choose which store it loads from.');
       return;
@@ -290,7 +303,7 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
             )
           : await dao.dispatchLoad(
               vanStoreId: widget.vanStoreId,
-              driverUserId: driver.id,
+              vanDriverId: driver?.id,
               sourceStoreId: source.id,
               performedBy: currentUser.id,
               dispatchEventId: _dispatchEventId,
@@ -317,9 +330,9 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
                   ? 'This restock was already sent.'
                   : 'This load was already sent.'
             : _isRestock
-            ? '${driver.name} signed for '
+            ? '${driver?.name ?? 'The van'} signed for '
                   '${formatCurrency(result.totalLoadValueKobo / 100)} more.'
-            : '${driver.name} signed for '
+            : '${driver?.name ?? 'The van'} signed for '
                   '${formatCurrency(result.totalLoadValueKobo / 100)}.',
       );
       Navigator.pop(context);
@@ -391,25 +404,40 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
               // offered: a restock goes to the driver who is out, from the
               // warehouse the trip loads from (one per trip in v1, spec §4.2).
               _FixedTripCard(
-                driverName: _driver?.name ?? 'Driver',
+                driverName: _driver?.name ?? 'No driver assigned',
                 sourceName: _sourceStore?.name ?? 'Warehouse',
               )
             else ...[
-              AppDropdown<UserData>(
-                labelText: 'Driver',
-                hintText: drivers.isEmpty
-                    ? 'No staff have the Driver role yet'
-                    : 'Who is taking it out?',
-                value: _driver,
+              // Optional (#748): '' = no driver, '+' = add a new one.
+              AppDropdown<String>(
+                labelText: 'Driver (optional)',
+                hintText: 'Who is taking it out?',
+                value: _driver?.id ?? '',
                 prefixIcon: Icon(
                   AppIcons.managerRole,
                   size: 14,
                   color: _subtext,
                 ),
-                items: drivers
-                    .map((d) => DropdownMenuItem(value: d, child: Text(d.name)))
-                    .toList(),
-                onChanged: (v) => setState(() => _driver = v),
+                items: [
+                  const DropdownMenuItem(
+                    value: '',
+                    child: Text('No driver assigned'),
+                  ),
+                  ...drivers.map(
+                    (d) => DropdownMenuItem(value: d.id, child: Text(d.name)),
+                  ),
+                  const DropdownMenuItem(
+                    value: '+',
+                    child: Text('Add a new driver...'),
+                  ),
+                ],
+                onChanged: (v) {
+                  if (v == '+') {
+                    _addDriver();
+                  } else {
+                    setState(() => _driver = _driverById(v));
+                  }
+                },
               ),
               SizedBox(height: context.getRSize(16)),
 

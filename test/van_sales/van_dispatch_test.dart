@@ -70,6 +70,13 @@ void main() {
             pin: '0000',
           ),
         );
+    await db.into(db.vanDrivers).insert(
+      VanDriversCompanion.insert(
+        id: Value(driverId),
+        businessId: businessId,
+        name: 'Driver Dan',
+      ),
+    );
     await db.into(db.users).insert(
           UsersCompanion.insert(
             id: Value(managerId),
@@ -166,7 +173,7 @@ void main() {
 
       final result = await db.vanTripsDao.dispatchLoad(
         vanStoreId: vanId,
-        driverUserId: driverId,
+        vanDriverId: driverId,
         sourceStoreId: warehouseId,
         performedBy: managerId,
         dispatchEventId: UuidV7.generate(),
@@ -185,7 +192,7 @@ void main() {
       expect(trip, isNotNull);
       expect(trip!.status, kVanTripStatusOpen);
       expect(trip.vanStoreId, vanId);
-      expect(trip.driverUserId, driverId);
+      expect(trip.vanDriverId, driverId);
       expect(trip.sourceStoreId, warehouseId);
       expect(trip.openedBy, managerId);
       expect(trip.closedAt, isNull);
@@ -232,7 +239,7 @@ void main() {
 
       final result = await db.vanTripsDao.dispatchLoad(
         vanStoreId: vanId,
-        driverUserId: driverId,
+        vanDriverId: driverId,
         sourceStoreId: warehouseId,
         performedBy: managerId,
         dispatchEventId: UuidV7.generate(),
@@ -266,7 +273,7 @@ void main() {
 
       final result = await db.vanTripsDao.dispatchLoad(
         vanStoreId: vanId,
-        driverUserId: driverId,
+        vanDriverId: driverId,
         sourceStoreId: warehouseId,
         performedBy: managerId,
         dispatchEventId: UuidV7.generate(),
@@ -282,7 +289,7 @@ void main() {
       expect(entry.referenceType, kDriverLedgerRefLot);
       expect(entry.referenceId, result.lots.single.id);
       expect(entry.tripId, result.tripId);
-      expect(entry.driverUserId, driverId);
+      expect(entry.vanDriverId, driverId);
       expect(entry.amountKobo, 7000000, reason: 'magnitude is positive');
       expect(entry.signedAmountKobo, -7000000, reason: 'a load is a DEBIT');
       expect(entry.performedBy, managerId);
@@ -300,7 +307,7 @@ void main() {
 
       await db.vanTripsDao.dispatchLoad(
         vanStoreId: vanId,
-        driverUserId: driverId,
+        vanDriverId: driverId,
         sourceStoreId: warehouseId,
         performedBy: managerId,
         dispatchEventId: UuidV7.generate(),
@@ -325,7 +332,7 @@ void main() {
 
       await db.vanTripsDao.dispatchLoad(
         vanStoreId: vanId,
-        driverUserId: driverId,
+        vanDriverId: driverId,
         sourceStoreId: warehouseId,
         performedBy: managerId,
         dispatchEventId: UuidV7.generate(),
@@ -360,7 +367,7 @@ void main() {
 
       final result = await db.vanTripsDao.dispatchLoad(
         vanStoreId: vanId,
-        driverUserId: driverId,
+        vanDriverId: driverId,
         sourceStoreId: warehouseId,
         performedBy: managerId,
         dispatchEventId: UuidV7.generate(),
@@ -382,7 +389,7 @@ void main() {
 
       final result = await db.vanTripsDao.dispatchLoad(
         vanStoreId: vanId,
-        driverUserId: driverId,
+        vanDriverId: driverId,
         sourceStoreId: warehouseId,
         performedBy: managerId,
         dispatchEventId: UuidV7.generate(),
@@ -417,7 +424,7 @@ void main() {
 
       final result = await db.vanTripsDao.dispatchLoad(
         vanStoreId: vanId,
-        driverUserId: driverId,
+        vanDriverId: driverId,
         sourceStoreId: warehouseId,
         performedBy: managerId,
         dispatchEventId: UuidV7.generate(),
@@ -450,6 +457,13 @@ void main() {
               pin: '2222',
             ),
           );
+      await db.into(db.vanDrivers).insert(
+        VanDriversCompanion.insert(
+          id: Value(driver2),
+          businessId: businessId,
+          name: 'Driver Ada',
+        ),
+      );
 
       final older = DateTime(2026, 1, 1);
       final newer = DateTime(2026, 2, 1);
@@ -459,7 +473,7 @@ void main() {
       // Van 1 loads first and takes the cheap layer.
       final t1 = await db.vanTripsDao.dispatchLoad(
         vanStoreId: vanId,
-        driverUserId: driverId,
+        vanDriverId: driverId,
         sourceStoreId: warehouseId,
         performedBy: managerId,
         dispatchEventId: UuidV7.generate(),
@@ -470,7 +484,7 @@ void main() {
       // Van 2 loads second and gets the expensive one.
       final t2 = await db.vanTripsDao.dispatchLoad(
         vanStoreId: van2,
-        driverUserId: driver2,
+        vanDriverId: driver2,
         sourceStoreId: warehouseId,
         performedBy: managerId,
         dispatchEventId: UuidV7.generate(),
@@ -504,7 +518,7 @@ void main() {
 
       final first = await db.vanTripsDao.dispatchLoad(
         vanStoreId: vanId,
-        driverUserId: driverId,
+        vanDriverId: driverId,
         sourceStoreId: warehouseId,
         performedBy: managerId,
         dispatchEventId: key,
@@ -515,7 +529,7 @@ void main() {
       // The retry after a timeout / the double-tap.
       final second = await db.vanTripsDao.dispatchLoad(
         vanStoreId: vanId,
-        driverUserId: driverId,
+        vanDriverId: driverId,
         sourceStoreId: warehouseId,
         performedBy: managerId,
         dispatchEventId: key,
@@ -543,7 +557,7 @@ void main() {
       final key = UuidV7.generate();
       final first = await db.vanTripsDao.dispatchLoad(
         vanStoreId: vanId,
-        driverUserId: driverId,
+        vanDriverId: driverId,
         sourceStoreId: warehouseId,
         performedBy: managerId,
         dispatchEventId: key,
@@ -554,7 +568,7 @@ void main() {
 
       final replay = await db.vanTripsDao.dispatchLoad(
         vanStoreId: vanId,
-        driverUserId: driverId,
+        vanDriverId: driverId,
         sourceStoreId: warehouseId,
         performedBy: managerId,
         dispatchEventId: key,
@@ -574,7 +588,7 @@ void main() {
 
       final result = await db.vanTripsDao.dispatchLoad(
         vanStoreId: vanId,
-        driverUserId: driverId,
+        vanDriverId: driverId,
         sourceStoreId: warehouseId,
         performedBy: managerId,
         dispatchEventId: UuidV7.generate(),
@@ -599,7 +613,7 @@ void main() {
     Future<String> loadTheVan({String? van, String? driver}) async {
       final result = await db.vanTripsDao.dispatchLoad(
         vanStoreId: van ?? vanId,
-        driverUserId: driver ?? driverId,
+        vanDriverId: driver ?? driverId,
         sourceStoreId: warehouseId,
         performedBy: managerId,
         dispatchEventId: UuidV7.generate(),
@@ -624,6 +638,13 @@ void main() {
               pin: '3333',
             ),
           );
+      await db.into(db.vanDrivers).insert(
+        VanDriversCompanion.insert(
+          id: Value(otherDriver),
+          businessId: businessId,
+          name: 'Driver Bola',
+        ),
+      );
 
       await expectLater(
         loadTheVan(driver: otherDriver),
@@ -641,7 +662,7 @@ void main() {
       expect(await onHand(vanId), 10);
     });
 
-    test('a second open trip for the SAME DRIVER (on another van) is blocked',
+    test('#748: the same driver may be out on a second van (rule is per van)',
         () async {
       await stockWithBatch(warehouseId, 100, 1000);
       final firstTrip = await loadTheVan();
@@ -656,16 +677,9 @@ void main() {
             ),
           );
 
-      await expectLater(
-        loadTheVan(van: van2),
-        throwsA(
-          isA<VanTripAlreadyOpenException>()
-              .having((e) => e.onVan, 'onVan', isFalse)
-              .having((e) => e.openTripId, 'openTripId', firstTrip),
-        ),
-      );
-      expect(await ledgerRows(), hasLength(1));
-      expect(await onHand(van2), 0);
+      final secondTrip = await loadTheVan(van: van2);
+      expect(secondTrip, isNot(firstTrip));
+      expect(await ledgerRows(), hasLength(2));
     });
 
     test('a CLOSED trip frees both the van and the driver', () async {
@@ -713,7 +727,7 @@ void main() {
       await expectLater(
         db.vanTripsDao.dispatchLoad(
           vanStoreId: vanId,
-          driverUserId: driverId,
+          vanDriverId: driverId,
           sourceStoreId: warehouseId,
           performedBy: managerId,
           dispatchEventId: UuidV7.generate(),
@@ -748,7 +762,7 @@ void main() {
       await expectLater(
         db.vanTripsDao.dispatchLoad(
           vanStoreId: vanId,
-          driverUserId: driverId,
+          vanDriverId: driverId,
           sourceStoreId: warehouseId,
           performedBy: managerId,
           dispatchEventId: UuidV7.generate(),
@@ -776,7 +790,7 @@ void main() {
       await expectLater(
         db.vanTripsDao.dispatchLoad(
           vanStoreId: vanId,
-          driverUserId: driverId,
+          vanDriverId: driverId,
           sourceStoreId: vanId,
           performedBy: managerId,
           dispatchEventId: UuidV7.generate(),
@@ -790,7 +804,7 @@ void main() {
       await expectLater(
         db.vanTripsDao.dispatchLoad(
           vanStoreId: vanId,
-          driverUserId: driverId,
+          vanDriverId: driverId,
           sourceStoreId: warehouseId,
           performedBy: managerId,
           dispatchEventId: UuidV7.generate(),
@@ -804,7 +818,7 @@ void main() {
       await expectLater(
         db.vanTripsDao.dispatchLoad(
           vanStoreId: vanId,
-          driverUserId: driverId,
+          vanDriverId: driverId,
           sourceStoreId: warehouseId,
           performedBy: managerId,
           dispatchEventId: UuidV7.generate(),
@@ -1002,7 +1016,7 @@ void main() {
 
       final result = await db.vanTripsDao.dispatchLoad(
         vanStoreId: vanId,
-        driverUserId: driverId,
+        vanDriverId: driverId,
         sourceStoreId: warehouseId,
         performedBy: managerId,
         dispatchEventId: UuidV7.generate(),
@@ -1048,7 +1062,7 @@ void main() {
 
       await db.vanTripsDao.dispatchLoad(
         vanStoreId: vanId,
-        driverUserId: driverId,
+        vanDriverId: driverId,
         sourceStoreId: warehouseId,
         performedBy: managerId,
         dispatchEventId: key,
@@ -1087,6 +1101,13 @@ void main() {
               pin: '2222',
             ),
           );
+      await db.into(db.vanDrivers).insert(
+        VanDriversCompanion.insert(
+          id: Value(driver2),
+          businessId: businessId,
+          name: 'Driver Ada',
+        ),
+      );
       await db.into(db.stores).insert(
             StoresCompanion.insert(
               id: Value(van2),
@@ -1099,7 +1120,7 @@ void main() {
 
       await db.vanTripsDao.dispatchLoad(
         vanStoreId: vanId,
-        driverUserId: driverId,
+        vanDriverId: driverId,
         sourceStoreId: warehouseId,
         performedBy: managerId,
         dispatchEventId: UuidV7.generate(),
@@ -1109,7 +1130,7 @@ void main() {
       );
       await db.vanTripsDao.dispatchLoad(
         vanStoreId: van2,
-        driverUserId: driver2,
+        vanDriverId: driver2,
         sourceStoreId: warehouseId,
         performedBy: managerId,
         dispatchEventId: UuidV7.generate(),
@@ -1118,16 +1139,16 @@ void main() {
         ],
       );
 
-      final balances = await db.driverLedgerDao.watchAllBalancesKobo().first;
-      expect(balances[driverId], -50000);
-      expect(balances[driver2], -20000);
+      final balances = await db.driverLedgerDao.watchAllBalances().first;
+      expect(balances.byDriver[driverId], -50000);
+      expect(balances.byDriver[driver2], -20000);
     });
 
     test('a credit reduces what the driver owes (the #144 seam)', () async {
       await stockWithBatch(warehouseId, 100, 1000);
       final result = await db.vanTripsDao.dispatchLoad(
         vanStoreId: vanId,
-        driverUserId: driverId,
+        vanDriverId: driverId,
         sourceStoreId: warehouseId,
         performedBy: managerId,
         dispatchEventId: UuidV7.generate(),
@@ -1138,7 +1159,8 @@ void main() {
       expect(await db.driverLedgerDao.getBalanceKobo(driverId), -50000);
 
       await db.driverLedgerDao.postEntry(
-        driverUserId: driverId,
+        vanStoreId: vanId,
+        vanDriverId: driverId,
         tripId: result.tripId,
         type: kDriverLedgerTypePaymentCash,
         amountKobo: 30000,
@@ -1158,7 +1180,7 @@ void main() {
       await stockWithBatch(warehouseId, 100, 1000);
       await db.vanTripsDao.dispatchLoad(
         vanStoreId: vanId,
-        driverUserId: driverId,
+        vanDriverId: driverId,
         sourceStoreId: warehouseId,
         performedBy: managerId,
         dispatchEventId: UuidV7.generate(),
@@ -1208,7 +1230,8 @@ void main() {
     test('postEntry refuses a negative magnitude', () async {
       await expectLater(
         db.driverLedgerDao.postEntry(
-          driverUserId: driverId,
+          vanStoreId: vanId,
+          vanDriverId: driverId,
           type: kDriverLedgerTypePaymentCash,
           amountKobo: -1,
           isCredit: true,

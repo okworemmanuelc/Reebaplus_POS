@@ -75,6 +75,13 @@ void main() {
             pin: '0000',
           ),
         );
+    await db.into(db.vanDrivers).insert(
+      VanDriversCompanion.insert(
+        id: Value(driverId),
+        businessId: businessId,
+        name: 'Driver Dan',
+      ),
+    );
     await db.into(db.users).insert(
           UsersCompanion.insert(
             id: Value(managerId),
@@ -158,7 +165,7 @@ void main() {
     );
     final result = await db.vanTripsDao.dispatchLoad(
       vanStoreId: vanId,
-      driverUserId: driverId,
+      vanDriverId: driverId,
       sourceStoreId: warehouseId,
       lines: [
         VanLoadLine(
