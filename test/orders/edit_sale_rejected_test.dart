@@ -239,10 +239,6 @@ void main() {
         expect((p['qty_remaining'] as num).toDouble(), layersBefore[p['id']],
             reason: 'queued layer ${p['id']}');
       }
-      if (synced) {
-        expect(queue.where((q) => q.actionType == 'cost_batches:upsert'), isEmpty,
-            reason: 'the cloud never saw the draw: nothing to re-send');
-      }
 
       // The person sees the plain message, in Sync Issues and as an alert.
       final orphan = (await db.select(db.syncQueueOrphans).get())
@@ -254,6 +250,33 @@ void main() {
       expect(mine.linkedRecordId, id);
     });
   }
+
+  test('a later sale on the same layer still reaches the cloud after the edit '
+      'is refused', () async {
+    final a = await product('Rice');
+    final b = await product('Beans');
+    final id = await completedSale({a: 2, b: 4});
+    await db.delete(db.syncQueue).go();
+    await mixedEdit(id, b, a);
+
+    // Rung while the edit waits: its draw coalesces into the held layer row.
+    await completedSale({a: 1});
+    final drawnBySale = await layers();
+
+    await refuseClaim();
+
+    final now = await layers();
+    expect(now.values.fold<double>(0, (s, v) => s + v),
+        greaterThan(drawnBySale.values.fold<double>(0, (s, v) => s + v)));
+    final queued = {
+      for (final q in (await db.select(db.syncQueue).get())
+          .where((q) => q.actionType == 'cost_batches:upsert'))
+        decodePayload(q)['id'] as String:
+            (decodePayload(q)['qty_remaining'] as num).toDouble(),
+    };
+    expect(queued, isNotEmpty);
+    queued.forEach((layerId, qty) => expect(qty, now[layerId]));
+  });
 
   test('a refused part return still reads as a return, not an edit', () async {
     final a = await product('Rice');

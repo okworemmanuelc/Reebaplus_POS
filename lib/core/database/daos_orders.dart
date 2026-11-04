@@ -2747,10 +2747,10 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         if (inv == null || heldInventoryIds.contains(inv.id)) continue;
         await db.syncDao.enqueueUpsert('inventory', inv);
       }
-      // Same rule for a restored cost layer: a held upsert was discarded
-      // unsent (the cloud never saw the draw); a coalesced one is re-sent.
+      // A restored cost layer is always re-sent, unlike inventory: the upsert
+      // is the layer's absolute qty, and a later sale on this phone may have
+      // coalesced its own draw into the held row we just discarded (#732).
       for (final id in restoredLayers) {
-        if (heldCostIds.contains(id)) continue;
         final layer =
             await (select(db.costBatches)
                   ..where((b) => b.id.equals(id) & whereBusiness(b)))
