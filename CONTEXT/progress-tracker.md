@@ -7,6 +7,11 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #687: Smooth screens S6 - local database on Drift's background worker, behind a cloud off switch (2026-11-04, branch `feat/687-background-db`)
+- `lib/core/database/local_database_connection.dart` owns the open: `NativeDatabase.createInBackground` with one connection and no read pool; the same five PRAGMAs on both paths. `off` is the old open on the screen's thread. The worker finds SQLite the same way the main isolate does (`source: system`: `libsqlite3.so` bundled on Android, system `libsqlite3.dylib` on iOS and macOS).
+- Off switch: `app_config` key `db_background_worker` (migration 0252, seeded `on`; push is the supervisor's). `DbWorkerSwitchWatcher` reads it on launch and resume (never awaited, 1 minute gap) and remembers it in the file `.db_background_worker` beside the database. Applied only at the next open; nothing remembered, junk or a read failure means the worker. The file survives a logout wipe on purpose.
+- Tests: `test/database/background_connection_test.dart` (15, real worker on a temp file) and `migration_upgrade_test.dart` now runs both ways (152, 76 through the production worker connection).
+- First download, 6-month shop, 26,434 rows, Mac (benchmark, same run): on the screen thread 2.70 s, on the worker 4.20-4.40 s (two runs, about 1.6x). Noticeably slower, so per #687 the follow-up to cut trips to the worker needs filing; not fixed here. Phone "after" numbers and owner phone checks are pending.
 ### Issue #748: A driver is a plain name; each driver's debt is their own (2026-11-04, branch `feat/748-standalone-van`)
 - Drift v108 + cloud `0251_van_drivers.sql`: new synced `van_drivers`; `stores.van_driver_id`, `van_trips.van_driver_id`, ledger `van_store_id` + `van_driver_id`; `driver_user_id` nullable on trips and ledger (real table rebuilds), old drivers backfilled to `van_drivers` (id = old user id). A van loads with no driver.
 - Balance/history/payments key on the driver; a ledger row follows its trip's current driver (assign later moves the debt, no amount edited); driverless trips = "No driver assigned" per van. One open trip per van; per-driver open rule dropped. Reason `van_return:<tripId>` (old form parses).
