@@ -26,6 +26,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/database/local_database_connection.dart';
 import 'package:reebaplus_pos/core/services/supabase_cloud_transport.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
@@ -441,36 +442,45 @@ void main() {
         );
         final rowTotal = cloud.values.fold<int>(0, (a, l) => a + l.length);
         out['sync: rows downloaded'] = '$rowTotal';
-        final dir2 = Directory.systemTemp.createTempSync('hist_bench_dl_');
-        final fresh = newHistoryDb(filePath: '${dir2.path}/fresh.sqlite');
-        fresh.businessIdResolver = () => shop.businessId;
-        await fresh.customSelect('SELECT 1').get();
-        final sync = SupabaseSyncService(
-          fresh,
-          SupabaseCloudTransport(
-            SupabaseClient('https://placeholder.supabase.co', 'placeholder'),
-          ),
-        );
-        final applySw = Stopwatch()..start();
-        for (final table in kSyncPullOrder) {
-          final rows = cloud[table];
-          if (rows == null) continue;
-          await fresh.transaction(
-            () => sync.restoreTableDataForTesting(
-              table,
-              rows,
-              fkSkipped: <String>{},
+        // #687: the same download through both connections, the app's real
+        // one on each side, so the only difference is where SQLite runs.
+        for (final (label, home) in const [
+          ('', LocalDatabaseHome.screenThread),
+          (' (background worker)', LocalDatabaseHome.backgroundWorker),
+        ]) {
+          final dir2 = Directory.systemTemp.createTempSync('hist_bench_dl_');
+          final fresh = AppDatabase.forTesting(
+            openLocalDatabaseFile(File('${dir2.path}/fresh.sqlite'), home),
+          );
+          fresh.businessIdResolver = () => shop.businessId;
+          await fresh.customSelect('SELECT 1').get();
+          final sync = SupabaseSyncService(
+            fresh,
+            SupabaseCloudTransport(
+              SupabaseClient('https://placeholder.supabase.co', 'placeholder'),
             ),
           );
+          final applySw = Stopwatch()..start();
+          for (final table in kSyncPullOrder) {
+            final rows = cloud[table];
+            if (rows == null) continue;
+            await fresh.transaction(
+              () => sync.restoreTableDataForTesting(
+                table,
+                rows,
+                fkSkipped: <String>{},
+              ),
+            );
+          }
+          out['sync: save a full first download$label'] =
+              (applySw.elapsedMicroseconds / 1000).toStringAsFixed(1);
+          final applied = await fresh
+              .customSelect('SELECT COUNT(*) AS n FROM order_items')
+              .getSingle();
+          out['sync: order_items applied$label'] = '${applied.read<int>('n')}';
+          await fresh.close();
+          dir2.deleteSync(recursive: true);
         }
-        out['sync: save a full first download'] =
-            (applySw.elapsedMicroseconds / 1000).toStringAsFixed(1);
-        final applied = await fresh
-            .customSelect('SELECT COUNT(*) AS n FROM order_items')
-            .getSingle();
-        out['sync: order_items applied'] = '${applied.read<int>('n')}';
-        await fresh.close();
-        dir2.deleteSync(recursive: true);
       } finally {
         await db.close();
         dir.deleteSync(recursive: true);
