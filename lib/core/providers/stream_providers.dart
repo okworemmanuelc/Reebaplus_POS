@@ -1201,6 +1201,16 @@ final productStockByStoreProvider =
   whenAbsent: const {},
 );
 
+/// A fingerprint of one product's recent sales lines (#686): Product Details
+/// listens to this instead of the whole-history orders stream, so only a sale
+/// (or a status change) of this product reloads its Sales card.
+final productSalesSignatureProvider =
+    businessScopedStreamAutoDisposeFamily<List<String>, String>(
+  (ref, db, businessId, productId) =>
+      db.ordersDao.watchProductSalesSignature(productId),
+  whenAbsent: const [],
+);
+
 // ── Categories ──────────────────────────────────────────────────────────────
 final allCategoriesProvider = businessScopedStream<List<CategoryData>>(
   (ref, db, businessId) => db.inventoryDao.watchAllCategories(),
