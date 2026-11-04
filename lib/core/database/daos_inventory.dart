@@ -1040,6 +1040,28 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
+  /// #684 — the non-voided stock movements dated INSIDE one period only (no
+  /// later rows). The reviewed-day sweep needs just the day's own flow lines;
+  /// [getTransactionsFrom] adds the later rows only the stock card's rewind
+  /// wants. Bounds padded by a second (epoch seconds); the report applies the
+  /// exact span.
+  Future<List<StockTransactionData>> getTransactionsForPeriod(
+    DateTime start,
+    DateTime endExclusive,
+  ) {
+    final end = endExclusive.add(const Duration(seconds: 1));
+    return (select(stockTransactions)
+          ..where(
+            (s) =>
+                whereBusiness(s) &
+                s.voidedAt.isNull() &
+                s.createdAt.isBiggerOrEqualValue(start) &
+                s.createdAt.isSmallerThanValue(end),
+          )
+          ..orderBy([(s) => OrderingTerm.desc(s.createdAt)]))
+        .get();
+  }
+
   Stream<List<StockTransactionData>> watchAllTransactions() {
     return (select(stockTransactions)
           ..where((s) => whereBusiness(s) & s.voidedAt.isNull())
@@ -2784,6 +2806,40 @@ class StockAdjustmentRequestsDao extends DatabaseAccessor<AppDatabase>
 class StockCountsDao extends DatabaseAccessor<AppDatabase>
     with _$StockCountsDaoMixin, BusinessScopedDao<AppDatabase> {
   StockCountsDao(super.db);
+
+  /// #684 — the light facts the reconciliation period LIST reads from the
+  /// count sessions: store, business date, save time and shortage units. No
+  /// lines JSON.
+  Future<
+    List<
+      ({
+        String? storeId,
+        String businessDate,
+        DateTime createdAt,
+        double shortageUnits,
+      })
+    >
+  >
+  getCountListFacts() async {
+    final query = selectOnly(stockCounts)
+      ..addColumns([
+        stockCounts.storeId,
+        stockCounts.businessDate,
+        stockCounts.createdAt,
+        stockCounts.shortageUnits,
+      ])
+      ..where(whereBusiness(stockCounts));
+    final rows = await query.get();
+    return [
+      for (final r in rows)
+        (
+          storeId: r.read(stockCounts.storeId),
+          businessDate: r.read(stockCounts.businessDate)!,
+          createdAt: r.read(stockCounts.createdAt)!,
+          shortageUnits: r.read(stockCounts.shortageUnits)!,
+        ),
+    ];
+  }
 
   /// Persists one saved Daily Stock Count session (§17.3) — the stock-audit
   /// snapshot the Daily Reconciliation Report (Ring 3, §25.9) reads.
