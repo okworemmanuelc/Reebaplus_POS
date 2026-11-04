@@ -162,7 +162,7 @@ void main() {
         tester.widgetList<SwitchListTile>(find.byType(SwitchListTile)).toList();
     // 48 seeded keys (#423 stores.online_ordering, #427 online_orders.*, #432 mark paid, #667 payroll) − 3 hidden, less those
     // two van keys while Van Sales is switched off.
-    final shown = isVanSalesEnabled() ? 45 : 43; // +payroll.manage (#667)
+    final shown = isDriverScreensEnabled() ? 45 : (isVanSalesEnabled() ? 44 : 43); // +payroll.manage (#667)
     expect(switches.length, shown, reason: 'all $shown permissions shown');
     expect(find.text('Online store'), findsOneWidget);
     expect(find.text('Manage online product listings'), findsOneWidget);

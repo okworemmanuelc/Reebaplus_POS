@@ -21,6 +21,21 @@
 //  * the `van.manage` / `van.sell` permission toggles;
 //  * vans in the staff store-assignment sheet.
 //
+// A SECOND switch, [kDriverScreensEnabled] (#747), turns off only the driver
+// side while the manager side above stays on: it is OFF from 2026-11-04. The
+// manager records what each van went out with, what came back and what the
+// driver handed in; nobody needs the driver terminal to do that. While it is
+// off:
+//  * `Gates.vanSell` denies for everyone (driver terminal, run screen, driver
+//    van selection, driver payments);
+//  * the Driver role is hidden wherever a role is picked or configured;
+//  * the `van.sell` toggle is hidden (`van.manage` stays);
+//  * vans are hidden in the staff store-assignment sheet (only drivers are
+//    assigned to a van).
+// `Gates.vanManage` and every manager screen are unaffected. The driver code
+// and its tests stay; the tests force the switch on. It is only ever on when
+// Van Sales itself is on.
+//
 // What it deliberately does NOT touch: the van exclusions in store pickers and
 // reports, the road-sale checks in `createOrder`, the costing fences, the van
 // tables' sync and the late-sale restatement sweep, the driver offboarding
@@ -40,10 +55,18 @@ const bool kVanSalesEnabled = true;
 /// editor while the feature is off.
 const Set<String> kVanSalesPermissionKeys = {'van.manage', 'van.sell'};
 
-/// The seeded role that only exists for Van Sales.
+/// The permission keys that belong to the driver screens only.
+const Set<String> kDriverScreenPermissionKeys = {'van.sell'};
+
+/// Whether the driver screens ship switched on (#747). Off since 2026-11-04;
+/// the manager side of Van Sales is unaffected.
+const bool kDriverScreensEnabled = false;
+
+/// The seeded role that only exists for the driver screens.
 const String kDriverRoleSlug = 'driver';
 
 bool? _override;
+bool? _driverOverride;
 
 /// Whether Van Sales is on right now: [kVanSalesEnabled], unless a test has
 /// overridden it.
@@ -57,19 +80,33 @@ bool isVanSalesEnabled() => _override ?? kVanSalesEnabled;
 @visibleForTesting
 void debugOverrideVanSalesEnabled(bool? enabled) => _override = enabled;
 
+/// Whether the driver screens are on right now: only if Van Sales is on AND
+/// [kDriverScreensEnabled] (or a test override). Top-level function so the gate
+/// registry can hold a `const` tear-off of it.
+bool isDriverScreensEnabled() =>
+    isVanSalesEnabled() && (_driverOverride ?? kDriverScreensEnabled);
+
+/// Forces the driver-screens switch for a test; `null` restores
+/// [kDriverScreensEnabled]. Driver suites set it `true`.
+@visibleForTesting
+void debugOverrideDriverScreensEnabled(bool? enabled) =>
+    _driverOverride = enabled;
+
 /// [roles] minus the ones that belong to a switched-off feature — today, the
 /// Driver role while Van Sales is off. For any list a user picks a role from or
 /// configures a role in; lookups by id must keep using the full list.
 List<RoleData> rolesOnOffer(List<RoleData> roles) {
-  if (isVanSalesEnabled()) return roles;
+  if (isDriverScreensEnabled()) return roles;
   return [for (final r in roles) if (r.slug != kDriverRoleSlug) r];
 }
 
-/// True when [key] is a van permission and Van Sales is switched off.
+/// True when [key] is a van permission and Van Sales is switched off, or the
+/// driver-only `van.sell` while the driver screens are switched off.
 bool isSwitchedOffPermissionKey(String key) =>
-    !isVanSalesEnabled() && kVanSalesPermissionKeys.contains(key);
+    (!isVanSalesEnabled() && kVanSalesPermissionKeys.contains(key)) ||
+    (!isDriverScreensEnabled() && kDriverScreenPermissionKeys.contains(key));
 
-/// [stores] for a staff store-assignment list: every location while Van Sales
-/// is on, vans dropped while it is off.
+/// [stores] for a staff store-assignment list: every location while the driver
+/// screens are on, vans dropped while they are off (only drivers go to a van).
 List<StoreData> assignableStores(List<StoreData> stores) =>
-    isVanSalesEnabled() ? stores : withoutVans(stores);
+    isDriverScreensEnabled() ? stores : withoutVans(stores);
