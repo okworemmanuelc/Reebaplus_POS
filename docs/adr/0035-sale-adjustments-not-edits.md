@@ -103,3 +103,7 @@ adjustment (`OrdersDao.editCompletedSale`) holding the DIFFERENCE:
   all adjustments). Not deployed.
 - Edit slip: `buildReceiptLines(slipTitle:)` stamps "EDIT SLIP - ORD-..." (text
   print only). Out of scope: price edits, customer/store change, van sales adds.
+- Refused edit (#732): the plus lines drew units from layers that already existed,
+  so those layers are never withdrawn. The claim keeps the units per batch in
+  phone-only notes (`_local`, removed before the RPC) and the undo adds them back;
+  only the restore layers the edit created are withdrawn.

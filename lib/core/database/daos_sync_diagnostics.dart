@@ -37,6 +37,17 @@ const String kAdjustmentExceedsError = 'adjustment_exceeds_returnable';
 /// reached the cloud.
 const String kOrderNotReturnableError = 'order_not_returnable';
 
+/// #732 — a domain envelope's PHONE-ONLY notes: stripped before the RPC call
+/// (never sent to the cloud), read back if the claim is refused. An edit's
+/// claim carries `{'edit': true, 'cost_draws': {batchId: units}}` here, so a
+/// refused edit can put back exactly the cost-layer units its plus lines drew.
+const String kLocalEnvelopeKey = '_local';
+
+/// The plain message a phone shows when the cloud refuses a sale edit.
+const String kEditRejectedMessage =
+    "This edit wasn't saved — another phone changed this sale first. "
+    'Nothing was changed.';
+
 /// Both claim envelopes, for the "is a claim still queued" checks.
 const String kClaimActionsSql =
     "('$kReversalClaimAction', '$kAdjustmentClaimAction')";

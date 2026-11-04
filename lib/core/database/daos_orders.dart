@@ -2572,6 +2572,11 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   ///   • the held outbox rows are discarded (sanctioned under Invariant #12:
   ///     the server rejected them; the claim itself stays visible as an orphan).
   ///
+  /// [costDraws] (#732) — the units a sale EDIT's plus lines drew from
+  /// existing cost layers (batch id -> units, from the claim's local notes).
+  /// Those layers are not the reversal's own rows: their units are put back
+  /// (never deleted), so the layers end exactly as before the edit.
+  ///
   /// Idempotent: returns false (and writes nothing) when no rows are held for
   /// [reversalId] — already undone, or never guarded.
   Future<bool> undoRejectedReversal({
@@ -2579,6 +2584,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     required String orderId,
     Map<String, dynamic>? cloudHeader,
     String? adjustmentOrderId,
+    Map<String, double> costDraws = const {},
   }) {
     return db.transaction(() async {
       final held = await db.syncDao.heldRowsFor(reversalId);
@@ -2629,6 +2635,20 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       await db.cratePoolDao.withdrawRejectedReversalRows(
         idsByTable['crate_ledger'] ?? const <String>[],
       );
+
+      // Cost layers an edit's plus lines drew from existed before it: put the
+      // drawn units back instead of withdrawing the layer (#732).
+      final heldCostIds = (idsByTable['cost_batches'] ?? const <String>[])
+          .toSet();
+      final restoredLayers = await db.costBatchesDao.restoreDrawnUnits(
+        costDraws,
+      );
+      if (costDraws.isNotEmpty) {
+        idsByTable['cost_batches'] = [
+          for (final id in heldCostIds)
+            if (!costDraws.containsKey(id)) id,
+        ];
+      }
 
       for (final table in kWithdrawableReversalTables) {
         if (table == 'crate_ledger') continue; // withdrawn by the seam above
@@ -2698,6 +2718,16 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         if (inv == null || heldInventoryIds.contains(inv.id)) continue;
         await db.syncDao.enqueueUpsert('inventory', inv);
       }
+      // Same rule for a restored cost layer: a held upsert was discarded
+      // unsent (the cloud never saw the draw); a coalesced one is re-sent.
+      for (final id in restoredLayers) {
+        if (heldCostIds.contains(id)) continue;
+        final layer =
+            await (select(db.costBatches)
+                  ..where((b) => b.id.equals(id) & whereBusiness(b)))
+                .getSingleOrNull();
+        if (layer != null) await db.syncDao.enqueueUpsert('cost_batches', layer);
+      }
       return true;
     });
   }
@@ -2709,6 +2739,8 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   Future<void> alertRefundRejected(
     String orderId, {
     bool partReturn = false,
+    bool edit = false,
+    String? actorId,
   }) async {
     try {
       final order = await (select(
@@ -2726,10 +2758,18 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         )).toSet();
         managerIds = managerIds.where(storeUserIds.contains).toList();
       }
-      for (final uid in <String>{...ceoIds, ...managerIds}) {
+      // #732 — a refused EDIT also tells the person who made it.
+      final recipients = <String>{
+        ...ceoIds,
+        ...managerIds,
+        if (edit && actorId != null) actorId,
+      };
+      for (final uid in recipients) {
         await db.notificationsDao.fireNotification(
           type: 'sale_refund_rejected',
-          message: partReturn
+          message: edit
+              ? '$label: $kEditRejectedMessage'
+              : partReturn
               ? 'A return on $label was rejected: more of it was returned on '
                     'another phone than was sold. Check whether goods or money '
                     'were handed back twice.'

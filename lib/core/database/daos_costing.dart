@@ -176,7 +176,14 @@ class CostBatchesDao extends DatabaseAccessor<AppDatabase>
   /// the units it covers. There is deliberately no scalar fallback — a scalar
   /// value the server would later overwrite to 0 on sync is the "vanishing
   /// trust" failure ADR 0005 avoids.
-  Future<Map<int, int>> drawDownSale(List<SaleCostLine> lines) async {
+  ///
+  /// [consumedByBatch], when given, collects the units drawn from each batch
+  /// (by batch id) so a caller can put exactly those units back later — a
+  /// sale edit the cloud rejects ([CostBatchesDao.restoreDrawnUnits], #732).
+  Future<Map<int, int>> drawDownSale(
+    List<SaleCostLine> lines, {
+    Map<String, double>? consumedByBatch,
+  }) async {
     if (lines.isEmpty) return const {};
     final perUnitByIndex = <int, int>{};
 
@@ -230,6 +237,9 @@ class CostBatchesDao extends DatabaseAccessor<AppDatabase>
             lastUpdatedAt: Value(DateTime.now()),
           ),
         );
+        if (consumedByBatch != null) {
+          consumedByBatch[row.id] = (consumedByBatch[row.id] ?? 0) + consumed;
+        }
         final updated = await (select(
           costBatches,
         )..where((t) => t.id.equals(row.id))).getSingle();
@@ -242,6 +252,39 @@ class CostBatchesDao extends DatabaseAccessor<AppDatabase>
     }
 
     return perUnitByIndex;
+  }
+
+  /// #732 — puts back units a [drawDownSale] took from existing batches
+  /// ([drawn] = batch id -> units, as collected by `consumedByBatch`), for a
+  /// sale edit the cloud REJECTED. Additive (`qty_remaining + units`), so a
+  /// later draw on the same batch is not undone with it. Re-points each touched
+  /// product's scalar cost. Does NOT enqueue the batches: the caller knows
+  /// whether the draw's upsert was held (discarded unsent) or must be re-sent.
+  /// Returns the ids of the batches it restored (a missing batch is skipped).
+  /// Must run inside the caller's transaction.
+  Future<List<String>> restoreDrawnUnits(Map<String, double> drawn) async {
+    final restored = <String>[];
+    final touchedProducts = <String>{};
+    for (final entry in drawn.entries) {
+      if (entry.value <= 0) continue;
+      final row =
+          await (select(costBatches)
+                ..where((b) => b.id.equals(entry.key) & whereBusiness(b)))
+              .getSingleOrNull();
+      if (row == null) continue;
+      await (update(costBatches)..where((t) => t.id.equals(row.id))).write(
+        CostBatchesCompanion(
+          qtyRemaining: Value(row.qtyRemaining + entry.value),
+          lastUpdatedAt: Value(DateTime.now()),
+        ),
+      );
+      restored.add(row.id);
+      touchedProducts.add(row.productId);
+    }
+    for (final productId in touchedProducts) {
+      await _recomputeScalarCost(productId);
+    }
+    return restored;
   }
 
   /// Draw a NON-sale outflow of [quantity] units down the (product, store) FIFO
