@@ -7,6 +7,9 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #686: Smooth screens S5 - Product Details listens to its own sales (2026-11-04, branch `feat/686-product-details-own-sales`)
+
+- Product Details no longer listens to `allOrdersProvider` (whole-history join). New `OrdersDao.watchProductSalesSignature(productId)` (this product's lines from the last 40 days joined to their order, fingerprint of id/status/qty/total/cost, `.distinct`) behind `productSalesSignatureProvider`; the screen reloads the Sales card only when it changes (own sale, synced-in sale, status change). Figures unchanged. Test: `test/orders/product_sales_signature_test.dart`. Audit table is in the issue report (follow-ups to be filed by supervisor).
 ### Issue #732 PR A: refused edit restores cost layers + edit sheet tests (2026-11-04, branch `fix/732a-edit-undo-cost-tests`)
 - Bug was worse than "not restored": the plus lines' `cost_batches` upserts were held, so `undoRejectedReversal` DELETED those existing layers. Now `drawDownSale(consumedByBatch:)` records the units per batch, the edit's claim keeps them in phone-only notes (`kLocalEnvelopeKey` = `_local`, stripped before the RPC), and `CostBatchesDao.restoreDrawnUnits` adds them back additively; only the edit's own restore layers are withdrawn. A layer whose upsert was held is not re-sent (the cloud never saw the draw); a coalesced one is re-enqueued, same rule as inventory.
 - Refused edit message `kEditRejectedMessage` in Sync Issues and the `sale_refund_rejected` alert (also sent to the editor). Open: a claim queued by an older build has no notes, so its refused edit still takes the old path (layers deleted); whether a pull brings them back was not checked.

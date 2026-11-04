@@ -234,11 +234,13 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       _reloadDerived();
     });
 
-    // A sale records an order (and its stock delta). Watch the orders stream
-    // directly so every sale (this device or synced from another) refreshes
-    // the summary live, including one in another store.
-    ref.listen(allOrdersProvider, (prev, next) {
-      if (next.valueOrNull == null || !mounted) return;
+    // A sale of THIS product (this device or synced from another, any store)
+    // or a status change on one refreshes the summary live. Narrow watch on
+    // this product's lines only, not the whole sales history (#686).
+    ref.listen(productSalesSignatureProvider(widget.item.id), (prev, next) {
+      if (prev?.valueOrNull == null || next.valueOrNull == null || !mounted) {
+        return;
+      }
       _reloadDerived();
     });
 

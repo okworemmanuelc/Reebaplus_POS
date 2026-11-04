@@ -3121,6 +3121,45 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
+  /// A narrow "this product's sales changed" signal for Product Details (#686).
+  /// Watches only this product's recent lines (the Sales card's window, with
+  /// slack) joined to their order, and emits a fingerprint of what feeds the
+  /// card's figures. Distinct, so an unrelated sale (another product) or an
+  /// unrelated orders write never makes the card reload.
+  Stream<List<String>> watchProductSalesSignature(
+    String productId, {
+    DateTime? now,
+  }) {
+    final since = (now ?? DateTime.now()).toUtc().subtract(
+      const Duration(days: 40),
+    );
+    final query = select(orderItems).join([
+      innerJoin(orders, orders.id.equalsExp(orderItems.orderId)),
+    ])
+      ..where(
+        orderItems.productId.equals(productId) &
+            whereBusiness(orders) &
+            orders.createdAt.isBiggerOrEqualValue(since),
+      )
+      ..orderBy([OrderingTerm.asc(orderItems.id)]);
+    return query
+        .watch()
+        .map((rows) {
+          return [
+            for (final r in rows)
+              '${r.readTable(orderItems).id}|${r.readTable(orders).status}|'
+                  '${r.readTable(orderItems).quantity}|'
+                  '${r.readTable(orderItems).totalKobo}|'
+                  '${r.readTable(orderItems).buyingPriceKobo}',
+          ];
+        })
+        .distinct(
+          (a, b) =>
+              a.length == b.length &&
+              Iterable<int>.generate(a.length).every((i) => a[i] == b[i]),
+        );
+  }
+
   /// One row per local calendar day (business timezone) from the earlier of
   /// "6 days ago" and "the 1st of this month" up to today, zeros included, for
   /// the Sales card on Product Details (#487 PR 5). Only recognized sales
