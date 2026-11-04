@@ -184,6 +184,16 @@ List<Override> reportOverrides(ScreenTestEnvironment env, DateTime orderAt) => [
     (ref, period) =>
         Stream.value(ReconPeriodRows(orders: sampleReportOrders(env, orderAt))),
   ),
+  // #684 — the reconciliation list reads light facts, not whole orders; the
+  // same sample orders, so the list is unchanged.
+  reconListFactsProvider.overrideWith(
+    (ref) => Stream.value(
+      ReconListFacts.fromRows(
+        orders: sampleReportOrders(env, orderAt),
+        counts: const [],
+      ),
+    ),
+  ),
   crateDepositSummaryProvider.overrideWith(
     (ref) => Stream.value(
       const CrateDepositSummary(

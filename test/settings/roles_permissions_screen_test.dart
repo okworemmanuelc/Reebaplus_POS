@@ -128,7 +128,7 @@ void main() {
 
     // 48 seeded keys (#423 stores.online_ordering, #427 online_orders.*, #432 mark paid, #667 payroll) − 3 hidden, less those
     // two van keys while Van Sales is switched off.
-    final shown = isVanSalesEnabled() ? 45 : 43; // +payroll.manage (#667)
+    final shown = isDriverScreensEnabled() ? 45 : (isVanSalesEnabled() ? 44 : 43); // +payroll.manage (#667)
     expect(find.text('All $shown permissions'), findsOneWidget); // CEO, locked
     expect(find.text('2 of $shown permissions'), findsOneWidget); // Cashier
   });
@@ -145,10 +145,14 @@ void main() {
             ),
           );
     });
-    tearDown(() => debugOverrideVanSalesEnabled(null));
+    tearDown(() {
+    debugOverrideVanSalesEnabled(null);
+    debugOverrideDriverScreensEnabled(null);
+  });
 
     testWidgets('switched off: no Driver card', (tester) async {
       debugOverrideVanSalesEnabled(false);
+      debugOverrideDriverScreensEnabled(false);
       await pumpList(tester);
 
       expect(find.text('Stock keeper'), findsOneWidget);
@@ -157,6 +161,7 @@ void main() {
 
     testWidgets('switched on: the Driver card is back', (tester) async {
       debugOverrideVanSalesEnabled(true);
+      debugOverrideDriverScreensEnabled(true);
       await pumpList(tester);
 
       expect(find.text('Driver'), findsOneWidget);

@@ -116,6 +116,10 @@ class _DailyReconciliationListScreenState
 
     final Object currentValue = _customRange != null ? 'custom' : _grouping;
     final List<ReconBucket> buckets;
+    // #684 — the list is built from light dates/quantity facts, never from
+    // whole orders and count sessions.
+    final facts =
+        ref.watch(reconListFactsProvider).valueOrNull ?? ReconListFacts.empty;
 
     if (_customRange != null) {
       buckets = buildReconBuckets(
@@ -123,9 +127,10 @@ class _DailyReconciliationListScreenState
         start: _customRange!.start,
         endExclusive: _customRange!.end.add(const Duration(days: 1)),
         grouping: ReconGrouping.day,
+        facts: facts,
       );
     } else {
-      buckets = buildReconBuckets(ref, grouping: _grouping);
+      buckets = buildReconBuckets(ref, grouping: _grouping, facts: facts);
     }
 
     // #192 — the reviewed days whose figures have moved since. Before this the

@@ -222,7 +222,11 @@ void main() {
     tester,
   ) async {
     debugOverrideVanSalesEnabled(true);
-    addTearDown(() => debugOverrideVanSalesEnabled(null));
+    debugOverrideDriverScreensEnabled(true);
+    addTearDown(() {
+    debugOverrideVanSalesEnabled(null);
+    debugOverrideDriverScreensEnabled(null);
+  });
     await pumpScreen(tester, ceoUserId);
 
     await addLocation(
@@ -247,7 +251,11 @@ void main() {
     tester,
   ) async {
     debugOverrideVanSalesEnabled(true);
-    addTearDown(() => debugOverrideVanSalesEnabled(null));
+    debugOverrideDriverScreensEnabled(true);
+    addTearDown(() {
+    debugOverrideVanSalesEnabled(null);
+    debugOverrideDriverScreensEnabled(null);
+  });
     await pumpScreen(tester, ceoUserId);
 
     await addLocation(
@@ -276,7 +284,11 @@ void main() {
     tester,
   ) async {
     debugOverrideVanSalesEnabled(false);
-    addTearDown(() => debugOverrideVanSalesEnabled(null));
+    debugOverrideDriverScreensEnabled(false);
+    addTearDown(() {
+    debugOverrideVanSalesEnabled(null);
+    debugOverrideDriverScreensEnabled(null);
+  });
     await pumpScreen(tester, ceoUserId);
 
     expect(find.text('Add a store'), findsOneWidget);

@@ -180,7 +180,10 @@ Future<void> _pump(
 }
 
 void main() {
-  setUpAll(() => debugOverrideVanSalesEnabled(true));
+  setUpAll(() {
+    debugOverrideVanSalesEnabled(true);
+    debugOverrideDriverScreensEnabled(true);
+  });
 
   group('pure helpers', () {
     test('empties count only crate-tracked bottles, and only when tracked', () {

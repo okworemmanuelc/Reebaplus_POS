@@ -76,6 +76,9 @@ class _RoleCard extends ConsumerWidget {
         ? 42 -
               kHiddenPermissionKeys.length -
               (isVanSalesEnabled() ? 0 : kVanSalesPermissionKeys.length) -
+              (isDriverScreensEnabled() || !isVanSalesEnabled()
+                  ? 0
+                  : kDriverScreenPermissionKeys.length) -
               (isOnlineOrderingEnabled() ? 0 : kOnlineOrderingPermissionKeys.length)
         : allPerms.where((p) => !isPermissionKeyHidden(p.key)).length;
     // CEO is locked all-on; show the full count regardless of sync state.

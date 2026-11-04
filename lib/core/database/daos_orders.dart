@@ -378,6 +378,55 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         .get();
   }
 
+  /// #684 — the LIGHT facts behind the Daily Reconciliation period LIST: one
+  /// row per order line that can count as a sale (live or cancelled orders),
+  /// carrying only the dates, the cancel reason, the line's store and its
+  /// quantity. No customers, products, prices or payments are loaded. The
+  /// list applies `saleDayStamps` to these exactly as it did to full orders,
+  /// so which days appear (a cancel day included, #549) is unchanged.
+  Future<
+    List<
+      ({
+        String status,
+        DateTime createdAt,
+        DateTime? cancelledAt,
+        String? cancellationReason,
+        String? storeId,
+        double quantity,
+      })
+    >
+  >
+  getSaleDayLines() async {
+    final query = selectOnly(orders).join([
+      innerJoin(orderItems, orderItems.orderId.equalsExp(orders.id)),
+    ]);
+    query
+      ..addColumns([
+        orders.status,
+        orders.createdAt,
+        orders.cancelledAt,
+        orders.cancellationReason,
+        orderItems.storeId,
+        orderItems.quantity,
+      ])
+      ..where(
+        whereBusiness(orders) &
+            orders.status.isIn(const ['pending', 'completed', 'cancelled']),
+      );
+    final rows = await query.get();
+    return [
+      for (final r in rows)
+        (
+          status: r.read(orders.status)!,
+          createdAt: r.read(orders.createdAt)!,
+          cancelledAt: r.read(orders.cancelledAt),
+          cancellationReason: r.read(orders.cancellationReason),
+          storeId: r.read(orderItems.storeId),
+          quantity: r.read(orderItems.quantity)!,
+        ),
+    ];
+  }
+
   Stream<List<OrderWithItems>> watchPendingOrdersWithItems({String? storeId}) {
     final query = select(orders).join([
       leftOuterJoin(orderItems, orderItems.orderId.equalsExp(orders.id)),
@@ -3124,6 +3173,45 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       monthUnits: monthUnits,
       monthRevenueKobo: monthRevKobo,
     );
+  }
+
+  /// A narrow "this product's sales changed" signal for Product Details (#686).
+  /// Watches only this product's recent lines (the Sales card's window, with
+  /// slack) joined to their order, and emits a fingerprint of what feeds the
+  /// card's figures. Distinct, so an unrelated sale (another product) or an
+  /// unrelated orders write never makes the card reload.
+  Stream<List<String>> watchProductSalesSignature(
+    String productId, {
+    DateTime? now,
+  }) {
+    final since = (now ?? DateTime.now()).toUtc().subtract(
+      const Duration(days: 40),
+    );
+    final query = select(orderItems).join([
+      innerJoin(orders, orders.id.equalsExp(orderItems.orderId)),
+    ])
+      ..where(
+        orderItems.productId.equals(productId) &
+            whereBusiness(orders) &
+            orders.createdAt.isBiggerOrEqualValue(since),
+      )
+      ..orderBy([OrderingTerm.asc(orderItems.id)]);
+    return query
+        .watch()
+        .map((rows) {
+          return [
+            for (final r in rows)
+              '${r.readTable(orderItems).id}|${r.readTable(orders).status}|'
+                  '${r.readTable(orderItems).quantity}|'
+                  '${r.readTable(orderItems).totalKobo}|'
+                  '${r.readTable(orderItems).buyingPriceKobo}',
+          ];
+        })
+        .distinct(
+          (a, b) =>
+              a.length == b.length &&
+              Iterable<int>.generate(a.length).every((i) => a[i] == b[i]),
+        );
   }
 
   /// One row per local calendar day (business timezone) from the earlier of
