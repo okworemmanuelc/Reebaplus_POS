@@ -2299,7 +2299,7 @@ Map<String, List<T>> _byCandidateDay<T>(
 /// whenever any report row set changes, which is the right price to pay on the
 /// reconciliation list (a report screen you are already reading) and the wrong
 /// one on Home. The list marker is the surface #192 asked for.
-final changedReviewedDaysProvider = Provider<Set<String>>((ref) {
+final changedReviewedDaysProvider = Provider.autoDispose<Set<String>>((ref) {
   final snapshots =
       ref.watch(allDailyClosingsProvider).valueOrNull ?? const [];
   if (snapshots.isEmpty) return const <String>{};

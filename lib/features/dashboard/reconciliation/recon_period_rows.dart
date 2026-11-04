@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart' show AsyncValueX;
 import 'package:drift/drift.dart' show TableInfo, TableUpdateQuery;
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/inventory_reasons.dart';
 import 'package:reebaplus_pos/core/providers/business_scoped_stream.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart' show allDailyClosingsProvider;
 import 'package:reebaplus_pos/core/utils/perf_log.dart';
@@ -331,31 +332,205 @@ final reconListFactsProvider = businessScopedStream<ReconListFacts>(
 // ── The reviewed days (#684) ─────────────────────────────────────────────────
 
 /// The period rows of each reviewed day, keyed `YYYY-MM-DD`, for the
-/// "changed since reviewed" sweep. Each day loads only its own rows, through
-/// the same bounded reads as the detail screen ([loadReconPeriodRows]); a
-/// business with no reviewed day loads nothing.
+/// "changed since reviewed" sweep.
+///
+/// ONE bounded load covers the span from the earliest to the latest reviewed
+/// day (the same bounded reads as the detail screen, [loadReconPeriodRows]),
+/// then [splitReviewedDayRows] files the rows under their days in Dart. A shop
+/// that reviews every day therefore costs about ten queries, not ten per day.
+/// A business with no reviewed day loads nothing.
 Future<Map<String, ReconPeriodRows>> loadReviewedDayRows(
   AppDatabase db,
   Set<String> days,
 ) async {
-  final out = <String, ReconPeriodRows>{};
+  DateTime? first;
+  DateTime? last;
   for (final day in days) {
-    final start = DateTime.tryParse(day);
-    if (start == null) continue;
-    out[day] = await loadReconPeriodRows(
-      db,
-      start,
-      start.add(const Duration(days: 1)),
-      stockTxnsInPeriodOnly: true,
-    );
+    final d = DateTime.tryParse(day);
+    if (d == null) continue;
+    if (first == null || d.isBefore(first)) first = d;
+    if (last == null || d.isAfter(last)) last = d;
   }
-  return out;
+  if (first == null || last == null) return const {};
+  final span = await loadReconPeriodRows(
+    db,
+    first,
+    DateTime(last.year, last.month, last.day + 1),
+    // The sweep compares day-local figures only, so it never needs the later
+    // movements the stock card rewinds.
+    stockTxnsInPeriodOnly: true,
+  );
+  return splitReviewedDayRows(span, days);
 }
+
+/// Files the rows of one wide [span] load under each of [days]. Pure.
+///
+/// Each list is filed by the date its figure is counted on, exactly the basis
+/// the one-day bounded read uses: orders on their creation day AND their cancel
+/// day (#549), expenses on `expense_date`, supplier entries on `activity_date`,
+/// payments, stock movements, crate damages and forfeits on `created_at`.
+/// Adjustments are the day's own dated rows, the rows its movements point at,
+/// and EVERY count-shortage row of the span: a shortage row belongs to the first
+/// session of its store saved at or after it (#186), and the span window
+/// already holds each session's neighbours, so handing a day all of them lets
+/// the report match them exactly as it does over the whole history. Count
+/// sessions are likewise all of the span's. Handing a day extra rows is
+/// harmless (the report applies the exact period); handing it too few is not.
+Map<String, ReconPeriodRows> splitReviewedDayRows(
+  ReconPeriodRows span,
+  Set<String> days,
+) {
+  Map<String, List<T>> byDay<T>(
+    Iterable<T> rows,
+    Iterable<DateTime?> Function(T) datesOf,
+  ) {
+    final out = <String, List<T>>{};
+    for (final r in rows) {
+      for (final d in datesOf(r)) {
+        if (d == null) continue;
+        final k = _dayKey(d);
+        if (!days.contains(k)) continue;
+        final list = (out[k] ??= <T>[]);
+        // An order created and cancelled on the same day is filed once.
+        if (list.isEmpty || !identical(list.last, r)) list.add(r);
+      }
+    }
+    return out;
+  }
+
+  final orders = byDay<OrderWithItems>(span.orders, (o) => [
+    o.order.createdAt,
+    o.order.cancelledAt?.toLocal(),
+  ]);
+  final expenses = byDay<ExpenseWithCategory>(
+    span.expenses,
+    (e) => [e.expense.expenseDate],
+  );
+  final ledger = byDay<SupplierLedgerEntryData>(
+    span.supplierLedger,
+    (l) => [l.activityDate],
+  );
+  final payments = byDay<PaymentTransactionData>(
+    span.payments,
+    (p) => [p.createdAt],
+  );
+  final txns = byDay<StockTransactionData>(span.stockTxns, (t) => [t.createdAt]);
+  final damages = byDay<CrateLedgerData>(span.crateDamages, (c) => [c.createdAt]);
+  final forfeits = byDay<WalletTransactionData>(
+    span.crateForfeitRows,
+    (w) => [w.createdAt],
+  );
+  final datedAdjustments = byDay<StockAdjustmentData>(
+    span.adjustments,
+    (a) => [a.createdAt],
+  );
+  final countRows = [
+    for (final a in span.adjustments)
+      if (isCountReconciliationReason(a.reason)) a,
+  ]..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+  final sessionsAsc = [...span.stockCounts]
+    ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+  final adjustmentById = {for (final a in span.adjustments) a.id: a};
+
+  return {
+    for (final day in days)
+      if (DateTime.tryParse(day) != null)
+        day: () {
+          final dayTxns = txns[day] ?? const <StockTransactionData>[];
+          final win = _countWindowFor(day, sessionsAsc);
+          final adj = <String, StockAdjustmentData>{
+            for (final a in datedAdjustments[day] ?? const []) a.id: a,
+            for (final t in dayTxns)
+              if (t.adjustmentId != null &&
+                  adjustmentById[t.adjustmentId] != null)
+                t.adjustmentId!: adjustmentById[t.adjustmentId]!,
+            if (win.upTo != null)
+              for (final a in countRows)
+                if (!a.createdAt.isAfter(win.upTo!) &&
+                    (win.after == null || a.createdAt.isAfter(win.after!)))
+                  a.id: a,
+          };
+          return ReconPeriodRows(
+            orders: orders[day] ?? const [],
+            expenses: expenses[day] ?? const [],
+            adjustments: adj.values.toList(),
+            supplierLedger: ledger[day] ?? const [],
+            payments: payments[day] ?? const [],
+            stockTxns: dayTxns,
+            stockCounts: win.sessions,
+            crateDamages: damages[day] ?? const [],
+            crateForfeitRows: forfeits[day] ?? const [],
+          );
+        }(),
+  };
+}
+
+/// The count sessions (and the window of shortage rows) one reviewed [day]
+/// needs — the in-memory twin of `StockCountsDao.getCountWindowForPeriod`, run
+/// over the span's own sessions (which already hold every day's neighbours):
+/// sessions whose business date is within a day of the day, plus every session
+/// saved from each counted store's previous session on, so the shortage-row
+/// match (#186) comes out as over the whole history. [sessionsAsc] is sorted by
+/// save time, oldest first.
+({List<StockCountData> sessions, DateTime? after, DateTime? upTo})
+_countWindowFor(String day, List<StockCountData> sessionsAsc) {
+  final d = DateTime.parse(day);
+  final from = _dayKey(d.subtract(const Duration(days: 1)));
+  final to = _dayKey(DateTime(d.year, d.month, d.day + 2));
+  bool near(StockCountData c) =>
+      c.businessDate.compareTo(from) >= 0 && c.businessDate.compareTo(to) <= 0;
+  final inPeriod = [
+    for (final c in sessionsAsc)
+      if (near(c)) c,
+  ];
+  if (inPeriod.isEmpty) {
+    return (sessions: const <StockCountData>[], after: null, upTo: null);
+  }
+  var upTo = inPeriod.first.createdAt;
+  final earliestByStore = <String, DateTime>{};
+  for (final c in inPeriod) {
+    if (c.createdAt.isAfter(upTo)) upTo = c.createdAt;
+    final store = c.storeId;
+    if (store == null) continue;
+    final e = earliestByStore[store];
+    if (e == null || c.createdAt.isBefore(e)) earliestByStore[store] = c.createdAt;
+  }
+  DateTime? after;
+  var unbounded = false;
+  for (final entry in earliestByStore.entries) {
+    DateTime? prev;
+    for (final c in sessionsAsc) {
+      if (c.storeId == entry.key && c.createdAt.isBefore(entry.value)) {
+        prev = c.createdAt; // ascending: the last one wins = the latest earlier
+      }
+    }
+    if (prev == null) {
+      unbounded = true;
+      continue;
+    }
+    if (after == null || prev.isBefore(after)) after = prev;
+  }
+  if (unbounded || earliestByStore.isEmpty) after = null;
+  final rowsAfter = earliestByStore.isEmpty ? upTo : after;
+  final sessions = [
+    for (final c in sessionsAsc)
+      if ((!c.createdAt.isAfter(upTo) &&
+              (rowsAfter == null || !c.createdAt.isBefore(rowsAfter))) ||
+          near(c))
+        c,
+  ];
+  return (sessions: sessions, after: rowsAfter, upTo: upTo);
+}
+
+String _dayKey(DateTime d) =>
+    '${d.year.toString().padLeft(4, '0')}-'
+    '${d.month.toString().padLeft(2, '0')}-'
+    '${d.day.toString().padLeft(2, '0')}';
 
 /// The reviewed days' rows, re-loaded when any table they read changes or the
 /// set of reviewed days does.
 final reviewedDayRowsProvider =
-    businessScopedStream<Map<String, ReconPeriodRows>>((ref, db, businessId) {
+    businessScopedStreamAutoDispose<Map<String, ReconPeriodRows>>((ref, db, businessId) {
       final snapshots =
           ref.watch(allDailyClosingsProvider).valueOrNull ?? const [];
       final days = {for (final s in snapshots) s.businessDate};
