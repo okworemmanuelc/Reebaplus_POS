@@ -107,3 +107,48 @@ adjustment (`OrdersDao.editCompletedSale`) holding the DIFFERENCE:
   so those layers are never withdrawn. The claim keeps the units per batch in
   phone-only notes (`_local`, removed before the RPC) and the undo adds them back;
   only the restore layers the edit created are withdrawn.
+
+## Addendum: Goods added by an edit can be returned (#732)
+
+This replaces "Plus lines are not returnable through the sale" above. Owner
+decision, 2026-11-04. The 30-day window stays keyed on the parent sale's
+`created_at` for everything on the sale.
+
+- **Returnable** per product = the sale's lines + every plus line - every minus
+  line. The Return and Edit sheets show one row per product and store, keyed by
+  the first line (`ReturnableGoods.lineId`); the editor's quantity is the
+  combined one.
+- **Allocation** (`lib/core/orders/sale_return_allocation.dart`, pure): a return
+  consumes original lines first, then plus lines, oldest adjustment first (ties
+  by line id, so phones agree). Each minus line carries the consumed line's
+  price and cost and names it in `adjusts_line_id`, which may now be a plus line.
+  One return can therefore write several minus lines for one product. Damaged
+  units follow the same order.
+- **Discount** was given on the original goods, so it is shared over what is
+  left of them only. Plus lines take none.
+- **Money.** Paid-standing is pooled over all the goods: tendered `sale` rows on
+  the sale and on every adjustment, minus each header's released share, less what
+  that adjustment kept back to pay for its own added goods (`min(released,
+  added)`). A refund copies the oldest tender of either, since a credit sale's
+  paid added goods have their only `sale` row on the adjustment.
+- **Crates** stay one running position across the sale and its adjustments, so
+  the #711 rule holds for added crates: a returned crate cancels what is owed
+  first, and the deposit is released pro rata by the crates BEYOND what is owed.
+  One crate never both cancels a debt and releases a deposit. This also applies
+  to a sale with no edit that mixes owed and deposit brands.
+- **Full return.** A sale with any adjustment, an add-only edit included, is
+  returned whole by a final adjustment and stays `completed`.
+  `OrdersDao.returnCompletedSale` refuses it (`ReturnRefusal.hasAdjustments`):
+  it reversed only the parent, and the cloud refused that reversal.
+- **Cloud `0251`:** `pos_claim_sale_adjustment` accepts a plus line of an
+  adjustment of this sale as `order_item_id`. The check stays per line, the
+  payload format is unchanged and old claims keep counting. A plus line not yet
+  landed is FK-deferred. Per line is stricter than per product on purpose: a
+  phone that has not seen another return would price units at the wrong line, so
+  it is refused and undone rather than accepted at the wrong money.
+- **Refused edit:** a return still queued on the same phone that consumed its
+  plus lines is withdrawn with it, since its claim could never land.
+- Van sales are unchanged: they cannot gain plus lines (`notForRoadSale`).
+- Receipts are unchanged. The Orders card shows the combined quantity with a note
+  ("12× Star (+2 added 4 Nov)").
+- Deploy `0251` before any phone build carrying this.
