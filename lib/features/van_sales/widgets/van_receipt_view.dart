@@ -83,6 +83,10 @@ class VanReceiptView extends ConsumerStatefulWidget {
   final DateTime? saleDate;
   final String? staffId;
 
+  /// Show the built-in Print / Share row. The redesigned terminal (#729) draws
+  /// its own Print Receipt button and turns this off.
+  final bool showActions;
+
   const VanReceiptView({
     super.key,
     required this.orderNumber,
@@ -94,13 +98,17 @@ class VanReceiptView extends ConsumerStatefulWidget {
     this.isReopened = false,
     this.saleDate,
     this.staffId,
+    this.showActions = true,
   });
 
   @override
-  ConsumerState<VanReceiptView> createState() => _VanReceiptViewState();
+  ConsumerState<VanReceiptView> createState() => VanReceiptViewState();
 }
 
-class _VanReceiptViewState extends ConsumerState<VanReceiptView> {
+class VanReceiptViewState extends ConsumerState<VanReceiptView> {
+  /// Print the receipt now (the terminal's own Print Receipt button, #729).
+  Future<void> printReceipt() => _print();
+
   final ScreenshotController _shot = ScreenshotController();
 
   bool _printing = false;
@@ -190,6 +198,7 @@ class _VanReceiptViewState extends ConsumerState<VanReceiptView> {
             ),
           ),
         ),
+        if (widget.showActions) ...[
         SizedBox(height: context.getRSize(16)),
         Row(
           children: [
@@ -216,6 +225,7 @@ class _VanReceiptViewState extends ConsumerState<VanReceiptView> {
             ),
           ],
         ),
+        ],
       ],
     );
   }

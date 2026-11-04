@@ -174,8 +174,8 @@ void main() {
     testWidgets('a driver sees their run and no write control', (tester) async {
       await pumpRun(tester, driverCtx());
 
-      expect(find.text('Taken on the road'), findsOneWidget);
-      expect(find.text('Sales on this run'), findsOneWidget);
+      expect(find.text('You owe'), findsOneWidget);
+      expect(find.text('Sold this trip'), findsOneWidget);
       // Nothing on this screen writes. These are the three van write actions;
       // none of them has a control here.
       expect(find.text('Record payment'), findsNothing);
@@ -187,7 +187,7 @@ void main() {
       await pumpRun(tester, ctx(rank: GateTier.driver));
 
       expect(find.text('No access'), findsOneWidget);
-      expect(find.text('Taken on the road'), findsNothing);
+      expect(find.text('You owe'), findsNothing);
     });
   });
 }
