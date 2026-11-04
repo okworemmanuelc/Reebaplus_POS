@@ -162,6 +162,40 @@ class OrderService {
     Map<String, double> qtyByLineId,
   ) => _queries.planPartReturn(orderId, qtyByLineId);
 
+  /// #713 — preview of an edit (added / returned / net). No writes.
+  Future<EditSalePlan> planEditSale(
+    String orderId,
+    Map<String, double> newQtyByLineId,
+    List<EditAddedLine> addedLines,
+  ) => _queries.planEditSale(orderId, newQtyByLineId, addedLines);
+
+  /// **Edit a completed sale** (#713). See [OrderCommands.editCompletedSale].
+  Future<EditSaleOutcome> editCompletedSale({
+    required String orderId,
+    required Map<String, double> newQtyByLineId,
+    List<EditAddedLine> addedLines = const [],
+    required String reason,
+    required String staffId,
+    required GateContext gateContext,
+    RefundDestination refundDestination = RefundDestination.cashOrTransfer,
+    String? refundMethod,
+    int? amountPaidKobo,
+    String paymentMethod = 'cash',
+    Map<String, int> depositPaidByManufacturer = const {},
+  }) => _commands.editCompletedSale(
+    orderId: orderId,
+    newQtyByLineId: newQtyByLineId,
+    addedLines: addedLines,
+    reason: reason,
+    staffId: staffId,
+    gateContext: gateContext,
+    refundDestination: refundDestination,
+    refundMethod: refundMethod,
+    amountPaidKobo: amountPaidKobo,
+    paymentMethod: paymentMethod,
+    depositPaidByManufacturer: depositPaidByManufacturer,
+  );
+
   /// #712 — a sale's part returns with their minus lines, live.
   Stream<List<({OrderData adjustment, List<OrderItemDataWithProductData> lines})>>
   watchAdjustmentsWithLines(String orderId) =>

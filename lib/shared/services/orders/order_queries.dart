@@ -132,6 +132,13 @@ class OrderQueries {
     Map<String, double> qtyByLineId,
   ) => _ordersDao.planPartReturn(orderId, qtyByLineId);
 
+  /// #713 — what an edit of a completed sale would do, without writing.
+  Future<EditSalePlan> planEditSale(
+    String orderId,
+    Map<String, double> newQtyByLineId,
+    List<EditAddedLine> addedLines,
+  ) => _ordersDao.planEditSale(orderId, newQtyByLineId, addedLines);
+
   /// #712 — the part returns of a sale with their minus lines, live.
   Stream<List<({OrderData adjustment, List<OrderItemDataWithProductData> lines})>>
   watchAdjustmentsWithLines(String orderId) =>

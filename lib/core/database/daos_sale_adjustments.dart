@@ -602,9 +602,13 @@ extension SaleAdjustments on OrdersDao {
     required RefundDestination destination,
     required String? refundMethod,
     required DateTime now,
+    int? paidOutKobo,
   }) async {
     final toBalance = destination == RefundDestination.balance;
     final parent = plan.parent;
+    // #713 — an edit that also adds goods spends part of the freed paid money
+    // on them, so only `paidOutKobo` (<= the paid share) leaves as a refund.
+    final paidOut = paidOutKobo ?? plan.paidShareKobo;
     final goods = plan.goodsKobo;
     final customerId = parent.customerId;
 
@@ -620,13 +624,13 @@ extension SaleAdjustments on OrdersDao {
           )
           ..limit(1))
         .getSingleOrNull();
-    if (plan.paidShareKobo > 0 && !toBalance && salePay != null) {
+    if (paidOut > 0 && !toBalance && salePay != null) {
       await db.paymentTransactionsDao.postReversalPayment(
         original: salePay.copyWith(orderId: Value(adjustmentId)),
         reversalType: 'refund',
         method: refundMethod,
         performedBy: staffId,
-        amountKobo: plan.paidShareKobo,
+        amountKobo: paidOut,
         reason: 'order_part_returned: $reason',
         at: now,
       );
@@ -668,7 +672,7 @@ extension SaleAdjustments on OrdersDao {
       await leg('credit', goods, 'refund');
       // ...and the paid part leaves with the cash (or stays as credit).
       if (!toBalance && salePay != null) {
-        await leg('debit', plan.paidShareKobo, 'void');
+        await leg('debit', paidOut, 'void');
       }
 
       // The deposit still held, pro rata by crates.
@@ -708,6 +712,9 @@ extension SaleAdjustments on OrdersDao {
   /// its never-uploaded header and minus lines (the held stock, money, cost and
   /// crate rows go through [undoRejectedReversal]). The parent is untouched.
   Future<void> removeRejectedAdjustmentRows(String adjustmentOrderId) async {
+    await (delete(db.orderCrateLines)
+          ..where((l) => l.orderId.equals(adjustmentOrderId) & whereBusiness(l)))
+        .go();
     await (delete(orderItems)
           ..where(
             (i) => i.orderId.equals(adjustmentOrderId) & whereBusiness(i),
@@ -721,5 +728,562 @@ extension SaleAdjustments on OrdersDao {
                 whereBusiness(o),
           ))
         .go();
+  }
+}
+
+// ── Edit a completed sale (#713, ADR 0035 addendum) ─────────────────────────
+//
+// ONE adjustment record holding the DIFFERENCE between the sale as it stands
+// (original minus what was already returned) and the edited cart:
+//   * lowered / removed lines  -> MINUS lines, exactly a part return;
+//   * raised / added lines     -> PLUS lines at TODAY's price for the customer's
+//     tier, written like checkout writes a sale (stock out, FIFO draw-down,
+//     crates issued / deposit taken), all referencing the adjustment's id.
+// Header totals are the NET (added - returned goods); `amount_paid_kobo` stays
+// `-paidShare` released from the sale (what the next return derives paid-standing
+// from). Plus lines are never returnable through the sale: they belong to the
+// adjustment.
+//
+// Money (A = added goods, G = returned goods after discount share, P = paid
+// share of G, net = A - G):
+//   * net > 0: the customer pays `amountPaid` (<= net) now, the rest is charged
+//     to the balance (named customers only); wallet = +G - A + paid.
+//   * net < 0: freed paid money first covers A; only R = max(0, P - A) leaves
+//     through the refund choice (or stays as credit); the rest of G - A cancels
+//     debt on the account.
+//   * the paid-for part of the minus side never leaves as cash while the added
+//     goods still need it, so the till moves by exactly the net.
+
+/// One product added in the editor (quantity > 0).
+class EditAddedLine {
+  const EditAddedLine({required this.productId, required this.quantity});
+  final String productId;
+  final double quantity;
+}
+
+/// What an edit would do, for the pop-up (preview) and the write.
+class EditSalePlan {
+  const EditSalePlan({
+    required this.parent,
+    required this.minus,
+    required this.plusLines,
+    required this.addedKobo,
+    required this.returnedKobo,
+    required this.paidOutKobo,
+  });
+  final OrderData parent;
+
+  /// The part-return half (null when nothing is lowered or removed).
+  final PartReturnPlan? minus;
+
+  /// Plus lines in order: product, units, today's unit price (kobo).
+  final List<({ProductData product, double qty, int unitPriceKobo})> plusLines;
+  final int addedKobo;
+  final int returnedKobo;
+
+  /// Cash that would leave as a refund (0 unless net < 0 and money was paid).
+  final int paidOutKobo;
+
+  int get netKobo => addedKobo - returnedKobo;
+  bool get hasMinus => minus != null;
+  bool get hasPlus => plusLines.isNotEmpty;
+}
+
+/// The result of an edit, for the audit trail, the message and the slip.
+class EditSaleOutcome {
+  const EditSaleOutcome({
+    required this.adjustmentOrderId,
+    required this.adjustmentOrderNumber,
+    required this.parentOrderNumber,
+    required this.storeId,
+    required this.addedKobo,
+    required this.returnedKobo,
+    required this.refundKobo,
+    required this.collectedKobo,
+    required this.chargedKobo,
+  });
+  final String adjustmentOrderId;
+  final String adjustmentOrderNumber;
+  final String parentOrderNumber;
+  final String? storeId;
+  final int addedKobo;
+  final int returnedKobo;
+  final int refundKobo;
+  final int collectedKobo;
+  final int chargedKobo;
+  int get netKobo => addedKobo - returnedKobo;
+}
+
+extension EditCompletedSale on OrdersDao {
+  /// Works out an edit of [orderId] without writing. [newQtyByLineId] maps sale
+  /// line id -> the quantity the line should end at (lines left out stay as
+  /// they are); a value above the line's current quantity adds the difference
+  /// at today's price. [addedLines] are extra products. Throws
+  /// [ReturnRefusedException] when it cannot be done.
+  Future<EditSalePlan> planEditSale(
+    String orderId,
+    Map<String, double> newQtyByLineId,
+    List<EditAddedLine> addedLines,
+  ) async {
+    final parent = await findById(orderId);
+    if (parent == null || parent.kind != 'sale') {
+      throw const ReturnRefusedException(ReturnRefusal.notFound);
+    }
+    final refusal = await returnRefusal(orderId);
+    if (refusal != null) throw ReturnRefusedException(refusal);
+
+    final lines = await (select(orderItems)
+          ..where((i) => i.orderId.equals(orderId) & whereBusiness(i)))
+        .get();
+    final byId = {for (final l in lines) l.id: l};
+    final current = await returnableQtyByLine(orderId);
+
+    final lower = <String, double>{};
+    final raise = <String, double>{};
+    for (final e in newQtyByLineId.entries) {
+      final line = byId[e.key];
+      if (line == null || e.value < 0 || !Qty.isQuarterStep(e.value)) {
+        throw const ReturnRefusedException(ReturnRefusal.badReturnQty);
+      }
+      final now = current[e.key] ?? 0;
+      final diff = e.value - now;
+      if (diff.abs() < 1e-9) continue;
+      if (diff < 0) {
+        lower[e.key] = -diff;
+      } else {
+        if (line.productId == null) {
+          // A quick-sale line has no product to take off the shelf.
+          throw const ReturnRefusedException(ReturnRefusal.badEditQty);
+        }
+        raise[e.key] = diff;
+      }
+    }
+    for (final a in addedLines) {
+      if (a.quantity <= 0 || !Qty.isQuarterStep(a.quantity)) {
+        throw const ReturnRefusedException(ReturnRefusal.badEditQty);
+      }
+    }
+    if (lower.isEmpty && raise.isEmpty && addedLines.isEmpty) {
+      throw const ReturnRefusedException(ReturnRefusal.nothingChanged);
+    }
+
+    // Plus lines: raised lines + added products, priced for the customer's tier.
+    final wantsPlus = raise.isNotEmpty || addedLines.isNotEmpty;
+    if (wantsPlus && parent.vanTripId != null) {
+      throw const ReturnRefusedException(ReturnRefusal.notForRoadSale);
+    }
+    var tier = 'retailer';
+    if (parent.customerId != null) {
+      final c = await (select(customers)
+            ..where((c) => c.id.equals(parent.customerId!) & whereBusiness(c))
+            ..limit(1))
+          .getSingleOrNull();
+      tier = c?.priceTier ?? 'retailer';
+    }
+    final plus = <({ProductData product, double qty, int unitPriceKobo})>[];
+    Future<void> addPlus(String productId, double qty) async {
+      final p = await (select(products)
+            ..where((x) => x.id.equals(productId) & whereBusiness(x))
+            ..limit(1))
+          .getSingleOrNull();
+      if (p == null) {
+        throw const ReturnRefusedException(ReturnRefusal.badEditQty);
+      }
+      plus.add((
+        product: p,
+        qty: qty,
+        unitPriceKobo: tier == 'wholesaler'
+            ? p.wholesalerPriceKobo
+            : p.retailerPriceKobo,
+      ));
+    }
+
+    for (final e in raise.entries) {
+      await addPlus(byId[e.key]!.productId!, e.value);
+    }
+    for (final a in addedLines) {
+      await addPlus(a.productId, a.quantity);
+    }
+    final added = plus.fold<int>(
+      0,
+      (s, l) => s + lineTotalKobo(l.unitPriceKobo, l.qty),
+    );
+
+    final PartReturnPlan? minus = lower.isEmpty
+        ? null
+        : await planPartReturn(orderId, lower);
+    final returned = minus?.goodsKobo ?? 0;
+    final paid = minus?.paidShareKobo ?? 0;
+    return EditSalePlan(
+      parent: parent,
+      minus: minus,
+      plusLines: plus,
+      addedKobo: added,
+      returnedKobo: returned,
+      paidOutKobo: math.max(0, paid - added),
+    );
+  }
+
+  /// **Edit a completed sale** (#713): ONE transaction, ONE adjustment order,
+  /// behind the same guarded `pos_claim_sale_adjustment` envelope as a part
+  /// return (only the minus half is claimed; an add-only edit sends an empty
+  /// claim, which still proves the sale is `completed`). The caller (command)
+  /// has checked the Gate; the DAO re-checks nothing about people, only data.
+  ///
+  /// [amountPaidKobo] is what the customer hands over toward a net amount due
+  /// (default: all of it); the rest is charged to a named customer's balance.
+  /// A walk-in must pay it in full. [depositPaidByManufacturer] is the crate
+  /// deposit taken on the ADDED crates, as at checkout (empty = crates tracked).
+  Future<EditSaleOutcome> editCompletedSale({
+    required String orderId,
+    required Map<String, double> newQtyByLineId,
+    List<EditAddedLine> addedLines = const [],
+    required String reason,
+    required String staffId,
+    required String deviceTag,
+    RefundDestination refundDestination = RefundDestination.cashOrTransfer,
+    String? refundMethod,
+    int? amountPaidKobo,
+    String paymentMethod = 'cash',
+    Map<String, int> depositPaidByManufacturer = const {},
+  }) {
+    assert(refundMethod == null || refundMethod == 'cash' || refundMethod == 'transfer');
+    assert(paymentMethod == 'cash' || paymentMethod == 'transfer');
+    return db.transaction(() async {
+      final plan = await planEditSale(orderId, newQtyByLineId, addedLines);
+      final parent = plan.parent;
+      final customerId = parent.customerId;
+      final net = plan.netKobo;
+      final toBalance = refundDestination == RefundDestination.balance;
+      if (toBalance && customerId == null && plan.paidOutKobo > 0) {
+        throw const ReturnRefusedException(ReturnRefusal.noCustomerBalance);
+      }
+      final deposit = depositPaidByManufacturer.values.fold<int>(0, (a, b) => a + b);
+      if (deposit > 0 && customerId == null) {
+        throw const ReturnRefusedException(ReturnRefusal.badEditQty);
+      }
+      // Net due: what the customer pays now; the rest goes on the balance.
+      final due = math.max(0, net);
+      final tendered = net > 0
+          ? (amountPaidKobo ?? due).clamp(0, due).toInt()
+          : 0;
+      if (net > 0 && customerId == null && tendered < due) {
+        throw const ReturnRefusedException(ReturnRefusal.walkInMustPay);
+      }
+
+      final now = DateTime.now();
+      final adjustmentId = UuidV7.generate();
+      final adjustmentNumber = await generateOrderNumber(deviceTag);
+      final guard = await beginGuardedReversal();
+      final minus = plan.minus;
+      final goodsReturned = plan.returnedKobo;
+
+      final header = OrdersCompanion.insert(
+        id: Value(adjustmentId),
+        businessId: requireBusinessId(),
+        orderNumber: adjustmentNumber,
+        customerId: Value(customerId),
+        totalAmountKobo: net,
+        discountKobo: Value(-(minus?.discountShareKobo ?? 0)),
+        netAmountKobo: net,
+        amountPaidKobo: Value(-(minus?.paidShareKobo ?? 0)),
+        paymentType: parent.paymentType,
+        status: 'completed',
+        cancellationReason: Value(reason),
+        staffId: Value(staffId),
+        storeId: Value(parent.storeId),
+        vanTripId: Value(parent.vanTripId),
+        kind: const Value('adjustment'),
+        adjustsOrderId: Value(orderId),
+        completedAt: Value(now),
+        createdAt: Value(now),
+        lastUpdatedAt: Value(now),
+      );
+      await into(orders).insert(header);
+      await db.syncDao.enqueueUpsert('orders', header);
+
+      final parentLines = {for (final l in minus?.lines ?? <OrderItemData>[]) l.id: l};
+      final claimLines = <Map<String, dynamic>>[];
+
+      // ── Minus half: exactly a part return's rows ──────────────────────────
+      if (minus != null) {
+        for (final entry in minus.qtyByLine.entries) {
+          final line = parentLines[entry.key]!;
+          final q = entry.value;
+          final minusId = UuidV7.generate();
+          var snapshot = <String, dynamic>{};
+          if (line.priceSnapshot != null) {
+            try {
+              final decoded = jsonDecode(line.priceSnapshot!);
+              if (decoded is Map) snapshot = Map<String, dynamic>.from(decoded);
+            } catch (_) {}
+          }
+          snapshot[kAdjustsLineKey] = line.id;
+          final row = OrderItemsCompanion.insert(
+            id: Value(minusId),
+            businessId: requireBusinessId(),
+            orderId: adjustmentId,
+            productId: Value(line.productId),
+            storeId: line.storeId,
+            quantity: -q,
+            unitPriceKobo: line.unitPriceKobo,
+            buyingPriceKobo: Value(line.buyingPriceKobo),
+            totalKobo: -lineTotalKobo(line.unitPriceKobo, q),
+            cataloguePriceKobo: Value(line.cataloguePriceKobo),
+            priceSnapshot: Value(jsonEncode(snapshot)),
+            createdAt: Value(now),
+            lastUpdatedAt: Value(now),
+          );
+          await into(orderItems).insert(row);
+          await db.syncDao.enqueueUpsert('order_items', row);
+          claimLines.add({'order_item_id': line.id, 'quantity': q});
+
+          final productId = line.productId;
+          if (productId == null) continue;
+          final stock = StockTransactionsCompanion.insert(
+            id: Value(UuidV7.generate()),
+            businessId: requireBusinessId(),
+            productId: productId,
+            locationId: line.storeId,
+            quantityDelta: q,
+            movementType: 'return',
+            orderId: Value(adjustmentId),
+            performedBy: Value(staffId),
+            lastUpdatedAt: Value(now),
+          );
+          await into(stockTransactions).insert(stock);
+          await db.syncDao.enqueueUpsert('stock_transactions', stock);
+          await customUpdate(
+            'UPDATE inventory SET quantity = quantity + ? '
+            'WHERE business_id = ? AND product_id = ? AND store_id = ?',
+            variables: [
+              Variable(q),
+              Variable(requireBusinessId()),
+              Variable(productId),
+              Variable(line.storeId),
+            ],
+            updates: {inventory},
+          );
+          await db.costBatchesDao.recordInflowBatch(
+            productId: productId,
+            storeId: line.storeId,
+            quantity: q,
+            costKobo: line.buyingPriceKobo,
+            id: CostBatchesDao.cancelRestoreLayerId(minusId),
+            allowEmpty: true,
+          );
+        }
+        final adjs = await adjustmentsOf(orderId);
+        await db.cratePoolDao.returnCratesForAdjustment(
+          orderIds: [orderId, for (final a in adjs) a.id],
+          adjustmentOrderId: adjustmentId,
+          returnedByBrand: minus.cratesByBrand,
+          staffId: staffId,
+        );
+      }
+
+      // ── Plus half: written like checkout writes a sale ────────────────────
+      if (plan.hasPlus) {
+        final storeId = parent.storeId ?? (minus?.lines.first.storeId);
+        final saleStore = storeId ?? await _firstStoreOf(parent.id);
+        final costLines = [
+          for (var i = 0; i < plan.plusLines.length; i++)
+            SaleCostLine(
+              index: i,
+              productId: plan.plusLines[i].product.id,
+              storeId: saleStore,
+              quantity: plan.plusLines[i].qty,
+            ),
+        ];
+        // Stock guard first: an oversell fails fast, before anything else.
+        for (final l in plan.plusLines) {
+          final n = await customUpdate(
+            'UPDATE inventory SET quantity = quantity - ? '
+            'WHERE business_id = ? AND product_id = ? '
+            'AND store_id = ? AND quantity >= ?',
+            variables: [
+              Variable(l.qty),
+              Variable(requireBusinessId()),
+              Variable(l.product.id),
+              Variable(saleStore),
+              Variable(l.qty),
+            ],
+            updates: {inventory},
+          );
+          if (n == 0) {
+            throw InsufficientStockException(productId: l.product.id, requested: l.qty);
+          }
+        }
+        final cogs = await db.costBatchesDao.drawDownSale(costLines);
+        final plusCompanions = <OrderItemsCompanion>[];
+        for (var i = 0; i < plan.plusLines.length; i++) {
+          final l = plan.plusLines[i];
+          final row = OrderItemsCompanion.insert(
+            id: Value(UuidV7.generate()),
+            businessId: requireBusinessId(),
+            orderId: adjustmentId,
+            productId: Value(l.product.id),
+            storeId: saleStore,
+            quantity: l.qty,
+            unitPriceKobo: l.unitPriceKobo,
+            buyingPriceKobo: Value(cogs[i] ?? 0),
+            totalKobo: lineTotalKobo(l.unitPriceKobo, l.qty),
+            cataloguePriceKobo: Value(l.unitPriceKobo),
+            createdAt: Value(now),
+            lastUpdatedAt: Value(now),
+          );
+          plusCompanions.add(row);
+          await into(orderItems).insert(row);
+          await db.syncDao.enqueueUpsert('order_items', row);
+          final stock = StockTransactionsCompanion.insert(
+            id: Value(UuidV7.generate()),
+            businessId: requireBusinessId(),
+            productId: l.product.id,
+            locationId: saleStore,
+            quantityDelta: -l.qty,
+            movementType: 'sale',
+            orderId: Value(adjustmentId),
+            performedBy: Value(staffId),
+            lastUpdatedAt: Value(now),
+          );
+          await into(stockTransactions).insert(stock);
+          await db.syncDao.enqueueUpsert('stock_transactions', stock);
+          final inv = await (select(inventory)..where(
+                (t) =>
+                    t.productId.equals(l.product.id) &
+                    t.storeId.equals(saleStore) &
+                    whereBusiness(t),
+              ))
+              .getSingle();
+          await db.syncDao.enqueueUpsert('inventory', inv);
+        }
+
+        // Crates issued / deposit taken, as at checkout (registered customers).
+        final biz = await (select(businesses)
+              ..where((b) => b.id.equals(requireBusinessId()))
+              ..limit(1))
+            .getSingleOrNull();
+        final tracksCrates = crateTrackingOn(
+          businessType: biz?.type,
+          tracksEmptyCrates: biz?.tracksEmptyCrates,
+        );
+        if (tracksCrates && customerId != null) {
+          final taken = await cratesTakenByManufacturer(plusCompanions);
+          for (final entry in taken.entries) {
+            final mfr = await (select(manufacturers)
+                  ..where((m) => m.id.equals(entry.key) & whereBusiness(m))
+                  ..limit(1))
+                .getSingleOrNull();
+            final depositPaid = depositPaidByManufacturer[entry.key] ?? 0;
+            await db.orderCrateLinesDao.insertLine(
+              OrderCrateLinesCompanion.insert(
+                businessId: requireBusinessId(),
+                orderId: adjustmentId,
+                manufacturerId: entry.key,
+                cratesTaken: entry.value,
+                depositRateKobo: Value(mfr?.depositAmountKobo ?? 0),
+                depositPaidKobo: Value(depositPaid),
+              ),
+            );
+            if (depositPaid == 0) {
+              await db.cratePoolDao.recordCrateIssueByCustomer(
+                customerId: customerId,
+                manufacturerId: entry.key,
+                quantity: entry.value,
+                performedBy: staffId,
+                orderId: adjustmentId,
+              );
+            }
+          }
+        }
+
+        // Cash taken now (goods + deposit), then the wallet legs.
+        final depositHeld = tracksCrates ? deposit : 0;
+        await _insertCheckoutPaymentRow(
+          orderId: adjustmentId,
+          storeId: saleStore,
+          amountKobo: tendered,
+          method: paymentMethod,
+          type: 'sale',
+          staffId: staffId,
+        );
+        await _insertCheckoutPaymentRow(
+          orderId: adjustmentId,
+          storeId: saleStore,
+          amountKobo: depositHeld,
+          method: paymentMethod,
+          type: 'crate_deposit',
+          staffId: staffId,
+        );
+        if (customerId != null) {
+          // The added goods are a debit; the cash is a credit. The minus half
+          // posts its own credit (goods back) and refund legs below, so the
+          // wallet nets to +G - A + paid.
+          await _postSaleWalletLegs(
+            customerId: customerId,
+            orderId: adjustmentId,
+            staffId: staffId,
+            totalAmountKobo: plan.addedKobo + depositHeld,
+            amountPaidKobo: tendered + depositHeld,
+            paymentMethod: paymentMethod,
+            crateDepositPaidByManufacturer:
+                depositHeld > 0 ? depositPaidByManufacturer : const {},
+          );
+        }
+      }
+
+      // ── Minus-side money (refund / credit), net of the added goods ────────
+      if (minus != null) {
+        await _postPartReturnMoney(
+          plan: minus,
+          adjustmentId: adjustmentId,
+          staffId: staffId,
+          reason: reason,
+          destination: refundDestination,
+          refundMethod: refundMethod,
+          now: now,
+          paidOutKobo: plan.paidOutKobo,
+        );
+      }
+
+      // Claim: only the minus half needs the over-return guard.
+      final businessId = requireBusinessId();
+      final held = (await db.syncDao.queueRowIds(
+        businessId,
+      )).difference(guard.queueBefore).toList();
+      await db.syncDao.enqueue(
+        kAdjustmentClaimAction,
+        jsonEncode(<String, dynamic>{
+          'p_business_id': businessId,
+          'p_actor_id': staffId,
+          'p_parent_order_id': orderId,
+          'p_adjustment_order_id': adjustmentId,
+          'p_reversal_id': guard.reversalId,
+          'p_lines': claimLines,
+        }),
+      );
+      await db.syncDao.holdRowsByOrder(held, guard.reversalId);
+
+      final refunded = (!toBalance && minus != null) ? plan.paidOutKobo : 0;
+      return EditSaleOutcome(
+        adjustmentOrderId: adjustmentId,
+        adjustmentOrderNumber: adjustmentNumber,
+        parentOrderNumber: parent.orderNumber,
+        storeId: parent.storeId,
+        addedKobo: plan.addedKobo,
+        returnedKobo: goodsReturned,
+        refundKobo: refunded,
+        collectedKobo: tendered,
+        chargedKobo: due - tendered,
+      );
+    });
+  }
+
+  Future<String> _firstStoreOf(String orderId) async {
+    final l = await (select(orderItems)
+          ..where((i) => i.orderId.equals(orderId) & whereBusiness(i))
+          ..limit(1))
+        .getSingle();
+    return l.storeId;
   }
 }

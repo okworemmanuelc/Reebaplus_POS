@@ -191,6 +191,7 @@ List<ReceiptLine> buildReceiptLines({
   bool showWalletInfo = false,
   DateTime? reprintDate,
   DateTime? reshareDate,
+  String? slipTitle,
   String? orderStatus,
   double? refundAmount,
   String? storeAddress,
@@ -293,7 +294,9 @@ List<ReceiptLine> buildReceiptLines({
   // Stamps.
   void stamp(String s) =>
       centered(s, bold: true, size: ReceiptTextSize.big);
-  if (reprintDate != null) stamp('REPRINTED');
+  // #713 — an Edit slip names itself and is never a reprint.
+  if (slipTitle != null) stamp(receiptSafe(slipTitle.toUpperCase()));
+  if (reprintDate != null && slipTitle == null) stamp('REPRINTED');
   if (reshareDate != null) stamp('RESHARED');
   if (orderStatus == 'Refunded') {
     stamp('REFUNDED ${receiptMoney(refundAmount ?? total)}');

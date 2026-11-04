@@ -614,6 +614,16 @@ abstract final class Gates {
     rule: Gate.key('sales.cancel'),
   );
 
+  /// Edit a completed sale (#713, PRD #707) — the "Edit sale" action on a
+  /// Completed order. Rides the existing `sales.cancel` key (CEO + Manager by
+  /// default), so there is no new permission key; checked at render and
+  /// re-checked in OrderCommands.editCompletedSale before anything is written.
+  static const NamedGate editSale = NamedGate(
+    name: 'editSale',
+    action: 'Edit Sale',
+    rule: Gate.key('sales.cancel'),
+  );
+
   /// Confirm a pending order — the "Confirm" ("Mark as delivered") action on the
   /// Orders Pending tab (#171 / PRD #155). Confirm is a real money boundary: it
   /// runs the crate-deposit settlement (forfeit / refund / shortfall) before the
