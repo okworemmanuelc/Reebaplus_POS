@@ -815,19 +815,23 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                     onEdit: () => _editCompletedSale(item),
                   );
                 }
-                return _OrderCard(
-                  orderWithItems: item,
-                  status: status,
-                  onMarkAsDelivered: (status == 'pending' && canConfirm)
-                      ? () => _markAsDelivered(item)
-                      : null,
-                  onRefund: (status == 'pending' && canRefund)
-                      ? () => _refundPendingOrder(item.order)
-                      : null,
-                  onAssignRider: status == 'pending'
-                      ? (orderId) => _showRiderSelection(context, orderId)
-                      : null,
-                  onViewReceipt: () => _viewReceipt(context, item),
+                return _pendingAwareCard(
+                  item,
+                  (refundOk) => _OrderCard(
+                    orderWithItems: item,
+                    status: status,
+                    onMarkAsDelivered: (status == 'pending' && canConfirm)
+                        ? () => _markAsDelivered(item)
+                        : null,
+                    onRefund: (status == 'pending' && canRefund && refundOk)
+                        ? () => _refundPendingOrder(item.order)
+                        : null,
+                    onAssignRider: status == 'pending'
+                        ? (orderId) => _showRiderSelection(context, orderId)
+                        : null,
+                    onViewReceipt: () => _viewReceipt(context, item),
+                  ),
+                  checkWindow: status == 'pending' && canRefund,
                 );
               }, childCount: childCount),
             ),
@@ -908,24 +912,29 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                     onEdit: () => _editCompletedSale(item),
                   );
                 }
-                return _OrderCard(
-                  orderWithItems: item,
-                  status: status,
-                  onMarkAsDelivered: (status == 'pending' && canConfirm)
-                      ? () => _markAsDelivered(item)
-                      : null,
-                  // §19.7: Refund replaces the old Cancel button on the Pending
-                  // tab and is hidden unless the user may cancel a sale. It
-                  // reverses the sale (stock, payment, both wallet legs) and moves
-                  // the order to Cancelled. The Completed and Cancelled tabs have
-                  // no Refund button here (§19.8; a crate-free Completed sale offers Return, #551).
-                  onRefund: (status == 'pending' && canRefund)
-                      ? () => _refundPendingOrder(item.order)
-                      : null,
-                  onAssignRider: status == 'pending'
-                      ? (orderId) => _showRiderSelection(context, orderId)
-                      : null,
-                  onViewReceipt: () => _viewReceipt(context, item),
+                return _pendingAwareCard(
+                  item,
+                  (refundOk) => _OrderCard(
+                    orderWithItems: item,
+                    status: status,
+                    onMarkAsDelivered: (status == 'pending' && canConfirm)
+                        ? () => _markAsDelivered(item)
+                        : null,
+                    // §19.7: Refund replaces the old Cancel button on the
+                    // Pending tab and is hidden unless the user may cancel a
+                    // sale. It reverses the sale (stock, payment, both wallet
+                    // legs) and moves the order to Cancelled. The Completed and
+                    // Cancelled tabs have no Refund button here (§19.8; a
+                    // crate-free Completed sale offers Return, #551).
+                    onRefund: (status == 'pending' && canRefund && refundOk)
+                        ? () => _refundPendingOrder(item.order)
+                        : null,
+                    onAssignRider: status == 'pending'
+                        ? (orderId) => _showRiderSelection(context, orderId)
+                        : null,
+                    onViewReceipt: () => _viewReceipt(context, item),
+                  ),
+                  checkWindow: status == 'pending' && canRefund,
                 );
               }, childCount: list.length),
             ),
@@ -933,6 +942,24 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         },
       ),
     ];
+  }
+
+  /// #733 — a Pending order past the refund window keeps its Refund button
+  /// only while nothing was paid on it (the Order Module decides). Younger
+  /// orders skip the lookup.
+  Widget _pendingAwareCard(
+    OrderWithItems item,
+    Widget Function(bool refundOk) card, {
+    required bool checkWindow,
+  }) {
+    if (!checkWindow || !isPastRefundWindow(item.order.createdAt)) {
+      return card(true);
+    }
+    return _RefundWindowGate(
+      key: ValueKey('win-${item.order.id}'),
+      orderId: item.order.id,
+      builder: card,
+    );
   }
 
   // ─────────────────────── ACTION HANDLERS (unchanged) ────────────────────
@@ -1133,6 +1160,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       }
     } on GateDeniedError {
       if (mounted) showGateDenied(context, Gates.refundOrder);
+    } on ReturnRefusedException catch (e) {
+      if (mounted) AppNotification.showError(context, e.message);
     } catch (e) {
       if (mounted) {
         AppNotification.showError(context, 'Could not issue refund: $e');
@@ -1925,6 +1954,35 @@ class _ReturnableCardState extends ConsumerState<_ReturnableCard> {
       ),
     );
   }
+}
+
+/// #733 — asks the Order Module once whether an old Pending order may still
+/// be refunded, and builds the card with the answer (hidden until known).
+class _RefundWindowGate extends ConsumerStatefulWidget {
+  final String orderId;
+  final Widget Function(bool refundOk) builder;
+
+  const _RefundWindowGate({
+    super.key,
+    required this.orderId,
+    required this.builder,
+  });
+
+  @override
+  ConsumerState<_RefundWindowGate> createState() => _RefundWindowGateState();
+}
+
+class _RefundWindowGateState extends ConsumerState<_RefundWindowGate> {
+  late final Future<bool> _ok = ref
+      .read(orderServiceProvider)
+      .canRefundPending(widget.orderId)
+      .catchError((_) => false);
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<bool>(
+    future: _ok,
+    builder: (context, snap) => widget.builder(snap.data == true),
+  );
 }
 
 /// #712 — "Returned: …" lines on the parent sale: one per part return, with the

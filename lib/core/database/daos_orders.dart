@@ -2327,6 +2327,20 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
+  /// #733 — why the Pending-tab Refund of [orderId] is refused, or null when it
+  /// may run. Refused only when the order is past the refund window AND money
+  /// was paid on it ([refundablePaidKobo] > 0); with nothing paid there is
+  /// nothing to refund, so an old order stays cancellable. Not checked inside
+  /// [markCancelled] itself: the system's own reversals (a rejected sale) must
+  /// still run on an old order.
+  Future<ReturnRefusal?> pendingRefundRefusal(String orderId) async {
+    final order = await findById(orderId);
+    if (order == null) return ReturnRefusal.notFound;
+    if (!isPastRefundWindow(order.createdAt)) return null;
+    if (await refundablePaidKobo(orderId) > 0) return ReturnRefusal.tooOld;
+    return null;
+  }
+
   // ── Return a crate-free Completed sale (#551, PRD #337) ────────────────────
 
   /// #710 — money actually tendered on [orderId] and still refundable: the sum
@@ -2397,6 +2411,9 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   Future<ReturnRefusal?> returnRefusal(String orderId) async {
     final order = await findById(orderId);
     if (order == null) return ReturnRefusal.notFound;
+    // #733 — first: a sale past the refund window can't be returned, part
+    // returned or edited, whatever else is true of it.
+    if (isPastRefundWindow(order.createdAt)) return ReturnRefusal.tooOld;
     if (order.status != 'completed') return ReturnRefusal.notCompleted;
     // #711 — crate sales can be Returned. The one case the rules cannot
     // settle on their own: a deposit already KEPT at Confirm (forfeited for
@@ -3839,9 +3856,23 @@ class GuardedReversal {
   final Set<String> queueBefore;
 }
 
+/// #733 — a sale older than this many days (from the ORIGINAL sale's
+/// `created_at`, never an adjustment's) can no longer be refunded, returned or
+/// edited. The device clock decides, like the other offline rules.
+const int kRefundWindowDays = 30;
+
+/// #733 — whether a sale made at [saleCreatedAt] is past the refund window.
+bool isPastRefundWindow(DateTime saleCreatedAt, [DateTime? now]) =>
+    (now ?? DateTime.now()).difference(saleCreatedAt) >
+    const Duration(days: kRefundWindowDays);
+
 /// Why a Completed sale can't be Returned (#551).
 enum ReturnRefusal {
   notFound('That sale could not be found.'),
+  tooOld(
+    'This sale is more than 30 days old, so it can\'t be returned or '
+    'refunded.',
+  ),
   notCompleted('Only a Completed sale can be returned.'),
   depositKept(
     'The crate deposit on this sale was kept for crates that stayed out, so '
