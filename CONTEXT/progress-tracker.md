@@ -7,6 +7,9 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #713: Edit a completed sale, CEO/Manager (2026-11-04, branch `feat/713-edit-sale`)
+- `OrdersDao.editCompletedSale`/`planEditSale` (daos_sale_adjustments.dart), `Gates.editSale` (sales.cancel), command+service, Edit sale button + editor (`edit_sale_sheet.dart`) + Edit slip. Reports split plus/minus. New cloud `0248` (recost counts plus lines) NOT deployed. Tests: test/orders/edit_sale_test.dart. ADR 0035 addendum. Open: pos-parity issue in reebaplus-web on merge; edit-time crate deposit UI not exposed (crates tracked).
+
 ### Issue #712: Sale adjustment record + part return (2026-11-03, branch `feat/712-sale-adjustment`)
 - Drift **v105** + cloud **0247_sale_adjustments.sql** (NOT applied; deploy before any v105 client pushes): `orders.kind` (sale|adjustment) + `orders.adjusts_order_id`; `order_items.quantity` CHECK `<> 0`; cloud-only `sale_adjustment_claims` + `pos_claim_sale_adjustment` (over-return guard); full-cancel claim refuses a sale with an adjustment; recost ignores adjustment orders. ADR 0035.
 - `OrdersDao.returnPartOfSale` / `planPartReturn` / `returnableQtyByLine` (`daos_sale_adjustments.dart`), `CratePoolDao.returnCratesForAdjustment` / `emptiesBackFor`; Return pop-up has per-line "up to N" steppers; whole-sale return with no earlier part return still uses `markCancelled`.
