@@ -219,6 +219,7 @@ void main() {
         ),
       );
       await tester.tap(find.text('open'));
+      await tester.pump();
       await tester.pump(const Duration(seconds: 1));
       expect(find.textContaining('+2 added 4 Nov at N1,200'), findsOneWidget);
       expect(find.text('12'), findsOneWidget);
