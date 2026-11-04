@@ -627,6 +627,20 @@ final List<SyncedTable> kSyncRegistry = [
       defaults: {'crate_money_arrangement': kCrateMoneyArrangementNone},
     ),
   ),
+  // #748: van drivers — a plain name (+ phone), no sign-in. Pulled BEFORE
+  // `stores` (whose `van_driver_id` points here) and the van trips. Soft-deleted
+  // via is_deleted, never hard-deleted.
+  SyncedTable(
+    name: 'van_drivers',
+    pushPriority: 1,
+    tenantScoped: true,
+    restore: Restore.plain(
+      (db) => db.vanDrivers,
+      VanDriverData.fromJson,
+      resilient: true,
+      defaults: {'isDeleted': false},
+    ),
+  ),
   SyncedTable(
     name: 'stores',
     pushPriority: 2,
@@ -998,6 +1012,9 @@ final List<SyncedTable> kSyncRegistry = [
       'id',
       'business_id',
       'driver_user_id',
+      // #748: the van and the driver a row was posted for; set at insert.
+      'van_store_id',
+      'van_driver_id',
       'trip_id',
       'type',
       'amount_kobo',

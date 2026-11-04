@@ -156,7 +156,7 @@ void main() {
   }) async {
     final r = await db.vanTripsDao.dispatchLoad(
       vanStoreId: vanId,
-      driverUserId: driverId,
+      vanDriverId: driverId,
       sourceStoreId: warehouseId,
       performedBy: managerId,
       dispatchEventId: UuidV7.generate(),

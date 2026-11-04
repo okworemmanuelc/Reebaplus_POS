@@ -574,7 +574,7 @@ void main() {
               businessId: businessId,
               vanStoreId: vanStore,
               sourceStoreId: (await db.storesDao.getActiveStores()).first.id,
-              driverUserId: driver,
+              driverUserId: Value(driver),
               status: const Value('open'),
             ),
           );
@@ -596,7 +596,7 @@ void main() {
               businessId: businessId,
               vanStoreId: vanStore,
               sourceStoreId: warehouse,
-              driverUserId: driver,
+              driverUserId: Value(driver),
               status: const Value('open'),
             ),
           );
@@ -618,7 +618,7 @@ void main() {
               businessId: businessId,
               vanStoreId: vanStore,
               sourceStoreId: warehouse,
-              driverUserId: driver,
+              driverUserId: Value(driver),
               status: const Value('closed'),
               closedAt: Value(DateTime.now()),
             ),

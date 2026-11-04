@@ -96,6 +96,13 @@ void main() {
               pin: '0000',
             ),
           );
+      await db.into(db.vanDrivers).insert(
+        VanDriversCompanion.insert(
+          id: Value(driverId),
+          businessId: b,
+          name: 'Dan Driver',
+        ),
+      );
 
       await db.into(db.userBusinesses).insert(
             UserBusinessesCompanion.insert(
@@ -138,7 +145,7 @@ void main() {
                 id: Value(tripId),
                 businessId: b,
                 vanStoreId: vanStoreId,
-                driverUserId: driverId,
+                vanDriverId: Value(driverId),
                 sourceStoreId: env.storeId,
                 status: const Value(kVanTripStatusClosed),
                 openedAt: Value(openedAt),
@@ -187,7 +194,7 @@ void main() {
               DriverLedgerEntriesCompanion.insert(
                 id: Value(UuidV7.generate()),
                 businessId: b,
-                driverUserId: driverId,
+                vanDriverId: Value(driverId),
                 tripId: Value(tripId),
                 type: i.isOdd ? kDriverLedgerTypeLoad : kDriverLedgerTypePaymentCash,
                 amountKobo: 250000 * i,
@@ -211,7 +218,7 @@ void main() {
           tester,
           env: env,
           size: size,
-          screen: DriverProfileScreen(driverUserId: driverId),
+          screen: DriverProfileScreen(vanDriverId: driverId),
           grantedKeys: driverGrants,
           settle: false,
         );
@@ -264,6 +271,13 @@ void main() {
               pin: '0000',
             ),
           );
+      await db.into(db.vanDrivers).insert(
+        VanDriversCompanion.insert(
+          id: Value(driverId),
+          businessId: b,
+          name: 'Empty Dan',
+        ),
+      );
 
       await db.into(db.userBusinesses).insert(
             UserBusinessesCompanion.insert(
@@ -287,7 +301,7 @@ void main() {
           tester,
           env: env,
           size: size,
-          screen: DriverProfileScreen(driverUserId: driverId),
+          screen: DriverProfileScreen(vanDriverId: driverId),
           grantedKeys: driverGrants,
           settle: false,
         );
@@ -350,6 +364,13 @@ void main() {
               pin: '0000',
             ),
           );
+      await db.into(db.vanDrivers).insert(
+        VanDriversCompanion.insert(
+          id: Value(driverId),
+          businessId: b,
+          name: 'Scroll Dan',
+        ),
+      );
 
       await db.into(db.userBusinesses).insert(
             UserBusinessesCompanion.insert(
@@ -391,7 +412,7 @@ void main() {
                 id: Value(tripId),
                 businessId: b,
                 vanStoreId: vanStoreId,
-                driverUserId: driverId,
+                vanDriverId: Value(driverId),
                 sourceStoreId: env.storeId,
                 status: const Value(kVanTripStatusClosed),
                 openedAt: Value(openedAt),
@@ -424,7 +445,7 @@ void main() {
               DriverLedgerEntriesCompanion.insert(
                 id: Value(UuidV7.generate()),
                 businessId: b,
-                driverUserId: driverId,
+                vanDriverId: Value(driverId),
                 tripId: Value(tripId),
                 type: kDriverLedgerTypeLoad,
                 amountKobo: 200000 * i,
@@ -447,7 +468,7 @@ void main() {
         tester,
         env: env,
         size: pixel7Portrait,
-        screen: DriverProfileScreen(driverUserId: driverId),
+        screen: DriverProfileScreen(vanDriverId: driverId),
         grantedKeys: driverGrants,
         settle: false,
       );
@@ -494,7 +515,7 @@ void main() {
         tester,
         env: env,
         size: pixel7Portrait,
-        screen: DriverProfileScreen(driverUserId: driverId),
+        screen: DriverProfileScreen(vanDriverId: driverId),
         grantedKeys: driverGrants,
         settle: false,
       );
@@ -536,7 +557,7 @@ void main() {
           env: env,
           size: size,
           textScaler: const TextScaler.linear(1.3),
-          screen: DriverProfileScreen(driverUserId: driverId),
+          screen: DriverProfileScreen(vanDriverId: driverId),
           grantedKeys: driverGrants,
           settle: false,
         );
@@ -560,7 +581,7 @@ void main() {
         tester,
         env: env,
         size: pixel7Portrait,
-        screen: DriverProfileScreen(driverUserId: driverId, initialTab: 'sales'),
+        screen: DriverProfileScreen(vanDriverId: driverId, initialTab: 'sales'),
         grantedKeys: driverGrants,
         settle: false,
       );

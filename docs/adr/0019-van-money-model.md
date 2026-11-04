@@ -180,3 +180,29 @@ before that flag is ever enabled.
 
 Full design, worked money trail, and the complete edge-case list:
 `docs/design/van-sales-spec.md`. Product record: PRD #139 as amended by PRD #161.
+
+## Amendment (#748, 2026-11-04) - a driver is a plain name; debt is the driver's
+
+A driver no longer needs an invite, a sign-in or a `users` row, and is not a
+customer. A van loads with no driver at all.
+
+- New synced table `van_drivers` (name, optional phone, soft delete). The van
+  may carry a default driver (`stores.van_driver_id`); a trip carries the driver
+  that answers for it (`van_trips.van_driver_id`, pre-filled from the van, may be
+  changed or cleared, also after the trip).
+- **Debt belongs to the driver, never to the van.** Balance = Sigma
+  `signed_amount_kobo` over the driver's rows, across every trip and van. A new
+  driver never inherits the last driver's debt. A ledger row with a trip belongs
+  to whoever that trip's driver is NOW, so setting a driver on a trip moves its
+  debt without editing a ledger amount. A row with no trip belongs to its own
+  `van_driver_id`. Trips with no driver form "No driver assigned" per van.
+- `driver_ledger_entries` also carries `van_store_id`. `driver_user_id` is
+  nullable on it and on `van_trips`; old rows keep it. Backfill (cloud 0251 and
+  Drift v108 identically): one `van_drivers` row per distinct old
+  `driver_user_id`, id = that user's id, name and phone from the user.
+- One open trip per VAN stays enforced. One driver may now be out on two vans
+  (the per-driver index on `driver_user_id` is harmless: new rows are null).
+- The van-return empties reason is `van_return:<tripId>`; the old
+  `van_return:<tripId>:<driverUserId>` still parses.
+- Money rules are unchanged: balance = loaded - good returns - paid -
+  write-offs; profit, close and the empties credit are the same.

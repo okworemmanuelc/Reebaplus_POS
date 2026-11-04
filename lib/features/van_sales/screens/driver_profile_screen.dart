@@ -14,13 +14,14 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
+import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
-import 'package:reebaplus_pos/core/van_sales/driver_directory.dart';
 import 'package:reebaplus_pos/core/van_sales/driver_vans.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/drivers_list_screen.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/van_reconcile_screen.dart';
 import 'package:reebaplus_pos/features/van_sales/widgets/driver_ledger_entry_tile.dart';
+import 'package:reebaplus_pos/features/van_sales/widgets/van_driver_pickers.dart';
 import 'package:reebaplus_pos/features/van_sales/widgets/van_sale_receipt_sheet.dart';
 import 'package:reebaplus_pos/shared/models/order_status.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
@@ -41,38 +42,42 @@ Key driverLedgerRowKey(String entryId) =>
 Key driverCrateRowKey(String tripId) =>
     ValueKey('$kDriverCrateRowKeyPrefix$tripId');
 
-/// One driver's whole money story (#146, PRD #139 / ADR 0019, van-sales spec
-/// §9.5 / §11).
+/// One driver's whole money story (#146, reworked by #748; PRD #139 / ADR 0019,
+/// van-sales spec §9.5 / §11).
 ///
-/// The supplier/customer detail screen, keyed on a **staff user id** — because
-/// that is what a van-sales driver is (spec §3 / §14: a `users` row with the
-/// seeded Driver role, never a row in the dormant legacy `drivers` table).
+/// The supplier/customer detail screen, keyed on a **van driver** (a plain
+/// `van_drivers` row: a name and an optional phone, no sign-in). With
+/// [noDriverVanStoreId] set instead it is the "No driver assigned" account of one
+/// van: the trips loaded with nobody named, and what they owe. Setting a driver
+/// on one of those trips moves its debt to that driver.
 ///
 /// ## The one decision worth stating: the period selector does NOT move the
 /// balance.
 ///
-/// A driver's balance is `Σ signed_amount_kobo` over **every** entry, ever
-/// (spec §4.4 — the ledger's axis is the person, cross-trip). It is a *current
-/// position*, not a period figure: "what does Dan owe me right now". Filtering
-/// it to "This Month" would produce a number that answers no question anybody
-/// asks — a partial sum whose complement is invisible — and would quietly
-/// contradict the same driver's figure on the Van Sales hub, the reconcile
-/// screen and the Drivers list, all of which show the cross-trip balance.
-///
-/// So the balance card is always current, and says so. The **period selector
-/// scopes the history below it**: trips by their opening date, sales by when
-/// they were rung, ledger rows by their activity date. The Ledger tab's In/Out
-/// summary is the period-scoped money figure — money that moved in the window,
-/// sitting next to a balance that is a position rather than a flow.
+/// A driver's balance is `Σ signed_amount_kobo` over **every** entry, ever,
+/// across every trip and van. It is a *current position*, not a period figure:
+/// "what does Dan owe me right now". The balance card is always current, and says
+/// so. The **period selector scopes the history below it**: trips by their
+/// opening date, sales by when they were rung, ledger rows by their activity
+/// date.
 class DriverProfileScreen extends ConsumerStatefulWidget {
-  final String driverUserId;
+  /// The driver, or null for a van's "No driver assigned" account.
+  final String? vanDriverId;
+
+  /// The van whose driverless trips this screen shows (when [vanDriverId] is
+  /// null).
+  final String? noDriverVanStoreId;
   final String initialTab;
 
   const DriverProfileScreen({
     super.key,
-    required this.driverUserId,
+    this.vanDriverId,
+    this.noDriverVanStoreId,
     this.initialTab = 'trips',
-  });
+  }) : assert(
+         (vanDriverId == null) != (noDriverVanStoreId == null),
+         'Pass a driver or a van, not both',
+       );
 
   @override
   ConsumerState<DriverProfileScreen> createState() =>
@@ -189,51 +194,54 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
   }
 
   Widget _build(BuildContext context) {
-    final entries = ref.watch(vanDriverEntriesProvider);
-    final users =
-        ref.watch(usersByBusinessProvider).valueOrNull ??
-        const <String, UserData>{};
-    final user = users[widget.driverUserId];
+    final driverId = widget.vanDriverId;
+    final vanId = widget.noDriverVanStoreId;
+    final driverRows =
+        ref.watch(vanDriverRowsProvider).valueOrNull ?? const <VanDriverData>[];
+    final driver = driverId == null
+        ? null
+        : driverRows.where((d) => d.id == driverId).firstOrNull;
 
-    if (user == null) {
+    if (driverId != null && driver == null) {
       return _shell(
         context,
         const Center(child: Text('That driver is no longer on this device.')),
       );
     }
 
-    final standing = entries
-        .where((e) => e.userId == widget.driverUserId)
-        .map((e) => e.standing)
-        .firstOrNull;
-    final balanceKobo =
-        ref.watch(driverBalanceProvider(widget.driverUserId)).valueOrNull ?? 0;
-    final trips =
-        ref.watch(driverTripsProvider(widget.driverUserId)).valueOrNull ??
-        const <VanTripData>[];
-    final sales =
-        ref.watch(driverVanSalesProvider(widget.driverUserId)).valueOrNull ??
-        const <OrderWithItems>[];
-    final ledger =
-        ref
-            .watch(driverLedgerHistoryProvider(widget.driverUserId))
-            .valueOrNull ??
-        const <DriverLedgerEntryData>[];
-
     final vanNameById = {
       for (final v in ref.watch(vansProvider)) v.id: v.name,
     };
+    final name = driver?.name ?? 'No driver assigned';
+    final isRemoved = driver?.isDeleted ?? false;
 
-    // The header's fallback source (#208 item 3). Filtered through
-    // [vanNameById] — which holds vans and nothing else — so a warehouse
-    // assignment can never be read as a van. It is only consulted when the
-    // trips name nothing, which is the long-dormant-driver case: every trip
-    // they ever ran fell out of the local pull window.
+    final balanceKobo = driverId != null
+        ? ref.watch(driverBalanceProvider(driverId)).valueOrNull ?? 0
+        : ref.watch(vanNoDriverBalanceProvider(vanId!)).valueOrNull ?? 0;
+    final trips = driverId != null
+        ? ref.watch(driverTripsProvider(driverId)).valueOrNull ??
+              const <VanTripData>[]
+        : [
+            for (final t
+                in ref.watch(vanTripsForVanProvider(vanId!)).valueOrNull ??
+                    const <VanTripData>[])
+              if (t.vanDriverId == null) t,
+          ];
+    final sales = driverId != null
+        ? ref.watch(driverVanSalesProvider(driverId)).valueOrNull ??
+              const <OrderWithItems>[]
+        : const <OrderWithItems>[];
+    final ledger = driverId != null
+        ? ref.watch(driverLedgerHistoryProvider(driverId)).valueOrNull ??
+              const <DriverLedgerEntryData>[]
+        : ref.watch(vanNoDriverHistoryProvider(vanId!)).valueOrNull ??
+              const <DriverLedgerEntryData>[];
+
+    // The header's fallback source (#208 item 3): the vans this driver is the
+    // default driver of. Filtered through [vanNameById], which holds vans only.
     final assignedVanStoreIds = [
-      for (final s
-          in ref.watch(myUserStoresProvider(widget.driverUserId)).valueOrNull ??
-              const <UserStoreData>[])
-        if (vanNameById.containsKey(s.storeId)) s.storeId,
+      for (final v in ref.watch(vansProvider))
+        if (v.vanDriverId == driverId && driverId != null) v.id,
     ];
 
     // Everything below the balance card is period-scoped; the balance is not.
@@ -275,8 +283,12 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
         headerSlivers: [
           SliverToBoxAdapter(
             child: _Header(
-              user: user,
-              standing: standing,
+              name: name,
+              phone: driver?.phone,
+              isRemoved: isRemoved,
+              onAssignVan: driverId == null || isRemoved
+                  ? null
+                  : () => _assignVan(driverId),
               trips: trips,
               vanNameById: vanNameById,
               assignedVanStoreIds: assignedVanStoreIds,
@@ -291,7 +303,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
             slivers: _tripsTabSlivers(
               trips: periodTrips,
               vanNameById: vanNameById,
-              driverName: user.name,
+              driverName: name,
             ),
           ),
           TabSliverView(
@@ -317,8 +329,44 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
             ),
         ],
       ),
-      subtitle: user.name,
+      subtitle: name,
     );
+  }
+
+  /// Make this driver the usual driver of a van (pre-fills its next load).
+  Future<void> _assignVan(String driverId) async {
+    final vans = ref.read(vansProvider);
+    if (vans.isEmpty) {
+      AppNotification.showError(context, 'There are no vans set up yet.');
+      return;
+    }
+    final van = await showModalBottomSheet<StoreData>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Text(
+                'Which van does this driver usually take?',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+            for (final v in vans)
+              ListTile(
+                title: Text(v.name),
+                trailing: v.vanDriverId == driverId
+                    ? const Icon(Icons.check)
+                    : null,
+                onTap: () => Navigator.pop(ctx, v),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (van == null) return;
+    await ref.read(databaseProvider).vanDriversDao.assignToVan(van.id, driverId);
   }
 
   /// "Driver since" — the first trip they ever ran.
@@ -863,8 +911,10 @@ class _LostCratesLine extends ConsumerWidget {
 // ── Header ──────────────────────────────────────────────────────────────────
 
 class _Header extends StatelessWidget {
-  final UserData user;
-  final DriverStanding? standing;
+  final String name;
+  final String? phone;
+  final bool isRemoved;
+  final VoidCallback? onAssignVan;
   final List<VanTripData> trips;
   final Map<String, String> vanNameById;
 
@@ -875,8 +925,10 @@ class _Header extends StatelessWidget {
   final DateTime? joinedAt;
 
   const _Header({
-    required this.user,
-    required this.standing,
+    required this.name,
+    required this.phone,
+    required this.isRemoved,
+    required this.onAssignVan,
     required this.trips,
     required this.vanNameById,
     required this.assignedVanStoreIds,
@@ -926,7 +978,7 @@ class _Header extends StatelessWidget {
             ),
             child: Center(
               child: Text(
-                _initials(user.name),
+                _initials(name),
                 style: TextStyle(
                   fontSize: context.getRFontSize(22),
                   fontWeight: FontWeight.w900,
@@ -944,7 +996,7 @@ class _Header extends StatelessWidget {
                   children: [
                     Flexible(
                       child: Text(
-                        user.name,
+                        name,
                         style: TextStyle(
                           fontSize: context.getRFontSize(18),
                           fontWeight: FontWeight.w800,
@@ -954,18 +1006,15 @@ class _Header extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    SizedBox(width: context.getRSize(8)),
-                    DriverStandingBadge(
-                      standing: standing ?? DriverStanding.removed,
-                    ),
+                    if (isRemoved) ...[
+                      SizedBox(width: context.getRSize(8)),
+                      const RemovedDriverBadge(),
+                    ],
                   ],
                 ),
-                if ((user.phone ?? '').isNotEmpty) ...[
+                if ((phone ?? '').isNotEmpty) ...[
                   SizedBox(height: context.getRSize(6)),
-                  _InfoRow(
-                    icon: AppIcons.phone,
-                    text: user.phone!,
-                  ),
+                  _InfoRow(icon: AppIcons.phone, text: phone!),
                 ],
                 SizedBox(height: context.getRSize(4)),
                 _InfoRow(icon: AppIcons.supplier, text: _vans),
@@ -976,14 +1025,20 @@ class _Header extends StatelessWidget {
                       ? 'No trips yet'
                       : 'Driving since ${DateFormat('d MMM y').format(joinedAt!)}',
                 ),
-                if (standing == DriverStanding.removed) ...[
+                if (isRemoved) ...[
                   SizedBox(height: context.getRSize(8)),
                   Text(
-                    'No longer with the business. They stay on the Drivers '
+                    'No longer a driver here. They stay on the Drivers '
                     'list until this account is settled or written off.',
                     style: t.textTheme.bodySmall?.copyWith(color: subtext),
                   ),
                 ],
+                if (onAssignVan != null)
+                  TextButton.icon(
+                    onPressed: onAssignVan,
+                    icon: const Icon(Icons.local_shipping_outlined, size: 18),
+                    label: const Text('Assign to a van'),
+                  ),
               ],
             ),
           ),
@@ -1120,7 +1175,28 @@ class _TripRow extends ConsumerWidget {
                     _Chip(label: 'Corrected later', color: semantic.info),
                 ],
               ),
-              SizedBox(height: context.getRSize(10)),
+              SizedBox(height: context.getRSize(4)),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Driver: $driverName',
+                      style: TextStyle(
+                        fontSize: context.getRFontSize(12),
+                        color: subtext,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () =>
+                        showAssignTripDriverSheet(context, ref, trip),
+                    child: Text(
+                      trip.vanDriverId == null ? 'Set driver' : 'Change',
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: context.getRSize(6)),
               Row(
                 children: [
                   Expanded(

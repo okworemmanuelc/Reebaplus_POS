@@ -137,7 +137,7 @@ void main() {
   }) async {
     final r = await db.vanTripsDao.dispatchLoad(
       vanStoreId: van,
-      driverUserId: driverId,
+      vanDriverId: driverId,
       sourceStoreId: warehouseId,
       lines: [
         VanLoadLine(
@@ -434,7 +434,7 @@ void main() {
       final mine = await loadVan(van: vanA, qty: 10);
       await db.vanTripsDao.dispatchLoad(
         vanStoreId: vanB,
-        driverUserId: otherDriver,
+        vanDriverId: otherDriver,
         sourceStoreId: warehouseId,
         lines: [
           VanLoadLine(

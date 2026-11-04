@@ -51,6 +51,8 @@ void main() {
     'businesses',
     'crate_size_groups',
     'manufacturers',
+    // #748: van drivers, before stores (stores.van_driver_id points here).
+    'van_drivers',
     'stores',
     // #423: per-store delivery areas, right after their parent store.
     'store_delivery_areas',
@@ -155,6 +157,7 @@ void main() {
     'staff_pay_totals', // #669
     'users',
     'sessions',
+    'van_drivers', // #748
     'stores',
     'store_delivery_areas', // #423
     'manufacturers',
@@ -431,6 +434,7 @@ void main() {
       'businesses': 0,
       'profiles': 1,
       'users': 1,
+      'van_drivers': 1, // #748
       'stores': 2,
       'manufacturers': 3,
       'crate_size_groups': 3,
@@ -592,6 +596,8 @@ void main() {
         'id',
         'business_id',
         'driver_user_id',
+        'van_store_id',
+        'van_driver_id',
         'trip_id',
         'type',
         'amount_kobo',

@@ -116,7 +116,7 @@ Future<_Run> _boot() async {
   );
   final result = await db.vanTripsDao.dispatchLoad(
     vanStoreId: vanId,
-    driverUserId: driverId,
+    vanDriverId: driverId,
     sourceStoreId: warehouseId,
     lines: [
       VanLoadLine(productId: productId, quantity: 100, loadPriceKobo: _load),

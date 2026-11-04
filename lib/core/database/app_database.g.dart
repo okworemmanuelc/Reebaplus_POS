@@ -2272,6 +2272,473 @@ class ManufacturersCompanion extends UpdateCompanion<ManufacturerData> {
   }
 }
 
+class $VanDriversTable extends VanDrivers
+    with TableInfo<$VanDriversTable, VanDriverData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $VanDriversTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: () => UuidV7.generate(),
+  );
+  static const VerificationMeta _businessIdMeta = const VerificationMeta(
+    'businessId',
+  );
+  @override
+  late final GeneratedColumn<String> businessId = GeneratedColumn<String>(
+    'business_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES businesses (id)',
+    ),
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _phoneMeta = const VerificationMeta('phone');
+  @override
+  late final GeneratedColumn<String> phone = GeneratedColumn<String>(
+    'phone',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _isDeletedMeta = const VerificationMeta(
+    'isDeleted',
+  );
+  @override
+  late final GeneratedColumn<bool> isDeleted = GeneratedColumn<bool>(
+    'is_deleted',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_deleted" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _lastUpdatedAtMeta = const VerificationMeta(
+    'lastUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'last_updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    businessId,
+    name,
+    phone,
+    isDeleted,
+    createdAt,
+    lastUpdatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'van_drivers';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<VanDriverData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('business_id')) {
+      context.handle(
+        _businessIdMeta,
+        businessId.isAcceptableOrUnknown(data['business_id']!, _businessIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_businessIdMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('phone')) {
+      context.handle(
+        _phoneMeta,
+        phone.isAcceptableOrUnknown(data['phone']!, _phoneMeta),
+      );
+    }
+    if (data.containsKey('is_deleted')) {
+      context.handle(
+        _isDeletedMeta,
+        isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('last_updated_at')) {
+      context.handle(
+        _lastUpdatedAtMeta,
+        lastUpdatedAt.isAcceptableOrUnknown(
+          data['last_updated_at']!,
+          _lastUpdatedAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  VanDriverData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return VanDriverData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      businessId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}business_id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      phone: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}phone'],
+      ),
+      isDeleted: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_deleted'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $VanDriversTable createAlias(String alias) {
+    return $VanDriversTable(attachedDatabase, alias);
+  }
+}
+
+class VanDriverData extends DataClass implements Insertable<VanDriverData> {
+  final String id;
+  final String businessId;
+  final String name;
+  final String? phone;
+  final bool isDeleted;
+  final DateTime createdAt;
+  final DateTime lastUpdatedAt;
+  const VanDriverData({
+    required this.id,
+    required this.businessId,
+    required this.name,
+    this.phone,
+    required this.isDeleted,
+    required this.createdAt,
+    required this.lastUpdatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['business_id'] = Variable<String>(businessId);
+    map['name'] = Variable<String>(name);
+    if (!nullToAbsent || phone != null) {
+      map['phone'] = Variable<String>(phone);
+    }
+    map['is_deleted'] = Variable<bool>(isDeleted);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    return map;
+  }
+
+  VanDriversCompanion toCompanion(bool nullToAbsent) {
+    return VanDriversCompanion(
+      id: Value(id),
+      businessId: Value(businessId),
+      name: Value(name),
+      phone: phone == null && nullToAbsent
+          ? const Value.absent()
+          : Value(phone),
+      isDeleted: Value(isDeleted),
+      createdAt: Value(createdAt),
+      lastUpdatedAt: Value(lastUpdatedAt),
+    );
+  }
+
+  factory VanDriverData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return VanDriverData(
+      id: serializer.fromJson<String>(json['id']),
+      businessId: serializer.fromJson<String>(json['businessId']),
+      name: serializer.fromJson<String>(json['name']),
+      phone: serializer.fromJson<String?>(json['phone']),
+      isDeleted: serializer.fromJson<bool>(json['isDeleted']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'businessId': serializer.toJson<String>(businessId),
+      'name': serializer.toJson<String>(name),
+      'phone': serializer.toJson<String?>(phone),
+      'isDeleted': serializer.toJson<bool>(isDeleted),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+    };
+  }
+
+  VanDriverData copyWith({
+    String? id,
+    String? businessId,
+    String? name,
+    Value<String?> phone = const Value.absent(),
+    bool? isDeleted,
+    DateTime? createdAt,
+    DateTime? lastUpdatedAt,
+  }) => VanDriverData(
+    id: id ?? this.id,
+    businessId: businessId ?? this.businessId,
+    name: name ?? this.name,
+    phone: phone.present ? phone.value : this.phone,
+    isDeleted: isDeleted ?? this.isDeleted,
+    createdAt: createdAt ?? this.createdAt,
+    lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+  );
+  VanDriverData copyWithCompanion(VanDriversCompanion data) {
+    return VanDriverData(
+      id: data.id.present ? data.id.value : this.id,
+      businessId: data.businessId.present
+          ? data.businessId.value
+          : this.businessId,
+      name: data.name.present ? data.name.value : this.name,
+      phone: data.phone.present ? data.phone.value : this.phone,
+      isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastUpdatedAt: data.lastUpdatedAt.present
+          ? data.lastUpdatedAt.value
+          : this.lastUpdatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VanDriverData(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('name: $name, ')
+          ..write('phone: $phone, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    businessId,
+    name,
+    phone,
+    isDeleted,
+    createdAt,
+    lastUpdatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is VanDriverData &&
+          other.id == this.id &&
+          other.businessId == this.businessId &&
+          other.name == this.name &&
+          other.phone == this.phone &&
+          other.isDeleted == this.isDeleted &&
+          other.createdAt == this.createdAt &&
+          other.lastUpdatedAt == this.lastUpdatedAt);
+}
+
+class VanDriversCompanion extends UpdateCompanion<VanDriverData> {
+  final Value<String> id;
+  final Value<String> businessId;
+  final Value<String> name;
+  final Value<String?> phone;
+  final Value<bool> isDeleted;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> lastUpdatedAt;
+  final Value<int> rowid;
+  const VanDriversCompanion({
+    this.id = const Value.absent(),
+    this.businessId = const Value.absent(),
+    this.name = const Value.absent(),
+    this.phone = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  VanDriversCompanion.insert({
+    this.id = const Value.absent(),
+    required String businessId,
+    required String name,
+    this.phone = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : businessId = Value(businessId),
+       name = Value(name);
+  static Insertable<VanDriverData> custom({
+    Expression<String>? id,
+    Expression<String>? businessId,
+    Expression<String>? name,
+    Expression<String>? phone,
+    Expression<bool>? isDeleted,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastUpdatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (businessId != null) 'business_id': businessId,
+      if (name != null) 'name': name,
+      if (phone != null) 'phone': phone,
+      if (isDeleted != null) 'is_deleted': isDeleted,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  VanDriversCompanion copyWith({
+    Value<String>? id,
+    Value<String>? businessId,
+    Value<String>? name,
+    Value<String?>? phone,
+    Value<bool>? isDeleted,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? lastUpdatedAt,
+    Value<int>? rowid,
+  }) {
+    return VanDriversCompanion(
+      id: id ?? this.id,
+      businessId: businessId ?? this.businessId,
+      name: name ?? this.name,
+      phone: phone ?? this.phone,
+      isDeleted: isDeleted ?? this.isDeleted,
+      createdAt: createdAt ?? this.createdAt,
+      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (businessId.present) {
+      map['business_id'] = Variable<String>(businessId.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (phone.present) {
+      map['phone'] = Variable<String>(phone.value);
+    }
+    if (isDeleted.present) {
+      map['is_deleted'] = Variable<bool>(isDeleted.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lastUpdatedAt.present) {
+      map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VanDriversCompanion(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('name: $name, ')
+          ..write('phone: $phone, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $StoresTable extends Stores with TableInfo<$StoresTable, StoreData> {
   @override
   final GeneratedDatabase attachedDatabase;
@@ -2395,6 +2862,20 @@ class $StoresTable extends Stores with TableInfo<$StoresTable, StoreData> {
         ),
         defaultValue: const Constant(false),
       );
+  static const VerificationMeta _vanDriverIdMeta = const VerificationMeta(
+    'vanDriverId',
+  );
+  @override
+  late final GeneratedColumn<String> vanDriverId = GeneratedColumn<String>(
+    'van_driver_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES van_drivers (id)',
+    ),
+  );
   static const VerificationMeta _isDeletedMeta = const VerificationMeta(
     'isDeleted',
   );
@@ -2448,6 +2929,7 @@ class $StoresTable extends Stores with TableInfo<$StoresTable, StoreData> {
     phone,
     onlineNote,
     onlineOrderingEnabled,
+    vanDriverId,
     isDeleted,
     createdAt,
     lastUpdatedAt,
@@ -2534,6 +3016,15 @@ class $StoresTable extends Stores with TableInfo<$StoresTable, StoreData> {
         ),
       );
     }
+    if (data.containsKey('van_driver_id')) {
+      context.handle(
+        _vanDriverIdMeta,
+        vanDriverId.isAcceptableOrUnknown(
+          data['van_driver_id']!,
+          _vanDriverIdMeta,
+        ),
+      );
+    }
     if (data.containsKey('is_deleted')) {
       context.handle(
         _isDeletedMeta,
@@ -2608,6 +3099,10 @@ class $StoresTable extends Stores with TableInfo<$StoresTable, StoreData> {
         DriftSqlType.bool,
         data['${effectivePrefix}online_ordering_enabled'],
       )!,
+      vanDriverId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}van_driver_id'],
+      ),
       isDeleted: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_deleted'],
@@ -2662,6 +3157,10 @@ class StoreData extends DataClass implements Insertable<StoreData> {
   /// Online ordering switch (#423), default off. Only `kind = 'store'` rows
   /// with state + LGA may be on (cloud CHECK in 0199 is the backstop).
   final bool onlineOrderingEnabled;
+
+  /// The van's default driver (#748) — a `van_drivers` row, pre-filled onto a
+  /// new trip at load. Only a `kind = 'van'` row carries one. Null = none.
+  final String? vanDriverId;
   final bool isDeleted;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
@@ -2677,6 +3176,7 @@ class StoreData extends DataClass implements Insertable<StoreData> {
     this.phone,
     this.onlineNote,
     required this.onlineOrderingEnabled,
+    this.vanDriverId,
     required this.isDeleted,
     required this.createdAt,
     required this.lastUpdatedAt,
@@ -2707,6 +3207,9 @@ class StoreData extends DataClass implements Insertable<StoreData> {
       map['online_note'] = Variable<String>(onlineNote);
     }
     map['online_ordering_enabled'] = Variable<bool>(onlineOrderingEnabled);
+    if (!nullToAbsent || vanDriverId != null) {
+      map['van_driver_id'] = Variable<String>(vanDriverId);
+    }
     map['is_deleted'] = Variable<bool>(isDeleted);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
@@ -2736,6 +3239,9 @@ class StoreData extends DataClass implements Insertable<StoreData> {
           ? const Value.absent()
           : Value(onlineNote),
       onlineOrderingEnabled: Value(onlineOrderingEnabled),
+      vanDriverId: vanDriverId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(vanDriverId),
       isDeleted: Value(isDeleted),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
@@ -2761,6 +3267,7 @@ class StoreData extends DataClass implements Insertable<StoreData> {
       onlineOrderingEnabled: serializer.fromJson<bool>(
         json['onlineOrderingEnabled'],
       ),
+      vanDriverId: serializer.fromJson<String?>(json['vanDriverId']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
@@ -2781,6 +3288,7 @@ class StoreData extends DataClass implements Insertable<StoreData> {
       'phone': serializer.toJson<String?>(phone),
       'onlineNote': serializer.toJson<String?>(onlineNote),
       'onlineOrderingEnabled': serializer.toJson<bool>(onlineOrderingEnabled),
+      'vanDriverId': serializer.toJson<String?>(vanDriverId),
       'isDeleted': serializer.toJson<bool>(isDeleted),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
@@ -2799,6 +3307,7 @@ class StoreData extends DataClass implements Insertable<StoreData> {
     Value<String?> phone = const Value.absent(),
     Value<String?> onlineNote = const Value.absent(),
     bool? onlineOrderingEnabled,
+    Value<String?> vanDriverId = const Value.absent(),
     bool? isDeleted,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
@@ -2814,6 +3323,7 @@ class StoreData extends DataClass implements Insertable<StoreData> {
     phone: phone.present ? phone.value : this.phone,
     onlineNote: onlineNote.present ? onlineNote.value : this.onlineNote,
     onlineOrderingEnabled: onlineOrderingEnabled ?? this.onlineOrderingEnabled,
+    vanDriverId: vanDriverId.present ? vanDriverId.value : this.vanDriverId,
     isDeleted: isDeleted ?? this.isDeleted,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -2837,6 +3347,9 @@ class StoreData extends DataClass implements Insertable<StoreData> {
       onlineOrderingEnabled: data.onlineOrderingEnabled.present
           ? data.onlineOrderingEnabled.value
           : this.onlineOrderingEnabled,
+      vanDriverId: data.vanDriverId.present
+          ? data.vanDriverId.value
+          : this.vanDriverId,
       isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       lastUpdatedAt: data.lastUpdatedAt.present
@@ -2859,6 +3372,7 @@ class StoreData extends DataClass implements Insertable<StoreData> {
           ..write('phone: $phone, ')
           ..write('onlineNote: $onlineNote, ')
           ..write('onlineOrderingEnabled: $onlineOrderingEnabled, ')
+          ..write('vanDriverId: $vanDriverId, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
@@ -2879,6 +3393,7 @@ class StoreData extends DataClass implements Insertable<StoreData> {
     phone,
     onlineNote,
     onlineOrderingEnabled,
+    vanDriverId,
     isDeleted,
     createdAt,
     lastUpdatedAt,
@@ -2898,6 +3413,7 @@ class StoreData extends DataClass implements Insertable<StoreData> {
           other.phone == this.phone &&
           other.onlineNote == this.onlineNote &&
           other.onlineOrderingEnabled == this.onlineOrderingEnabled &&
+          other.vanDriverId == this.vanDriverId &&
           other.isDeleted == this.isDeleted &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
@@ -2915,6 +3431,7 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
   final Value<String?> phone;
   final Value<String?> onlineNote;
   final Value<bool> onlineOrderingEnabled;
+  final Value<String?> vanDriverId;
   final Value<bool> isDeleted;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
@@ -2931,6 +3448,7 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
     this.phone = const Value.absent(),
     this.onlineNote = const Value.absent(),
     this.onlineOrderingEnabled = const Value.absent(),
+    this.vanDriverId = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -2948,6 +3466,7 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
     this.phone = const Value.absent(),
     this.onlineNote = const Value.absent(),
     this.onlineOrderingEnabled = const Value.absent(),
+    this.vanDriverId = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -2966,6 +3485,7 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
     Expression<String>? phone,
     Expression<String>? onlineNote,
     Expression<bool>? onlineOrderingEnabled,
+    Expression<String>? vanDriverId,
     Expression<bool>? isDeleted,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
@@ -2984,6 +3504,7 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
       if (onlineNote != null) 'online_note': onlineNote,
       if (onlineOrderingEnabled != null)
         'online_ordering_enabled': onlineOrderingEnabled,
+      if (vanDriverId != null) 'van_driver_id': vanDriverId,
       if (isDeleted != null) 'is_deleted': isDeleted,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
@@ -3003,6 +3524,7 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
     Value<String?>? phone,
     Value<String?>? onlineNote,
     Value<bool>? onlineOrderingEnabled,
+    Value<String?>? vanDriverId,
     Value<bool>? isDeleted,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
@@ -3021,6 +3543,7 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
       onlineNote: onlineNote ?? this.onlineNote,
       onlineOrderingEnabled:
           onlineOrderingEnabled ?? this.onlineOrderingEnabled,
+      vanDriverId: vanDriverId ?? this.vanDriverId,
       isDeleted: isDeleted ?? this.isDeleted,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -3066,6 +3589,9 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
         onlineOrderingEnabled.value,
       );
     }
+    if (vanDriverId.present) {
+      map['van_driver_id'] = Variable<String>(vanDriverId.value);
+    }
     if (isDeleted.present) {
       map['is_deleted'] = Variable<bool>(isDeleted.value);
     }
@@ -3095,6 +3621,7 @@ class StoresCompanion extends UpdateCompanion<StoreData> {
           ..write('phone: $phone, ')
           ..write('onlineNote: $onlineNote, ')
           ..write('onlineOrderingEnabled: $onlineOrderingEnabled, ')
+          ..write('vanDriverId: $vanDriverId, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
@@ -16089,11 +16616,25 @@ class $VanTripsTable extends VanTrips
   late final GeneratedColumn<String> driverUserId = GeneratedColumn<String>(
     'driver_user_id',
     aliasedName,
-    false,
+    true,
     type: DriftSqlType.string,
-    requiredDuringInsert: true,
+    requiredDuringInsert: false,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
       'REFERENCES users (id)',
+    ),
+  );
+  static const VerificationMeta _vanDriverIdMeta = const VerificationMeta(
+    'vanDriverId',
+  );
+  @override
+  late final GeneratedColumn<String> vanDriverId = GeneratedColumn<String>(
+    'van_driver_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES van_drivers (id)',
     ),
   );
   static const VerificationMeta _sourceStoreIdMeta = const VerificationMeta(
@@ -16357,6 +16898,7 @@ class $VanTripsTable extends VanTrips
     businessId,
     vanStoreId,
     driverUserId,
+    vanDriverId,
     sourceStoreId,
     status,
     openedAt,
@@ -16421,8 +16963,15 @@ class $VanTripsTable extends VanTrips
           _driverUserIdMeta,
         ),
       );
-    } else if (isInserting) {
-      context.missing(_driverUserIdMeta);
+    }
+    if (data.containsKey('van_driver_id')) {
+      context.handle(
+        _vanDriverIdMeta,
+        vanDriverId.isAcceptableOrUnknown(
+          data['van_driver_id']!,
+          _vanDriverIdMeta,
+        ),
+      );
     }
     if (data.containsKey('source_store_id')) {
       context.handle(
@@ -16606,7 +17155,11 @@ class $VanTripsTable extends VanTrips
       driverUserId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}driver_user_id'],
-      )!,
+      ),
+      vanDriverId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}van_driver_id'],
+      ),
       sourceStoreId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}source_store_id'],
@@ -16707,10 +17260,17 @@ class VanTripData extends DataClass implements Insertable<VanTripData> {
   /// The van. A `stores` row with `kind = 'van'` (#140).
   final String vanStoreId;
 
-  /// The driver — a `users` row holding the seeded Driver role. Deliberately
-  /// NOT the dormant legacy `drivers` table, which is a different axis and is
-  /// left untouched (spec §14).
-  final String driverUserId;
+  /// LEGACY (#748). A driver is a `van_drivers` row now (no sign-in), so new
+  /// trips leave this null. Trips opened before v108 keep the `users` id they
+  /// were opened with. Never the dormant `drivers` table.
+  final String? driverUserId;
+
+  /// The driver who answers for this trip (#748) — a `van_drivers` row,
+  /// pre-filled from the van's assigned driver at load. The manager may change
+  /// or clear it, also later: a trip's ledger rows resolve to their driver
+  /// THROUGH this column, so re-pointing it moves the debt without editing a
+  /// ledger amount. Null = "No driver assigned".
+  final String? vanDriverId;
 
   /// The warehouse this trip loads from. One warehouse per trip in v1, so the
   /// remittance (#144) and the good-return re-batch (#143) both know where the
@@ -16750,7 +17310,8 @@ class VanTripData extends DataClass implements Insertable<VanTripData> {
     required this.id,
     required this.businessId,
     required this.vanStoreId,
-    required this.driverUserId,
+    this.driverUserId,
+    this.vanDriverId,
     required this.sourceStoreId,
     required this.status,
     required this.openedAt,
@@ -16779,7 +17340,12 @@ class VanTripData extends DataClass implements Insertable<VanTripData> {
     map['id'] = Variable<String>(id);
     map['business_id'] = Variable<String>(businessId);
     map['van_store_id'] = Variable<String>(vanStoreId);
-    map['driver_user_id'] = Variable<String>(driverUserId);
+    if (!nullToAbsent || driverUserId != null) {
+      map['driver_user_id'] = Variable<String>(driverUserId);
+    }
+    if (!nullToAbsent || vanDriverId != null) {
+      map['van_driver_id'] = Variable<String>(vanDriverId);
+    }
     map['source_store_id'] = Variable<String>(sourceStoreId);
     map['status'] = Variable<String>(status);
     map['opened_at'] = Variable<DateTime>(openedAt);
@@ -16819,7 +17385,12 @@ class VanTripData extends DataClass implements Insertable<VanTripData> {
       id: Value(id),
       businessId: Value(businessId),
       vanStoreId: Value(vanStoreId),
-      driverUserId: Value(driverUserId),
+      driverUserId: driverUserId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(driverUserId),
+      vanDriverId: vanDriverId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(vanDriverId),
       sourceStoreId: Value(sourceStoreId),
       status: Value(status),
       openedAt: Value(openedAt),
@@ -16863,7 +17434,8 @@ class VanTripData extends DataClass implements Insertable<VanTripData> {
       id: serializer.fromJson<String>(json['id']),
       businessId: serializer.fromJson<String>(json['businessId']),
       vanStoreId: serializer.fromJson<String>(json['vanStoreId']),
-      driverUserId: serializer.fromJson<String>(json['driverUserId']),
+      driverUserId: serializer.fromJson<String?>(json['driverUserId']),
+      vanDriverId: serializer.fromJson<String?>(json['vanDriverId']),
       sourceStoreId: serializer.fromJson<String>(json['sourceStoreId']),
       status: serializer.fromJson<String>(json['status']),
       openedAt: serializer.fromJson<DateTime>(json['openedAt']),
@@ -16896,7 +17468,8 @@ class VanTripData extends DataClass implements Insertable<VanTripData> {
       'id': serializer.toJson<String>(id),
       'businessId': serializer.toJson<String>(businessId),
       'vanStoreId': serializer.toJson<String>(vanStoreId),
-      'driverUserId': serializer.toJson<String>(driverUserId),
+      'driverUserId': serializer.toJson<String?>(driverUserId),
+      'vanDriverId': serializer.toJson<String?>(vanDriverId),
       'sourceStoreId': serializer.toJson<String>(sourceStoreId),
       'status': serializer.toJson<String>(status),
       'openedAt': serializer.toJson<DateTime>(openedAt),
@@ -16925,7 +17498,8 @@ class VanTripData extends DataClass implements Insertable<VanTripData> {
     String? id,
     String? businessId,
     String? vanStoreId,
-    String? driverUserId,
+    Value<String?> driverUserId = const Value.absent(),
+    Value<String?> vanDriverId = const Value.absent(),
     String? sourceStoreId,
     String? status,
     DateTime? openedAt,
@@ -16951,7 +17525,8 @@ class VanTripData extends DataClass implements Insertable<VanTripData> {
     id: id ?? this.id,
     businessId: businessId ?? this.businessId,
     vanStoreId: vanStoreId ?? this.vanStoreId,
-    driverUserId: driverUserId ?? this.driverUserId,
+    driverUserId: driverUserId.present ? driverUserId.value : this.driverUserId,
+    vanDriverId: vanDriverId.present ? vanDriverId.value : this.vanDriverId,
     sourceStoreId: sourceStoreId ?? this.sourceStoreId,
     status: status ?? this.status,
     openedAt: openedAt ?? this.openedAt,
@@ -16988,6 +17563,9 @@ class VanTripData extends DataClass implements Insertable<VanTripData> {
       driverUserId: data.driverUserId.present
           ? data.driverUserId.value
           : this.driverUserId,
+      vanDriverId: data.vanDriverId.present
+          ? data.vanDriverId.value
+          : this.vanDriverId,
       sourceStoreId: data.sourceStoreId.present
           ? data.sourceStoreId.value
           : this.sourceStoreId,
@@ -17045,6 +17623,7 @@ class VanTripData extends DataClass implements Insertable<VanTripData> {
           ..write('businessId: $businessId, ')
           ..write('vanStoreId: $vanStoreId, ')
           ..write('driverUserId: $driverUserId, ')
+          ..write('vanDriverId: $vanDriverId, ')
           ..write('sourceStoreId: $sourceStoreId, ')
           ..write('status: $status, ')
           ..write('openedAt: $openedAt, ')
@@ -17076,6 +17655,7 @@ class VanTripData extends DataClass implements Insertable<VanTripData> {
     businessId,
     vanStoreId,
     driverUserId,
+    vanDriverId,
     sourceStoreId,
     status,
     openedAt,
@@ -17106,6 +17686,7 @@ class VanTripData extends DataClass implements Insertable<VanTripData> {
           other.businessId == this.businessId &&
           other.vanStoreId == this.vanStoreId &&
           other.driverUserId == this.driverUserId &&
+          other.vanDriverId == this.vanDriverId &&
           other.sourceStoreId == this.sourceStoreId &&
           other.status == this.status &&
           other.openedAt == this.openedAt &&
@@ -17133,7 +17714,8 @@ class VanTripsCompanion extends UpdateCompanion<VanTripData> {
   final Value<String> id;
   final Value<String> businessId;
   final Value<String> vanStoreId;
-  final Value<String> driverUserId;
+  final Value<String?> driverUserId;
+  final Value<String?> vanDriverId;
   final Value<String> sourceStoreId;
   final Value<String> status;
   final Value<DateTime> openedAt;
@@ -17161,6 +17743,7 @@ class VanTripsCompanion extends UpdateCompanion<VanTripData> {
     this.businessId = const Value.absent(),
     this.vanStoreId = const Value.absent(),
     this.driverUserId = const Value.absent(),
+    this.vanDriverId = const Value.absent(),
     this.sourceStoreId = const Value.absent(),
     this.status = const Value.absent(),
     this.openedAt = const Value.absent(),
@@ -17188,7 +17771,8 @@ class VanTripsCompanion extends UpdateCompanion<VanTripData> {
     this.id = const Value.absent(),
     required String businessId,
     required String vanStoreId,
-    required String driverUserId,
+    this.driverUserId = const Value.absent(),
+    this.vanDriverId = const Value.absent(),
     required String sourceStoreId,
     this.status = const Value.absent(),
     this.openedAt = const Value.absent(),
@@ -17213,13 +17797,13 @@ class VanTripsCompanion extends UpdateCompanion<VanTripData> {
     this.rowid = const Value.absent(),
   }) : businessId = Value(businessId),
        vanStoreId = Value(vanStoreId),
-       driverUserId = Value(driverUserId),
        sourceStoreId = Value(sourceStoreId);
   static Insertable<VanTripData> custom({
     Expression<String>? id,
     Expression<String>? businessId,
     Expression<String>? vanStoreId,
     Expression<String>? driverUserId,
+    Expression<String>? vanDriverId,
     Expression<String>? sourceStoreId,
     Expression<String>? status,
     Expression<DateTime>? openedAt,
@@ -17248,6 +17832,7 @@ class VanTripsCompanion extends UpdateCompanion<VanTripData> {
       if (businessId != null) 'business_id': businessId,
       if (vanStoreId != null) 'van_store_id': vanStoreId,
       if (driverUserId != null) 'driver_user_id': driverUserId,
+      if (vanDriverId != null) 'van_driver_id': vanDriverId,
       if (sourceStoreId != null) 'source_store_id': sourceStoreId,
       if (status != null) 'status': status,
       if (openedAt != null) 'opened_at': openedAt,
@@ -17279,7 +17864,8 @@ class VanTripsCompanion extends UpdateCompanion<VanTripData> {
     Value<String>? id,
     Value<String>? businessId,
     Value<String>? vanStoreId,
-    Value<String>? driverUserId,
+    Value<String?>? driverUserId,
+    Value<String?>? vanDriverId,
     Value<String>? sourceStoreId,
     Value<String>? status,
     Value<DateTime>? openedAt,
@@ -17308,6 +17894,7 @@ class VanTripsCompanion extends UpdateCompanion<VanTripData> {
       businessId: businessId ?? this.businessId,
       vanStoreId: vanStoreId ?? this.vanStoreId,
       driverUserId: driverUserId ?? this.driverUserId,
+      vanDriverId: vanDriverId ?? this.vanDriverId,
       sourceStoreId: sourceStoreId ?? this.sourceStoreId,
       status: status ?? this.status,
       openedAt: openedAt ?? this.openedAt,
@@ -17347,6 +17934,9 @@ class VanTripsCompanion extends UpdateCompanion<VanTripData> {
     }
     if (driverUserId.present) {
       map['driver_user_id'] = Variable<String>(driverUserId.value);
+    }
+    if (vanDriverId.present) {
+      map['van_driver_id'] = Variable<String>(vanDriverId.value);
     }
     if (sourceStoreId.present) {
       map['source_store_id'] = Variable<String>(sourceStoreId.value);
@@ -17424,6 +18014,7 @@ class VanTripsCompanion extends UpdateCompanion<VanTripData> {
           ..write('businessId: $businessId, ')
           ..write('vanStoreId: $vanStoreId, ')
           ..write('driverUserId: $driverUserId, ')
+          ..write('vanDriverId: $vanDriverId, ')
           ..write('sourceStoreId: $sourceStoreId, ')
           ..write('status: $status, ')
           ..write('openedAt: $openedAt, ')
@@ -18171,7 +18762,7 @@ class OrderData extends DataClass implements Insertable<OrderData> {
   /// [netAmountKobo] / [amountPaidKobo], which stay at the load price so every
   /// shop figure (sales, profit, closing, Van Sales, driver balance, reconcile)
   /// is untouched. The customer actually paid `netAmountKobo + driverExtraKobo`.
-  /// Mirrors supabase/migrations/0249_van_driver_extra.sql.
+  /// Mirrors supabase/migrations/0250_van_driver_extra.sql.
   final int driverExtraKobo;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
@@ -45482,11 +46073,39 @@ class $DriverLedgerEntriesTable extends DriverLedgerEntries
   late final GeneratedColumn<String> driverUserId = GeneratedColumn<String>(
     'driver_user_id',
     aliasedName,
-    false,
+    true,
     type: DriftSqlType.string,
-    requiredDuringInsert: true,
+    requiredDuringInsert: false,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
       'REFERENCES users (id)',
+    ),
+  );
+  static const VerificationMeta _vanStoreIdMeta = const VerificationMeta(
+    'vanStoreId',
+  );
+  @override
+  late final GeneratedColumn<String> vanStoreId = GeneratedColumn<String>(
+    'van_store_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES stores (id)',
+    ),
+  );
+  static const VerificationMeta _vanDriverIdMeta = const VerificationMeta(
+    'vanDriverId',
+  );
+  @override
+  late final GeneratedColumn<String> vanDriverId = GeneratedColumn<String>(
+    'van_driver_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES van_drivers (id)',
     ),
   );
   static const VerificationMeta _tripIdMeta = const VerificationMeta('tripId');
@@ -45678,6 +46297,8 @@ class $DriverLedgerEntriesTable extends DriverLedgerEntries
     id,
     businessId,
     driverUserId,
+    vanStoreId,
+    vanDriverId,
     tripId,
     type,
     amountKobo,
@@ -45726,8 +46347,24 @@ class $DriverLedgerEntriesTable extends DriverLedgerEntries
           _driverUserIdMeta,
         ),
       );
-    } else if (isInserting) {
-      context.missing(_driverUserIdMeta);
+    }
+    if (data.containsKey('van_store_id')) {
+      context.handle(
+        _vanStoreIdMeta,
+        vanStoreId.isAcceptableOrUnknown(
+          data['van_store_id']!,
+          _vanStoreIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('van_driver_id')) {
+      context.handle(
+        _vanDriverIdMeta,
+        vanDriverId.isAcceptableOrUnknown(
+          data['van_driver_id']!,
+          _vanDriverIdMeta,
+        ),
+      );
     }
     if (data.containsKey('trip_id')) {
       context.handle(
@@ -45882,7 +46519,15 @@ class $DriverLedgerEntriesTable extends DriverLedgerEntries
       driverUserId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}driver_user_id'],
-      )!,
+      ),
+      vanStoreId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}van_store_id'],
+      ),
+      vanDriverId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}van_driver_id'],
+      ),
       tripId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}trip_id'],
@@ -45961,9 +46606,21 @@ class DriverLedgerEntryData extends DataClass
   final String id;
   final String businessId;
 
-  /// The balance axis — a driver's balance is CROSS-TRIP, so a residual from a
-  /// closed trip follows them onto the next one.
-  final String driverUserId;
+  /// LEGACY (#748). Drivers are `van_drivers` now; rows written before v108
+  /// keep the user they were written under, new rows leave this null.
+  final String? driverUserId;
+
+  /// The van this row was posted against (#748). Nullable only because a v107
+  /// row whose van cannot be worked out stays unattributed; the DAO requires it
+  /// on every new row.
+  final String? vanStoreId;
+
+  /// The driver this row was posted for (#748). A row WITH a [tripId] belongs
+  /// to whoever that trip's `van_driver_id` is NOW (so re-assigning the trip
+  /// moves the debt, no amount edited) and this column is only the driver at
+  /// posting time. A row WITHOUT a trip (a payment or write-off not tied to a
+  /// run) belongs to THIS driver. Debt is per driver, never per van.
+  final String? vanDriverId;
 
   /// Nullable only for a cross-trip correction; normally set.
   final String? tripId;
@@ -46000,7 +46657,9 @@ class DriverLedgerEntryData extends DataClass
   const DriverLedgerEntryData({
     required this.id,
     required this.businessId,
-    required this.driverUserId,
+    this.driverUserId,
+    this.vanStoreId,
+    this.vanDriverId,
     this.tripId,
     required this.type,
     required this.amountKobo,
@@ -46023,7 +46682,15 @@ class DriverLedgerEntryData extends DataClass
     final map = <String, Expression>{};
     map['id'] = Variable<String>(id);
     map['business_id'] = Variable<String>(businessId);
-    map['driver_user_id'] = Variable<String>(driverUserId);
+    if (!nullToAbsent || driverUserId != null) {
+      map['driver_user_id'] = Variable<String>(driverUserId);
+    }
+    if (!nullToAbsent || vanStoreId != null) {
+      map['van_store_id'] = Variable<String>(vanStoreId);
+    }
+    if (!nullToAbsent || vanDriverId != null) {
+      map['van_driver_id'] = Variable<String>(vanDriverId);
+    }
     if (!nullToAbsent || tripId != null) {
       map['trip_id'] = Variable<String>(tripId);
     }
@@ -46065,7 +46732,15 @@ class DriverLedgerEntryData extends DataClass
     return DriverLedgerEntriesCompanion(
       id: Value(id),
       businessId: Value(businessId),
-      driverUserId: Value(driverUserId),
+      driverUserId: driverUserId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(driverUserId),
+      vanStoreId: vanStoreId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(vanStoreId),
+      vanDriverId: vanDriverId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(vanDriverId),
       tripId: tripId == null && nullToAbsent
           ? const Value.absent()
           : Value(tripId),
@@ -46111,7 +46786,9 @@ class DriverLedgerEntryData extends DataClass
     return DriverLedgerEntryData(
       id: serializer.fromJson<String>(json['id']),
       businessId: serializer.fromJson<String>(json['businessId']),
-      driverUserId: serializer.fromJson<String>(json['driverUserId']),
+      driverUserId: serializer.fromJson<String?>(json['driverUserId']),
+      vanStoreId: serializer.fromJson<String?>(json['vanStoreId']),
+      vanDriverId: serializer.fromJson<String?>(json['vanDriverId']),
       tripId: serializer.fromJson<String?>(json['tripId']),
       type: serializer.fromJson<String>(json['type']),
       amountKobo: serializer.fromJson<int>(json['amountKobo']),
@@ -46136,7 +46813,9 @@ class DriverLedgerEntryData extends DataClass
     return <String, dynamic>{
       'id': serializer.toJson<String>(id),
       'businessId': serializer.toJson<String>(businessId),
-      'driverUserId': serializer.toJson<String>(driverUserId),
+      'driverUserId': serializer.toJson<String?>(driverUserId),
+      'vanStoreId': serializer.toJson<String?>(vanStoreId),
+      'vanDriverId': serializer.toJson<String?>(vanDriverId),
       'tripId': serializer.toJson<String?>(tripId),
       'type': serializer.toJson<String>(type),
       'amountKobo': serializer.toJson<int>(amountKobo),
@@ -46159,7 +46838,9 @@ class DriverLedgerEntryData extends DataClass
   DriverLedgerEntryData copyWith({
     String? id,
     String? businessId,
-    String? driverUserId,
+    Value<String?> driverUserId = const Value.absent(),
+    Value<String?> vanStoreId = const Value.absent(),
+    Value<String?> vanDriverId = const Value.absent(),
     Value<String?> tripId = const Value.absent(),
     String? type,
     int? amountKobo,
@@ -46179,7 +46860,9 @@ class DriverLedgerEntryData extends DataClass
   }) => DriverLedgerEntryData(
     id: id ?? this.id,
     businessId: businessId ?? this.businessId,
-    driverUserId: driverUserId ?? this.driverUserId,
+    driverUserId: driverUserId.present ? driverUserId.value : this.driverUserId,
+    vanStoreId: vanStoreId.present ? vanStoreId.value : this.vanStoreId,
+    vanDriverId: vanDriverId.present ? vanDriverId.value : this.vanDriverId,
     tripId: tripId.present ? tripId.value : this.tripId,
     type: type ?? this.type,
     amountKobo: amountKobo ?? this.amountKobo,
@@ -46210,6 +46893,12 @@ class DriverLedgerEntryData extends DataClass
       driverUserId: data.driverUserId.present
           ? data.driverUserId.value
           : this.driverUserId,
+      vanStoreId: data.vanStoreId.present
+          ? data.vanStoreId.value
+          : this.vanStoreId,
+      vanDriverId: data.vanDriverId.present
+          ? data.vanDriverId.value
+          : this.vanDriverId,
       tripId: data.tripId.present ? data.tripId.value : this.tripId,
       type: data.type.present ? data.type.value : this.type,
       amountKobo: data.amountKobo.present
@@ -46257,6 +46946,8 @@ class DriverLedgerEntryData extends DataClass
           ..write('id: $id, ')
           ..write('businessId: $businessId, ')
           ..write('driverUserId: $driverUserId, ')
+          ..write('vanStoreId: $vanStoreId, ')
+          ..write('vanDriverId: $vanDriverId, ')
           ..write('tripId: $tripId, ')
           ..write('type: $type, ')
           ..write('amountKobo: $amountKobo, ')
@@ -46278,10 +46969,12 @@ class DriverLedgerEntryData extends DataClass
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     businessId,
     driverUserId,
+    vanStoreId,
+    vanDriverId,
     tripId,
     type,
     amountKobo,
@@ -46298,7 +46991,7 @@ class DriverLedgerEntryData extends DataClass
     voidReason,
     createdAt,
     lastUpdatedAt,
-  );
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -46306,6 +46999,8 @@ class DriverLedgerEntryData extends DataClass
           other.id == this.id &&
           other.businessId == this.businessId &&
           other.driverUserId == this.driverUserId &&
+          other.vanStoreId == this.vanStoreId &&
+          other.vanDriverId == this.vanDriverId &&
           other.tripId == this.tripId &&
           other.type == this.type &&
           other.amountKobo == this.amountKobo &&
@@ -46328,7 +47023,9 @@ class DriverLedgerEntriesCompanion
     extends UpdateCompanion<DriverLedgerEntryData> {
   final Value<String> id;
   final Value<String> businessId;
-  final Value<String> driverUserId;
+  final Value<String?> driverUserId;
+  final Value<String?> vanStoreId;
+  final Value<String?> vanDriverId;
   final Value<String?> tripId;
   final Value<String> type;
   final Value<int> amountKobo;
@@ -46350,6 +47047,8 @@ class DriverLedgerEntriesCompanion
     this.id = const Value.absent(),
     this.businessId = const Value.absent(),
     this.driverUserId = const Value.absent(),
+    this.vanStoreId = const Value.absent(),
+    this.vanDriverId = const Value.absent(),
     this.tripId = const Value.absent(),
     this.type = const Value.absent(),
     this.amountKobo = const Value.absent(),
@@ -46371,7 +47070,9 @@ class DriverLedgerEntriesCompanion
   DriverLedgerEntriesCompanion.insert({
     this.id = const Value.absent(),
     required String businessId,
-    required String driverUserId,
+    this.driverUserId = const Value.absent(),
+    this.vanStoreId = const Value.absent(),
+    this.vanDriverId = const Value.absent(),
     this.tripId = const Value.absent(),
     required String type,
     required int amountKobo,
@@ -46390,7 +47091,6 @@ class DriverLedgerEntriesCompanion
     this.lastUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : businessId = Value(businessId),
-       driverUserId = Value(driverUserId),
        type = Value(type),
        amountKobo = Value(amountKobo),
        signedAmountKobo = Value(signedAmountKobo),
@@ -46400,6 +47100,8 @@ class DriverLedgerEntriesCompanion
     Expression<String>? id,
     Expression<String>? businessId,
     Expression<String>? driverUserId,
+    Expression<String>? vanStoreId,
+    Expression<String>? vanDriverId,
     Expression<String>? tripId,
     Expression<String>? type,
     Expression<int>? amountKobo,
@@ -46422,6 +47124,8 @@ class DriverLedgerEntriesCompanion
       if (id != null) 'id': id,
       if (businessId != null) 'business_id': businessId,
       if (driverUserId != null) 'driver_user_id': driverUserId,
+      if (vanStoreId != null) 'van_store_id': vanStoreId,
+      if (vanDriverId != null) 'van_driver_id': vanDriverId,
       if (tripId != null) 'trip_id': tripId,
       if (type != null) 'type': type,
       if (amountKobo != null) 'amount_kobo': amountKobo,
@@ -46445,7 +47149,9 @@ class DriverLedgerEntriesCompanion
   DriverLedgerEntriesCompanion copyWith({
     Value<String>? id,
     Value<String>? businessId,
-    Value<String>? driverUserId,
+    Value<String?>? driverUserId,
+    Value<String?>? vanStoreId,
+    Value<String?>? vanDriverId,
     Value<String?>? tripId,
     Value<String>? type,
     Value<int>? amountKobo,
@@ -46468,6 +47174,8 @@ class DriverLedgerEntriesCompanion
       id: id ?? this.id,
       businessId: businessId ?? this.businessId,
       driverUserId: driverUserId ?? this.driverUserId,
+      vanStoreId: vanStoreId ?? this.vanStoreId,
+      vanDriverId: vanDriverId ?? this.vanDriverId,
       tripId: tripId ?? this.tripId,
       type: type ?? this.type,
       amountKobo: amountKobo ?? this.amountKobo,
@@ -46499,6 +47207,12 @@ class DriverLedgerEntriesCompanion
     }
     if (driverUserId.present) {
       map['driver_user_id'] = Variable<String>(driverUserId.value);
+    }
+    if (vanStoreId.present) {
+      map['van_store_id'] = Variable<String>(vanStoreId.value);
+    }
+    if (vanDriverId.present) {
+      map['van_driver_id'] = Variable<String>(vanDriverId.value);
     }
     if (tripId.present) {
       map['trip_id'] = Variable<String>(tripId.value);
@@ -46560,6 +47274,8 @@ class DriverLedgerEntriesCompanion
           ..write('id: $id, ')
           ..write('businessId: $businessId, ')
           ..write('driverUserId: $driverUserId, ')
+          ..write('vanStoreId: $vanStoreId, ')
+          ..write('vanDriverId: $vanDriverId, ')
           ..write('tripId: $tripId, ')
           ..write('type: $type, ')
           ..write('amountKobo: $amountKobo, ')
@@ -56599,6 +57315,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     this,
   );
   late final $ManufacturersTable manufacturers = $ManufacturersTable(this);
+  late final $VanDriversTable vanDrivers = $VanDriversTable(this);
   late final $StoresTable stores = $StoresTable(this);
   late final $StoreDeliveryAreasTable storeDeliveryAreas =
       $StoreDeliveryAreasTable(this);
@@ -56727,6 +57444,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     this as AppDatabase,
   );
   late final VanTripsDao vanTripsDao = VanTripsDao(this as AppDatabase);
+  late final VanDriversDao vanDriversDao = VanDriversDao(this as AppDatabase);
   late final DriverLedgerDao driverLedgerDao = DriverLedgerDao(
     this as AppDatabase,
   );
@@ -56822,6 +57540,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     businesses,
     crateSizeGroups,
     manufacturers,
+    vanDrivers,
     stores,
     storeDeliveryAreas,
     users,
@@ -56986,6 +57705,24 @@ final class $$BusinessesTableReferences
     ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_manufacturersRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$VanDriversTable, List<VanDriverData>>
+  _vanDriversRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.vanDrivers,
+    aliasName: $_aliasNameGenerator(db.businesses.id, db.vanDrivers.businessId),
+  );
+
+  $$VanDriversTableProcessedTableManager get vanDriversRefs {
+    final manager = $$VanDriversTableTableManager(
+      $_db,
+      $_db.vanDrivers,
+    ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_vanDriversRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -58633,6 +59370,31 @@ class $$BusinessesTableFilterComposer
           }) => $$ManufacturersTableFilterComposer(
             $db: $db,
             $table: $db.manufacturers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> vanDriversRefs(
+    Expression<bool> Function($$VanDriversTableFilterComposer f) f,
+  ) {
+    final $$VanDriversTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vanDrivers,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanDriversTableFilterComposer(
+            $db: $db,
+            $table: $db.vanDrivers,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -60572,6 +61334,31 @@ class $$BusinessesTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> vanDriversRefs<T extends Object>(
+    Expression<T> Function($$VanDriversTableAnnotationComposer a) f,
+  ) {
+    final $$VanDriversTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vanDrivers,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanDriversTableAnnotationComposer(
+            $db: $db,
+            $table: $db.vanDrivers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> storesRefs<T extends Object>(
     Expression<T> Function($$StoresTableAnnotationComposer a) f,
   ) {
@@ -62292,6 +63079,7 @@ class $$BusinessesTableTableManager
           PrefetchHooks Function({
             bool crateSizeGroupsRefs,
             bool manufacturersRefs,
+            bool vanDriversRefs,
             bool storesRefs,
             bool storeDeliveryAreasRefs,
             bool usersRefs,
@@ -62472,6 +63260,7 @@ class $$BusinessesTableTableManager
               ({
                 crateSizeGroupsRefs = false,
                 manufacturersRefs = false,
+                vanDriversRefs = false,
                 storesRefs = false,
                 storeDeliveryAreasRefs = false,
                 usersRefs = false,
@@ -62545,6 +63334,7 @@ class $$BusinessesTableTableManager
                   explicitlyWatchedTables: [
                     if (crateSizeGroupsRefs) db.crateSizeGroups,
                     if (manufacturersRefs) db.manufacturers,
+                    if (vanDriversRefs) db.vanDrivers,
                     if (storesRefs) db.stores,
                     if (storeDeliveryAreasRefs) db.storeDeliveryAreas,
                     if (usersRefs) db.users,
@@ -62654,6 +63444,27 @@ class $$BusinessesTableTableManager
                                 table,
                                 p0,
                               ).manufacturersRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.businessId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (vanDriversRefs)
+                        await $_getPrefetchedData<
+                          BusinessData,
+                          $BusinessesTable,
+                          VanDriverData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$BusinessesTableReferences
+                              ._vanDriversRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$BusinessesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).vanDriversRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.businessId == item.id,
@@ -64090,6 +64901,7 @@ typedef $$BusinessesTableProcessedTableManager =
       PrefetchHooks Function({
         bool crateSizeGroupsRefs,
         bool manufacturersRefs,
+        bool vanDriversRefs,
         bool storesRefs,
         bool storeDeliveryAreasRefs,
         bool usersRefs,
@@ -66529,6 +67341,665 @@ typedef $$ManufacturersTableProcessedTableManager =
         bool orderCrateLinesRefs,
       })
     >;
+typedef $$VanDriversTableCreateCompanionBuilder =
+    VanDriversCompanion Function({
+      Value<String> id,
+      required String businessId,
+      required String name,
+      Value<String?> phone,
+      Value<bool> isDeleted,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+typedef $$VanDriversTableUpdateCompanionBuilder =
+    VanDriversCompanion Function({
+      Value<String> id,
+      Value<String> businessId,
+      Value<String> name,
+      Value<String?> phone,
+      Value<bool> isDeleted,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<int> rowid,
+    });
+
+final class $$VanDriversTableReferences
+    extends BaseReferences<_$AppDatabase, $VanDriversTable, VanDriverData> {
+  $$VanDriversTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $BusinessesTable _businessIdTable(_$AppDatabase db) =>
+      db.businesses.createAlias(
+        $_aliasNameGenerator(db.vanDrivers.businessId, db.businesses.id),
+      );
+
+  $$BusinessesTableProcessedTableManager get businessId {
+    final $_column = $_itemColumn<String>('business_id')!;
+
+    final manager = $$BusinessesTableTableManager(
+      $_db,
+      $_db.businesses,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$StoresTable, List<StoreData>> _storesRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.stores,
+    aliasName: $_aliasNameGenerator(db.vanDrivers.id, db.stores.vanDriverId),
+  );
+
+  $$StoresTableProcessedTableManager get storesRefs {
+    final manager = $$StoresTableTableManager(
+      $_db,
+      $_db.stores,
+    ).filter((f) => f.vanDriverId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_storesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$VanTripsTable, List<VanTripData>>
+  _vanTripsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.vanTrips,
+    aliasName: $_aliasNameGenerator(db.vanDrivers.id, db.vanTrips.vanDriverId),
+  );
+
+  $$VanTripsTableProcessedTableManager get vanTripsRefs {
+    final manager = $$VanTripsTableTableManager(
+      $_db,
+      $_db.vanTrips,
+    ).filter((f) => f.vanDriverId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_vanTripsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $DriverLedgerEntriesTable,
+    List<DriverLedgerEntryData>
+  >
+  _driverLedgerEntriesRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.driverLedgerEntries,
+        aliasName: $_aliasNameGenerator(
+          db.vanDrivers.id,
+          db.driverLedgerEntries.vanDriverId,
+        ),
+      );
+
+  $$DriverLedgerEntriesTableProcessedTableManager get driverLedgerEntriesRefs {
+    final manager = $$DriverLedgerEntriesTableTableManager(
+      $_db,
+      $_db.driverLedgerEntries,
+    ).filter((f) => f.vanDriverId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _driverLedgerEntriesRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$VanDriversTableFilterComposer
+    extends Composer<_$AppDatabase, $VanDriversTable> {
+  $$VanDriversTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get phone => $composableBuilder(
+    column: $table.phone,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isDeleted => $composableBuilder(
+    column: $table.isDeleted,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$BusinessesTableFilterComposer get businessId {
+    final $$BusinessesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableFilterComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> storesRefs(
+    Expression<bool> Function($$StoresTableFilterComposer f) f,
+  ) {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.vanDriverId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableFilterComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> vanTripsRefs(
+    Expression<bool> Function($$VanTripsTableFilterComposer f) f,
+  ) {
+    final $$VanTripsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vanTrips,
+      getReferencedColumn: (t) => t.vanDriverId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripsTableFilterComposer(
+            $db: $db,
+            $table: $db.vanTrips,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> driverLedgerEntriesRefs(
+    Expression<bool> Function($$DriverLedgerEntriesTableFilterComposer f) f,
+  ) {
+    final $$DriverLedgerEntriesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.driverLedgerEntries,
+      getReferencedColumn: (t) => t.vanDriverId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$DriverLedgerEntriesTableFilterComposer(
+            $db: $db,
+            $table: $db.driverLedgerEntries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$VanDriversTableOrderingComposer
+    extends Composer<_$AppDatabase, $VanDriversTable> {
+  $$VanDriversTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get phone => $composableBuilder(
+    column: $table.phone,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isDeleted => $composableBuilder(
+    column: $table.isDeleted,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$BusinessesTableOrderingComposer get businessId {
+    final $$BusinessesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableOrderingComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$VanDriversTableAnnotationComposer
+    extends Composer<_$AppDatabase, $VanDriversTable> {
+  $$VanDriversTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get phone =>
+      $composableBuilder(column: $table.phone, builder: (column) => column);
+
+  GeneratedColumn<bool> get isDeleted =>
+      $composableBuilder(column: $table.isDeleted, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => column,
+  );
+
+  $$BusinessesTableAnnotationComposer get businessId {
+    final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> storesRefs<T extends Object>(
+    Expression<T> Function($$StoresTableAnnotationComposer a) f,
+  ) {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.vanDriverId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableAnnotationComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> vanTripsRefs<T extends Object>(
+    Expression<T> Function($$VanTripsTableAnnotationComposer a) f,
+  ) {
+    final $$VanTripsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vanTrips,
+      getReferencedColumn: (t) => t.vanDriverId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanTripsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.vanTrips,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> driverLedgerEntriesRefs<T extends Object>(
+    Expression<T> Function($$DriverLedgerEntriesTableAnnotationComposer a) f,
+  ) {
+    final $$DriverLedgerEntriesTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.driverLedgerEntries,
+          getReferencedColumn: (t) => t.vanDriverId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$DriverLedgerEntriesTableAnnotationComposer(
+                $db: $db,
+                $table: $db.driverLedgerEntries,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+}
+
+class $$VanDriversTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $VanDriversTable,
+          VanDriverData,
+          $$VanDriversTableFilterComposer,
+          $$VanDriversTableOrderingComposer,
+          $$VanDriversTableAnnotationComposer,
+          $$VanDriversTableCreateCompanionBuilder,
+          $$VanDriversTableUpdateCompanionBuilder,
+          (VanDriverData, $$VanDriversTableReferences),
+          VanDriverData,
+          PrefetchHooks Function({
+            bool businessId,
+            bool storesRefs,
+            bool vanTripsRefs,
+            bool driverLedgerEntriesRefs,
+          })
+        > {
+  $$VanDriversTableTableManager(_$AppDatabase db, $VanDriversTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$VanDriversTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$VanDriversTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$VanDriversTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> businessId = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String?> phone = const Value.absent(),
+                Value<bool> isDeleted = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => VanDriversCompanion(
+                id: id,
+                businessId: businessId,
+                name: name,
+                phone: phone,
+                isDeleted: isDeleted,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String businessId,
+                required String name,
+                Value<String?> phone = const Value.absent(),
+                Value<bool> isDeleted = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => VanDriversCompanion.insert(
+                id: id,
+                businessId: businessId,
+                name: name,
+                phone: phone,
+                isDeleted: isDeleted,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$VanDriversTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                businessId = false,
+                storesRefs = false,
+                vanTripsRefs = false,
+                driverLedgerEntriesRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (storesRefs) db.stores,
+                    if (vanTripsRefs) db.vanTrips,
+                    if (driverLedgerEntriesRefs) db.driverLedgerEntries,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (businessId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.businessId,
+                                    referencedTable: $$VanDriversTableReferences
+                                        ._businessIdTable(db),
+                                    referencedColumn:
+                                        $$VanDriversTableReferences
+                                            ._businessIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (storesRefs)
+                        await $_getPrefetchedData<
+                          VanDriverData,
+                          $VanDriversTable,
+                          StoreData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$VanDriversTableReferences
+                              ._storesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$VanDriversTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).storesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.vanDriverId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (vanTripsRefs)
+                        await $_getPrefetchedData<
+                          VanDriverData,
+                          $VanDriversTable,
+                          VanTripData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$VanDriversTableReferences
+                              ._vanTripsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$VanDriversTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).vanTripsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.vanDriverId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (driverLedgerEntriesRefs)
+                        await $_getPrefetchedData<
+                          VanDriverData,
+                          $VanDriversTable,
+                          DriverLedgerEntryData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$VanDriversTableReferences
+                              ._driverLedgerEntriesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$VanDriversTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).driverLedgerEntriesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.vanDriverId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$VanDriversTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $VanDriversTable,
+      VanDriverData,
+      $$VanDriversTableFilterComposer,
+      $$VanDriversTableOrderingComposer,
+      $$VanDriversTableAnnotationComposer,
+      $$VanDriversTableCreateCompanionBuilder,
+      $$VanDriversTableUpdateCompanionBuilder,
+      (VanDriverData, $$VanDriversTableReferences),
+      VanDriverData,
+      PrefetchHooks Function({
+        bool businessId,
+        bool storesRefs,
+        bool vanTripsRefs,
+        bool driverLedgerEntriesRefs,
+      })
+    >;
 typedef $$StoresTableCreateCompanionBuilder =
     StoresCompanion Function({
       Value<String> id,
@@ -66542,6 +68013,7 @@ typedef $$StoresTableCreateCompanionBuilder =
       Value<String?> phone,
       Value<String?> onlineNote,
       Value<bool> onlineOrderingEnabled,
+      Value<String?> vanDriverId,
       Value<bool> isDeleted,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -66560,6 +68032,7 @@ typedef $$StoresTableUpdateCompanionBuilder =
       Value<String?> phone,
       Value<String?> onlineNote,
       Value<bool> onlineOrderingEnabled,
+      Value<String?> vanDriverId,
       Value<bool> isDeleted,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -66583,6 +68056,25 @@ final class $$StoresTableReferences
       $_db.businesses,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $VanDriversTable _vanDriverIdTable(_$AppDatabase db) =>
+      db.vanDrivers.createAlias(
+        $_aliasNameGenerator(db.stores.vanDriverId, db.vanDrivers.id),
+      );
+
+  $$VanDriversTableProcessedTableManager? get vanDriverId {
+    final $_column = $_itemColumn<String>('van_driver_id');
+    if ($_column == null) return null;
+    final manager = $$VanDriversTableTableManager(
+      $_db,
+      $_db.vanDrivers,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_vanDriverIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -67231,6 +68723,33 @@ final class $$StoresTableReferences
     );
   }
 
+  static MultiTypedResultKey<
+    $DriverLedgerEntriesTable,
+    List<DriverLedgerEntryData>
+  >
+  _driverLedgerEntriesRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.driverLedgerEntries,
+        aliasName: $_aliasNameGenerator(
+          db.stores.id,
+          db.driverLedgerEntries.vanStoreId,
+        ),
+      );
+
+  $$DriverLedgerEntriesTableProcessedTableManager get driverLedgerEntriesRefs {
+    final manager = $$DriverLedgerEntriesTableTableManager(
+      $_db,
+      $_db.driverLedgerEntries,
+    ).filter((f) => f.vanStoreId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _driverLedgerEntriesRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<$ActivityLogsTable, List<ActivityLogData>>
   _activityLogsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.activityLogs,
@@ -67402,6 +68921,29 @@ class $$StoresTableFilterComposer
           }) => $$BusinessesTableFilterComposer(
             $db: $db,
             $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$VanDriversTableFilterComposer get vanDriverId {
+    final $$VanDriversTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.vanDriverId,
+      referencedTable: $db.vanDrivers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanDriversTableFilterComposer(
+            $db: $db,
+            $table: $db.vanDrivers,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -68144,6 +69686,31 @@ class $$StoresTableFilterComposer
     return f(composer);
   }
 
+  Expression<bool> driverLedgerEntriesRefs(
+    Expression<bool> Function($$DriverLedgerEntriesTableFilterComposer f) f,
+  ) {
+    final $$DriverLedgerEntriesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.driverLedgerEntries,
+      getReferencedColumn: (t) => t.vanStoreId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$DriverLedgerEntriesTableFilterComposer(
+            $db: $db,
+            $table: $db.driverLedgerEntries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<bool> activityLogsRefs(
     Expression<bool> Function($$ActivityLogsTableFilterComposer f) f,
   ) {
@@ -68341,6 +69908,29 @@ class $$StoresTableOrderingComposer
     );
     return composer;
   }
+
+  $$VanDriversTableOrderingComposer get vanDriverId {
+    final $$VanDriversTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.vanDriverId,
+      referencedTable: $db.vanDrivers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanDriversTableOrderingComposer(
+            $db: $db,
+            $table: $db.vanDrivers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$StoresTableAnnotationComposer
@@ -68411,6 +70001,29 @@ class $$StoresTableAnnotationComposer
           }) => $$BusinessesTableAnnotationComposer(
             $db: $db,
             $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$VanDriversTableAnnotationComposer get vanDriverId {
+    final $$VanDriversTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.vanDriverId,
+      referencedTable: $db.vanDrivers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanDriversTableAnnotationComposer(
+            $db: $db,
+            $table: $db.vanDrivers,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -69162,6 +70775,32 @@ class $$StoresTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> driverLedgerEntriesRefs<T extends Object>(
+    Expression<T> Function($$DriverLedgerEntriesTableAnnotationComposer a) f,
+  ) {
+    final $$DriverLedgerEntriesTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.driverLedgerEntries,
+          getReferencedColumn: (t) => t.vanStoreId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$DriverLedgerEntriesTableAnnotationComposer(
+                $db: $db,
+                $table: $db.driverLedgerEntries,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<T> activityLogsRefs<T extends Object>(
     Expression<T> Function($$ActivityLogsTableAnnotationComposer a) f,
   ) {
@@ -69279,6 +70918,7 @@ class $$StoresTableTableManager
           StoreData,
           PrefetchHooks Function({
             bool businessId,
+            bool vanDriverId,
             bool storeDeliveryAreasRefs,
             bool usersRefs,
             bool supplierLedgerEntriesRefs,
@@ -69308,6 +70948,7 @@ class $$StoresTableTableManager
             bool paymentTransactionsRefs,
             bool stockCountsRefs,
             bool dailyClosingsRefs,
+            bool driverLedgerEntriesRefs,
             bool activityLogsRefs,
             bool storeRolePermissionsRefs,
             bool inviteCodesRefs,
@@ -69338,6 +70979,7 @@ class $$StoresTableTableManager
                 Value<String?> phone = const Value.absent(),
                 Value<String?> onlineNote = const Value.absent(),
                 Value<bool> onlineOrderingEnabled = const Value.absent(),
+                Value<String?> vanDriverId = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -69354,6 +70996,7 @@ class $$StoresTableTableManager
                 phone: phone,
                 onlineNote: onlineNote,
                 onlineOrderingEnabled: onlineOrderingEnabled,
+                vanDriverId: vanDriverId,
                 isDeleted: isDeleted,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -69372,6 +71015,7 @@ class $$StoresTableTableManager
                 Value<String?> phone = const Value.absent(),
                 Value<String?> onlineNote = const Value.absent(),
                 Value<bool> onlineOrderingEnabled = const Value.absent(),
+                Value<String?> vanDriverId = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -69388,6 +71032,7 @@ class $$StoresTableTableManager
                 phone: phone,
                 onlineNote: onlineNote,
                 onlineOrderingEnabled: onlineOrderingEnabled,
+                vanDriverId: vanDriverId,
                 isDeleted: isDeleted,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -69402,6 +71047,7 @@ class $$StoresTableTableManager
           prefetchHooksCallback:
               ({
                 businessId = false,
+                vanDriverId = false,
                 storeDeliveryAreasRefs = false,
                 usersRefs = false,
                 supplierLedgerEntriesRefs = false,
@@ -69431,6 +71077,7 @@ class $$StoresTableTableManager
                 paymentTransactionsRefs = false,
                 stockCountsRefs = false,
                 dailyClosingsRefs = false,
+                driverLedgerEntriesRefs = false,
                 activityLogsRefs = false,
                 storeRolePermissionsRefs = false,
                 inviteCodesRefs = false,
@@ -69469,6 +71116,7 @@ class $$StoresTableTableManager
                     if (paymentTransactionsRefs) db.paymentTransactions,
                     if (stockCountsRefs) db.stockCounts,
                     if (dailyClosingsRefs) db.dailyClosings,
+                    if (driverLedgerEntriesRefs) db.driverLedgerEntries,
                     if (activityLogsRefs) db.activityLogs,
                     if (storeRolePermissionsRefs) db.storeRolePermissions,
                     if (inviteCodesRefs) db.inviteCodes,
@@ -69499,6 +71147,19 @@ class $$StoresTableTableManager
                                         ._businessIdTable(db),
                                     referencedColumn: $$StoresTableReferences
                                         ._businessIdTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
+                        if (vanDriverId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.vanDriverId,
+                                    referencedTable: $$StoresTableReferences
+                                        ._vanDriverIdTable(db),
+                                    referencedColumn: $$StoresTableReferences
+                                        ._vanDriverIdTable(db)
                                         .id,
                                   )
                                   as T;
@@ -70109,6 +71770,27 @@ class $$StoresTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (driverLedgerEntriesRefs)
+                        await $_getPrefetchedData<
+                          StoreData,
+                          $StoresTable,
+                          DriverLedgerEntryData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$StoresTableReferences
+                              ._driverLedgerEntriesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$StoresTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).driverLedgerEntriesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.vanStoreId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (activityLogsRefs)
                         await $_getPrefetchedData<
                           StoreData,
@@ -70215,6 +71897,7 @@ typedef $$StoresTableProcessedTableManager =
       StoreData,
       PrefetchHooks Function({
         bool businessId,
+        bool vanDriverId,
         bool storeDeliveryAreasRefs,
         bool usersRefs,
         bool supplierLedgerEntriesRefs,
@@ -70244,6 +71927,7 @@ typedef $$StoresTableProcessedTableManager =
         bool paymentTransactionsRefs,
         bool stockCountsRefs,
         bool dailyClosingsRefs,
+        bool driverLedgerEntriesRefs,
         bool activityLogsRefs,
         bool storeRolePermissionsRefs,
         bool inviteCodesRefs,
@@ -86217,7 +87901,8 @@ typedef $$VanTripsTableCreateCompanionBuilder =
       Value<String> id,
       required String businessId,
       required String vanStoreId,
-      required String driverUserId,
+      Value<String?> driverUserId,
+      Value<String?> vanDriverId,
       required String sourceStoreId,
       Value<String> status,
       Value<DateTime> openedAt,
@@ -86246,7 +87931,8 @@ typedef $$VanTripsTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> businessId,
       Value<String> vanStoreId,
-      Value<String> driverUserId,
+      Value<String?> driverUserId,
+      Value<String?> vanDriverId,
       Value<String> sourceStoreId,
       Value<String> status,
       Value<DateTime> openedAt,
@@ -86314,14 +88000,33 @@ final class $$VanTripsTableReferences
   static $UsersTable _driverUserIdTable(_$AppDatabase db) => db.users
       .createAlias($_aliasNameGenerator(db.vanTrips.driverUserId, db.users.id));
 
-  $$UsersTableProcessedTableManager get driverUserId {
-    final $_column = $_itemColumn<String>('driver_user_id')!;
-
+  $$UsersTableProcessedTableManager? get driverUserId {
+    final $_column = $_itemColumn<String>('driver_user_id');
+    if ($_column == null) return null;
     final manager = $$UsersTableTableManager(
       $_db,
       $_db.users,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_driverUserIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $VanDriversTable _vanDriverIdTable(_$AppDatabase db) =>
+      db.vanDrivers.createAlias(
+        $_aliasNameGenerator(db.vanTrips.vanDriverId, db.vanDrivers.id),
+      );
+
+  $$VanDriversTableProcessedTableManager? get vanDriverId {
+    final $_column = $_itemColumn<String>('van_driver_id');
+    if ($_column == null) return null;
+    final manager = $$VanDriversTableTableManager(
+      $_db,
+      $_db.vanDrivers,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_vanDriverIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -86659,6 +88364,29 @@ class $$VanTripsTableFilterComposer
           }) => $$UsersTableFilterComposer(
             $db: $db,
             $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$VanDriversTableFilterComposer get vanDriverId {
+    final $$VanDriversTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.vanDriverId,
+      referencedTable: $db.vanDrivers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanDriversTableFilterComposer(
+            $db: $db,
+            $table: $db.vanDrivers,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -87036,6 +88764,29 @@ class $$VanTripsTableOrderingComposer
     return composer;
   }
 
+  $$VanDriversTableOrderingComposer get vanDriverId {
+    final $$VanDriversTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.vanDriverId,
+      referencedTable: $db.vanDrivers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanDriversTableOrderingComposer(
+            $db: $db,
+            $table: $db.vanDrivers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   $$StoresTableOrderingComposer get sourceStoreId {
     final $$StoresTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -87265,6 +89016,29 @@ class $$VanTripsTableAnnotationComposer
     return composer;
   }
 
+  $$VanDriversTableAnnotationComposer get vanDriverId {
+    final $$VanDriversTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.vanDriverId,
+      referencedTable: $db.vanDrivers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanDriversTableAnnotationComposer(
+            $db: $db,
+            $table: $db.vanDrivers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   $$StoresTableAnnotationComposer get sourceStoreId {
     final $$StoresTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -87479,6 +89253,7 @@ class $$VanTripsTableTableManager
             bool businessId,
             bool vanStoreId,
             bool driverUserId,
+            bool vanDriverId,
             bool sourceStoreId,
             bool openedBy,
             bool closedBy,
@@ -87505,7 +89280,8 @@ class $$VanTripsTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> businessId = const Value.absent(),
                 Value<String> vanStoreId = const Value.absent(),
-                Value<String> driverUserId = const Value.absent(),
+                Value<String?> driverUserId = const Value.absent(),
+                Value<String?> vanDriverId = const Value.absent(),
                 Value<String> sourceStoreId = const Value.absent(),
                 Value<String> status = const Value.absent(),
                 Value<DateTime> openedAt = const Value.absent(),
@@ -87533,6 +89309,7 @@ class $$VanTripsTableTableManager
                 businessId: businessId,
                 vanStoreId: vanStoreId,
                 driverUserId: driverUserId,
+                vanDriverId: vanDriverId,
                 sourceStoreId: sourceStoreId,
                 status: status,
                 openedAt: openedAt,
@@ -87561,7 +89338,8 @@ class $$VanTripsTableTableManager
                 Value<String> id = const Value.absent(),
                 required String businessId,
                 required String vanStoreId,
-                required String driverUserId,
+                Value<String?> driverUserId = const Value.absent(),
+                Value<String?> vanDriverId = const Value.absent(),
                 required String sourceStoreId,
                 Value<String> status = const Value.absent(),
                 Value<DateTime> openedAt = const Value.absent(),
@@ -87589,6 +89367,7 @@ class $$VanTripsTableTableManager
                 businessId: businessId,
                 vanStoreId: vanStoreId,
                 driverUserId: driverUserId,
+                vanDriverId: vanDriverId,
                 sourceStoreId: sourceStoreId,
                 status: status,
                 openedAt: openedAt,
@@ -87625,6 +89404,7 @@ class $$VanTripsTableTableManager
                 businessId = false,
                 vanStoreId = false,
                 driverUserId = false,
+                vanDriverId = false,
                 sourceStoreId = false,
                 openedBy = false,
                 closedBy = false,
@@ -87694,6 +89474,19 @@ class $$VanTripsTableTableManager
                                         ._driverUserIdTable(db),
                                     referencedColumn: $$VanTripsTableReferences
                                         ._driverUserIdTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
+                        if (vanDriverId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.vanDriverId,
+                                    referencedTable: $$VanTripsTableReferences
+                                        ._vanDriverIdTable(db),
+                                    referencedColumn: $$VanTripsTableReferences
+                                        ._vanDriverIdTable(db)
                                         .id,
                                   )
                                   as T;
@@ -87871,6 +89664,7 @@ typedef $$VanTripsTableProcessedTableManager =
         bool businessId,
         bool vanStoreId,
         bool driverUserId,
+        bool vanDriverId,
         bool sourceStoreId,
         bool openedBy,
         bool closedBy,
@@ -117526,7 +119320,9 @@ typedef $$DriverLedgerEntriesTableCreateCompanionBuilder =
     DriverLedgerEntriesCompanion Function({
       Value<String> id,
       required String businessId,
-      required String driverUserId,
+      Value<String?> driverUserId,
+      Value<String?> vanStoreId,
+      Value<String?> vanDriverId,
       Value<String?> tripId,
       required String type,
       required int amountKobo,
@@ -117549,7 +119345,9 @@ typedef $$DriverLedgerEntriesTableUpdateCompanionBuilder =
     DriverLedgerEntriesCompanion Function({
       Value<String> id,
       Value<String> businessId,
-      Value<String> driverUserId,
+      Value<String?> driverUserId,
+      Value<String?> vanStoreId,
+      Value<String?> vanDriverId,
       Value<String?> tripId,
       Value<String> type,
       Value<int> amountKobo,
@@ -117609,14 +119407,55 @@ final class $$DriverLedgerEntriesTableReferences
         $_aliasNameGenerator(db.driverLedgerEntries.driverUserId, db.users.id),
       );
 
-  $$UsersTableProcessedTableManager get driverUserId {
-    final $_column = $_itemColumn<String>('driver_user_id')!;
-
+  $$UsersTableProcessedTableManager? get driverUserId {
+    final $_column = $_itemColumn<String>('driver_user_id');
+    if ($_column == null) return null;
     final manager = $$UsersTableTableManager(
       $_db,
       $_db.users,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_driverUserIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $StoresTable _vanStoreIdTable(_$AppDatabase db) =>
+      db.stores.createAlias(
+        $_aliasNameGenerator(db.driverLedgerEntries.vanStoreId, db.stores.id),
+      );
+
+  $$StoresTableProcessedTableManager? get vanStoreId {
+    final $_column = $_itemColumn<String>('van_store_id');
+    if ($_column == null) return null;
+    final manager = $$StoresTableTableManager(
+      $_db,
+      $_db.stores,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_vanStoreIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $VanDriversTable _vanDriverIdTable(_$AppDatabase db) =>
+      db.vanDrivers.createAlias(
+        $_aliasNameGenerator(
+          db.driverLedgerEntries.vanDriverId,
+          db.vanDrivers.id,
+        ),
+      );
+
+  $$VanDriversTableProcessedTableManager? get vanDriverId {
+    final $_column = $_itemColumn<String>('van_driver_id');
+    if ($_column == null) return null;
+    final manager = $$VanDriversTableTableManager(
+      $_db,
+      $_db.vanDrivers,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_vanDriverIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -117796,6 +119635,52 @@ class $$DriverLedgerEntriesTableFilterComposer
           }) => $$UsersTableFilterComposer(
             $db: $db,
             $table: $db.users,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$StoresTableFilterComposer get vanStoreId {
+    final $$StoresTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.vanStoreId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableFilterComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$VanDriversTableFilterComposer get vanDriverId {
+    final $$VanDriversTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.vanDriverId,
+      referencedTable: $db.vanDrivers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanDriversTableFilterComposer(
+            $db: $db,
+            $table: $db.vanDrivers,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -118000,6 +119885,52 @@ class $$DriverLedgerEntriesTableOrderingComposer
     return composer;
   }
 
+  $$StoresTableOrderingComposer get vanStoreId {
+    final $$StoresTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.vanStoreId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableOrderingComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$VanDriversTableOrderingComposer get vanDriverId {
+    final $$VanDriversTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.vanDriverId,
+      referencedTable: $db.vanDrivers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanDriversTableOrderingComposer(
+            $db: $db,
+            $table: $db.vanDrivers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   $$VanTripsTableOrderingComposer get tripId {
     final $$VanTripsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -118187,6 +120118,52 @@ class $$DriverLedgerEntriesTableAnnotationComposer
     return composer;
   }
 
+  $$StoresTableAnnotationComposer get vanStoreId {
+    final $$StoresTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.vanStoreId,
+      referencedTable: $db.stores,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$StoresTableAnnotationComposer(
+            $db: $db,
+            $table: $db.stores,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$VanDriversTableAnnotationComposer get vanDriverId {
+    final $$VanDriversTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.vanDriverId,
+      referencedTable: $db.vanDrivers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanDriversTableAnnotationComposer(
+            $db: $db,
+            $table: $db.vanDrivers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   $$VanTripsTableAnnotationComposer get tripId {
     final $$VanTripsTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -118273,6 +120250,8 @@ class $$DriverLedgerEntriesTableTableManager
           PrefetchHooks Function({
             bool businessId,
             bool driverUserId,
+            bool vanStoreId,
+            bool vanDriverId,
             bool tripId,
             bool performedBy,
             bool voidedBy,
@@ -118301,7 +120280,9 @@ class $$DriverLedgerEntriesTableTableManager
               ({
                 Value<String> id = const Value.absent(),
                 Value<String> businessId = const Value.absent(),
-                Value<String> driverUserId = const Value.absent(),
+                Value<String?> driverUserId = const Value.absent(),
+                Value<String?> vanStoreId = const Value.absent(),
+                Value<String?> vanDriverId = const Value.absent(),
                 Value<String?> tripId = const Value.absent(),
                 Value<String> type = const Value.absent(),
                 Value<int> amountKobo = const Value.absent(),
@@ -118323,6 +120304,8 @@ class $$DriverLedgerEntriesTableTableManager
                 id: id,
                 businessId: businessId,
                 driverUserId: driverUserId,
+                vanStoreId: vanStoreId,
+                vanDriverId: vanDriverId,
                 tripId: tripId,
                 type: type,
                 amountKobo: amountKobo,
@@ -118345,7 +120328,9 @@ class $$DriverLedgerEntriesTableTableManager
               ({
                 Value<String> id = const Value.absent(),
                 required String businessId,
-                required String driverUserId,
+                Value<String?> driverUserId = const Value.absent(),
+                Value<String?> vanStoreId = const Value.absent(),
+                Value<String?> vanDriverId = const Value.absent(),
                 Value<String?> tripId = const Value.absent(),
                 required String type,
                 required int amountKobo,
@@ -118367,6 +120352,8 @@ class $$DriverLedgerEntriesTableTableManager
                 id: id,
                 businessId: businessId,
                 driverUserId: driverUserId,
+                vanStoreId: vanStoreId,
+                vanDriverId: vanDriverId,
                 tripId: tripId,
                 type: type,
                 amountKobo: amountKobo,
@@ -118397,6 +120384,8 @@ class $$DriverLedgerEntriesTableTableManager
               ({
                 businessId = false,
                 driverUserId = false,
+                vanStoreId = false,
+                vanDriverId = false,
                 tripId = false,
                 performedBy = false,
                 voidedBy = false,
@@ -118446,6 +120435,36 @@ class $$DriverLedgerEntriesTableTableManager
                                     referencedColumn:
                                         $$DriverLedgerEntriesTableReferences
                                             ._driverUserIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (vanStoreId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.vanStoreId,
+                                    referencedTable:
+                                        $$DriverLedgerEntriesTableReferences
+                                            ._vanStoreIdTable(db),
+                                    referencedColumn:
+                                        $$DriverLedgerEntriesTableReferences
+                                            ._vanStoreIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (vanDriverId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.vanDriverId,
+                                    referencedTable:
+                                        $$DriverLedgerEntriesTableReferences
+                                            ._vanDriverIdTable(db),
+                                    referencedColumn:
+                                        $$DriverLedgerEntriesTableReferences
+                                            ._vanDriverIdTable(db)
                                             .id,
                                   )
                                   as T;
@@ -118522,6 +120541,8 @@ typedef $$DriverLedgerEntriesTableProcessedTableManager =
       PrefetchHooks Function({
         bool businessId,
         bool driverUserId,
+        bool vanStoreId,
+        bool vanDriverId,
         bool tripId,
         bool performedBy,
         bool voidedBy,
@@ -127450,6 +129471,8 @@ class $AppDatabaseManager {
       $$CrateSizeGroupsTableTableManager(_db, _db.crateSizeGroups);
   $$ManufacturersTableTableManager get manufacturers =>
       $$ManufacturersTableTableManager(_db, _db.manufacturers);
+  $$VanDriversTableTableManager get vanDrivers =>
+      $$VanDriversTableTableManager(_db, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
       $$StoresTableTableManager(_db, _db.stores);
   $$StoreDeliveryAreasTableTableManager get storeDeliveryAreas =>

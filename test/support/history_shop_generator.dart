@@ -626,7 +626,7 @@ Future<HistoryShop> buildHistoryShop(
       ];
       final result = await db.vanTripsDao.dispatchLoad(
         vanStoreId: vanStoreId,
-        driverUserId: driverId,
+        vanDriverId: driverId,
         sourceStoreId: warehouseId,
         lines: lines,
         performedBy: staffId,

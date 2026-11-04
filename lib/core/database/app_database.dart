@@ -224,6 +224,10 @@ class Stores extends Table {
   /// with state + LGA may be on (cloud CHECK in 0199 is the backstop).
   BoolColumn get onlineOrderingEnabled =>
       boolean().withDefault(const Constant(false))();
+
+  /// The van's default driver (#748) — a `van_drivers` row, pre-filled onto a
+  /// new trip at load. Only a `kind = 'van'` row carries one. Null = none.
+  TextColumn get vanDriverId => text().nullable().references(VanDrivers, #id)();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
@@ -1265,6 +1269,26 @@ const String kVanCloseShortageReason = 'van_shortage:trip_closed';
 /// nag is what stops that from being invisible.
 const int kVanStaleTripDays = 3;
 
+/// A van driver (#748): a plain name (and optional phone) — NOT a `users` row,
+/// NOT a `customers` row, no invite and no sign-in. The manager records
+/// everything in the app; the driver answers for the debt. Synced; soft-deleted
+/// via [isDeleted], never hard-deleted (a former driver who still owes stays
+/// listed). Rows made from a v107 driver user reuse that user's id.
+@DataClassName('VanDriverData')
+class VanDrivers extends Table {
+  TextColumn get id => text().clientDefault(() => UuidV7.generate())();
+  TextColumn get businessId => text().references(Businesses, #id)();
+  TextColumn get name => text()();
+  TextColumn get phone => text().nullable()();
+  BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get lastUpdatedAt =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 /// One van run: `open → closed`, referencing van + driver + source warehouse
 /// (van-sales spec §4.2). The aggregate the whole reconciliation hangs off.
 ///
@@ -1291,10 +1315,17 @@ class VanTrips extends Table {
   /// The van. A `stores` row with `kind = 'van'` (#140).
   TextColumn get vanStoreId => text().references(Stores, #id)();
 
-  /// The driver — a `users` row holding the seeded Driver role. Deliberately
-  /// NOT the dormant legacy `drivers` table, which is a different axis and is
-  /// left untouched (spec §14).
-  TextColumn get driverUserId => text().references(Users, #id)();
+  /// LEGACY (#748). A driver is a `van_drivers` row now (no sign-in), so new
+  /// trips leave this null. Trips opened before v108 keep the `users` id they
+  /// were opened with. Never the dormant `drivers` table.
+  TextColumn get driverUserId => text().nullable().references(Users, #id)();
+
+  /// The driver who answers for this trip (#748) — a `van_drivers` row,
+  /// pre-filled from the van's assigned driver at load. The manager may change
+  /// or clear it, also later: a trip's ledger rows resolve to their driver
+  /// THROUGH this column, so re-pointing it moves the debt without editing a
+  /// ledger amount. Null = "No driver assigned".
+  TextColumn get vanDriverId => text().nullable().references(VanDrivers, #id)();
 
   /// The warehouse this trip loads from. One warehouse per trip in v1, so the
   /// remittance (#144) and the good-return re-batch (#143) both know where the
@@ -1526,9 +1557,21 @@ class DriverLedgerEntries extends Table {
   TextColumn get id => text().clientDefault(() => UuidV7.generate())();
   TextColumn get businessId => text().references(Businesses, #id)();
 
-  /// The balance axis — a driver's balance is CROSS-TRIP, so a residual from a
-  /// closed trip follows them onto the next one.
-  TextColumn get driverUserId => text().references(Users, #id)();
+  /// LEGACY (#748). Drivers are `van_drivers` now; rows written before v108
+  /// keep the user they were written under, new rows leave this null.
+  TextColumn get driverUserId => text().nullable().references(Users, #id)();
+
+  /// The van this row was posted against (#748). Nullable only because a v107
+  /// row whose van cannot be worked out stays unattributed; the DAO requires it
+  /// on every new row.
+  TextColumn get vanStoreId => text().nullable().references(Stores, #id)();
+
+  /// The driver this row was posted for (#748). A row WITH a [tripId] belongs
+  /// to whoever that trip's `van_driver_id` is NOW (so re-assigning the trip
+  /// moves the debt, no amount edited) and this column is only the driver at
+  /// posting time. A row WITHOUT a trip (a payment or write-off not tied to a
+  /// run) belongs to THIS driver. Debt is per driver, never per van.
+  TextColumn get vanDriverId => text().nullable().references(VanDrivers, #id)();
 
   /// Nullable only for a cross-trip correction; normally set.
   TextColumn get tripId => text().nullable().references(VanTrips, #id)();
@@ -3343,6 +3386,7 @@ class MigrationEvents extends Table {
     PaymentTransactions,
     StockCounts,
     DailyClosings,
+    VanDrivers,
     VanTrips,
     VanTripLots,
     VanReturnEvents,
@@ -3378,6 +3422,7 @@ class MigrationEvents extends Table {
     ExpenseBudgetsDao,
     DailyClosingsDao,
     VanTripsDao,
+    VanDriversDao,
     DriverLedgerDao,
     SyncDao,
     ActivityLogDao,
@@ -3451,7 +3496,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 107;
+  int get schemaVersion => 108;
 
   /// The v90 (#473) listing columns, pinned to their defaults in every older
   /// products rebuild: TableMigration copies from the CURRENT schema, so a
@@ -7396,6 +7441,171 @@ class AppDatabase extends _$AppDatabase {
           await m.addColumn(orderItems, orderItems.chargedUnitPriceKobo);
         }
       }
+
+      if (from < 108) {
+        // ── v108 — #748: drivers are `van_drivers` (no sign-in) ───────────
+        //
+        // Mirrors supabase/migrations/0251_van_drivers.sql. A driver's debt is
+        // tracked per DRIVER, so:
+        //   · new synced table `van_drivers` (+ sync index + bump trigger),
+        //   · `stores.van_driver_id`, `van_trips.van_driver_id`,
+        //     `driver_ledger_entries.van_store_id` + `.van_driver_id` (nullable),
+        //   · `driver_user_id` becomes NULLABLE on van_trips and
+        //     driver_ledger_entries — a nullable rebuild, so a real
+        //     alterTable (stale-column trap: every new column exists on the old
+        //     table first, via addColumn, so TableMigration copies it 1:1).
+        //   · BACKFILL: one van_drivers row per distinct old driver_user_id,
+        //     id = that user's id (deterministic, and identical to the cloud
+        //     backfill), name/phone from the user; trips and ledger rows link
+        //     to it, ledger rows also get their van (trip's van, else the
+        //     driver's most recent trip's van). Nothing is deleted, no row is
+        //     enqueued (the cloud migration does the same backfill).
+        Future<bool> has(String table, String col) async =>
+            (await customSelect(
+              "SELECT 1 FROM pragma_table_info('$table') WHERE name = '$col'",
+            ).get()).isNotEmpty;
+        final hasDrivers = (await customSelect(
+          "SELECT 1 FROM sqlite_master WHERE type = 'table' "
+          "AND name = 'van_drivers'",
+        ).get()).isNotEmpty;
+        if (!hasDrivers) {
+          await m.createTable(vanDrivers);
+          await customStatement(
+            'CREATE INDEX idx_van_drivers_business_lua '
+            'ON van_drivers (business_id, last_updated_at)',
+          );
+          await customStatement(
+            'CREATE TRIGGER bump_van_drivers_last_updated_at '
+            'AFTER UPDATE ON van_drivers '
+            'FOR EACH ROW '
+            'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+            'BEGIN '
+            "UPDATE van_drivers SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+            'END',
+          );
+        }
+        if (!await has('stores', 'van_driver_id')) {
+          await m.addColumn(stores, stores.vanDriverId);
+        }
+        if (!await has('van_trips', 'van_driver_id')) {
+          await m.addColumn(vanTrips, vanTrips.vanDriverId);
+        }
+        if (!await has('driver_ledger_entries', 'van_store_id')) {
+          await m.addColumn(driverLedgerEntries, driverLedgerEntries.vanStoreId);
+        }
+        if (!await has('driver_ledger_entries', 'van_driver_id')) {
+          await m.addColumn(
+            driverLedgerEntries,
+            driverLedgerEntries.vanDriverId,
+          );
+        }
+
+        // Backfill. The ledger's immutability trigger must be gone first (it
+        // guards the very columns being filled); both ledger triggers are
+        // re-emitted after the rebuild.
+        await customStatement(
+          'DROP TRIGGER IF EXISTS driver_ledger_entries_immutable',
+        );
+        await customStatement(
+          'DROP TRIGGER IF EXISTS driver_ledger_entries_no_delete',
+        );
+        await customStatement(
+          'INSERT OR IGNORE INTO van_drivers '
+          '(id, business_id, name, phone, is_deleted, created_at, '
+          'last_updated_at) '
+          'SELECT u.id, u.business_id, u.name, u.phone, 0, '
+          "CAST(strftime('%s', 'now') AS INTEGER), "
+          "CAST(strftime('%s', 'now') AS INTEGER) "
+          'FROM users u WHERE u.id IN '
+          '(SELECT driver_user_id FROM van_trips '
+          'WHERE driver_user_id IS NOT NULL '
+          'UNION SELECT driver_user_id FROM driver_ledger_entries '
+          'WHERE driver_user_id IS NOT NULL)',
+        );
+        await customStatement(
+          'UPDATE van_trips SET van_driver_id = driver_user_id '
+          'WHERE van_driver_id IS NULL AND driver_user_id IN '
+          '(SELECT id FROM van_drivers)',
+        );
+        await customStatement(
+          'UPDATE driver_ledger_entries SET van_driver_id = driver_user_id '
+          'WHERE van_driver_id IS NULL AND driver_user_id IN '
+          '(SELECT id FROM van_drivers)',
+        );
+        await customStatement(
+          'UPDATE driver_ledger_entries SET van_store_id = '
+          '(SELECT t.van_store_id FROM van_trips t '
+          'WHERE t.id = driver_ledger_entries.trip_id) '
+          'WHERE van_store_id IS NULL AND trip_id IS NOT NULL',
+        );
+        await customStatement(
+          'UPDATE driver_ledger_entries SET van_store_id = '
+          '(SELECT t.van_store_id FROM van_trips t '
+          'WHERE t.driver_user_id = driver_ledger_entries.driver_user_id '
+          'ORDER BY t.opened_at DESC, t.id DESC LIMIT 1) '
+          'WHERE van_store_id IS NULL AND driver_user_id IS NOT NULL',
+        );
+
+        // Nullable `driver_user_id`: real rebuilds (SQLite cannot drop NOT
+        // NULL in place). Guarded on the live DDL so a re-upgrade is a no-op.
+        Future<bool> userIdIsNotNull(String table) async {
+          final rows = await customSelect(
+            'SELECT "notnull" AS nn FROM pragma_table_info(\'$table\') '
+            "WHERE name = 'driver_user_id'",
+          ).get();
+          return rows.isNotEmpty && rows.first.read<int>('nn') == 1;
+        }
+
+        if (await userIdIsNotNull('van_trips')) {
+          await m.alterTable(TableMigration(vanTrips));
+        }
+        if (await userIdIsNotNull('driver_ledger_entries')) {
+          await m.alterTable(TableMigration(driverLedgerEntries));
+        }
+        // alterTable re-applies a table's old indexes but not its triggers:
+        // re-create the lot idempotently, from the shared SQL.
+        for (final stmt in [
+          'DROP INDEX IF EXISTS idx_van_trips_business_lua',
+          'CREATE INDEX idx_van_trips_business_lua '
+              'ON van_trips (business_id, last_updated_at)',
+          'DROP TRIGGER IF EXISTS bump_van_trips_last_updated_at',
+          'CREATE TRIGGER bump_van_trips_last_updated_at '
+              'AFTER UPDATE ON van_trips '
+              'FOR EACH ROW '
+              'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+              'BEGIN '
+              "UPDATE van_trips SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+              'END',
+          'DROP INDEX IF EXISTS idx_driver_ledger_entries_business_lua',
+          'CREATE INDEX idx_driver_ledger_entries_business_lua '
+              'ON driver_ledger_entries (business_id, last_updated_at)',
+          'DROP TRIGGER IF EXISTS bump_driver_ledger_entries_last_updated_at',
+          'CREATE TRIGGER bump_driver_ledger_entries_last_updated_at '
+              'AFTER UPDATE ON driver_ledger_entries '
+              'FOR EACH ROW '
+              'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+              'BEGIN '
+              "UPDATE driver_ledger_entries SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+              'END',
+          'DROP INDEX IF EXISTS idx_van_trips_business_van_status',
+          'DROP INDEX IF EXISTS idx_van_trips_business_driver_status',
+          'DROP INDEX IF EXISTS idx_driver_ledger_business_driver_time',
+          'DROP INDEX IF EXISTS idx_driver_ledger_business_trip',
+          'DROP INDEX IF EXISTS idx_driver_ledger_business_van_driver',
+          ..._vanSalesHotPathIndexStatements.where(
+            (x) =>
+                x.contains(' ON van_trips ') ||
+                x.contains(' ON driver_ledger_entries '),
+          ),
+        ]) {
+          await customStatement(stmt);
+        }
+        for (final stmt in _ledgerTriggerStatements(
+          _ledgerTables.firstWhere((l) => l.table == 'driver_ledger_entries'),
+        )) {
+          await customStatement(stmt);
+        }
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -8096,7 +8306,7 @@ const List<String> _vanSalesHotPathIndexStatements = [
   'CREATE INDEX idx_van_trips_business_van_status '
       'ON van_trips (business_id, van_store_id, status)',
   'CREATE INDEX idx_van_trips_business_driver_status '
-      'ON van_trips (business_id, driver_user_id, status)',
+      'ON van_trips (business_id, van_driver_id, status)',
   // Oldest-lot-first scan — the FIFO cursor a good return credits against.
   'CREATE INDEX idx_van_trip_lots_trip_dispatched '
       'ON van_trip_lots (trip_id, dispatched_at, id)',
@@ -8109,6 +8319,9 @@ const List<String> _vanSalesHotPathIndexStatements = [
   // The per-trip ledger slice #145's close artifact sums.
   'CREATE INDEX idx_driver_ledger_business_trip '
       'ON driver_ledger_entries (business_id, trip_id)',
+  // #748: the tripless-row half of the per-driver balance.
+  'CREATE INDEX idx_driver_ledger_business_van_driver '
+      'ON driver_ledger_entries (business_id, van_driver_id, created_at)',
 ];
 
 /// The van-remittance index (#144). Deliberately NOT part of

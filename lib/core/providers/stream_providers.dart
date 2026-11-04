@@ -1877,17 +1877,56 @@ final vanTripLotsProvider =
   whenAbsent: const [],
 );
 
-/// driverUserId → balance (kobo); **negative = the driver owes**. Drivers with
-/// no ledger rows are absent — render them at 0.
-final driverBalancesProvider = businessScopedStream<Map<String, int>>(
-  (ref, db, businessId) => db.driverLedgerDao.watchAllBalancesKobo(),
-  whenAbsent: const {},
+/// Every balance, resolved per owner (#748): `vanDriverId -> kobo` plus the
+/// per-van "No driver assigned" buckets; **negative = owed**. Absent = zero.
+final driverBalancesProvider = businessScopedStream<DriverBalances>(
+  (ref, db, businessId) => db.driverLedgerDao.watchAllBalances(),
+  whenAbsent: DriverBalances.empty,
+);
+
+/// The balance the owner of one TRIP carries now (#748): its driver's, or the
+/// van's "No driver assigned" bucket. Follows the trip's driver live, so
+/// re-assigning the trip moves the figure. Null until the trip is known.
+final tripOwnerBalanceProvider = businessScopedStreamFamily<int?, String>(
+  (ref, db, businessId, tripId) async* {
+    await for (final trip in db.vanTripsDao.watchTrip(tripId)) {
+      if (trip == null) {
+        yield null;
+        continue;
+      }
+      // Re-read the balance whenever the trip row OR the ledger changes.
+      yield await db.driverLedgerDao.balanceForTrip(trip);
+      yield* db.driverLedgerDao.watchBalanceForTrip(trip);
+    }
+  },
+  whenAbsent: null,
+);
+
+/// A van's "No driver assigned" balance (kobo); negative = owed.
+final vanNoDriverBalanceProvider = businessScopedStreamFamily<int, String>(
+  (ref, db, businessId, vanStoreId) =>
+      db.driverLedgerDao.watchNoDriverBalanceKobo(vanStoreId),
+  whenAbsent: 0,
+);
+
+/// A van's "No driver assigned" ledger, newest first.
+final vanNoDriverHistoryProvider =
+    businessScopedStreamFamily<List<DriverLedgerEntryData>, String>(
+      (ref, db, businessId, vanStoreId) =>
+          db.driverLedgerDao.watchNoDriverHistory(vanStoreId),
+      whenAbsent: const [],
+    );
+
+/// Every van driver (including removed ones), by name (#748).
+final vanDriverRowsProvider = businessScopedStream<List<VanDriverData>>(
+  (ref, db, businessId) => db.vanDriversDao.watchEvery(),
+  whenAbsent: const [],
 );
 
 /// One driver's live balance (kobo); negative = they owe.
 final driverBalanceProvider = businessScopedStreamFamily<int, String>(
-  (ref, db, businessId, driverUserId) =>
-      db.driverLedgerDao.watchBalanceKobo(driverUserId),
+  (ref, db, businessId, vanDriverId) =>
+      db.driverLedgerDao.watchBalanceKobo(vanDriverId),
   whenAbsent: 0,
 );
 
@@ -1897,8 +1936,8 @@ final driverBalanceProvider = businessScopedStreamFamily<int, String>(
 /// record (spec §4.4).
 final driverLedgerHistoryProvider =
     businessScopedStreamFamily<List<DriverLedgerEntryData>, String>(
-      (ref, db, businessId, driverUserId) =>
-          db.driverLedgerDao.watchHistory(driverUserId),
+      (ref, db, businessId, vanDriverId) =>
+          db.driverLedgerDao.watchHistory(vanDriverId),
       whenAbsent: const [],
     );
 
@@ -1906,8 +1945,8 @@ final driverLedgerHistoryProvider =
 /// profile's Trips tab (#146). Ordered by `opened_at`.
 final driverTripsProvider =
     businessScopedStreamFamily<List<VanTripData>, String>(
-      (ref, db, businessId, driverUserId) =>
-          db.vanTripsDao.watchTripsForDriver(driverUserId),
+      (ref, db, businessId, vanDriverId) =>
+          db.vanTripsDao.watchTripsForDriver(vanDriverId),
       whenAbsent: const [],
     );
 
@@ -1915,39 +1954,29 @@ final driverTripsProvider =
 /// its lines — the driver profile's Sales tab (#146).
 final driverVanSalesProvider =
     businessScopedStreamFamily<List<OrderWithItems>, String>(
-      (ref, db, businessId, driverUserId) =>
-          db.vanTripsDao.watchSalesWithItemsForDriver(driverUserId),
+      (ref, db, businessId, vanDriverId) =>
+          db.vanTripsDao.watchSalesWithItemsForDriver(vanDriverId),
       whenAbsent: const [],
     );
 
-/// The Drivers list (#146, spec §9.5 #19) — every current driver, plus every
-/// FORMER driver the ledger still has a balance for, badged as removed.
+/// The Drivers list (#146, reworked by #748) — every current driver, plus every
+/// REMOVED driver the ledger still has a balance for, badged.
 ///
-/// Composed from the existing membership / role / user / balance providers
-/// through the pure [buildDriversList], so the rule that keeps a debt visible
-/// after offboarding is testable without a widget tree — and so it cannot drift
-/// from the guard that stops the offboarding in the first place
-/// (`VanTripsDao.assertDriverOffboardable`).
+/// Composed through the pure [buildDriversList], so the rule that keeps a debt
+/// visible after a driver is removed is testable without a widget tree.
 final vanDriverEntriesProvider = Provider<List<DriverListEntry>>((ref) {
-  final memberships =
-      ref.watch(userBusinessesProvider).valueOrNull ??
-      const <UserBusinessData>[];
-  final roles = ref.watch(allRolesProvider).valueOrNull ?? const <RoleData>[];
-  final users =
-      ref.watch(usersByBusinessProvider).valueOrNull ??
-      const <String, UserData>{};
+  final drivers =
+      ref.watch(vanDriverRowsProvider).valueOrNull ?? const <VanDriverData>[];
   final balances =
-      ref.watch(driverBalancesProvider).valueOrNull ?? const <String, int>{};
+      ref.watch(driverBalancesProvider).valueOrNull ?? DriverBalances.empty;
+  return buildDriversList(drivers: drivers, balancesKobo: balances.byDriver);
+});
 
-  return buildDriversList(
-    memberships: memberships,
-    driverRoleIds: {
-      for (final r in roles)
-        if (r.slug == 'driver') r.id,
-    },
-    usersById: users,
-    balancesKobo: balances,
-  );
+/// The per-van "No driver assigned" groups that still carry a balance.
+final noDriverGroupsProvider = Provider<List<NoDriverGroup>>((ref) {
+  final balances =
+      ref.watch(driverBalancesProvider).valueOrNull ?? DriverBalances.empty;
+  return buildNoDriverGroups(balances.noDriverByVan);
 });
 
 /// One trip by id, live — so a screen tracking a trip sees it close under it
@@ -1986,54 +2015,15 @@ final vanTripReturnsProvider =
 // appears as a credit), so a second per-trip feed would render the same money
 // twice. #145's reconcile screen is the first real consumer.
 
-/// The business's drivers: active staff whose role slug is `driver` (the role
-/// the cloud seeds per business, 0161). Composed from the existing membership /
-/// role / user providers rather than a new query, so a suspended or removed
-/// driver drops out of the Load Van picker the moment their membership changes.
-///
-/// **Ordered by name, deliberately** (#208 item 2) — not an oversight, and not
-/// a place to apply [roleRank].
-///
-/// The house rule is that people lists are tier-ordered (CEO → Manager →
-/// Cashier → Stock keeper → Driver). It does not bite here because this list is
-/// closed under a single role by construction, not by luck:
-///
-///  * `roles` carries `UNIQUE (business_id, slug)` (the `Roles` table's
-///    `customConstraints`, mirrored by the cloud's `ON CONFLICT (business_id,
-///    slug)` in 0161), so `driverRoleIds` below holds **at most one** id per
-///    business; and
-///  * every member of that one role therefore scores the same [roleRank], which
-///    makes a tier sort a constant comparator — it would leave exactly the
-///    alphabetical order already present here, with a slower sort and a false
-///    implication that the list is mixed.
-///
-/// So: tier ordering is not weakened here, it is vacuous here. Name order is
-/// what a manager scans a single-role picker by. Pinned by
-/// `test/van_sales/van_driver_ordering_test.dart` so a later reader does not
-/// "fix" it into churn — if a second driver-ish role is ever seeded, that test
-/// fails first and this decision is reopened.
-final vanDriversProvider = Provider<List<UserData>>((ref) {
-  final memberships =
-      ref.watch(userBusinessesProvider).valueOrNull ?? const <UserBusinessData>[];
-  final roles = ref.watch(allRolesProvider).valueOrNull ?? const <RoleData>[];
-  final users = ref.watch(usersByBusinessProvider).valueOrNull ??
-      const <String, UserData>{};
-
-  final driverRoleIds = {
-    for (final r in roles)
-      if (r.slug == 'driver') r.id,
-  };
-  if (driverRoleIds.isEmpty) return const [];
-
-  final out = <UserData>[];
-  for (final m in memberships) {
-    if (m.status != 'active') continue;
-    if (!driverRoleIds.contains(m.roleId)) continue;
-    final user = users[m.userId];
-    if (user != null) out.add(user);
-  }
-  out.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-  return out;
+/// The business's drivers for the Load Van picker (#748): every driver that is
+/// not removed, by name. A driver is a plain name — no account, no role.
+final vanDriversProvider = Provider<List<VanDriverData>>((ref) {
+  final rows =
+      ref.watch(vanDriverRowsProvider).valueOrNull ?? const <VanDriverData>[];
+  return [
+    for (final d in rows)
+      if (!d.isDeleted) d,
+  ];
 });
 
 // ── Driver terminal (#142, PRD #139 / ADR 0019, spec §9.2) ──────────────────
