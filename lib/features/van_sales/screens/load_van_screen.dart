@@ -689,9 +689,11 @@ class _LineCard extends StatelessWidget {
           if (showCrates) ...[
             SizedBox(height: context.getRSize(10)),
             AppInput(
-              // §11 — counting only. No deposit money moves in v1; the count
-              // exists so a trip can't close "settled" having lost every shell.
-              labelText: 'Empty crates going out (optional)',
+              // §11 / #726 — the crates that must come home with this load:
+              // the full crates' own shells plus any extra empties handed over
+              // for swaps. Counted back at the return (empties + unsold full
+              // crates); what is missing shows as lost crates. No money moves.
+              labelText: 'Crates to bring back (optional)',
               initialValue: line.shellsOut == 0 ? '' : line.shellsOut.toString(),
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -700,6 +702,12 @@ class _LineCard extends StatelessWidget {
                 line.shellsOut = int.tryParse(v.trim()) ?? 0;
                 onChanged();
               },
+            ),
+            SizedBox(height: context.getRSize(4)),
+            Text(
+              'Crates leaving with this load, including any extra empties for '
+              'swaps. Used to spot lost crates at close.',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
           if (isBelowCost) ...[
