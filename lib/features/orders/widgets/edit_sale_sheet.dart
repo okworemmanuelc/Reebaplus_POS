@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -128,14 +129,14 @@ class _EditSaleEditorState extends ConsumerState<_EditSaleEditor> {
       mainAxisSize: MainAxisSize.min,
       children: [
         IconButton(
-          icon: const Icon(Icons.remove_circle_outline),
+          icon: const Icon(AppIcons.removeCircle),
           onPressed: value - step < min - 1e-9
               ? null
               : () => onChanged(value - step),
         ),
         Text(formatQty(value), style: context.regularStyle(15)),
         IconButton(
-          icon: const Icon(Icons.add_circle_outline),
+          icon: const Icon(AppIcons.addCircle),
           onPressed: max != null && value + step > max + 1e-9
               ? null
               : () => onChanged(value + step),
@@ -307,7 +308,7 @@ class _ProductSearchSheetState extends State<_ProductSearchSheet> {
                 autofocus: true,
                 decoration: const InputDecoration(
                   labelText: 'Search items',
-                  prefixIcon: Icon(Icons.search),
+                  prefixIcon: Icon(AppIcons.search),
                 ),
                 onChanged: (v) => setState(() => _q = v.trim().toLowerCase()),
               ),
