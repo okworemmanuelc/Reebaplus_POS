@@ -31,6 +31,14 @@ The human updates it when resolving open questions or making architectural decis
 - Tests: `test/orders/sale_adjustment_test.dart` (13), v104→v105 in `migration_upgrade_test.dart`. pos-parity issue to open on merge.
 - Deferred: order-details/receipt sheet lists adjustments only via the card line; no per-line crate deposit split (deposit released pro rata by crates).
 - 2026-11-03 #709 (PRD #707 S2): a cancelled sale's reversal rows read "Sale cancelled — ORD-…" in crate history (new `crate_ledger.reason = order_cancelled`, movement stays `adjusted`; old reason-less rows on cancelled orders also labelled), stock history (`return` rows with an order) and the customer statement (`refund`/`void` legs with an order). Labels in `core/utils/reversal_labels.dart`. The #551 Return writes the same rows as a cancel so both read "Sale cancelled". No cloud CHECK on `crate_ledger.reason`, no migration.
+### Issue #742: Receipt printer settings redesign (2026-11-04, branch `feat/742-printer-settings-design`)
+
+- Rebuilt Settings > Receipt printer from the owner's mockups. Phone: `LAST USED` card with a settings summary and Test Print, the rest behind `Other devices (n)`, settings open inside the card. From a measured 720 wide: list beside a settings panel, `Search Again` in the top bar.
+- `PayrollSegmented` promoted to the shared `AppSegmented`; blank paper is now a − / + stepper (still 0 to 5). Screen only: printing and saved settings are unchanged.
+- Other devices starts open when nothing has been used yet or it holds a plugged-in USB printer, so a USB printer is never hidden.
+- Test print now locks on the first tap (`onAsyncPressed`, #659).
+- Tests: `receipt_printer_settings_screen_test.dart` rewritten for phone + tablet; receipt_printer goldens regenerated (they were already failing on main).
+
 ### Issue #724: Most recently used printers at the top (2026-11-03, branch `feat/724-printer-recent-first`)
 - `PrinterService` keeps `printer_recent_ids` (newest first, max 20; seeded from `last_printer_mac`), updated after every successful print (USB, Bluetooth auto/direct, test prints).
 - Receipt printer settings: USB + Bluetooth in ONE list ordered by recency (`PrinterService.sortByRecent`); never-used keep old order below. Printer picker sorted the same way.
