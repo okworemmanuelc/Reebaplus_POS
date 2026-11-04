@@ -541,11 +541,31 @@ void main() {
             ]),
           ),
           allDailyClosingsProvider.overrideWith((ref) => Stream.value(snapshots)),
-          allOrdersProvider.overrideWith((ref) => Stream.value(orders)),
-          allSupplierLedgerEntriesProvider
-              .overrideWith((ref) => Stream.value(ledger)),
-          allPaymentTransactionsProvider
-              .overrideWith((ref) => Stream.value(payments)),
+          // #684 — the sweep reads each reviewed day's own rows; file the
+          // test's lists under their days the way the bounded reads would.
+          reviewedDayRowsProvider.overrideWith((ref) {
+            String key(DateTime d) => reconDayKey(d);
+            bool on(String day, DateTime? d) => d != null && key(d) == day;
+            return Stream.value({
+              for (final snap in snapshots)
+                snap.businessDate: ReconPeriodRows(
+                  orders: [
+                    for (final o in orders)
+                      if (on(snap.businessDate, o.order.createdAt) ||
+                          on(snap.businessDate, o.order.cancelledAt?.toLocal()))
+                        o,
+                  ],
+                  supplierLedger: [
+                    for (final l in ledger)
+                      if (on(snap.businessDate, l.activityDate)) l,
+                  ],
+                  payments: [
+                    for (final p in payments)
+                      if (on(snap.businessDate, p.createdAt)) p,
+                  ],
+                ),
+            });
+          }),
           productsWithStockProvider.overrideWith(
             (ref, storeId) => Stream.value([
               ProductDataWithStock(product: _product(), totalStock: 10),
