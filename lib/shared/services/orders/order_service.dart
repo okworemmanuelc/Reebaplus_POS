@@ -148,6 +148,10 @@ class OrderService {
 
   Future<bool> isReturnable(String orderId) => _queries.isReturnable(orderId);
 
+  /// #733 — see [OrderQueries.canRefundPending].
+  Future<bool> canRefundPending(String orderId) =>
+      _queries.canRefundPending(orderId);
+
   /// #711 — the crate side of a Return, for the pop-up.
   Future<ReturnCratePlan> returnPlan(String orderId) =>
       _queries.returnPlan(orderId);

@@ -122,6 +122,11 @@ class OrderQueries {
   Future<bool> isReturnable(String orderId) =>
       _ordersDao.isReturnable(orderId);
 
+  /// #733 — whether the Pending-tab Refund may run (an old order with money
+  /// paid on it can't be refunded).
+  Future<bool> canRefundPending(String orderId) async =>
+      await _ordersDao.pendingRefundRefusal(orderId) == null;
+
   /// #712 — units still returnable per line ("up to N").
   Future<Map<String, double>> returnableQtyByLine(String orderId) =>
       _ordersDao.returnableQtyByLine(orderId);

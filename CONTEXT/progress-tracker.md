@@ -7,6 +7,8 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #733: No refunds after 30 days (2026-11-04, branch `feat/733-refund-window`)
+- `kRefundWindowDays = 30` + `isPastRefundWindow` + `ReturnRefusal.tooOld` (daos_orders.dart), first check in `returnRefusal` (full Return, part return, edit). Pending Refund: `OrdersDao.pendingRefundRefusal` (old AND `refundablePaidKobo > 0`) enforced in `OrderCommands.cancel`, not in `markCancelled` (system reversals of rejected sales still run). Orders cards hide the buttons. Tests `test/orders/refund_window_test.dart` (9). No migration; pos-parity issue opened in reebaplus-web.
 ### Issue #713: Edit a completed sale, CEO/Manager (2026-11-04, branch `feat/713-edit-sale`)
 - `OrdersDao.editCompletedSale`/`planEditSale` (daos_sale_adjustments.dart), `Gates.editSale` (sales.cancel), command+service, Edit sale button + editor (`edit_sale_sheet.dart`) + Edit slip. Reports split plus/minus. New cloud `0249` (recost counts plus lines) NOT deployed. Tests: test/orders/edit_sale_test.dart. ADR 0035 addendum. Open: pos-parity issue in reebaplus-web on merge; edit-time crate deposit UI not exposed (crates tracked).
 ### Issue #682: Smooth screens S1 — measure first (2026-11-03, branch `feat/682-measure-first`)
