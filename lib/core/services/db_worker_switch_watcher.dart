@@ -11,7 +11,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 const Duration kDbWorkerSwitchCheckGap = Duration(minutes: 1);
 
 /// Reads the cloud off switch (`app_config` key `db_background_worker`,
-/// migration 0252; anon-readable, so it works before sign-in and even when the
+/// migration 0253; anon-readable, so it works before sign-in and even when the
 /// local database failed to open).
 ///
 /// Returns true for "on", false for "off", and null on ANY failure (offline,

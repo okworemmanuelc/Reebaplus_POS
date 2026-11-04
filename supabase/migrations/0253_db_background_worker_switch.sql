@@ -1,4 +1,4 @@
--- 0252_db_background_worker_switch.sql
+-- 0253_db_background_worker_switch.sql
 --
 -- #687 (PRD #680 S6): cloud off switch for the phone's local database worker.
 -- 'on' = the database runs on Drift's background worker (the default).
