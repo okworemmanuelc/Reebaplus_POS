@@ -1,0 +1,7 @@
+# Tags used by this project's tests.
+tags:
+  # #682 — timing runs on generated multi-year shops. They take minutes, so the
+  # normal `flutter test` skips them. Run on purpose with:
+  #   flutter test --run-skipped -t benchmark test/benchmark
+  benchmark:
+    skip: "Benchmark. Run: flutter test --run-skipped -t benchmark test/benchmark"
