@@ -59,9 +59,9 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
               ..limit(1))
             .getSingleOrNull();
     if (biz == null) return false;
-    final rows = await (select(
-      products,
-    )..where((p) => p.id.isIn(ids.toSet().toList()) & whereBusiness(p))).get();
+    final rows = await (select(products)
+          ..where((p) => p.id.isIn(ids.toSet().toList()) & whereBusiness(p)))
+        .get();
     return isCrateBearingSale(
       businessType: biz.type,
       tracksEmptyCrates: biz.tracksEmptyCrates,
@@ -114,17 +114,11 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   /// #712 — sale adjustments (part returns) are never their own row in any
   /// list, count or stat; they show inside their parent sale. Reports read them
   /// through `watchAllOrdersWithItems` instead.
-  Expression<bool> _notAdjustment(Orders o) =>
-      o.kind.equals('adjustment').not();
+  Expression<bool> _notAdjustment(Orders o) => o.kind.equals('adjustment').not();
 
   Stream<List<OrderData>> watchPendingOrders() {
     return (select(orders)
-          ..where(
-            (o) =>
-                whereBusiness(o) &
-                _notAdjustment(o) &
-                o.status.equals('pending'),
-          )
+          ..where((o) => whereBusiness(o) & _notAdjustment(o) & o.status.equals('pending'))
           ..orderBy([(o) => OrderingTerm.desc(o.createdAt)]))
         .watch();
   }
@@ -167,36 +161,21 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
 
   Stream<List<OrderData>> watchCompletedOrders() {
     return (select(orders)
-          ..where(
-            (o) =>
-                whereBusiness(o) &
-                _notAdjustment(o) &
-                o.status.equals('completed'),
-          )
+          ..where((o) => whereBusiness(o) & _notAdjustment(o) & o.status.equals('completed'))
           ..orderBy([(o) => OrderingTerm.desc(o.createdAt)]))
         .watch();
   }
 
   Stream<List<OrderData>> watchCancelledOrders() {
     return (select(orders)
-          ..where(
-            (o) =>
-                whereBusiness(o) &
-                _notAdjustment(o) &
-                o.status.equals('cancelled'),
-          )
+          ..where((o) => whereBusiness(o) & _notAdjustment(o) & o.status.equals('cancelled'))
           ..orderBy([(o) => OrderingTerm.desc(o.createdAt)]))
         .watch();
   }
 
   Stream<List<OrderData>> watchOrdersByCustomer(String customerId) {
     return (select(orders)
-          ..where(
-            (o) =>
-                whereBusiness(o) &
-                _notAdjustment(o) &
-                o.customerId.equals(customerId),
-          )
+          ..where((o) => whereBusiness(o) & _notAdjustment(o) & o.customerId.equals(customerId))
           ..orderBy([(o) => OrderingTerm.desc(o.createdAt)]))
         .watch();
   }
@@ -1966,9 +1945,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     // local reversal is the only path that honours a choice, so a non-default
     // choice never takes the v2 domain RPC.
     assert(
-      refundMethod == null ||
-          refundMethod == 'cash' ||
-          refundMethod == 'transfer',
+      refundMethod == null || refundMethod == 'cash' || refundMethod == 'transfer',
     );
     final toBalance = destination == RefundDestination.balance;
     // DO NOT ENABLE UNTIL #121 (the oversell-orphan go-live gate), and not
@@ -2172,18 +2149,17 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       // re-reversed.
       // #711 — the order's deposit already released at Confirm (refunded or
       // forfeited, deposit family). 0 for an untouched sale.
-      final depositRows =
-          await (select(walletTransactions)..where(
-                (t) =>
-                    whereBusiness(t) &
-                    t.orderId.equals(orderId) &
-                    t.referenceType.isIn(const [
-                      'crate_deposit',
-                      'crate_deposit_refunded',
-                      'crate_deposit_forfeited',
-                    ]),
-              ))
-              .get();
+      final depositRows = await (select(walletTransactions)..where(
+            (t) =>
+                whereBusiness(t) &
+                t.orderId.equals(orderId) &
+                t.referenceType.isIn(const [
+                  'crate_deposit',
+                  'crate_deposit_refunded',
+                  'crate_deposit_forfeited',
+                ]),
+          ))
+          .get();
       var depositHeldCreditKobo = 0;
       var depositReleasedKobo = 0;
       for (final r in depositRows) {
@@ -2193,7 +2169,8 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
           depositReleasedKobo += r.amountKobo;
         }
       }
-      final depositStillHeldKobo = depositHeldCreditKobo > depositReleasedKobo
+      final depositStillHeldKobo =
+          depositHeldCreditKobo > depositReleasedKobo
           ? depositHeldCreditKobo - depositReleasedKobo
           : 0;
       final orderPayments =
@@ -2225,8 +2202,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         // Untouched sale (nothing released yet): each row reverses as ever,
         // unless the money goes to the balance, where it becomes spendable
         // credit and the cash stays in the till.
-        if (pay.type == 'crate_deposit' &&
-            (depositReleasedKobo > 0 || toBalance)) {
+        if (pay.type == 'crate_deposit' && (depositReleasedKobo > 0 || toBalance)) {
           continue;
         }
         await db.paymentTransactionsDao.postReversalPayment(
@@ -2450,15 +2426,14 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   /// of unvoided positive `sale` + `wallet_topup` payment rows. Decides whether
   /// the Refund destination pop-up shows (0 = pure credit sale, skip it).
   Future<int> refundablePaidKobo(String orderId) async {
-    final rows =
-        await (select(paymentTransactions)..where(
-              (p) =>
-                  p.orderId.equals(orderId) &
-                  whereBusiness(p) &
-                  p.voidedAt.isNull() &
-                  p.type.isIn(const ['sale', 'wallet_topup']),
-            ))
-            .get();
+    final rows = await (select(paymentTransactions)..where(
+          (p) =>
+              p.orderId.equals(orderId) &
+              whereBusiness(p) &
+              p.voidedAt.isNull() &
+              p.type.isIn(const ['sale', 'wallet_topup']),
+        ))
+        .get();
     final paid = rows.fold<int>(
       0,
       (a, p) => a + (p.amountKobo > 0 ? p.amountKobo : 0),
@@ -2475,28 +2450,25 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     };
     final names = <ReturnEmpties>[];
     if (empties.isNotEmpty) {
-      final brands =
-          await (select(db.manufacturers)..where(
-                (m) => m.id.isIn(empties.keys.toList()) & whereBusiness(m),
-              ))
-              .get();
+      final brands = await (select(db.manufacturers)
+            ..where((m) => m.id.isIn(empties.keys.toList()) & whereBusiness(m)))
+          .get();
       final nameOf = {for (final m in brands) m.id: m.name};
       for (final e in empties.entries) {
         names.add(ReturnEmpties(nameOf[e.key] ?? 'Crates', e.value));
       }
     }
-    final rows =
-        await (select(walletTransactions)..where(
-              (t) =>
-                  whereBusiness(t) &
-                  t.orderId.equals(orderId) &
-                  t.referenceType.isIn(const [
-                    'crate_deposit',
-                    'crate_deposit_refunded',
-                    'crate_deposit_forfeited',
-                  ]),
-            ))
-            .get();
+    final rows = await (select(walletTransactions)..where(
+          (t) =>
+              whereBusiness(t) &
+              t.orderId.equals(orderId) &
+              t.referenceType.isIn(const [
+                'crate_deposit',
+                'crate_deposit_refunded',
+                'crate_deposit_forfeited',
+              ]),
+        ))
+        .get();
     var held = 0;
     for (final r in rows) {
       held += r.referenceType == 'crate_deposit' ? r.amountKobo : -r.amountKobo;
@@ -2526,16 +2498,15 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     // settle on their own: a deposit already KEPT at Confirm (forfeited for
     // crates that stayed out). Taking the crates back or not, and what the
     // kept deposit was worth, is the owner's call, not ours.
-    final kept =
-        await (select(walletTransactions)
-              ..where(
-                (t) =>
-                    whereBusiness(t) &
-                    t.orderId.equals(orderId) &
-                    t.referenceType.equals('crate_deposit_forfeited'),
-              )
-              ..limit(1))
-            .get();
+    final kept = await (select(walletTransactions)
+          ..where(
+            (t) =>
+                whereBusiness(t) &
+                t.orderId.equals(orderId) &
+                t.referenceType.equals('crate_deposit_forfeited'),
+          )
+          ..limit(1))
+        .get();
     if (kept.isNotEmpty) return ReturnRefusal.depositKept;
     return null;
   }
@@ -2566,9 +2537,9 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       final refusal = await returnRefusal(orderId);
       if (refusal != null) throw ReturnRefusedException(refusal);
 
-      final lines = await (select(
-        orderItems,
-      )..where((i) => i.orderId.equals(orderId) & whereBusiness(i))).get();
+      final lines = await (select(orderItems)
+            ..where((i) => i.orderId.equals(orderId) & whereBusiness(i)))
+          .get();
       final byId = {for (final l in lines) l.id: l};
       var damagedUnits = 0.0;
       for (final e in damagedQtyByLine.entries) {
@@ -2586,19 +2557,15 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
         throw const ReturnRefusedException(ReturnRefusal.badDamageReason);
       }
 
-      final refundKobo =
-          (await (select(paymentTransactions)..where(
-                    (p) =>
-                        p.orderId.equals(orderId) &
-                        whereBusiness(p) &
-                        p.voidedAt.isNull() &
-                        p.type.equals('sale'),
-                  ))
-                  .get())
-              .fold<int>(
-                0,
-                (a, p) => a + (p.amountKobo > 0 ? p.amountKobo : 0),
-              );
+      final refundKobo = (await (select(paymentTransactions)..where(
+                (p) =>
+                    p.orderId.equals(orderId) &
+                    whereBusiness(p) &
+                    p.voidedAt.isNull() &
+                    p.type.equals('sale'),
+              ))
+              .get())
+          .fold<int>(0, (a, p) => a + (p.amountKobo > 0 ? p.amountKobo : 0));
 
       await markCancelled(
         orderId,
@@ -2722,9 +2689,11 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       final stockIds = idsByTable['stock_transactions'] ?? const <String>[];
       final touchedInventory = <({String productId, String storeId})>{};
       if (stockIds.isNotEmpty) {
-        final rows = await (select(
-          stockTransactions,
-        )..where((s) => s.id.isIn(stockIds) & whereBusiness(s))).get();
+        final rows =
+            await (select(stockTransactions)..where(
+                  (s) => s.id.isIn(stockIds) & whereBusiness(s),
+                ))
+                .get();
         for (final r in rows) {
           await customUpdate(
             'UPDATE inventory SET quantity = quantity - ? '
@@ -2853,10 +2822,9 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     String? actorId,
   }) async {
     try {
-      final order =
-          await (select(orders)
-                ..where((o) => o.id.equals(orderId) & whereBusiness(o)))
-              .getSingleOrNull();
+      final order = await (select(
+        orders,
+      )..where((o) => o.id.equals(orderId) & whereBusiness(o))).getSingleOrNull();
       final label = order?.orderNumber ?? 'a sale';
       final ceoIds = await db.userBusinessesDao.getUserIdsForRoleSlugs(['ceo']);
       var managerIds = await db.userBusinessesDao.getUserIdsForRoleSlugs([
@@ -3165,16 +3133,15 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     final since = (now ?? DateTime.now()).toUtc().subtract(
       const Duration(days: 40),
     );
-    final query =
-        select(
-            orderItems,
-          ).join([innerJoin(orders, orders.id.equalsExp(orderItems.orderId))])
-          ..where(
-            orderItems.productId.equals(productId) &
-                whereBusiness(orders) &
-                orders.createdAt.isBiggerOrEqualValue(since),
-          )
-          ..orderBy([OrderingTerm.asc(orderItems.id)]);
+    final query = select(orderItems).join([
+      innerJoin(orders, orders.id.equalsExp(orderItems.orderId)),
+    ])
+      ..where(
+        orderItems.productId.equals(productId) &
+            whereBusiness(orders) &
+            orders.createdAt.isBiggerOrEqualValue(since),
+      )
+      ..orderBy([OrderingTerm.asc(orderItems.id)]);
     return query
         .watch()
         .map((rows) {
@@ -4042,10 +4009,7 @@ class QuickSaleRequestsDao extends DatabaseAccessor<AppDatabase>
 /// [OrdersDao.commitGuardedReversal]: the reversal's id (its hold key and the
 /// cloud's per-order marker) and the outbox snapshot taken at begin.
 class GuardedReversal {
-  const GuardedReversal._({
-    required this.reversalId,
-    required this.queueBefore,
-  });
+  const GuardedReversal._({required this.reversalId, required this.queueBefore});
   final String reversalId;
   final Set<String> queueBefore;
 }
