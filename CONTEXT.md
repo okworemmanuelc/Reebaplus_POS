@@ -246,6 +246,11 @@ same guarded reversal. Money collected after Checkout (Mark as paid / Record
 Payment) stays as customer credit, never a cash refund. Writes an activity-log
 entry and a `sale_returned` warning to CEO and Managers (best-effort). Partial
 returns are a **Sale adjustment** (#712); Online Order handling is out of scope.
+**Refund window** (#733): a sale whose ORIGINAL `created_at` is more than
+`kRefundWindowDays` (30) days old can't be Returned, part returned or edited
+(`ReturnRefusal.tooOld`, checked first in `returnRefusal`), and a Pending
+order that old can't be refunded once money was paid on it (nothing paid =
+still cancellable). The device clock decides; there is no CEO override.
 _Avoid_: "refund" for the Completed-sale action in code; a partial return.
 
 **Cart**:

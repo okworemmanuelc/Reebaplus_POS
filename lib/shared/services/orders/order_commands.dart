@@ -428,10 +428,14 @@ class OrderCommands {
     required GateContext gateContext,
     RefundDestination destination = RefundDestination.cashOrTransfer,
     String? refundMethod,
-  }) {
+  }) async {
     const gate = Gates.refundOrder;
     if (!gate.evaluate(gateContext)) {
       throw GateDeniedError(gateName: gate.name, action: gate.action);
+    }
+    // #733 — an old order with money paid on it can't be refunded.
+    if (await _ordersDao.pendingRefundRefusal(orderId) == ReturnRefusal.tooOld) {
+      throw const ReturnRefusedException(ReturnRefusal.tooOld);
     }
     return _ordersDao.markCancelled(
       orderId,
