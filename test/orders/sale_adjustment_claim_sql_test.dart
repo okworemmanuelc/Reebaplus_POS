@@ -8,7 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   final sql = File(
-    'supabase/migrations/0251_claim_returns_added_goods.sql',
+    'supabase/migrations/0252_claim_returns_added_goods.sql',
   ).readAsStringSync();
   final original = File(
     'supabase/migrations/0247_sale_adjustments.sql',

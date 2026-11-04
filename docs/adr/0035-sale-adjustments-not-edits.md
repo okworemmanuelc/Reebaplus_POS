@@ -140,7 +140,7 @@ decision, 2026-11-04. The 30-day window stays keyed on the parent sale's
   returned whole by a final adjustment and stays `completed`.
   `OrdersDao.returnCompletedSale` refuses it (`ReturnRefusal.hasAdjustments`):
   it reversed only the parent, and the cloud refused that reversal.
-- **Cloud `0251`:** `pos_claim_sale_adjustment` accepts a plus line of an
+- **Cloud `0252`:** `pos_claim_sale_adjustment` accepts a plus line of an
   adjustment of this sale as `order_item_id`. The check stays per line, the
   payload format is unchanged and old claims keep counting. A plus line not yet
   landed is FK-deferred. Per line is stricter than per product on purpose: a
@@ -151,7 +151,7 @@ decision, 2026-11-04. The 30-day window stays keyed on the parent sale's
 - Van sales are unchanged: they cannot gain plus lines (`notForRoadSale`).
 - Receipts are unchanged. The Orders card shows the combined quantity with a note
   ("12× Star (+2 added 4 Nov)").
-- Deploy `0251` before any phone build carrying this.
+- Deploy `0252` before any phone build carrying this.
 
 ## Addendum: Crate deposit on crates added by an edit (#732)
 
