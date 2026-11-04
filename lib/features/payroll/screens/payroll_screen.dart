@@ -143,7 +143,7 @@ class _PayrollScreenState extends ConsumerState<PayrollScreen> {
     );
   }
 
-  Widget _tabs() => PayrollSegmented<_Tab>(
+  Widget _tabs() => AppSegmented<_Tab>(
     value: _tab,
     items: const {_Tab.overview: 'Overview', _Tab.history: 'History'},
     keyOf: (t) =>

@@ -116,6 +116,7 @@ abstract final class AppIcons {
   static const IconData attachment = Symbols.attach_file;
   static const IconData backspace = Symbols.backspace;
   static const IconData biometrics = Symbols.fingerprint;
+  static const IconData bluetooth = Symbols.bluetooth;
   static const IconData camera = Symbols.photo_camera;
   static const IconData checkBox = Symbols.check_box;
   static const IconData checkBoxOutlineBlank = Symbols.check_box_outline_blank;
