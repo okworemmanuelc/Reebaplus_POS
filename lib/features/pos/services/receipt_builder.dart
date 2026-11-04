@@ -42,6 +42,7 @@ class ThermalReceiptService {
     bool showWalletInfo = false,
     DateTime? reprintDate,
     DateTime? reshareDate,
+    String? slipTitle,
     String? orderStatus,
     double? refundAmount,
     String? storeAddress,
@@ -65,7 +66,7 @@ class ThermalReceiptService {
   }) async {
     final compact = receiptSize == ReceiptSize.compact;
     // Compact (#676) always prints as text, whatever the print style says.
-    if (printStyle == ReceiptPrintStyle.text || compact) {
+    if (printStyle == ReceiptPrintStyle.text || compact || slipTitle != null) {
       final hasLogo = logoPath != null && File(logoPath).existsSync();
       final lines = buildReceiptLines(
         paperSize: paperSize,
@@ -82,6 +83,7 @@ class ThermalReceiptService {
         showWalletInfo: showWalletInfo,
         reprintDate: reprintDate,
         reshareDate: reshareDate,
+        slipTitle: slipTitle,
         orderStatus: orderStatus,
         refundAmount: refundAmount,
         manufacturerNames: manufacturerNames,

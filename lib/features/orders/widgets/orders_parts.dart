@@ -31,6 +31,7 @@ abstract final class OrdersKeys {
   static const search = Key('orders-search');
   static const period = Key('orders-period');
   static const refund = Key('orders-refund');
+  static const editSale = Key('orders-edit-sale');
   static const confirm = Key('orders-confirm');
   static const rider = Key('orders-rider');
   static const receiptSheet = Key('orders-receipt-sheet');
