@@ -36,6 +36,22 @@ final allOrdersProvider = businessScopedStream<List<OrderWithItems>>(
   whenAbsent: const [],
 );
 
+/// A report window: `from` inclusive, `to` inclusive, either null = open
+/// (the shape `dateRangeForLabel` returns). Value-equal, so it is the family key.
+typedef EntryDayWindow = ({DateTime? from, DateTime? to});
+
+/// #685 (PRD #680) - only the orders that can put a report entry on a day in
+/// [EntryDayWindow] (created in it, or cancelled in it), business-scoped. The
+/// Profit report feeds these to the same pure calculation it used to feed the
+/// whole history. "To Date" has no lower bound, so it loads every order.
+final periodOrdersProvider =
+    businessScopedStreamAutoDisposeFamily<List<OrderWithItems>, EntryDayWindow>(
+      (ref, db, businessId, window) => ref
+          .watch(orderServiceProvider)
+          .watchOrdersWithItemsForEntryDays(from: window.from, to: window.to),
+      whenAbsent: const [],
+    );
+
 final pendingOrdersProvider =
     businessScopedStreamFamily<List<OrderWithItems>, String?>(
   (ref, db, businessId, storeId) =>

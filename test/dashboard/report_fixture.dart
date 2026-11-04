@@ -173,6 +173,9 @@ List<Override> reportOverrides(ScreenTestEnvironment env, DateTime orderAt) => [
   allOrdersProvider.overrideWith(
     (ref) => Stream.value(sampleReportOrders(env, orderAt)),
   ),
+  periodOrdersProvider.overrideWith(
+    (ref, window) => Stream.value(sampleReportOrders(env, orderAt)),
+  ),
   crateDepositSummaryProvider.overrideWith(
     (ref) => Stream.value(
       const CrateDepositSummary(
