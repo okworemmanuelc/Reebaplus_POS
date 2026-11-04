@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
+import 'package:reebaplus_pos/core/crates/crate_bearing_sale.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
@@ -28,15 +29,25 @@ class _ReturnDraft {
   int quantity = 0;
   String condition = kVanReturnConditionGood;
 
-  /// Stays 0 for a business that does not track crates — the field is not shown
-  /// (see [_ReturnLineCard]), because empties are a Bar/Beverage concept only.
-  int shellsBack = 0;
+  /// The EMPTY crates counted back (#726) — separate from [quantity], which is
+  /// the unsold FULL crates. Null until the manager types it: for a
+  /// crate-tracked product the line cannot be saved while it is null (0 is a
+  /// valid answer). Stays 0 where [crateTracked] is false.
+  int? shellsBack;
+
+  /// Whether this product's empties are tracked (crate business, bottle,
+  /// track-empties on, has a brand) — decided once when the row is added.
+  final bool crateTracked;
 
   /// The idempotency key for this line, minted ONCE when the row is added and
   /// re-used across every retry, so a double-tap cannot credit twice.
   final String eventId = UuidV7.generate();
 
-  _ReturnDraft({required this.productId, required this.productName});
+  _ReturnDraft({
+    required this.productId,
+    required this.productName,
+    this.crateTracked = false,
+  });
 
   bool get isGood => condition == kVanReturnConditionGood;
 }
@@ -90,6 +101,23 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
       Theme.of(context).textTheme.bodySmall?.color ??
       Theme.of(context).iconTheme.color!;
 
+  /// Whether [productId] is a crate-tracked bottle with a brand in a business
+  /// that tracks crates — the products whose empties must be counted.
+  bool _isCrateTracked(String productId) {
+    if (!businessTracksCrates(ref.read(currentBusinessProvider))) return false;
+    for (final p
+        in ref.read(productsWithStockProvider(null)).valueOrNull ??
+            const <ProductDataWithStock>[]) {
+      if (p.product.id != productId) continue;
+      return p.product.manufacturerId != null &&
+          isCrateTrackedBottle((
+            unit: p.product.unit,
+            trackEmpties: p.product.trackEmpties,
+          ));
+    }
+    return false;
+  }
+
   void _addProduct(String productId, String productName) {
     if (_lines.any((l) => l.productId == productId)) {
       AppNotification.showError(
@@ -99,7 +127,13 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
       return;
     }
     setState(() {
-      _lines.add(_ReturnDraft(productId: productId, productName: productName));
+      _lines.add(
+        _ReturnDraft(
+          productId: productId,
+          productName: productName,
+          crateTracked: _isCrateTracked(productId),
+        ),
+      );
     });
   }
 
@@ -125,6 +159,14 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
         );
         return;
       }
+      if (line.crateTracked && line.shellsBack == null) {
+        AppNotification.showError(
+          context,
+          'Count the empty crates for ${line.productName} — type 0 if none '
+          'came back.',
+        );
+        return;
+      }
     }
 
     final currentUser = ref.read(authProvider).currentUser;
@@ -141,7 +183,7 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
                 productId: l.productId,
                 quantity: l.quantity,
                 condition: l.condition,
-                shellsBack: l.shellsBack,
+                shellsBack: l.shellsBack ?? 0,
                 eventId: l.eventId,
               ),
             )
@@ -281,7 +323,6 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
               ..._lines.map(
                 (line) => _ReturnLineCard(
                   line: line,
-                  showCrates: tracksCrates,
                   onChanged: () => setState(() {}),
                   onRemove: () => setState(() => _lines.remove(line)),
                 ),
@@ -374,15 +415,11 @@ class _CountItYourselfNote extends StatelessWidget {
 class _ReturnLineCard extends StatelessWidget {
   final _ReturnDraft line;
 
-  /// Whether to offer the empty-crate memo field. Passed down rather than read
-  /// here so the whole screen decides the crate question once.
-  final bool showCrates;
   final VoidCallback onChanged;
   final VoidCallback onRemove;
 
   const _ReturnLineCard({
     required this.line,
-    required this.showCrates,
     required this.onChanged,
     required this.onRemove,
   });
@@ -428,7 +465,9 @@ class _ReturnLineCard extends StatelessWidget {
           ),
           SizedBox(height: context.getRSize(4)),
           AppInput(
-            labelText: 'How many came back',
+            labelText: line.crateTracked
+                ? 'Unsold full crates coming back'
+                : 'How many came back',
             // NO initialValue and NO hint number: the emptiness is the control
             // (spec §7.3). A "0" hint would still anchor the manager.
             keyboardType: TextInputType.number,
@@ -473,18 +512,25 @@ class _ReturnLineCard extends StatelessWidget {
               color: line.isGood ? subtext : semantic.warning,
             ),
           ),
-          if (showCrates) ...[
+          if (line.crateTracked) ...[
             SizedBox(height: context.getRSize(10)),
             AppInput(
-              // §11 — counting only. No deposit money moves in v1.
-              labelText: 'Empty crates coming back (optional)',
+              // #726 — counted SEPARATELY from the full crates above, required
+              // (0 is fine), and added to the warehouse's Empties when saved.
+              labelText: 'Empty crates coming back (required)',
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              hintText: '0',
+              hintText: 'Count them — 0 if none',
               onChanged: (v) {
-                line.shellsBack = int.tryParse(v.trim()) ?? 0;
+                line.shellsBack = int.tryParse(v.trim());
                 onChanged();
               },
+            ),
+            SizedBox(height: context.getRSize(4)),
+            Text(
+              'Empties go into the warehouse\'s empty-crate count. Full crates '
+              'above go back into stock and are never counted as empties.',
+              style: t.textTheme.bodySmall?.copyWith(color: subtext),
             ),
           ],
         ],

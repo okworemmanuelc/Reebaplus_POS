@@ -736,6 +736,10 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
                       ),
                     ],
                   ),
+                  SizedBox(height: context.getRSize(12)),
+                  _LostCratesLine(
+                    tripIds: [for (final trip in withShells) trip.id],
+                  ),
                 ],
               ),
             ),
@@ -759,7 +763,10 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
                   margin: EdgeInsets.only(bottom: context.getRSize(12)),
                   padding: EdgeInsets.all(context.getRSize(16)),
                   radius: 16,
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  Row(
                     children: [
                       Expanded(
                         child: Column(
@@ -799,12 +806,57 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
                       ),
                     ],
                   ),
+                      SizedBox(height: context.getRSize(8)),
+                      _LostCratesLine(tripIds: [trip.id]),
+                    ],
+                  ),
                 ),
               ),
           ]),
         ),
       ),
     ];
+  }
+}
+
+/// Lost crates (#726): the count and naira value of crates that went out on
+/// [tripIds] and are not accounted for, at the manufacturer deposit rate.
+///
+/// **Shown only.** The driver is not charged for these and they sit outside
+/// every money total on this profile.
+class _LostCratesLine extends ConsumerWidget {
+  final List<String> tripIds;
+
+  const _LostCratesLine({required this.tripIds});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    var units = 0;
+    var valueKobo = 0;
+    for (final id in tripIds) {
+      final p = ref.watch(vanTripPositionProvider(id)).valueOrNull;
+      if (p == null) continue;
+      units += p.shellsLostUnits;
+      valueKobo += p.shellsLostValueKobo;
+    }
+    final t = Theme.of(context);
+    final semantic = t.extension<AppSemanticColors>()!;
+    final lost = units > 0;
+    return Text(
+      lost
+          ? 'Lost crates: $units'
+                '${valueKobo > 0 ? ' (${formatCurrency(valueKobo / 100)})' : ''}'
+                ' — shown only, not charged to the driver.'
+          : 'No lost crates.',
+      key: const ValueKey('driver-lost-crates'),
+      style: TextStyle(
+        fontSize: context.getRFontSize(12),
+        fontWeight: FontWeight.w600,
+        color: lost
+            ? semantic.warning
+            : (t.textTheme.bodySmall?.color ?? t.iconTheme.color),
+      ),
+    );
   }
 }
 

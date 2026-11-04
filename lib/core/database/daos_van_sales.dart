@@ -1539,6 +1539,25 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
         await into(vanReturnEvents).insert(event);
         await db.syncDao.enqueueUpsert('van_return_events', event);
 
+        // 2b. #726 — the empties that came back reach the SOURCE warehouse
+        //     pool, by manufacturer, in this same transaction. Unsold FULL
+        //     crates are the line's `quantity`, never empties, and are not
+        //     touched here.
+        if (line.shellsBack > 0) {
+          final brandId = await _crateBrandOf(line.productId);
+          if (brandId != null) {
+            await db.cratePoolDao.creditVanReturnEmpties(
+              manufacturerId: brandId,
+              quantity: line.shellsBack.toDouble(),
+              storeId: trip.sourceStoreId,
+              tripId: tripId,
+              driverUserId: trip.driverUserId,
+              eventId: eventId,
+              performedBy: performedBy,
+            );
+          }
+        }
+
         if (line.isGood) {
           // 3. Off the van, into SELLABLE warehouse stock — immediately. Both
           //    legs `trackCost: false`: the van has no queue to draw, and the
@@ -1663,6 +1682,31 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
         alreadyApplied: false,
       );
     });
+  }
+
+  /// The manufacturer whose empties [productId]'s crates are, or null when the
+  /// product is not a crate-tracked bottle with a brand (or the business does
+  /// not track crates) — the same gate `createOrder` applies before writing any
+  /// crate row (rule #13).
+  Future<String?> _crateBrandOf(String productId) async {
+    final biz = await (db.select(
+      db.businesses,
+    )..where((b) => b.id.equals(requireBusinessId()))).getSingleOrNull();
+    if (!crateTrackingOn(
+      businessType: biz?.type,
+      tracksEmptyCrates: biz?.tracksEmptyCrates,
+    )) {
+      return null;
+    }
+    final p =
+        await (db.select(db.products)
+              ..where((t) => t.id.equals(productId) & whereBusiness(t)))
+            .getSingleOrNull();
+    if (p == null || p.manufacturerId == null) return null;
+    if (!isCrateTrackedBottle((unit: p.unit, trackEmpties: p.trackEmpties))) {
+      return null;
+    }
+    return p.manufacturerId;
   }
 
   /// Sum duplicate (product, condition) lines into one and drop the degenerate
@@ -2078,7 +2122,63 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
       ],
       shellsOut: trip?.shellsOut ?? 0,
       shellsBack: trip?.shellsBack ?? 0,
+      shells: await _shellLinesForTrip(lots, returnRows),
     );
+  }
+
+  /// The trip's crate shells grouped by manufacturer, with the deposit rate each
+  /// brand's shell is valued at (#726, spec §11) — the input that makes
+  /// [VanTripPosition.shellsLostUnits] / `shellsLostValueKobo` non-zero.
+  ///
+  /// **Lost = shells that went out − shells that came back**, per brand, floored
+  /// at 0. "Came back" is the empties counted in PLUS every unsold full crate
+  /// returned (a full crate carries its shell home), so an unsold full crate is
+  /// never shown as lost. Nothing here reads recorded road sales, which a driver
+  /// may not have rung: lost crates are therefore an upper bound the manager
+  /// reads beside the count, and they stay OUTSIDE every money total (the
+  /// driver is not charged for them).
+  ///
+  /// Empty for a business that does not track crates, and for any product that
+  /// is not a crate-tracked bottle with a brand.
+  Future<List<VanPositionShellLine>> _shellLinesForTrip(
+    List<VanTripLotData> lots,
+    List<VanReturnEventData> returnRows,
+  ) async {
+    final brandOf = <String, String?>{};
+    Future<String?> brand(String productId) async =>
+        brandOf.containsKey(productId)
+        ? brandOf[productId]
+        : brandOf[productId] = await _crateBrandOf(productId);
+
+    final out = <String, int>{};
+    final back = <String, int>{};
+    for (final l in lots) {
+      if (l.shellsOut <= 0) continue;
+      final b = await brand(l.productId);
+      if (b != null) out[b] = (out[b] ?? 0) + l.shellsOut;
+    }
+    for (final r in returnRows) {
+      final b = await brand(r.productId);
+      if (b == null) continue;
+      back[b] = (back[b] ?? 0) + r.shellsBack + r.quantity;
+    }
+    if (out.isEmpty && back.isEmpty) return const <VanPositionShellLine>[];
+
+    final lines = <VanPositionShellLine>[];
+    for (final id in {...out.keys, ...back.keys}) {
+      final m = await (db.select(
+        db.manufacturers,
+      )..where((t) => t.id.equals(id) & whereBusiness(t))).getSingleOrNull();
+      lines.add(
+        VanPositionShellLine(
+          manufacturerId: id,
+          shellsOut: out[id] ?? 0,
+          shellsBack: back[id] ?? 0,
+          depositRateKobo: m?.depositAmountKobo ?? 0,
+        ),
+      );
+    }
+    return lines;
   }
 
   /// Live [positionForTrip] — the reconcile screen's whole feed.

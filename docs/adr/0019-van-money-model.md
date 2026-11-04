@@ -131,6 +131,20 @@ settled" having lost every shell and the data to reconstruct it never existed.
 The full pass is filed as **Van Sales v2** and cross-linked from #139 so the
 deferral cannot quietly become permanent.
 
+**Amendment (#726, 2026-11-04): empties reach the warehouse; lost crates are
+shown, not charged.** The van stays a *store*, not a customer. (1) Saving a van
+return credits the trip's SOURCE warehouse pool with the empties counted, by
+manufacturer, in the return's transaction: a store-stamped `adjusted`
+`crate_ledger` row whose `reason` is `van_return:<tripId>:<driverUserId>` and
+whose id is derived from the `van_return_events` id, so a retry or a second
+device collapses to one row. No new movement type or column, so no cloud change.
+Unsold FULL crates are the line quantity and never count as empties. (2) Lost
+crates (`shells out - (empties + unsold full crates back)`, per manufacturer,
+floored at 0) are valued at `manufacturers.deposit_amount_kobo` and shown on the
+reconcile screen and driver profile. They sit OUTSIDE balance, outstanding,
+COGS and profit; charging the driver is a later money decision. Nothing depends
+on recorded road sales.
+
 ## Consequences
 
 - `van_trip_lots.unit_cost_kobo` is load-bearing. If a dispatch ever writes a lot
