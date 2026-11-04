@@ -7,6 +7,12 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #682: Smooth screens S1 — measure first (2026-11-03, branch `feat/682-measure-first`)
+- Test shop generator `test/support/history_shop_generator.dart` (N months, seeded, deterministic): sales + lines, later-day cancels, van trips/sales, deposits held/released/forfeited, expenses, supplier entries, adjustments/damages, stock receipts, stock counts, crate damages. Goes through `OrderService.addOrder` / DAOs; rows are then re-stamped onto each simulated day (drops the `_immutable` ledger triggers on the throwaway DB only). `test/support/history_reports.dart` loads the 8 `all*` lists and runs `reconDataFrom`.
+- Timing logs: `lib/core/utils/perf_log.dart` (`perfLog`, `perfLogAsync`, `PerfClock`) print `[perf] <label> <ms>ms <extra>` in debug + profile, nothing in release. Wrapped: recon build (day/week/month/year), Profit `_compute`, Product Details open + refresh, Confirm Payment save, sync restore loop (`sync-save <table>` + `sync-save TOTAL`).
+- Benchmark `test/benchmark/history_benchmark_test.dart` (tag `benchmark`, skipped by default via `dart_test.yaml`): `flutter test --run-skipped -t benchmark test/benchmark` (`BENCH_MONTHS=6,12,24`). Numbers + phone steps are posted on #680 by the supervisor.
+- No behaviour change. Next: owner phone "before" numbers must be on #680 before #683 merges.
+
 ### Issue #723: Payroll redesign to the owner's mockups, phone + tablet (2026-11-03, branch `feat/723-payroll-redesign`)
 - Overview (month switcher, salaries-to-pay card, today's allowances with Change, 2x2 figures, staff list with All / Unpaid / Paid), History (grouped by day on a phone; staff + type filters, figure tiles and a table on a wide screen, Print Report), Pay profile, Pay Salary (signatures after Confirm Payment, Print Payslip After Saving) and Add Pay Record (Allowance / Bonus / Advance / Loan). Wide screens (>= 1024) show the staff list beside the chosen worker.
 - Owner decisions: signatures stay; one salary payment per month (money before payday is an Advance, so no "Part paid" and no split method); loans get a fixed monthly plan filled in at payday and changeable that day; allowances stay automatic.
@@ -27,6 +33,7 @@ The human updates it when resolving open questions or making architectural decis
 
 ### Issue #708: Reports show Sales / Returns / Net separately (2026-11-03, branch `feat/708-returns-line`)
 - Home, Profit report and Daily Recon split the figure into Sales / Returns / Net (and Profit / Profit returned) only when the period has cancel entries; `computeSalesSplitKobo` in `report_revenue.dart` is the one source, Net == old total, day-close snapshot untouched.
+
 ### Issue #717: Receipts waste paper — trim the end-of-print feed (2026-11-03, branch `fix/717-receipt-paper-feed`)
 - Cause: `receipt_lines` fed 2 blank lines and `esc_pos_utils_plus` `Generator.cut()` silently adds 5 more → ~7 lines (~28 mm) per job; tear-bar printers (MTP-3) ignore the cut, so it was all paper (bottom of this receipt + top of the next).
 - Builders (receipt text/picture, sample, payslip, online slip) now emit content only; `PrinterService` appends `paperEnd(n)` = `ESC d n` + `GS V 65 0` (feed to the cutter's own position) on every write path. Never use `generator.cut()` again.

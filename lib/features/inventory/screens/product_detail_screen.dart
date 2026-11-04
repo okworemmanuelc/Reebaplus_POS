@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/core/utils/perf_log.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/shared/utils/quantity_input.dart';
 import 'package:flutter/services.dart';
@@ -160,7 +161,10 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     }
 
     // Load the per-day sales for the Sales card (recognized sales only).
-    final days = await db.ordersDao.getProductSalesByDay(productId, now: _now);
+    final days = await perfLogAsync(
+      'product-details open',
+      () => db.ordersDao.getProductSalesByDay(productId, now: _now),
+    );
     if (mounted) {
       setState(() {
         _salesDays = days;
@@ -172,10 +176,13 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   /// Re-read the Sales card's days after a stock change or a sale syncs in, so
   /// it stays live alongside the product fields.
   Future<void> _reloadDerived() async {
-    final days = await ref
-        .read(databaseProvider)
-        .ordersDao
-        .getProductSalesByDay(widget.item.id, now: _now);
+    final days = await perfLogAsync(
+      'product-details refresh',
+      () => ref
+          .read(databaseProvider)
+          .ordersDao
+          .getProductSalesByDay(widget.item.id, now: _now),
+    );
     if (mounted) setState(() => _salesDays = days);
   }
 
