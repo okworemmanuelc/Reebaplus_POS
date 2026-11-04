@@ -1004,6 +1004,10 @@ extension EditCompletedSale on OrdersDao {
 
       final parentLines = {for (final l in minus?.lines ?? <OrderItemData>[]) l.id: l};
       final claimLines = <Map<String, dynamic>>[];
+      // #732 — restore layers this edit creates (withdrawn whole if refused)
+      // and the units the plus lines draw from EXISTING layers (put back).
+      final newLayerIds = <String>{};
+      final costDraws = <String, double>{};
 
       // ── Minus half: exactly a part return's rows ──────────────────────────
       if (minus != null) {
@@ -1064,12 +1068,14 @@ extension EditCompletedSale on OrdersDao {
             ],
             updates: {inventory},
           );
+          final layerId = CostBatchesDao.cancelRestoreLayerId(minusId);
+          newLayerIds.add(layerId);
           await db.costBatchesDao.recordInflowBatch(
             productId: productId,
             storeId: line.storeId,
             quantity: q,
             costKobo: line.buyingPriceKobo,
-            id: CostBatchesDao.cancelRestoreLayerId(minusId),
+            id: layerId,
             allowEmpty: true,
           );
         }
@@ -1114,7 +1120,14 @@ extension EditCompletedSale on OrdersDao {
             throw InsufficientStockException(productId: l.product.id, requested: l.qty);
           }
         }
-        final cogs = await db.costBatchesDao.drawDownSale(costLines);
+        final drawn = <String, double>{};
+        final cogs = await db.costBatchesDao.drawDownSale(
+          costLines,
+          consumedByBatch: drawn,
+        );
+        drawn.forEach((id, units) {
+          if (!newLayerIds.contains(id)) costDraws[id] = units;
+        });
         final plusCompanions = <OrderItemsCompanion>[];
         for (var i = 0; i < plan.plusLines.length; i++) {
           final l = plan.plusLines[i];
@@ -1260,6 +1273,10 @@ extension EditCompletedSale on OrdersDao {
           'p_adjustment_order_id': adjustmentId,
           'p_reversal_id': guard.reversalId,
           'p_lines': claimLines,
+          kLocalEnvelopeKey: <String, dynamic>{
+            'edit': true,
+            'cost_draws': costDraws,
+          },
         }),
       );
       await db.syncDao.holdRowsByOrder(held, guard.reversalId);
