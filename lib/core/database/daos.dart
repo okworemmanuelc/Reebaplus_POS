@@ -60,6 +60,9 @@ import 'package:reebaplus_pos/core/van_sales/van_trip_position.dart';
 // ([[project_revenue_recognized_at_checkout]]).
 import 'package:reebaplus_pos/shared/models/order_status.dart';
 
+// #732: which lines a return consumes, and the goods the sheets list.
+export 'package:reebaplus_pos/core/orders/sale_return_allocation.dart';
+
 part 'daos.g.dart';
 
 part 'daos_catalog.dart';

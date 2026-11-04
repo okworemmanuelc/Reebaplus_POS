@@ -2536,6 +2536,11 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
       if (order.status == 'cancelled') return null;
       final refusal = await returnRefusal(orderId);
       if (refusal != null) throw ReturnRefusedException(refusal);
+      // #732 — reversing the sale alone would leave its adjustments' goods,
+      // money and crates standing, and the cloud refuses the reversal anyway.
+      if ((await adjustmentsOf(orderId)).isNotEmpty) {
+        throw const ReturnRefusedException(ReturnRefusal.hasAdjustments);
+      }
 
       final lines = await (select(orderItems)
             ..where((i) => i.orderId.equals(orderId) & whereBusiness(i)))
@@ -4014,6 +4019,10 @@ enum ReturnRefusal {
   notForRoadSale('Items cannot be added to a van sale. Return items instead.'),
   walkInMustPay(
     'A walk-in customer has no balance, so the full amount must be paid now.',
+  ),
+  hasAdjustments(
+    'This sale has been changed since it was made. Return its items from the '
+    'list instead.',
   );
 
   const ReturnRefusal(this.message);

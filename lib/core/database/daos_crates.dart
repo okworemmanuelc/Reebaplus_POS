@@ -1274,6 +1274,31 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     }
   }
 
+  /// Crates the customer still owes across [orderIds] (a sale and its
+  /// adjustments, one running position), per brand. What a return cancels
+  /// first ([returnCratesForAdjustment]).
+  Future<Map<String, double>> cratesOwedByBrand(List<String> orderIds) async {
+    final rows = await (select(crateLedger)..where(
+          (l) =>
+              whereBusiness(l) &
+              l.referenceOrderId.isIn(orderIds) &
+              l.customerId.isNotNull() &
+              l.manufacturerId.isNotNull(),
+        ))
+        .get();
+    final net = <(String, String), double>{};
+    for (final r in rows) {
+      final key = (r.manufacturerId!, r.customerId!);
+      net[key] = (net[key] ?? 0) + r.quantityDelta;
+    }
+    final out = <String, double>{};
+    for (final e in net.entries) {
+      if (e.value <= 0) continue;
+      out[e.key.$1] = (out[e.key.$1] ?? 0) + e.value;
+    }
+    return out;
+  }
+
   /// What a part return would hand back to the customer, per brand, without
   /// writing: for each brand, the crates not covered by what the customer still
   /// owes, capped at the empties the sale credited to the pool. Feeds the

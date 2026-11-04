@@ -34,8 +34,8 @@ class EditSaleInput {
   final String reason;
 }
 
-/// One sale line as the editor shows it: [current] is what stands today (the
-/// original minus what was already returned).
+/// One product as the editor shows it: [current] is what stands today (the
+/// original plus what edits added, minus what was already returned).
 class EditLineSeed {
   const EditLineSeed({
     required this.lineId,
@@ -44,6 +44,7 @@ class EditLineSeed {
     required this.unitPriceKobo,
     required this.canRaise,
     required this.allowParts,
+    this.addedNote,
   });
   final String lineId;
   final String name;
@@ -51,6 +52,9 @@ class EditLineSeed {
   final int unitPriceKobo;
   final bool canRaise;
   final bool allowParts;
+
+  /// Goods added by an earlier edit in this row, with their price (#732).
+  final String? addedNote;
 }
 
 /// #713 — the cart-style editor, seeded with the sale's standing quantities.
@@ -213,7 +217,12 @@ class _EditSaleEditorState extends ConsumerState<_EditSaleEditor> {
                     ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: Text(l.name),
-                      subtitle: Text(formatCurrency(l.unitPriceKobo / 100.0)),
+                      subtitle: Text(
+                        l.addedNote == null
+                            ? formatCurrency(l.unitPriceKobo / 100.0)
+                            : '${formatCurrency(l.unitPriceKobo / 100.0)}\n'
+                                  '${l.addedNote}',
+                      ),
                       trailing: _stepper(
                         value: _qty[l.lineId]!,
                         step: _step(l.allowParts),

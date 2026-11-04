@@ -9,23 +9,30 @@ part of 'daos.dart';
 // and every report counts the adjustment on its own `created_at` day.
 //
 // Rules (the numbers are all derived from rows, so two phones agree):
-//   * Returnable per line = the sale line's quantity minus the minus lines of
-//     every adjustment that points at it (the link is `price_snapshot`
-//     `adjusts_line_id` on the minus line).
-//   * Prices on returned lines stay at the ORIGINAL line price and cost.
+//   * Returnable per line = the line's quantity minus the minus lines of every
+//     adjustment that points at it (the link is `price_snapshot`
+//     `adjusts_line_id` on the minus line). A line is a sale line or an edit's
+//     PLUS line (#732): goods added by an edit come back like the original goods.
+//   * Per product, a return consumes original lines first, then added lines,
+//     oldest adjustment first (lib/core/orders/sale_return_allocation.dart).
+//   * Prices on returned lines stay at the consumed line's own price and cost.
 //   * Discount: the sale's order-level discount is shared out pro rata over the
-//     gross still standing; the return that takes everything left takes the
-//     rest, so the shares add up to the discount exactly.
+//     ORIGINAL gross still standing (plus lines never carried any); the return
+//     that takes every original unit left takes the rest, so the shares add up
+//     to the discount exactly.
 //   * Money is proportional to what was actually paid: goods value G is
 //     reversed on the customer's account in full (`refund` credit); the part of
 //     G that was paid (G x paid-standing / goods-standing) leaves as a `refund`
 //     cash-out row (and a `void` of the payment credit leg), or stays as credit
 //     when the destination is the balance. The unpaid rest simply cancels debt.
 //     The adjustment header records `-paidShare` in `amount_paid_kobo`, which is
-//     what makes "paid still standing" derivable for the next return.
+//     what makes "paid still standing" derivable for the next return: cash
+//     tendered on the sale and on every edit, plus what each edit kept back to
+//     pay for its added goods, minus what the headers released.
 //   * Crates of crate-tracked bottle lines: see
 //     [CratePoolDao.returnCratesForAdjustment]; deposit still held is released
-//     pro rata by crates.
+//     pro rata by the crates that are not cancelling a debt, so one returned
+//     crate never both cancels a debt and releases a deposit.
 
 /// What a part return would do, computed once and used both by the pop-up
 /// (preview) and by the write.
@@ -33,6 +40,7 @@ class PartReturnPlan {
   const PartReturnPlan({
     required this.parent,
     required this.lines,
+    required this.goods,
     required this.qtyByLine,
     required this.grossKobo,
     required this.discountShareKobo,
@@ -44,9 +52,15 @@ class PartReturnPlan {
   });
 
   final OrderData parent;
+
+  /// The sale's lines, then the plus lines of its adjustments.
   final List<OrderItemData> lines;
 
-  /// Parent-line id -> units returned (only above 0).
+  /// One entry per product, in the order a return consumes them.
+  final List<ReturnableGoods> goods;
+
+  /// Line consumed (a sale line or an edit's plus line) -> units returned, only
+  /// above 0. See [allocateReturn].
   final Map<String, double> qtyByLine;
   final int grossKobo;
   final int discountShareKobo;
@@ -88,10 +102,40 @@ class PartReturnOutcome {
   final double damagedUnits;
 }
 
-/// `price_snapshot` key on a minus line: the sale line it returns units of.
+/// `price_snapshot` key on a minus line: the line it returns units of, a sale
+/// line or (#732) an edit's plus line.
 const String kAdjustsLineKey = 'adjusts_line_id';
 
-/// The sale line a minus [line] returns units of, or null.
+/// One adjustment of a sale with its lines (and their products).
+typedef SaleAdjustmentLines = ({
+  OrderData adjustment,
+  List<OrderItemDataWithProductData> lines,
+});
+
+/// A sale's goods as they stand: every line with what is left of it.
+class _SaleStanding {
+  const _SaleStanding({
+    required this.lines,
+    required this.goods,
+    required this.adjustments,
+    required this.addedKoboByAdjustment,
+  });
+
+  /// The sale's lines, then the plus lines of its adjustments.
+  final List<OrderItemData> lines;
+  final List<ReturnableGoods> goods;
+  final List<OrderData> adjustments;
+
+  /// Adjustment id -> value of the goods it added.
+  final Map<String, int> addedKoboByAdjustment;
+
+  Map<String, ReturnableGoods> get goodsByLineId => {
+    for (final g in goods)
+      for (final l in g.lines) l.lineId: g,
+  };
+}
+
+/// The line a minus [line] returns units of, or null.
 String? adjustsLineIdOf(OrderItemData line) {
   final snap = line.priceSnapshot;
   if (snap == null) return null;
@@ -130,10 +174,9 @@ extension SaleAdjustments on OrdersDao {
           .watch();
 
   /// Live part returns of [orderId] with their minus lines (and products).
-  Stream<List<({OrderData adjustment, List<OrderItemDataWithProductData> lines})>>
-  watchAdjustmentsWithLines(String orderId) {
+  Stream<List<SaleAdjustmentLines>> watchAdjustmentsWithLines(String orderId) {
     return watchAdjustmentsOf(orderId).asyncMap((adjs) async {
-      final out = <({OrderData adjustment, List<OrderItemDataWithProductData> lines})>[];
+      final out = <SaleAdjustmentLines>[];
       for (final a in adjs) {
         final rows = await (select(orderItems).join([
           leftOuterJoin(products, products.id.equalsExp(orderItems.productId)),
@@ -154,29 +197,70 @@ extension SaleAdjustments on OrdersDao {
     });
   }
 
-  /// Units still returnable per line of [orderId] (line id -> units, never
-  /// below 0): the original quantity minus every adjustment's minus lines.
-  Future<Map<String, double>> returnableQtyByLine(String orderId) async {
-    final lines = await (select(orderItems)
-          ..where((i) => i.orderId.equals(orderId) & whereBusiness(i)))
+  /// Reads [orderId]'s goods as they stand (#732): the sale's lines and every
+  /// adjustment's plus lines, less every minus line.
+  Future<_SaleStanding> _saleStanding(String orderId) async {
+    final adjustments = await adjustmentsOf(orderId);
+    final addedAt = {for (final a in adjustments) a.id: a.createdAt};
+    final rows = await (select(orderItems).join([
+      leftOuterJoin(products, products.id.equalsExp(orderItems.productId)),
+    ])..where(
+          orderItems.orderId.isIn([orderId, ...addedAt.keys]) &
+              whereBusiness(orderItems),
+        ))
         .get();
-    final adjIds = [for (final a in await adjustmentsOf(orderId)) a.id];
+    final lines = <OrderItemDataWithProductData>[];
     final returned = <String, double>{};
-    if (adjIds.isNotEmpty) {
-      final minus = await (select(orderItems)
-            ..where((i) => i.orderId.isIn(adjIds) & whereBusiness(i)))
-          .get();
-      for (final m in minus) {
-        final target = adjustsLineIdOf(m);
-        if (target == null) continue;
-        returned[target] = (returned[target] ?? 0) - m.quantity;
+    final addedKobo = <String, int>{};
+    for (final r in rows) {
+      final line = r.readTable(orderItems);
+      if (line.orderId != orderId && line.quantity < 0) {
+        final target = adjustsLineIdOf(line);
+        if (target != null) {
+          returned[target] = (returned[target] ?? 0) - line.quantity;
+        }
+        continue;
       }
+      if (line.orderId != orderId) {
+        addedKobo[line.orderId] =
+            (addedKobo[line.orderId] ?? 0) + line.totalKobo;
+      }
+      lines.add(OrderItemDataWithProductData(line, r.readTableOrNull(products)));
     }
-    return {
-      for (final l in lines)
-        l.id: math.max(0.0, l.quantity - (returned[l.id] ?? 0)),
-    };
+    return _SaleStanding(
+      lines: [for (final l in lines) l.item],
+      goods: groupReturnableLines([
+        for (final l in lines)
+          ReturnableLine(
+            lineId: l.item.id,
+            productId: l.item.productId,
+            storeId: l.item.storeId,
+            sold: l.item.quantity,
+            returned: returned[l.item.id] ?? 0,
+            unitPriceKobo: l.item.unitPriceKobo,
+            buyingPriceKobo: l.item.buyingPriceKobo,
+            addedAt: addedAt[l.item.orderId],
+            name: l.displayName,
+            allowParts: l.product?.allowFractionalSales ?? false,
+          ),
+      ]),
+      adjustments: adjustments,
+      addedKoboByAdjustment: addedKobo,
+    );
   }
+
+  /// [orderId]'s goods per product, in the order a return consumes them: what
+  /// the Return and Edit sheets list (#732).
+  Future<List<ReturnableGoods>> returnableGoods(String orderId) async =>
+      (await _saleStanding(orderId)).goods;
+
+  /// Units still returnable per line of [orderId] (line id -> units, never
+  /// below 0), plus lines included: each line's quantity minus every minus line
+  /// pointing at it.
+  Future<Map<String, double>> returnableQtyByLine(String orderId) async => {
+    for (final g in await returnableGoods(orderId))
+      for (final l in g.lines) l.lineId: l.standing,
+  };
 
   /// Crates per brand that [qtyByLine]-shaped (line, units) pairs carry: units
   /// of crate-tracked bottle lines grouped by manufacturer, the same basis as
@@ -211,9 +295,12 @@ extension SaleAdjustments on OrdersDao {
     return out;
   }
 
-  /// Works out a part return of [orderId] without writing anything. Throws a
-  /// [ReturnRefusedException] when it cannot be done (not a completed sale, a
-  /// bad or over-the-limit quantity, nothing picked, deposit kept).
+  /// Works out a part return of [orderId] without writing anything. A key of
+  /// [qtyByLineId] is any line of the product (the sheets send
+  /// [ReturnableGoods.lineId]): the units are what comes back of that product,
+  /// and [allocateReturn] picks the lines. Throws a [ReturnRefusedException]
+  /// when it cannot be done (not a completed sale, a bad or over-the-limit
+  /// quantity, nothing picked, deposit kept).
   Future<PartReturnPlan> planPartReturn(
     String orderId,
     Map<String, double> qtyByLineId,
@@ -225,57 +312,76 @@ extension SaleAdjustments on OrdersDao {
     final refusal = await returnRefusal(orderId);
     if (refusal != null) throw ReturnRefusedException(refusal);
 
-    final lines = await (select(orderItems)
-          ..where((i) => i.orderId.equals(orderId) & whereBusiness(i)))
-        .get();
+    final standing = await _saleStanding(orderId);
+    final lines = standing.lines;
     final byId = {for (final l in lines) l.id: l};
-    final returnable = await returnableQtyByLine(orderId);
+    final goodsOf = standing.goodsByLineId;
 
-    final qty = <String, double>{};
+    final asked = <ReturnableGoods, double>{};
     for (final e in qtyByLineId.entries) {
       if (e.value == 0) continue;
-      final line = byId[e.key];
-      if (line == null || e.value < 0 || !Qty.isQuarterStep(e.value)) {
+      final goods = goodsOf[e.key];
+      if (goods == null || e.value < 0 || !Qty.isQuarterStep(e.value)) {
         throw const ReturnRefusedException(ReturnRefusal.badReturnQty);
       }
-      if (e.value > (returnable[e.key] ?? 0) + 1e-9) {
+      asked[goods] = (asked[goods] ?? 0) + e.value;
+    }
+    final qty = <String, double>{};
+    for (final e in asked.entries) {
+      if (e.value > e.key.standing + 1e-9) {
         throw const ReturnRefusedException(ReturnRefusal.overReturn);
       }
-      qty[e.key] = e.value;
+      qty.addAll(allocateReturn(e.key, e.value));
     }
     if (qty.isEmpty) {
       throw const ReturnRefusedException(ReturnRefusal.nothingToReturn);
     }
 
-    final adjs = await adjustmentsOf(orderId);
+    final adjs = standing.adjustments;
     var remainingGross = 0;
     var returnedGross = 0;
+    var originalLeftGross = 0;
+    var originalReturnedGross = 0;
     var coversAll = true;
-    for (final l in lines) {
-      final left = returnable[l.id] ?? 0;
-      remainingGross += lineTotalKobo(l.unitPriceKobo, left);
-      final q = qty[l.id] ?? 0;
-      returnedGross += lineTotalKobo(l.unitPriceKobo, q);
-      if (left > 0 && (q - left).abs() > 1e-9) coversAll = false;
+    var coversOriginals = true;
+    for (final g in standing.goods) {
+      for (final l in g.lines) {
+        final left = l.standing;
+        final q = qty[l.lineId] ?? 0;
+        final takesAll = left <= 0 || (q - left).abs() <= 1e-9;
+        remainingGross += lineTotalKobo(l.unitPriceKobo, left);
+        returnedGross += lineTotalKobo(l.unitPriceKobo, q);
+        if (!takesAll) coversAll = false;
+        if (l.isAdded) continue;
+        originalLeftGross += lineTotalKobo(l.unitPriceKobo, left);
+        originalReturnedGross += lineTotalKobo(l.unitPriceKobo, q);
+        if (!takesAll) coversOriginals = false;
+      }
     }
 
-    // Discount: pro rata over what is left; the last return takes the rest.
+    // Discount: it was given on the original goods only, so it is shared over
+    // what is left of them; the return that takes the last of them takes the
+    // rest. Added goods carry none.
     final usedDiscount = adjs.fold<int>(0, (s, a) => s + (-a.discountKobo));
     final remainingDiscount = math.max(0, parent.discountKobo - usedDiscount);
-    final share = coversAll
+    final share = coversOriginals
         ? remainingDiscount
-        : (remainingGross > 0
-              ? (remainingDiscount * returnedGross / remainingGross).round()
+        : (originalLeftGross > 0
+              ? (remainingDiscount * originalReturnedGross / originalLeftGross)
+                    .round()
               : 0);
     final int discountShare = share.clamp(0, remainingDiscount).toInt();
     final goods = returnedGross - discountShare;
     final remainingGoods = remainingGross - remainingDiscount;
 
-    // Paid still standing on the goods: tendered `sale` rows minus what earlier
-    // adjustments already released (their header carries -paidShare).
+    // Paid still standing on the goods: tendered `sale` rows (the sale's and
+    // each edit's) minus what earlier adjustments released (their header carries
+    // -paidShare). An edit's released money that stayed to pay for its added
+    // goods (the smaller of the two) is still standing on those goods.
+    final orderIds = [orderId, for (final a in adjs) a.id];
     final salePays = await (select(paymentTransactions)..where(
           (p) =>
-              p.orderId.equals(orderId) &
+              p.orderId.isIn(orderIds) &
               whereBusiness(p) &
               p.voidedAt.isNull() &
               p.type.equals('sale'),
@@ -285,7 +391,12 @@ extension SaleAdjustments on OrdersDao {
       0,
       (s, p) => s + (p.amountKobo > 0 ? p.amountKobo : 0),
     );
-    final released = adjs.fold<int>(0, (s, a) => s + (-a.amountPaidKobo));
+    var released = 0;
+    for (final a in adjs) {
+      final out = -a.amountPaidKobo;
+      released +=
+          out - math.min(out, standing.addedKoboByAdjustment[a.id] ?? 0);
+    }
     final paidStanding = math.max(0, tendered - released);
     final paidShare = coversAll
         ? paidStanding
@@ -301,9 +412,9 @@ extension SaleAdjustments on OrdersDao {
       for (final e in qty.entries) (line: byId[e.key]!, qty: e.value),
     ]);
     final crateLeft = await _crateUnitsByBrand([
-      for (final l in lines) (line: l, qty: returnable[l.id] ?? 0),
+      for (final g in standing.goods)
+        for (final l in g.lines) (line: byId[l.lineId]!, qty: l.standing),
     ]);
-    final orderIds = [orderId, for (final a in adjs) a.id];
     final depositRows = await (select(walletTransactions)..where(
           (t) =>
               whereBusiness(t) &
@@ -320,13 +431,22 @@ extension SaleAdjustments on OrdersDao {
       held += r.referenceType == 'crate_deposit' ? r.amountKobo : -r.amountKobo;
     }
     held = math.max(0, held);
-    final returnedCrates = crateReturned.values.fold<double>(0, (s, v) => s + v);
-    final leftCrates = crateLeft.values.fold<double>(0, (s, v) => s + v);
-    final deposit = held == 0 || returnedCrates == 0
+    // A returned crate cancels what is still owed first; only the crates beyond
+    // that are the deposit's, so none cancels a debt AND releases a deposit.
+    final owed = await db.cratePoolDao.cratesOwedByBrand(orderIds);
+    double beyondOwed(Map<String, double> crates) => crates.entries.fold(
+      0,
+      (s, e) => s + math.max(0.0, e.value - (owed[e.key] ?? 0)),
+    );
+    final returnedCrates = beyondOwed(crateReturned);
+    final leftCrates = beyondOwed(crateLeft);
+    final deposit = held == 0 || crateReturned.isEmpty
         ? 0
-        : (coversAll || returnedCrates >= leftCrates
+        : (coversAll || (returnedCrates > 0 && returnedCrates >= leftCrates)
               ? held
-              : (held * returnedCrates / leftCrates).round());
+              : (leftCrates > 0
+                    ? (held * returnedCrates / leftCrates).round()
+                    : 0));
 
     // Empties to hand back (preview of what returnCratesForAdjustment will do).
     final back = await db.cratePoolDao.emptiesBackFor(
@@ -347,6 +467,7 @@ extension SaleAdjustments on OrdersDao {
     return PartReturnPlan(
       parent: parent,
       lines: lines,
+      goods: standing.goods,
       qtyByLine: qty,
       grossKobo: returnedGross,
       discountShareKobo: discountShare,
@@ -359,7 +480,7 @@ extension SaleAdjustments on OrdersDao {
   }
 
   /// **Part return** (#712): ONE transaction, behind the #550 guarded reversal,
-  /// that writes a sale adjustment for [qtyByLineId] (parent-line id -> units).
+  /// that writes a sale adjustment for [qtyByLineId] (see [planPartReturn]).
   /// Rows written (all referencing the adjustment's id): the adjustment `orders`
   /// row + minus `order_items`; per stocked line a `return` stock row, inventory
   /// back up and a cost layer at the line's recorded cost (damaged units are
@@ -370,7 +491,9 @@ extension SaleAdjustments on OrdersDao {
   ///
   /// A full return of a sale with NO adjustment yet is [markCancelled]'s job
   /// (the caller decides); this works for any quantities that fit, including
-  /// the final adjustment that takes everything left.
+  /// the final adjustment that takes everything left, which is how a sale with
+  /// an adjustment is returned whole. [damagedQtyByLine] is keyed like
+  /// [qtyByLineId].
   Future<PartReturnOutcome> returnPartOfSale({
     required String orderId,
     required Map<String, double> qtyByLineId,
@@ -394,17 +517,30 @@ extension SaleAdjustments on OrdersDao {
       }
       final byId = {for (final l in plan.lines) l.id: l};
       var damagedUnits = 0.0;
+      // Line consumed -> damaged units of it.
+      final damagedByLine = <String, double>{};
       for (final e in damagedQtyByLine.entries) {
-        final line = byId[e.key];
-        final q = plan.qtyByLine[e.key] ?? 0;
+        final goods = [
+          for (final g in plan.goods)
+            if (g.lines.any((l) => l.lineId == e.key)) g,
+        ];
+        final coming = goods.isEmpty
+            ? 0.0
+            : goods.single.lines.fold<double>(
+                0,
+                (s, l) => s + (plan.qtyByLine[l.lineId] ?? 0),
+              );
         if (e.value < 0 ||
             !Qty.isQuarterStep(e.value) ||
-            line == null ||
-            e.value > q ||
-            (e.value > 0 && line.productId == null)) {
+            goods.isEmpty ||
+            e.value > coming ||
+            (e.value > 0 && goods.single.first.productId == null)) {
           throw const ReturnRefusedException(ReturnRefusal.badDamagedQty);
         }
         damagedUnits += e.value;
+        damagedByLine.addAll(
+          allocateDamaged(goods.single, plan.qtyByLine, e.value),
+        );
       }
       if (damagedUnits > 0 && !kReturnDamageKeys.contains(damageReasonKey)) {
         throw const ReturnRefusedException(ReturnRefusal.badDamageReason);
@@ -447,7 +583,7 @@ extension SaleAdjustments on OrdersDao {
       for (final entry in plan.qtyByLine.entries) {
         final line = byId[entry.key]!;
         final q = entry.value;
-        final damaged = damagedQtyByLine[line.id] ?? 0;
+        final damaged = damagedByLine[line.id] ?? 0;
         final minusId = UuidV7.generate();
 
         // The minus line: original price and cost; the link back to the sale
@@ -547,7 +683,7 @@ extension SaleAdjustments on OrdersDao {
       );
 
       // #551 — damaged units written off at the line's recorded cost.
-      for (final e in damagedQtyByLine.entries) {
+      for (final e in damagedByLine.entries) {
         final line = byId[e.key];
         final productId = line?.productId;
         if (line == null || productId == null || e.value <= 0) continue;
@@ -611,17 +747,24 @@ extension SaleAdjustments on OrdersDao {
     final paidOut = paidOutKobo ?? plan.paidShareKobo;
     final goods = plan.goodsKobo;
     final customerId = parent.customerId;
+    // #732 — the tender can sit on an edit: a credit sale's added goods paid
+    // in cash have no `sale` row on the sale itself.
+    final tenderOrderIds = [
+      parent.id,
+      for (final a in await adjustmentsOf(parent.id)) a.id,
+    ];
 
     // The payment rows come first: they are the cash that leaves the till.
     final salePay = await (select(paymentTransactions)
           ..where(
             (p) =>
-                p.orderId.equals(parent.id) &
+                p.orderId.isIn(tenderOrderIds) &
                 whereBusiness(p) &
                 p.voidedAt.isNull() &
                 p.type.equals('sale') &
                 p.amountKobo.isBiggerThanValue(0),
           )
+          ..orderBy([(p) => OrderingTerm.asc(p.createdAt)])
           ..limit(1))
         .getSingleOrNull();
     if (paidOut > 0 && !toBalance && salePay != null) {
@@ -687,12 +830,13 @@ extension SaleAdjustments on OrdersDao {
       final depositPay = await (select(paymentTransactions)
             ..where(
               (p) =>
-                  p.orderId.equals(parent.id) &
+                  p.orderId.isIn(tenderOrderIds) &
                   whereBusiness(p) &
                   p.voidedAt.isNull() &
                   p.type.equals('crate_deposit') &
                   p.amountKobo.isBiggerThanValue(0),
             )
+            ..orderBy([(p) => OrderingTerm.asc(p.createdAt)])
             ..limit(1))
           .getSingleOrNull();
       if (depositPay != null) {
@@ -706,6 +850,37 @@ extension SaleAdjustments on OrdersDao {
         );
       }
     }
+  }
+
+  /// Claims still queued on this phone that return goods [adjustmentOrderId]
+  /// added (#732). Read them BEFORE withdrawing it: without its plus lines
+  /// those claims could only fail for ever, so they are withdrawn with it.
+  Future<List<SyncQueueData>> queuedClaimsReturningGoodsOf(
+    String adjustmentOrderId,
+  ) async {
+    final plusIds = {
+      for (final l in await (select(orderItems)..where(
+            (i) =>
+                i.orderId.equals(adjustmentOrderId) &
+                whereBusiness(i) &
+                i.quantity.isBiggerThanValue(0),
+          ))
+          .get())
+        l.id,
+    };
+    if (plusIds.isEmpty) return const [];
+    final claims = await (select(db.syncQueue)..where(
+          (q) =>
+              q.actionType.equals(kAdjustmentClaimAction) &
+              q.businessId.equals(requireBusinessId()),
+        ))
+        .get();
+    return [
+      for (final c in claims)
+        if (((jsonDecode(c.payload) as Map<String, dynamic>)['p_lines'] as List)
+            .any((l) => plusIds.contains((l as Map)['order_item_id'])))
+          c,
+    ];
   }
 
   /// The sale adjustment [adjustmentOrderId] was REJECTED by the cloud: remove
@@ -741,8 +916,8 @@ extension SaleAdjustments on OrdersDao {
 //     crates issued / deposit taken), all referencing the adjustment's id.
 // Header totals are the NET (added - returned goods); `amount_paid_kobo` stays
 // `-paidShare` released from the sale (what the next return derives paid-standing
-// from). Plus lines are never returnable through the sale: they belong to the
-// adjustment.
+// from). Plus lines are returnable through the sale at their own price (#732):
+// see the rules at the top of this file.
 //
 // Money (A = added goods, G = returned goods after discount share, P = paid
 // share of G, net = A - G):
@@ -815,11 +990,12 @@ class EditSaleOutcome {
 }
 
 extension EditCompletedSale on OrdersDao {
-  /// Works out an edit of [orderId] without writing. [newQtyByLineId] maps sale
-  /// line id -> the quantity the line should end at (lines left out stay as
-  /// they are); a value above the line's current quantity adds the difference
-  /// at today's price. [addedLines] are extra products. Throws
-  /// [ReturnRefusedException] when it cannot be done.
+  /// Works out an edit of [orderId] without writing. [newQtyByLineId] maps any
+  /// line of a product ([ReturnableGoods.lineId] from the sheet) -> the quantity
+  /// that product should end at, added goods included (products left out stay as
+  /// they are); a value above what stands adds the difference at today's price,
+  /// a value below it returns the difference like a part return. [addedLines]
+  /// are extra products. Throws [ReturnRefusedException] when it cannot be done.
   Future<EditSalePlan> planEditSale(
     String orderId,
     Map<String, double> newQtyByLineId,
@@ -832,11 +1008,9 @@ extension EditCompletedSale on OrdersDao {
     final refusal = await returnRefusal(orderId);
     if (refusal != null) throw ReturnRefusedException(refusal);
 
-    final lines = await (select(orderItems)
-          ..where((i) => i.orderId.equals(orderId) & whereBusiness(i)))
-        .get();
-    final byId = {for (final l in lines) l.id: l};
-    final current = await returnableQtyByLine(orderId);
+    final standing = await _saleStanding(orderId);
+    final byId = {for (final l in standing.lines) l.id: l};
+    final goodsOf = standing.goodsByLineId;
 
     final lower = <String, double>{};
     final raise = <String, double>{};
@@ -845,7 +1019,7 @@ extension EditCompletedSale on OrdersDao {
       if (line == null || e.value < 0 || !Qty.isQuarterStep(e.value)) {
         throw const ReturnRefusedException(ReturnRefusal.badReturnQty);
       }
-      final now = current[e.key] ?? 0;
+      final now = goodsOf[e.key]!.standing;
       final diff = e.value - now;
       if (diff.abs() < 1e-9) continue;
       if (diff < 0) {
