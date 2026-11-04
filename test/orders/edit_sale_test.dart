@@ -9,7 +9,6 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/report_revenue.dart';
-import 'package:reebaplus_pos/shared/services/orders/crate_return_input.dart';
 import 'package:reebaplus_pos/shared/services/orders/order_service.dart';
 
 import '../helpers/dispatch_test_utils.dart';
@@ -191,7 +190,6 @@ void main() {
   }
 
   Future<int> balance() => db.walletTransactionsDao.getBalanceKobo(customerId);
-  Future<int> held() => db.walletTransactionsDao.getDepositsHeldKobo(customerId);
 
   Future<void> expectRefusal(Future<Object?> f, ReturnRefusal r) async {
     try {
@@ -320,6 +318,17 @@ void main() {
           .where((q) => q.actionType == 'domain:pos_claim_sale_adjustment')
           .single;
       expect(jsonDecode(claim.payload)['p_lines'], isEmpty);
+    });
+
+    test('crates: added crates are owed, removed crates are cancelled', () async {
+      final (m, p) = await crateBrand('Star');
+      final id = await completed(p, 10);
+      expect(await debt(m), 10);
+      await edit(id, add: [EditAddedLine(productId: p, quantity: 5)], paid: 500000);
+      expect(await debt(m), 15, reason: 'the 5 added crates are issued');
+      await edit(id, newQty: 7);
+      expect(await debt(m), 12, reason: '3 of the original crates came back');
+      expect(await inv(p), 100 - 10 - 5 + 3);
     });
 
     test('add-only: partly paid, the rest is charged to the balance', () async {
