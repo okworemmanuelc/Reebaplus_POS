@@ -71,8 +71,14 @@ VanTripData trip({String status = kVanTripStatusOpen}) => VanTripData(
 void main() {
   // Van Sales ships switched off (`kVanSalesEnabled`); these tests guard the
   // feature itself, so they run with it on.
-  setUpAll(() => debugOverrideVanSalesEnabled(true));
-  tearDownAll(() => debugOverrideVanSalesEnabled(null));
+  setUpAll(() {
+    debugOverrideVanSalesEnabled(true);
+    debugOverrideDriverScreensEnabled(true);
+  });
+  tearDownAll(() {
+    debugOverrideVanSalesEnabled(null);
+    debugOverrideDriverScreensEnabled(null);
+  });
 
   group('Gates.vanManage — the algebra', () {
     test('a manager holding van.manage is granted', () {

@@ -1515,7 +1515,13 @@ class SupabaseSyncService {
 
       final rpcName = item.actionType.substring('domain:'.length);
       try {
-        final response = await _transport.callRpc(rpcName, payload);
+        // #732 — the envelope's phone-only notes never reach the cloud.
+        final response = await _transport.callRpc(
+          rpcName,
+          payload.containsKey(kLocalEnvelopeKey)
+              ? (Map<String, dynamic>.of(payload)..remove(kLocalEnvelopeKey))
+              : payload,
+        );
         await _applyDomainResponse(rpcName, response);
         await _db.syncDao.markDone(item.id);
         // #40 — a delivered v2 sale (thin-intent) makes each of its (product,
@@ -1581,6 +1587,7 @@ class SupabaseSyncService {
             code == 'P0001' &&
             (e.message.contains(kAdjustmentExceedsError) ||
                 e.message.contains(kOrderNotReturnableError));
+        final editLost = adjustmentLost && _isEditEnvelope(payload);
         if (reversalLost) await _undoLostReversal(payload, e.details);
         if (adjustmentLost) await _undoLostAdjustment(payload);
         await _db.syncDao.markFailed(
@@ -1588,6 +1595,8 @@ class SupabaseSyncService {
           reversalLost
               ? 'pg_$code: ${e.message} — this sale was already refunded on '
                     'another phone; the refund made here was undone'
+              : editLost
+              ? 'pg_$code: ${e.message} — $kEditRejectedMessage'
               : adjustmentLost
               ? 'pg_$code: ${e.message} — this return no longer fits the sale '
                     '(returned on another phone first); it was undone here'
@@ -1669,14 +1678,22 @@ class SupabaseSyncService {
     if (reversalId is! String || parentId is! String || adjustmentId is! String) {
       return;
     }
+    final isEdit = _isEditEnvelope(payload);
+    final actorId = payload['p_actor_id'];
     try {
       final undone = await _db.ordersDao.undoRejectedReversal(
         reversalId: reversalId,
         orderId: parentId,
         adjustmentOrderId: adjustmentId,
+        costDraws: _costDrawsOf(payload),
       );
       if (undone) {
-        await _db.ordersDao.alertRefundRejected(parentId, partReturn: true);
+        await _db.ordersDao.alertRefundRejected(
+          parentId,
+          partReturn: true,
+          edit: isEdit,
+          actorId: actorId is String ? actorId : null,
+        );
       }
     } catch (e) {
       debugPrint('[SyncService] lost-adjustment undo failed: $e');
@@ -1687,6 +1704,25 @@ class SupabaseSyncService {
         businessId: _db.currentBusinessId,
       );
     }
+  }
+
+  /// #732 — whether an adjustment claim came from Edit sale (its local notes
+  /// say so), as opposed to a plain part return.
+  static bool _isEditEnvelope(Map<String, dynamic> payload) {
+    final local = payload[kLocalEnvelopeKey];
+    return local is Map && local['edit'] == true;
+  }
+
+  /// #732 — the cost-layer units an edit's plus lines drew (batch id -> units).
+  static Map<String, double> _costDrawsOf(Map<String, dynamic> payload) {
+    final local = payload[kLocalEnvelopeKey];
+    final draws = local is Map ? local['cost_draws'] : null;
+    if (draws is! Map) return const {};
+    return {
+      for (final e in draws.entries)
+        if (e.key is String && e.value is num)
+          e.key as String: (e.value as num).toDouble(),
+    };
   }
 
   /// Fire an alert notification to the cashier who rang a sale the server

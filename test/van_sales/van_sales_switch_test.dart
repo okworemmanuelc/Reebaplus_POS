@@ -61,10 +61,16 @@ final _stores = [
 ];
 
 void main() {
-  tearDown(() => debugOverrideVanSalesEnabled(null));
+  tearDown(() {
+    debugOverrideVanSalesEnabled(null);
+    debugOverrideDriverScreensEnabled(null);
+  });
 
   group('switched off', () {
-    setUp(() => debugOverrideVanSalesEnabled(false));
+    setUp(() {
+      debugOverrideVanSalesEnabled(false);
+      debugOverrideDriverScreensEnabled(true);
+    });
 
     test('both van gates deny, even for a CEO holding the keys', () {
       expect(Gates.vanManage.evaluate(_ceo), isFalse);
@@ -93,7 +99,10 @@ void main() {
   });
 
   group('switched on', () {
-    setUp(() => debugOverrideVanSalesEnabled(true));
+    setUp(() {
+      debugOverrideVanSalesEnabled(true);
+      debugOverrideDriverScreensEnabled(true);
+    });
 
     test('the van gates follow the keys again', () {
       expect(Gates.vanManage.evaluate(_ceo), isTrue);
@@ -106,6 +115,35 @@ void main() {
       expect(isPermissionKeyHidden('van.manage'), isFalse);
       expect(isPermissionKeyHidden('van.sell'), isFalse);
       expect(assignableStores(_stores), hasLength(2));
+    });
+  });
+
+  group('van sales on, driver screens off (#747)', () {
+    setUp(() {
+      debugOverrideVanSalesEnabled(true);
+      debugOverrideDriverScreensEnabled(false);
+    });
+
+    test('the manager gate stays on, the driver gate denies', () {
+      expect(Gates.vanManage.evaluate(_ceo), isTrue);
+      expect(Gates.vanSell.evaluate(_driver), isFalse);
+      expect(Gates.vanSell.evaluate(_ceo), isFalse);
+    });
+
+    test('Driver role, van.sell and vans are hidden; van.manage stays', () {
+      expect(
+        rolesOnOffer(_roles).map((r) => r.slug),
+        ['ceo', 'manager', 'cashier', 'stock_keeper'],
+      );
+      expect(isPermissionKeyHidden('van.sell'), isTrue);
+      expect(isPermissionKeyHidden('van.manage'), isFalse);
+      expect(assignableStores(_stores).map((s) => s.id), ['warehouse']);
+    });
+
+    test('the driver switch is never on while Van Sales is off', () {
+      debugOverrideVanSalesEnabled(false);
+      debugOverrideDriverScreensEnabled(true);
+      expect(isDriverScreensEnabled(), isFalse);
     });
   });
 }

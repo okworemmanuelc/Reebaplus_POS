@@ -120,8 +120,14 @@ bool _isEnabled(WidgetTester tester, Finder f) =>
 void main() {
   // Van Sales ships switched off (`kVanSalesEnabled`); these tests guard the
   // feature itself, so they run with it on.
-  setUpAll(() => debugOverrideVanSalesEnabled(true));
-  tearDownAll(() => debugOverrideVanSalesEnabled(null));
+  setUpAll(() {
+    debugOverrideVanSalesEnabled(true);
+    debugOverrideDriverScreensEnabled(true);
+  });
+  tearDownAll(() {
+    debugOverrideVanSalesEnabled(null);
+    debugOverrideDriverScreensEnabled(null);
+  });
 
   group('VanCloseBarrier — the contract', () {
     late int closes;

@@ -29,6 +29,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/services/supabase_cloud_transport.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
+import 'package:reebaplus_pos/features/dashboard/reconciliation/recon_data.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/report_revenue.dart';
 import 'package:reebaplus_pos/shared/services/orders/order_service.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
@@ -79,6 +80,83 @@ double _profitLoop(List<OrderWithItems> orders, String period, DateTime now) {
     }
   }
   return (revenue - cogs + concession + byProduct.length).toDouble();
+}
+
+
+/// The pre-#684 "changed since reviewed" sweep, frozen as the "before": the
+/// whole history is filed under the reviewed days, then each day is run
+/// through the real [reconDataFrom].
+Set<String> _oldSweep(
+  List<DailyClosingData> snaps,
+  ReconLists l,
+  List<WalletTransactionData> forfeits,
+  List<ManufacturerData> manufacturers,
+) {
+  final wanted = {for (final s in snaps) s.businessDate};
+  Map<String, List<T>> file<T>(
+    Iterable<T> rows,
+    Iterable<DateTime> Function(T) datesOf,
+  ) {
+    final out = <String, List<T>>{};
+    for (final r in rows) {
+      for (final d in datesOf(r)) {
+        final k = reconDayKey(d);
+        if (wanted.contains(k)) (out[k] ??= <T>[]).add(r);
+      }
+    }
+    return out;
+  }
+
+  final orders = file<OrderWithItems>(l.orders, (o) => [
+    o.order.createdAt,
+    if (o.order.cancelledAt != null) o.order.cancelledAt!.toLocal(),
+  ]);
+  final expenses = file<ExpenseWithCategory>(
+    l.expenses,
+    (e) => [e.expense.expenseDate, e.expense.createdAt],
+  );
+  final adj = file<StockAdjustmentData>(l.adjustments, (a) => [a.createdAt]);
+  final ledger = file<SupplierLedgerEntryData>(
+    l.supplierLedger,
+    (e) => [e.activityDate, e.createdAt],
+  );
+  final pay = file<PaymentTransactionData>(l.payments, (p) => [p.createdAt]);
+  final txns = file<StockTransactionData>(l.stockTxns, (t) => [t.createdAt]);
+  final counts = file<StockCountData>(
+    l.stockCounts,
+    (c) => [DateTime.tryParse(c.businessDate) ?? c.createdAt, c.createdAt],
+  );
+  final dmg = file<CrateLedgerData>(l.crateDamages, (c) => [c.createdAt]);
+  final forf = file<WalletTransactionData>(forfeits, (w) => [w.createdAt]);
+  final changed = <String>{};
+  for (final snap in snaps) {
+    final day = snap.businessDate;
+    final start = DateTime.parse(day);
+    final live = reconDataFrom(
+      ReconInputs(
+        orders: orders[day] ?? const [],
+        expenses: expenses[day] ?? const [],
+        adjustments: adj[day] ?? const [],
+        supplierLedger: ledger[day] ?? const [],
+        payments: pay[day] ?? const [],
+        stockTxns: txns[day] ?? const [],
+        stockCounts: counts[day] ?? const [],
+        productsWithStock: l.products,
+        manufacturers: manufacturers,
+        crateDamages: dmg[day] ?? const [],
+        crateForfeitRows: forf[day] ?? const [],
+        showCrates: true,
+        isCeo: true,
+        inScope: (s) => true,
+        start: start,
+        endExclusive: start.add(const Duration(days: 1)),
+      ),
+    );
+    if (reconClosingComparison(snap, live).anyDayLocalChanged) {
+      changed.add(day);
+    }
+  }
+  return changed;
 }
 
 /// Reads every synced table of [db] and shapes the rows the way the cloud
@@ -226,6 +304,76 @@ void main() {
             (double.parse(out['recon: load the 9 lists']!) +
                     double.parse(out['recon: compute MONTH']!))
                 .toStringAsFixed(1);
+
+
+        // ── #684: the list's "changed since reviewed" sweep, EVERY day
+        // reviewed. Old = load the whole history and file it under the days;
+        // new = one bounded load over the reviewed span, split by day.
+        final mfrs = await db.inventoryDao.watchAllManufacturers().first;
+        final frozenForfeits = await db.walletTransactionsDao
+            .watchForfeitRows()
+            .first;
+        for (
+          var d = shop.start;
+          !d.isAfter(shop.end);
+          d = DateTime(d.year, d.month, d.day + 1)
+        ) {
+          // Frozen on the sweep's own basis, so a quiet shop flags (almost)
+          // nothing and both paths are compared on the same footing.
+          final live = reconDataFrom(
+            ReconInputs(
+              orders: lists.orders,
+              expenses: lists.expenses,
+              adjustments: lists.adjustments,
+              supplierLedger: lists.supplierLedger,
+              payments: lists.payments,
+              stockTxns: lists.stockTxns,
+              stockCounts: lists.stockCounts,
+              productsWithStock: lists.products,
+              manufacturers: mfrs,
+              crateDamages: lists.crateDamages,
+              crateForfeitRows: frozenForfeits,
+              showCrates: true,
+              isCeo: true,
+              inScope: (s) => true,
+              start: d,
+              endExclusive: DateTime(d.year, d.month, d.day + 1),
+            ),
+          );
+          await db.dailyClosingsDao.snapshotIfAbsent(
+            businessDate: reconDayKey(d),
+            figures: dailyClosingFiguresFrom(live),
+          );
+        }
+        final snaps = await db.dailyClosingsDao.watchAllForBusiness().first;
+        out['sweep: reviewed days'] = '${snaps.length}';
+        final oldSw = Stopwatch()..start();
+        final oldLists = await loadReconLists(db);
+        final oldForfeits = await db.walletTransactionsDao
+            .watchForfeitRows()
+            .first;
+        final oldSet = _oldSweep(snaps, oldLists, oldForfeits, mfrs);
+        out['sweep: OLD whole-history (load + sweep)'] =
+            (oldSw.elapsedMicroseconds / 1000).toStringAsFixed(1);
+        final newSw = Stopwatch()..start();
+        final dayRows = await loadReviewedDayRows(db, {
+          for (final x in snaps) x.businessDate,
+        });
+        final newSet = changedReviewedDaysFrom(
+          snapshots: snaps,
+          dayRows: dayRows,
+          productsWithStock: lists.products,
+          manufacturers: mfrs,
+          showCrates: true,
+          inScope: (s) => true,
+        );
+        out['sweep: NEW bounded (load + sweep)'] =
+            (newSw.elapsedMicroseconds / 1000).toStringAsFixed(1);
+        // Nothing changed since the freeze, so the truth is "no day flagged".
+        // The old path's day-sliced inputs can flag days falsely (e.g. stock
+        // movements filed without their adjustments); the new one must not.
+        expect(newSet, isEmpty);
+        out['sweep: days flagged OLD / NEW'] = '${oldSet.length} / ${newSet.length}';
 
         // ── Profit report: the aggregation per period (orders already loaded)
         final now = kHistoryShopEnd;

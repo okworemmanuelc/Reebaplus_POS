@@ -16,6 +16,7 @@ import 'package:reebaplus_pos/core/stores/van_store.dart';
 import 'package:reebaplus_pos/core/inventory_reasons.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/report_revenue.dart';
+import 'package:reebaplus_pos/shared/models/order_status.dart';
 
 // Re-exports keep every existing `recon_data.dart` import working (#574).
 export 'package:reebaplus_pos/core/inventory_reasons.dart';
@@ -152,14 +153,41 @@ List<ReconBucket> buildReconBuckets(
   DateTime? endExclusive,
   required ReconGrouping grouping,
   ReconPeriodRows? rows,
+  ReconListFacts? facts,
 }) {
-  final orders =
-      rows?.orders ?? ref.watch(allOrdersProvider).valueOrNull ?? const [];
-  final counts =
-      rows?.stockCounts ??
-      ref.watch(allStockCountsProvider).valueOrNull ??
-      const [];
-  final inScope = reconStoreFilter(ref);
+  // #684 — the period LIST passes light [facts] (dates, store, quantity) so it
+  // never loads whole orders or count sessions; otherwise the rows are turned
+  // into the same facts, so there is one implementation of the list rules.
+  final f = facts ??
+      ReconListFacts.fromRows(
+        orders:
+            rows?.orders ??
+            ref.watch(allOrdersProvider).valueOrNull ??
+            const [],
+        counts:
+            rows?.stockCounts ??
+            ref.watch(allStockCountsProvider).valueOrNull ??
+            const [],
+      );
+  return reconBucketsFrom(
+    f,
+    inScope: reconStoreFilter(ref),
+    grouping: grouping,
+    start: start,
+    endExclusive: endExclusive,
+  );
+}
+
+/// The pure half of [buildReconBuckets] (#684): the list's periods, items-sold
+/// totals and shortage marks from the light [facts] — testable without a
+/// widget, and the one place the list rules live.
+List<ReconBucket> reconBucketsFrom(
+  ReconListFacts f, {
+  required bool Function(String?) inScope,
+  required ReconGrouping grouping,
+  DateTime? start,
+  DateTime? endExclusive,
+}) {
   bool inSpan(DateTime t) =>
       (start == null || !t.isBefore(start)) &&
       (endExclusive == null || t.isBefore(endExclusive));
@@ -174,20 +202,23 @@ List<ReconBucket> buildReconBuckets(
   }
 
   // #549 — a cancelled sale stays on its original day and its reversal is a
-  // negative entry on the cancel day (see [saleDayEntries]).
-  for (final e in saleDayEntries(orders)) {
-    if (!inSpan(e.day)) continue;
-    _BucketAccum? acc;
-    for (final i in e.o.items) {
-      if (!inScope(i.item.storeId)) continue;
-      acc ??= bucketOf(e.day);
-      acc.itemsSold += e.sign * i.item.quantity;
+  // negative entry on the cancel day (see [saleDayStamps]).
+  for (final line in f.saleLines) {
+    if (!inScope(line.storeId)) continue;
+    for (final stamp in saleDayStamps(
+      status: line.status,
+      createdAt: line.createdAt,
+      cancelledAt: line.cancelledAt,
+      cancellationReason: line.cancellationReason,
+    )) {
+      if (!inSpan(stamp.day)) continue;
+      bucketOf(stamp.day).itemsSold += stamp.sign * line.quantity;
     }
   }
 
   // Collapse re-saved counts to the latest session per (store, date) so a
   // shortage corrected in a later count of the same day stops flagging.
-  final sorted = [...counts]
+  final sorted = [...f.counts]
     ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   final seen = <String>{};
   for (final c in sorted) {
@@ -2268,106 +2299,69 @@ Map<String, List<T>> _byCandidateDay<T>(
 /// whenever any report row set changes, which is the right price to pay on the
 /// reconciliation list (a report screen you are already reading) and the wrong
 /// one on Home. The list marker is the surface #192 asked for.
-final changedReviewedDaysProvider = Provider<Set<String>>((ref) {
+final changedReviewedDaysProvider = Provider.autoDispose<Set<String>>((ref) {
   final snapshots =
       ref.watch(allDailyClosingsProvider).valueOrNull ?? const [];
   if (snapshots.isEmpty) return const <String>{};
+  // #684 — each reviewed day's OWN rows, loaded through the same bounded reads
+  // as the detail screen, instead of the whole history filed under days.
+  final dayRows =
+      ref.watch(reviewedDayRowsProvider).valueOrNull ??
+      const <String, ReconPeriodRows>{};
+  if (dayRows.isEmpty) return const <String>{};
   final wanted = {for (final s in snapshots) s.businessDate};
-
-  final showCrates = businessTracksCrates(ref.watch(currentBusinessProvider));
-  // The day close's own basis (#191, ADR 0022): the whole business minus the
-  // vans, ignoring the active lock and the viewer's confinement, and the
-  // UNSCOPED stock totals.
-  final inScope = businessWideStoreFilter(ref.watch(vanStoresProvider));
-  final products =
-      ref.watch(productsWithStockProvider(null)).valueOrNull ?? const [];
-  final manufacturers =
-      ref.watch(allManufacturersProvider).valueOrNull ?? const [];
-
-  final ordersByDay = _byCandidateDay<OrderWithItems>(
-    ref.watch(allOrdersProvider).valueOrNull ?? const [],
-    // #549 — a cancelled sale is also a (negative) entry on its cancel day.
-    (o) => [
-      o.order.createdAt,
-      if (o.order.cancelledAt != null) o.order.cancelledAt!.toLocal(),
-    ],
-    wanted,
-  );
-  final expensesByDay = _byCandidateDay<ExpenseWithCategory>(
-    ref.watch(allExpensesProvider).valueOrNull ?? const [],
-    (e) => [e.expense.expenseDate, e.expense.createdAt],
-    wanted,
-  );
-  // A stock adjustment carries ONE date, so this is the only day it can be
-  // filed under. #186 note: a BACKDATED count's shortage rows therefore land in
-  // a different slice from the session that wrote them, and that session falls
-  // to [countSessionShortage]'s labelled current-cost fallback inside this sweep
-  // only. Harmless by construction — the sweep compares the FROZEN figure set,
-  // whose only count figure is `shortageUnits` (session-sourced, so unaffected)
-  // — and the day's own detail screen, which sees every row, computes the real
-  // snapshot-valued figure. Filing a row under the session's business date is
-  // not possible here: nothing on the row names its session.
-  final adjustmentsByDay = _byCandidateDay<StockAdjustmentData>(
-    ref.watch(allStockAdjustmentsProvider).valueOrNull ?? const [],
-    (a) => [a.createdAt],
-    wanted,
-  );
-  final ledgerByDay = _byCandidateDay<SupplierLedgerEntryData>(
-    ref.watch(allSupplierLedgerEntriesProvider).valueOrNull ?? const [],
-    (l) => [l.activityDate, l.createdAt],
-    wanted,
-  );
-  final paymentsByDay = _byCandidateDay<PaymentTransactionData>(
-    ref.watch(allPaymentTransactionsProvider).valueOrNull ?? const [],
-    (p) => [p.createdAt],
-    wanted,
-  );
-  final stockTxnsByDay = _byCandidateDay<StockTransactionData>(
-    ref.watch(allStockTransactionsProvider).valueOrNull ?? const [],
-    (t) => [t.createdAt],
-    wanted,
-  );
-  final countsByDay = _byCandidateDay<StockCountData>(
-    ref.watch(allStockCountsProvider).valueOrNull ?? const [],
-    (c) => [DateTime.tryParse(c.businessDate) ?? c.createdAt, c.createdAt],
-    wanted,
-  );
-  final crateDamagesByDay = _byCandidateDay<CrateLedgerData>(
-    ref.watch(allCrateDamagesProvider).valueOrNull ?? const [],
-    (c) => [c.createdAt],
-    wanted,
-  );
   final staffPayByDay = _byCandidateDay<StaffPayTotalData>(
     ref.watch(allStaffPayTotalsProvider).valueOrNull ?? const [],
     (t) => [?DateTime.tryParse(t.totalDate)],
     wanted,
   );
-  final forfeitsByDay = _byCandidateDay<WalletTransactionData>(
-    showCrates
-        ? (ref.watch(crateForfeitRowsProvider).valueOrNull ?? const [])
-        : const <WalletTransactionData>[],
-    (w) => [w.createdAt],
-    wanted,
+  return changedReviewedDaysFrom(
+    snapshots: snapshots,
+    dayRows: dayRows,
+    staffPayByDay: staffPayByDay,
+    productsWithStock:
+        ref.watch(productsWithStockProvider(null)).valueOrNull ?? const [],
+    manufacturers:
+        ref.watch(allManufacturersProvider).valueOrNull ?? const [],
+    showCrates: businessTracksCrates(ref.watch(currentBusinessProvider)),
+    // The day close's own basis (#191, ADR 0022): the whole business minus the
+    // vans, ignoring the active lock and the viewer's confinement, and the
+    // UNSCOPED stock totals.
+    inScope: businessWideStoreFilter(ref.watch(vanStoresProvider)),
   );
+});
 
+/// The pure half of [changedReviewedDaysProvider] (#684): runs each reviewed
+/// day's own [dayRows] through the real [reconDataFrom] and names the days
+/// whose day-local figures moved since the review.
+Set<String> changedReviewedDaysFrom({
+  required List<DailyClosingData> snapshots,
+  required Map<String, ReconPeriodRows> dayRows,
+  Map<String, List<StaffPayTotalData>> staffPayByDay = const {},
+  required List<ProductDataWithStock> productsWithStock,
+  required List<ManufacturerData> manufacturers,
+  required bool showCrates,
+  required bool Function(String?) inScope,
+}) {
   final changed = <String>{};
   for (final snapshot in snapshots) {
     final day = snapshot.businessDate;
     final start = DateTime.tryParse(day);
-    if (start == null) continue;
+    final rows = dayRows[day];
+    if (start == null || rows == null) continue;
     final live = reconDataFrom(
       ReconInputs(
-        orders: ordersByDay[day] ?? const [],
-        expenses: expensesByDay[day] ?? const [],
-        adjustments: adjustmentsByDay[day] ?? const [],
-        supplierLedger: ledgerByDay[day] ?? const [],
-        payments: paymentsByDay[day] ?? const [],
-        stockTxns: stockTxnsByDay[day] ?? const [],
-        stockCounts: countsByDay[day] ?? const [],
-        productsWithStock: products,
+        orders: rows.orders,
+        expenses: rows.expenses,
+        adjustments: rows.adjustments,
+        supplierLedger: rows.supplierLedger,
+        payments: rows.payments,
+        stockTxns: rows.stockTxns,
+        stockCounts: rows.stockCounts,
+        productsWithStock: productsWithStock,
         manufacturers: manufacturers,
-        crateDamages: crateDamagesByDay[day] ?? const [],
-        crateForfeitRows: forfeitsByDay[day] ?? const [],
+        crateDamages: rows.crateDamages,
+        crateForfeitRows: showCrates ? rows.crateForfeitRows : const [],
         staffPayTotals: staffPayByDay[day] ?? const [],
         showCrates: showCrates,
         // The frozen record is opener-independent (#192): compute the supplier
@@ -2384,4 +2378,4 @@ final changedReviewedDaysProvider = Provider<Set<String>>((ref) {
     }
   }
   return changed;
-});
+}
