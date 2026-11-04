@@ -217,6 +217,8 @@ extension PayrollMoneyEntries on PayrollDao {
     String? note,
     String? correctsEntryId,
     String? entryDate,
+    // #723: a new staff loan's plan — taken back each payday. Loans only.
+    int? monthlyRepaymentKobo,
   }) async {
     if (!kPayrollManualEntryTypes.contains(type)) {
       throw ArgumentError.value(type, 'type', 'not a bonus, advance or loan');
@@ -238,6 +240,23 @@ extension PayrollMoneyEntries on PayrollDao {
     }
     if (amountKobo == 0 || (!isCorrection && amountKobo < 0)) {
       throw const PayrollRuleViolation('Enter an amount.');
+    }
+    if (monthlyRepaymentKobo != null) {
+      if (type != 'loan_given' || isCorrection) {
+        throw ArgumentError.value(
+          monthlyRepaymentKobo,
+          'monthlyRepaymentKobo',
+          'only a new staff loan has a plan',
+        );
+      }
+      if (monthlyRepaymentKobo <= 0) {
+        throw const PayrollRuleViolation('Enter how much to pay back a month.');
+      }
+      if (monthlyRepaymentKobo > amountKobo) {
+        throw const PayrollRuleViolation(
+          'The monthly repayment cannot be more than the loan.',
+        );
+      }
     }
     final limit = await currentUserPayrollLimitKobo();
     final trimmedNote = note?.trim();
@@ -342,6 +361,7 @@ extension PayrollMoneyEntries on PayrollDao {
           trimmedNote == null || trimmedNote.isEmpty ? null : trimmedNote,
         ),
         correctsEntryId: Value(correctsEntryId),
+        monthlyRepaymentKobo: Value(monthlyRepaymentKobo),
         recordedBy: Value(currentUserId),
         status: Value(waits ? 'pending' : 'approved'),
         approvedBy: waits ? const Value.absent() : Value(currentUserId),
@@ -551,6 +571,11 @@ extension PayrollMoneyEntries on PayrollDao {
   }
 
   /// [workerId]'s entries, newest first.
+  /// #723: every entry of the business, any status (Overview and History work
+  /// their figures out from these). Empty on a phone without the permission.
+  Stream<List<PayrollEntryData>> watchAllEntries() =>
+      (select(payrollEntries)..where((e) => whereBusiness(e))).watch();
+
   Stream<List<PayrollEntryData>> watchEntriesForWorker(String workerId) =>
       (select(payrollEntries)
             ..where((e) => e.workerId.equals(workerId) & whereBusiness(e))

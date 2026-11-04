@@ -12,17 +12,12 @@ import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
-import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/payroll/payroll_money_providers.dart';
 import 'package:reebaplus_pos/features/payroll/payslip.dart';
-import 'package:reebaplus_pos/features/pos/services/receipt_builder.dart';
-import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
-import 'package:reebaplus_pos/shared/services/printer_service.dart';
+import 'package:reebaplus_pos/features/payroll/widgets/payroll_print.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
-import 'package:reebaplus_pos/shared/widgets/printer_picker.dart';
-import 'package:reebaplus_pos/shared/widgets/receipt_paper_size_prompt.dart';
 
 /// Keys for tests.
 class PayslipKeys {
@@ -39,10 +34,14 @@ class PayrollPayslipScreen extends ConsumerStatefulWidget {
     super.key,
     required this.workerId,
     required this.statementId,
+    this.autoPrint = false,
   });
 
   final String workerId;
   final String statementId;
+
+  /// #723: "Print Payslip After Saving" — prints once when the slip opens.
+  final bool autoPrint;
 
   @override
   ConsumerState<PayrollPayslipScreen> createState() =>
@@ -52,6 +51,7 @@ class PayrollPayslipScreen extends ConsumerStatefulWidget {
 class _PayrollPayslipScreenState extends ConsumerState<PayrollPayslipScreen> {
   final ScreenshotController _shot = ScreenshotController();
   bool _printing = false;
+  bool _autoPrinted = false;
 
   PayslipData? _data(PayrollStatementData s) {
     final worker = (ref.watch(payrollWorkersProvider).valueOrNull ?? const [])
@@ -96,6 +96,12 @@ class _PayrollPayslipScreenState extends ConsumerState<PayrollPayslipScreen> {
         title: 'Payslip',
         body: Center(child: CircularProgressIndicator()),
       );
+    }
+    if (widget.autoPrint && !_autoPrinted) {
+      _autoPrinted = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_print(data));
+      });
     }
     final pad = context.getRSize(16);
     return GlassyScaffold(
@@ -144,85 +150,15 @@ class _PayrollPayslipScreenState extends ConsumerState<PayrollPayslipScreen> {
     );
   }
 
-  /// Prints on the receipt printer (USB first, then Bluetooth), falling back
-  /// to the printer picker — the same path as a sale receipt.
-  Future<void> _print(PayslipData data) async {
-    if (!mounted) return;
-    setState(() => _printing = true);
-    try {
-      final printer = ref.read(printerServiceProvider);
-      final granted = await printer.requestPermissions();
-      if (!mounted) return;
-      if (!granted) {
-        AppNotification.showError(context, 'Bluetooth permissions denied');
-        return;
-      }
-      Future<List<int>> buildBytes(ReceiptPaperSize size) =>
-          ThermalReceiptService.buildFromLines(
-            buildPayslipLines(data, size),
-            size,
-          );
-      final target = await prepareReceiptPrinter(context, printer);
-      if (!mounted) return;
-      if (target.connected) {
-        final printed = await printer.printBytes(
-          await buildBytes(target.paperSize),
-        );
-        if (!mounted) return;
-        if (printed) {
-          AppNotification.showSuccess(context, 'Print successful');
-          return;
-        }
-      }
-      _showPrinterPicker(printer, buildBytes);
-    } catch (e) {
-      if (mounted) AppNotification.showError(context, 'Print error: $e');
-    } finally {
-      if (mounted) setState(() => _printing = false);
-    }
-  }
-
-  void _showPrinterPicker(
-    PrinterService printer,
-    Future<List<int>> Function(ReceiptPaperSize) buildBytes,
-  ) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      constraints: BoxConstraints(maxHeight: context.sheetMaxHeight(0.5)),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(AppSpacing.borderRadiusL),
-        ),
-      ),
-      builder: (_) => PrinterPicker(
-        onSelected: (device) async {
-          if (!mounted) return;
-          Navigator.pop(context);
-          setState(() => _printing = true);
-          try {
-            final connected = await printer.connect(device.macAdress);
-            if (!mounted) return;
-            if (connected) {
-              final target = await prepareReceiptPrinter(context, printer);
-              if (!mounted) return;
-              await printer.printBytesDirectly(
-                await buildBytes(target.paperSize),
-              );
-              if (!mounted) return;
-              AppNotification.showSuccess(context, 'Print successful');
-            } else {
-              AppNotification.showError(context, 'Could not connect');
-            }
-          } catch (e) {
-            if (mounted) AppNotification.showError(context, 'Print error: $e');
-          } finally {
-            if (mounted) setState(() => _printing = false);
-          }
-        },
-      ),
-    );
-  }
+  /// Prints on the receipt printer (the same path as a sale receipt).
+  Future<void> _print(PayslipData data) => printPayrollLines(
+    context,
+    ref,
+    (size) => buildPayslipLines(data, size),
+    onBusy: (busy) {
+      if (mounted) setState(() => _printing = busy);
+    },
+  );
 
   /// Captures the on-screen payslip (with signatures) for the share sheet.
   Future<void> _share(PayslipData data) async {

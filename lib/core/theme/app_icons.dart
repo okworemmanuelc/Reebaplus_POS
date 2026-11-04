@@ -47,6 +47,8 @@ abstract final class AppIcons {
   static const IconData naira = Symbols.payments;
   static const IconData orders = Symbols.receipt_long;
   static const IconData payments = Symbols.payments;
+  static const IconData payrollWallet = Symbols.account_balance_wallet;
+  static const IconData bonus = Symbols.star;
   static const IconData pos = Symbols.point_of_sale;
   static const IconData price = Symbols.attach_money;
   static const IconData profit = Symbols.trending_up;
