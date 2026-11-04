@@ -17,6 +17,7 @@ import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/payroll/payroll_overview.dart';
 import 'package:reebaplus_pos/features/payroll/widgets/payroll_parts.dart';
+import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 
@@ -271,7 +272,7 @@ class _PayrollAddRecordScreenState
               ),
               gap,
               const PayrollFieldLabel('What are you recording?'),
-              PayrollSegmented<PayRecordType>(
+              AppSegmented<PayRecordType>(
                 value: _type,
                 items: _kTypeLabels,
                 solid: true,

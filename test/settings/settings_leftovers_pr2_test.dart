@@ -197,13 +197,17 @@ void main() {
         screen: const ReceiptPrinterSettingsScreen(),
         size: const Size(390, 844),
       );
-      expect(find.text('Counter printer'), findsOneWidget);
       expect(find.text('Back office printer'), findsOneWidget);
-      expect(find.text('Last used'), findsOneWidget);
+      expect(find.text('LAST USED'), findsOneWidget);
+      await tester.tap(find.text('Other devices (1)'));
+      await tester.pumpAndSettle();
+      expect(find.text('Counter printer'), findsOneWidget);
       expect(
         tester.getTopLeft(find.text('Back office printer')).dy,
         lessThan(tester.getTopLeft(find.text('Counter printer')).dy),
       );
+      await tester.tap(find.text('Back office printer'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('58mm (small)').first);
       await tester.pumpAndSettle();
       expect(find.byTooltip('Refresh printers'), findsOneWidget);
