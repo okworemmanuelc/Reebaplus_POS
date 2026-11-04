@@ -20,6 +20,131 @@ import 'package:reebaplus_pos/features/dashboard/reconciliation/report_revenue.d
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 
+/// Aggregate completed orders in [period] into headline totals + per-product
+/// rows (sorted by gross profit, descending). Lines whose captured buying
+/// price is 0 — cost was never recorded, e.g. a product created by a role
+/// without `products.edit_buying_price` — are treated as UNKNOWN cost and
+/// EXCLUDED from the profit math, exactly as the dashboard Net Profit
+/// (home_screen.dart) and the Sales breakdown do. Booking them at zero cost
+/// would overstate gross profit as 100% for those items. Their quantity is
+/// reported separately as [ProfitData.uncostedItems] so the exclusion is
+/// transparent and Revenue − COGS always equals Gross Profit.
+///
+/// [inScope] is the store predicate (#195) — `reconStoreFilter`, the SAME one
+/// the Daily Reconciliation uses, so it honours the §12.1 active store, a
+/// non-CEO's store confinement, and the van exclusion (#140/#142). It is
+/// applied PER LINE (and to the order's own store for the discount), matching
+/// the reconciliation exactly. Before #195 this screen read every store's
+/// orders whatever the lock said, so a locked-store Home and Recon showed the
+/// store while Profit showed the whole business — three screens, three
+/// answers, which is what US 28 forbids.
+ProfitData computeProfit(
+  List<OrderWithItems> orders,
+  String period,
+  bool Function(String? storeId) inScope, {
+  DateTime? now,
+}) {
+  final byProduct = <String, _ProductAccum>{};
+  var revenueKobo = 0;
+  var cogsKobo = 0;
+  var uncostedItems = 0.0;
+  var concessionKobo = 0;
+  var returnedProfitKobo = 0;
+
+  // #549 — recognized at checkout ('pending'), not at the ceremonial Confirm
+  // ('completed'). A cancelled sale still counts on its creation day and
+  // books a negative entry (same lines) on its cancel day, so a return never
+  // changes an earlier day's profit; every amount below is signed.
+  for (final e in saleDayEntries(orders)) {
+    if (!isDateInPeriod(e.day, period, now: now)) continue;
+    final o = e.o;
+    final sign = e.sign;
+    for (final i in o.items) {
+      // #195 — per-LINE store scope, like the reconciliation. This also
+      // carries the #140 van exclusion (a van fails `reconStoreFilter` by
+      // construction): a van sale is not a store sale, its COGS is not
+      // per-line (it is the trip's lot snapshot, booked at close), so
+      // including it would report road revenue at 100% margin. Van P&L comes
+      // from the closed-trip artifact instead (van-sales spec §5.4 / §8.1).
+      if (!inScope(i.item.storeId)) continue;
+      final product = i.product;
+      // #200 / US 32 — the catalogue-price concession is a SELLING-price fact,
+      // so it is counted before the uncosted skip below: a price cut on a line
+      // whose cost was never recorded is still a price cut, and dropping it
+      // would leave exactly the give-away this story exists to surface
+      // invisible. (It therefore covers a wider line set than the per-product
+      // rows, which follow the costed breakdown.)
+      final lineConcession = lineConcessionKobo(
+        cataloguePriceKobo: i.item.cataloguePriceKobo,
+        unitPriceKobo: i.item.unitPriceKobo,
+        quantity: i.item.quantity,
+      );
+      concessionKobo += sign * lineConcession;
+      // Quick-sale lines (§12.3) have no product and no captured cost — like
+      // any uncosted line, they are excluded from the profit math.
+      if (product == null || i.item.buyingPriceKobo <= 0) {
+        uncostedItems += sign * i.item.quantity;
+        continue;
+      }
+      final lineRevenue = lineTotalKobo(
+        i.item.unitPriceKobo,
+        i.item.quantity,
+      );
+      final lineCogs = lineTotalKobo(i.item.buyingPriceKobo, i.item.quantity);
+      revenueKobo += sign * lineRevenue;
+      cogsKobo += sign * lineCogs;
+      if (sign < 0) returnedProfitKobo += sign * (lineRevenue - lineCogs);
+      final acc = byProduct.putIfAbsent(
+        product.id,
+        () => _ProductAccum(product.name),
+      );
+      acc.qty += sign * i.item.quantity;
+      acc.revenueKobo += sign * lineRevenue;
+      acc.cogsKobo += sign * lineCogs;
+      acc.concessionKobo += sign * lineConcession;
+    }
+  }
+
+  // #708 — the #176 shared Total Sales, split for display. Same predicates
+  // as before; #195: the SAME store predicate the figures above apply.
+  final split = computeSalesSplitKobo(
+    orders,
+    inSpan: (createdAt) => isDateInPeriod(createdAt, period, now: now),
+    inScope: inScope,
+  );
+
+  final products =
+      byProduct.values
+          // #549 — a same-day cancel nets a product to nothing; don't list it.
+          .where((a) => a.qty != 0 || a.revenueKobo != 0 || a.cogsKobo != 0)
+          .map(
+            (a) => ProductProfit(
+              name: a.name,
+              qty: a.qty,
+              revenueKobo: a.revenueKobo,
+              cogsKobo: a.cogsKobo,
+              concessionKobo: a.concessionKobo,
+            ),
+          )
+          .toList()
+        ..sort((a, b) => b.profitKobo.compareTo(a.profitKobo));
+
+  return ProfitData(
+    revenueKobo: revenueKobo,
+    cogsKobo: cogsKobo,
+    products: products,
+    uncostedItems: uncostedItems,
+    concessionKobo: concessionKobo,
+    // #176 — the single "Total Sales" definition shared with the Home
+    // dashboard and the Daily Reconciliation (deposit-exclusive item lines
+    // minus discounts, ALL lines incl. quick sales). Distinct from
+    // [revenueKobo], which is costed-only so Revenue − COGS == Gross Profit.
+    totalSalesKobo: split.netKobo,
+    returnsKobo: split.returnsKobo,
+    returnedProfitKobo: returnedProfitKobo,
+  );
+}
+
 /// Profit Report (§25.2) — CEO only. Revenue, cost of goods sold, gross profit
 /// and margin over the selected period, with a per-product breakdown. Profit
 /// per item = (unit price − buying price) × quantity, using the buying price
@@ -62,131 +187,7 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
     }
   }
 
-  /// Aggregate completed orders in [period] into headline totals + per-product
-  /// rows (sorted by gross profit, descending). Lines whose captured buying
-  /// price is 0 — cost was never recorded, e.g. a product created by a role
-  /// without `products.edit_buying_price` — are treated as UNKNOWN cost and
-  /// EXCLUDED from the profit math, exactly as the dashboard Net Profit
-  /// (home_screen.dart) and the Sales breakdown do. Booking them at zero cost
-  /// would overstate gross profit as 100% for those items. Their quantity is
-  /// reported separately as [_ProfitData.uncostedItems] so the exclusion is
-  /// transparent and Revenue − COGS always equals Gross Profit.
-  ///
-  /// [inScope] is the store predicate (#195) — `reconStoreFilter`, the SAME one
-  /// the Daily Reconciliation uses, so it honours the §12.1 active store, a
-  /// non-CEO's store confinement, and the van exclusion (#140/#142). It is
-  /// applied PER LINE (and to the order's own store for the discount), matching
-  /// the reconciliation exactly. Before #195 this screen read every store's
-  /// orders whatever the lock said, so a locked-store Home and Recon showed the
-  /// store while Profit showed the whole business — three screens, three
-  /// answers, which is what US 28 forbids.
-  _ProfitData _compute(
-    List<OrderWithItems> orders,
-    String period,
-    bool Function(String? storeId) inScope,
-  ) {
-    final byProduct = <String, _ProductAccum>{};
-    var revenueKobo = 0;
-    var cogsKobo = 0;
-    var uncostedItems = 0.0;
-    var concessionKobo = 0;
-    var returnedProfitKobo = 0;
-
-    // #549 — recognized at checkout ('pending'), not at the ceremonial Confirm
-    // ('completed'). A cancelled sale still counts on its creation day and
-    // books a negative entry (same lines) on its cancel day, so a return never
-    // changes an earlier day's profit; every amount below is signed.
-    for (final e in saleDayEntries(orders)) {
-      if (!isDateInPeriod(e.day, period)) continue;
-      final o = e.o;
-      final sign = e.sign;
-      for (final i in o.items) {
-        // #195 — per-LINE store scope, like the reconciliation. This also
-        // carries the #140 van exclusion (a van fails `reconStoreFilter` by
-        // construction): a van sale is not a store sale, its COGS is not
-        // per-line (it is the trip's lot snapshot, booked at close), so
-        // including it would report road revenue at 100% margin. Van P&L comes
-        // from the closed-trip artifact instead (van-sales spec §5.4 / §8.1).
-        if (!inScope(i.item.storeId)) continue;
-        final product = i.product;
-        // #200 / US 32 — the catalogue-price concession is a SELLING-price fact,
-        // so it is counted before the uncosted skip below: a price cut on a line
-        // whose cost was never recorded is still a price cut, and dropping it
-        // would leave exactly the give-away this story exists to surface
-        // invisible. (It therefore covers a wider line set than the per-product
-        // rows, which follow the costed breakdown.)
-        final lineConcession = lineConcessionKobo(
-          cataloguePriceKobo: i.item.cataloguePriceKobo,
-          unitPriceKobo: i.item.unitPriceKobo,
-          quantity: i.item.quantity,
-        );
-        concessionKobo += sign * lineConcession;
-        // Quick-sale lines (§12.3) have no product and no captured cost — like
-        // any uncosted line, they are excluded from the profit math.
-        if (product == null || i.item.buyingPriceKobo <= 0) {
-          uncostedItems += sign * i.item.quantity;
-          continue;
-        }
-        final lineRevenue = lineTotalKobo(
-          i.item.unitPriceKobo,
-          i.item.quantity,
-        );
-        final lineCogs = lineTotalKobo(i.item.buyingPriceKobo, i.item.quantity);
-        revenueKobo += sign * lineRevenue;
-        cogsKobo += sign * lineCogs;
-        if (sign < 0) returnedProfitKobo += sign * (lineRevenue - lineCogs);
-        final acc = byProduct.putIfAbsent(
-          product.id,
-          () => _ProductAccum(product.name),
-        );
-        acc.qty += sign * i.item.quantity;
-        acc.revenueKobo += sign * lineRevenue;
-        acc.cogsKobo += sign * lineCogs;
-        acc.concessionKobo += sign * lineConcession;
-      }
-    }
-
-    // #708 — the #176 shared Total Sales, split for display. Same predicates
-    // as before; #195: the SAME store predicate the figures above apply.
-    final split = computeSalesSplitKobo(
-      orders,
-      inSpan: (createdAt) => isDateInPeriod(createdAt, period),
-      inScope: inScope,
-    );
-
-    final products =
-        byProduct.values
-            // #549 — a same-day cancel nets a product to nothing; don't list it.
-            .where((a) => a.qty != 0 || a.revenueKobo != 0 || a.cogsKobo != 0)
-            .map(
-              (a) => _ProductProfit(
-                name: a.name,
-                qty: a.qty,
-                revenueKobo: a.revenueKobo,
-                cogsKobo: a.cogsKobo,
-                concessionKobo: a.concessionKobo,
-              ),
-            )
-            .toList()
-          ..sort((a, b) => b.profitKobo.compareTo(a.profitKobo));
-
-    return _ProfitData(
-      revenueKobo: revenueKobo,
-      cogsKobo: cogsKobo,
-      products: products,
-      uncostedItems: uncostedItems,
-      concessionKobo: concessionKobo,
-      // #176 — the single "Total Sales" definition shared with the Home
-      // dashboard and the Daily Reconciliation (deposit-exclusive item lines
-      // minus discounts, ALL lines incl. quick sales). Distinct from
-      // [revenueKobo], which is costed-only so Revenue − COGS == Gross Profit.
-      totalSalesKobo: split.netKobo,
-      returnsKobo: split.returnsKobo,
-      returnedProfitKobo: returnedProfitKobo,
-    );
-  }
-
-  Future<void> _exportCsv(_ProfitData data) async {
+  Future<void> _exportCsv(ProfitData data) async {
     // Mirror the on-screen gate: omit the raw Cost-of-goods column unless the
     // viewer holds `reports.see_cost_prices`. Cites the SAME named gate as the
     // on-screen headline (`.allowsNow` — a one-shot read in this export path),
@@ -214,7 +215,7 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
       (data.profitKobo / 100.0).toStringAsFixed(2),
       data.marginPct.toStringAsFixed(1),
       // Period total — counts every sold line, so it can exceed the sum of the
-      // costed product rows above (see [_ProfitData.concessionKobo]).
+      // costed product rows above (see [ProfitData.concessionKobo]).
       (data.concessionKobo / 100.0).toStringAsFixed(2),
     ]);
     try {
@@ -256,12 +257,19 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
     // gate — so a CEO can grant someone the Profit Report yet withhold the raw
     // cost. Revenue / Gross Profit / Margin stay (they're `reports.see_profit`).
     final canSeeCost = Gates.seeReportCostPrices.allows(ref);
-    final orders = ref.watch(allOrdersProvider).valueOrNull ?? const [];
+    // #685 - only this period's entries (incl. cancels landing in it), not the
+    // whole history. Same window the calculation's own period test uses.
+    final (windowFrom, windowTo) = dateRangeForLabel(_period);
+    final orders =
+        ref
+            .watch(periodOrdersProvider((from: windowFrom, to: windowTo)))
+            .valueOrNull ??
+        const [];
     // #195 — the §12.1 active store, the viewer's confinement and the van
     // exclusion, in the one predicate the Daily Reconciliation uses.
     final data = perfLog(
       'profit compute $_period',
-      () => _compute(orders, _period, reconStoreFilter(ref)),
+      () => computeProfit(orders, _period, reconStoreFilter(ref)),
       extra: '${orders.length} orders',
     );
     final hasCostedData = data.products.isNotEmpty;
@@ -424,7 +432,7 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
     );
   }
 
-  Widget _headline(ThemeData theme, _ProfitData data, bool canSeeCost) {
+  Widget _headline(ThemeData theme, ProfitData data, bool canSeeCost) {
     final f = theme.extension<AppFixedColors>() ?? AppFixedColors.light;
     final profit = data.profitKobo;
     final color = profit >= 0 ? f.green : f.danger;
@@ -478,7 +486,7 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
     );
   }
 
-  Widget _breakdownCard(ThemeData theme, _ProfitData data) {
+  Widget _breakdownCard(ThemeData theme, ProfitData data) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -499,7 +507,7 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
     );
   }
 
-  Widget _productRow(ThemeData theme, _ProductProfit p) {
+  Widget _productRow(ThemeData theme, ProductProfit p) {
     final f = theme.extension<AppFixedColors>() ?? AppFixedColors.light;
     final muted =
         theme.textTheme.bodySmall?.color ?? theme.colorScheme.onSurface;
@@ -548,8 +556,8 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
   }
 }
 
-class _ProfitData {
-  _ProfitData({
+class ProfitData {
+  ProfitData({
     required this.revenueKobo,
     required this.cogsKobo,
     required this.products,
@@ -571,7 +579,7 @@ class _ProfitData {
   /// headline stays self-consistent: Revenue − COGS == Gross Profit).
   final int revenueKobo;
   final int cogsKobo;
-  final List<_ProductProfit> products;
+  final List<ProductProfit> products;
 
   /// Quantity of sold items excluded from the profit math because their captured
   /// buying price was 0 (cost never recorded). Surfaced as a transparency note.
@@ -580,7 +588,7 @@ class _ProfitData {
   /// #200 / PRD #155 US 32 — money given away by selling below the tier list
   /// price ("catalogue − charged", from `order_items.catalogue_price_kobo`).
   /// Positive = the shop charged less than list; negative = more. Summed over
-  /// EVERY sold line in the period (see `_compute`), so it is not limited to the
+  /// EVERY sold line in the period (see `computeProfit`), so it is not limited to the
   /// costed lines the per-product rows below cover. It does NOT enter
   /// [revenueKobo]/[cogsKobo]/[profitKobo]: the concession is already inside the
   /// price that was charged, so subtracting it again would double-count. It is
@@ -606,8 +614,8 @@ class _ProductAccum {
   int concessionKobo = 0;
 }
 
-class _ProductProfit {
-  _ProductProfit({
+class ProductProfit {
+  ProductProfit({
     required this.name,
     required this.qty,
     required this.revenueKobo,
@@ -621,7 +629,7 @@ class _ProductProfit {
   final int cogsKobo;
 
   /// Money given away on this product by selling below its list price (#200 /
-  /// US 32). See [_ProfitData.concessionKobo].
+  /// US 32). See [ProfitData.concessionKobo].
   final int concessionKobo;
 
   int get profitKobo => revenueKobo - cogsKobo;
