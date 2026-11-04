@@ -34,6 +34,7 @@ OrderWithItems _order({
   final orderId = 'o-${createdAt.microsecondsSinceEpoch}-${lines.length}';
   final order = OrderData(
     kind: 'sale',
+    driverExtraKobo: 0,
     id: orderId,
     businessId: 'b1',
     orderNumber: 'ORD-$orderId',

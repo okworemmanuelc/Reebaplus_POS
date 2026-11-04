@@ -144,6 +144,21 @@ class OrderCommands {
     final isVanSale =
         (await _db.vanTripsDao.saleContextForStore(storeId)).isVanSale;
     final mustReturnAllEmpties = isWalkIn && !isVanSale;
+    // #730 — the driver's extra (above the load price) exists only on the road,
+    // and is recorded on the side: the order's own totals stay at load price.
+    var driverExtraKobo = 0;
+    for (final it in items) {
+      final charged = it.chargedUnitPriceKobo.value;
+      if (charged == null) continue;
+      if (!isVanSale) {
+        throw ArgumentError(
+          'A selling price above the line price is road-only',
+        );
+      }
+      driverExtraKobo +=
+          lineTotalKobo(charged, it.quantity.value) -
+          lineTotalKobo(it.unitPriceKobo.value, it.quantity.value);
+    }
     if (crateBearing && mustReturnAllEmpties) {
       // #656 — a walk-in must return ALL empties at Checkout. Refused before
       // any write; Checkout shows the same text first. A count the exchange
@@ -221,6 +236,7 @@ class OrderCommands {
       staffId: Value(staffId),
       storeId: Value(storeId),
       crateDepositPaidKobo: Value(crateDepositPaidKobo),
+      driverExtraKobo: Value(driverExtraKobo),
     );
 
     await _ordersDao.createOrder(
@@ -886,6 +902,22 @@ class OrderCommands {
               ? catalogPriceKobo
               : null;
 
+          // #730 — a van driver's selling price above the load price. The
+          // line itself stays at the LOAD price; the charged price rides on the
+          // side. Below the load price is refused here, at the write boundary.
+          final chargedRaw = item['chargedUnitPriceKobo'] as int?;
+          if (chargedRaw != null && chargedRaw < unitPriceKobo) {
+            throw ArgumentError.value(
+              chargedRaw,
+              'chargedUnitPriceKobo',
+              'cannot be below the load price ($unitPriceKobo)',
+            );
+          }
+          final chargedUnitPriceKobo =
+              (chargedRaw != null && chargedRaw > unitPriceKobo)
+              ? chargedRaw
+              : null;
+
           final snapshot = jsonEncode({
             'name': item['name'],
             'unitPriceKobo': unitPriceKobo,
@@ -902,6 +934,7 @@ class OrderCommands {
             buyingPriceKobo: Value(buyingPriceKobo),
             totalKobo: totalKobo,
             cataloguePriceKobo: Value(cataloguePriceKobo),
+            chargedUnitPriceKobo: Value(chargedUnitPriceKobo),
             priceSnapshot: Value(snapshot),
           );
         })

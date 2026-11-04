@@ -58,6 +58,7 @@ OrderWithItems _order({
   final product = _product();
   final order = OrderData(
     kind: 'sale',
+    driverExtraKobo: 0,
     id: id,
     businessId: 'b1',
     orderNumber: id,

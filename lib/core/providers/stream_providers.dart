@@ -2113,6 +2113,14 @@ final vanTripSoldValueProvider = businessScopedStreamFamily<int, String>(
   whenAbsent: 0,
 );
 
+/// #730 — the driver's extra on a trip (above the load price). Apart from
+/// [vanTripSoldValueProvider]: never shop revenue, never owed to the shop.
+final vanTripDriverExtraProvider = businessScopedStreamFamily<int, String>(
+  (ref, db, businessId, tripId) =>
+      db.vanTripsDao.watchDriverExtraKoboForTrip(tripId),
+  whenAbsent: 0,
+);
+
 /// Display label for the active-store scope (§21.11 supplier accounts and any
 /// other screen that wants to caption the current scope): the locked store's
 /// name, or "All Stores" when nothing is locked.

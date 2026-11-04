@@ -64,12 +64,32 @@ class _DriverTerminalScreenState extends ConsumerState<DriverTerminalScreen> {
   bool _ringing = false;
 
   final TextEditingController _cashCtrl = TextEditingController();
+
+  /// #730 - productId -> the selling price (kobo) the driver typed; absent means
+  /// "at the load price". Never read raw: [_sellFor] clamps it up to the load.
+  final Map<String, int> _sellKobo = {};
+  final Map<String, TextEditingController> _priceCtrls = {};
+
+  int _sellFor(String productId, int loadPriceKobo) => driverSellPriceKobo(
+    loadPriceKobo: loadPriceKobo,
+    typedKobo: _sellKobo[productId],
+  );
+
+  void _resetPrices() {
+    for (final c in _priceCtrls.values) {
+      c.dispose();
+    }
+    _priceCtrls.clear();
+    _sellKobo.clear();
+  }
+
   final GlobalKey<VanReceiptViewState> _receiptKey =
       GlobalKey<VanReceiptViewState>();
 
   @override
   void dispose() {
     _cashCtrl.dispose();
+    _resetPrices();
     super.dispose();
   }
 
@@ -451,9 +471,20 @@ class _DriverTerminalScreenState extends ConsumerState<DriverTerminalScreen> {
     required Map<String, int> prices,
   }) {
     final rail = context.isRailLayout;
+    // #730 - what the customer pays can exceed the load value; the extra is the
+    // driver's. Cash and change are about what the customer pays.
+    final figures = driverCheckoutFigures([
+      for (final l in saleLines)
+        (
+          units: l.units,
+          loadPriceKobo: l.priceKobo,
+          sellPriceKobo: _sellFor(l.row.product.id, l.priceKobo),
+        ),
+    ]);
+    final payKobo = figures.customerPaysKobo;
     final cashKobo = (parseCurrency(_cashCtrl.text) * 100).round();
-    final changeKobo = cashKobo - totalKobo;
-    final enough = cashKobo >= totalKobo;
+    final changeKobo = cashKobo - payKobo;
+    final enough = cashKobo >= payKobo;
 
     final lines = _InfoCard(
       child: Column(
@@ -492,12 +523,19 @@ class _DriverTerminalScreenState extends ConsumerState<DriverTerminalScreen> {
                         'Load ${formatCurrency(l.priceKobo / 100)}',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
+                      SizedBox(height: context.getRSize(6)),
+                      SizedBox(
+                        width: context.getRSize(170),
+                        child: _sellPriceField(l.row.product.id, l.priceKobo),
+                      ),
                     ],
                   ),
                 ),
                 SizedBox(width: context.getRSize(8)),
                 Text(
-                  formatCurrency(l.priceKobo * l.units / 100),
+                  formatCurrency(
+                    _sellFor(l.row.product.id, l.priceKobo) * l.units / 100,
+                  ),
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
               ],
@@ -518,13 +556,45 @@ class _DriverTerminalScreenState extends ConsumerState<DriverTerminalScreen> {
           ),
         ),
         Text(
-          formatCurrency(totalKobo / 100),
+          formatCurrency(payKobo / 100),
           key: const ValueKey('van-checkout-total'),
           style: Theme.of(context).textTheme.headlineMedium?.copyWith(
             fontWeight: FontWeight.w800,
             color: Theme.of(context).colorScheme.primary,
           ),
         ),
+        SizedBox(height: context.getRSize(8)),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Load value (you hand in)',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+            Text(
+              formatCurrency(figures.loadValueKobo / 100),
+              key: const ValueKey('van-checkout-load-value'),
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+        if (figures.extraKobo > 0)
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Your extra',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+              Text(
+                formatCurrency(figures.extraKobo / 100),
+                key: const ValueKey('van-checkout-extra'),
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
       ],
     );
 
@@ -573,7 +643,7 @@ class _DriverTerminalScreenState extends ConsumerState<DriverTerminalScreen> {
 
     final completeButton = AppButton(
       key: const ValueKey('van-complete-sale'),
-      text: 'Complete Sale · ${formatCurrency(totalKobo / 100)}',
+      text: 'Complete Sale · ${formatCurrency(payKobo / 100)}',
       icon: AppIcons.checkCircle,
       // Locks on the first tap, before any await (the #659 rule).
       onAsyncPressed: enough && !_ringing
@@ -584,8 +654,8 @@ class _DriverTerminalScreenState extends ConsumerState<DriverTerminalScreen> {
     final quickPicks = <int>{};
     if (rail) {
       for (final step in [100000, 500000]) {
-        final up = ((totalKobo + step - 1) ~/ step) * step;
-        if (up > totalKobo) quickPicks.add(up);
+        final up = ((payKobo + step - 1) ~/ step) * step;
+        if (up > payKobo) quickPicks.add(up);
       }
     }
 
@@ -631,7 +701,7 @@ class _DriverTerminalScreenState extends ConsumerState<DriverTerminalScreen> {
                     ActionChip(
                       label: const Text('Exact'),
                       onPressed: () => setState(
-                        () => _cashCtrl.text = koboToInputText(totalKobo),
+                        () => _cashCtrl.text = koboToInputText(payKobo),
                       ),
                     ),
                     for (final p in quickPicks)
@@ -734,6 +804,7 @@ class _DriverTerminalScreenState extends ConsumerState<DriverTerminalScreen> {
   void _goCheckout() {
     if (_units.isEmpty) return;
     setState(() {
+      _resetPrices();
       _stage = _Stage.checkout;
       // Default to exact cash; the driver types what was actually handed over.
       _cashCtrl.text = koboToInputText(_currentTotalKobo());
@@ -771,6 +842,67 @@ class _DriverTerminalScreenState extends ConsumerState<DriverTerminalScreen> {
     });
   }
 
+  /// #730 - the per-line selling-price box. Starts at the load price and cannot
+  /// go below it: a lower number is held at the load price and flagged.
+  Widget _sellPriceField(String productId, int loadPriceKobo) {
+    final ctrl = _priceCtrls.putIfAbsent(
+      productId,
+      () => TextEditingController(text: koboToInputText(loadPriceKobo)),
+    );
+    final typed = (parseCurrency(ctrl.text) * 100).round();
+    final below = typed < loadPriceKobo;
+    final extra = _sellFor(productId, loadPriceKobo) - loadPriceKobo;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          key: ValueKey('van-sell-price-$productId'),
+          controller: ctrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+            CurrencyInputFormatter(),
+          ],
+          onChanged: (_) => setState(() {
+            _sellKobo[productId] = (parseCurrency(ctrl.text) * 100).round();
+            _cashCtrl.text = koboToInputText(_checkoutPayKobo());
+          }),
+          style: const TextStyle(fontWeight: FontWeight.w800),
+          decoration: InputDecoration(
+            isDense: true,
+            labelText: 'Selling price',
+            prefixText: '$activeCurrencySymbol ',
+            errorText: below ? "Can't go below the load price" : null,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(AppSpacing.borderRadiusM),
+            ),
+          ),
+        ),
+        if (extra > 0)
+          Padding(
+            padding: EdgeInsets.only(top: context.getRSize(4)),
+            child: Text(
+              '${formatCurrency(extra / 100)} above load on each',
+              key: ValueKey('van-above-load-$productId'),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+      ],
+    );
+  }
+
+  int _checkoutPayKobo() {
+    final trip = ref.read(currentDriverTripProvider).valueOrNull;
+    if (trip == null) return 0;
+    final prices =
+        ref.read(vanTripLoadPricesProvider(trip.id)).valueOrNull ??
+        const <String, int>{};
+    return _units.entries.fold<int>(
+      0,
+      (s, e) => s + _sellFor(e.key, prices[e.key] ?? 0) * e.value,
+    );
+  }
+
   Future<void> _ring(
     VanTripData trip,
     Map<String, int> prices,
@@ -789,13 +921,30 @@ class _DriverTerminalScreenState extends ConsumerState<DriverTerminalScreen> {
             'qty': entry.value,
             // The LOAD price, not the catalogue tier (spec §5.1 / §9.2 #9).
             'unitPriceKobo': prices[entry.key] ?? 0,
-            // #146: the receipt surfaces read `price`, in NAIRA.
-            'price': (prices[entry.key] ?? 0) / 100.0,
+            // #730: the driver's selling price, only when above the load
+            // price. The order stays at load price; this rides on the side.
+            if (_sellFor(entry.key, prices[entry.key] ?? 0) >
+                (prices[entry.key] ?? 0))
+              'chargedUnitPriceKobo': _sellFor(
+                entry.key,
+                prices[entry.key] ?? 0,
+              ),
+            // #146: the receipt surfaces read `price`, in NAIRA. It shows what
+            // the customer paid per unit (#730).
+            'price': _sellFor(entry.key, prices[entry.key] ?? 0) / 100.0,
           },
       ];
       final totalKobo = cart.fold<int>(
         0,
         (sum, l) => sum + (l['unitPriceKobo'] as int) * (l['qty'] as int),
+      );
+      final customerPaysKobo = cart.fold<int>(
+        0,
+        (sum, l) =>
+            sum +
+            ((l['chargedUnitPriceKobo'] as int?) ??
+                    (l['unitPriceKobo'] as int)) *
+                (l['qty'] as int),
       );
 
       final orderNumber = await ref
@@ -820,11 +969,12 @@ class _DriverTerminalScreenState extends ConsumerState<DriverTerminalScreen> {
         _lastSale = _RoadSale(
           orderNumber: orderNumber,
           cart: cart,
-          totalKobo: totalKobo,
-          cashReceivedKobo: cashReceivedKobo < totalKobo
-              ? totalKobo
+          totalKobo: customerPaysKobo,
+          cashReceivedKobo: cashReceivedKobo < customerPaysKobo
+              ? customerPaysKobo
               : cashReceivedKobo,
         );
+        _resetPrices();
         _stage = _Stage.complete;
       });
     } catch (e, st) {

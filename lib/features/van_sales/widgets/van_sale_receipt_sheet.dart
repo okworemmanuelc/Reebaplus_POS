@@ -45,17 +45,7 @@ class VanSaleReceiptSheet extends StatelessWidget {
     // `price` is in NAIRA and `qty` a plain count — the shape every other
     // receipt surface in the app passes (`ReceiptWidget` and the thermal
     // builder both read those two keys).
-    final cart = <Map<String, dynamic>>[
-      for (final line in sale.items)
-        {
-          'id': line.item.productId ?? line.item.id,
-          'name': line.displayName,
-          'size': line.product?.size,
-          'unit': line.product?.unit,
-          'qty': line.item.quantity,
-          'price': line.item.unitPriceKobo / 100.0,
-        },
-    ];
+    final cart = vanReceiptCart(sale);
 
     return Container(
       height: context.getRHeight(0.85),
@@ -86,8 +76,8 @@ class VanSaleReceiptSheet extends StatelessWidget {
                 VanReceiptView(
                   orderNumber: order.orderNumber,
                   cart: cart,
-                  totalKobo: order.netAmountKobo,
-                  cashReceivedKobo: order.amountPaidKobo,
+                  totalKobo: vanReceiptPaidKobo(order),
+                  cashReceivedKobo: vanReceiptCashKobo(order),
                   orderStatus: order.status,
                   isReopened: true,
                   saleDate: order.createdAt,
@@ -109,3 +99,28 @@ class VanSaleReceiptSheet extends StatelessWidget {
     );
   }
 }
+
+/// #730 - the receipt lines of a road sale: `price` is what the customer paid
+/// per unit (the charged price when the driver sold above the load price, else
+/// the load price), in NAIRA.
+List<Map<String, dynamic>> vanReceiptCart(OrderWithItems sale) => [
+  for (final line in sale.items)
+    {
+      'id': line.item.productId ?? line.item.id,
+      'name': line.displayName,
+      'size': line.product?.size,
+      'unit': line.product?.unit,
+      'qty': line.item.quantity,
+      'price':
+          (line.item.chargedUnitPriceKobo ?? line.item.unitPriceKobo) / 100.0,
+    },
+];
+
+/// What the customer actually paid: the order (load price) plus the driver's
+/// extra, which is kept on the side.
+int vanReceiptPaidKobo(OrderData order) =>
+    order.netAmountKobo + order.driverExtraKobo;
+
+/// Cash handed over (a road sale is cash in full) including the extra.
+int vanReceiptCashKobo(OrderData order) =>
+    order.amountPaidKobo + order.driverExtraKobo;

@@ -137,3 +137,33 @@ DriverTripFigures driverTripFigures({
 /// this sale" holds when the sale already takes every unit that is on the van.
 bool driverAllInSale({required int units, required int onVan}) =>
     onVan > 0 && units >= onVan;
+
+/// #730 — one sale line at checkout: units, the LOAD price, and the price the
+/// driver chose to sell at (never below the load price).
+typedef DriverPricedLine = ({int units, int loadPriceKobo, int sellPriceKobo});
+
+/// The three checkout money figures. The shop only ever sees [loadValueKobo];
+/// [extraKobo] is the driver's, recorded apart (ADR 0019).
+typedef DriverCheckoutFigures = ({
+  int customerPaysKobo,
+  int loadValueKobo,
+  int extraKobo,
+});
+
+/// A selling price clamped up to the load price: the box cannot go below it.
+int driverSellPriceKobo({required int loadPriceKobo, int? typedKobo}) =>
+    (typedKobo == null || typedKobo < loadPriceKobo)
+    ? loadPriceKobo
+    : typedKobo;
+
+/// customer pays = Σ sell × units; load value = Σ load × units (what the driver
+/// hands in); extra = the difference.
+DriverCheckoutFigures driverCheckoutFigures(List<DriverPricedLine> lines) {
+  var pays = 0;
+  var load = 0;
+  for (final l in lines) {
+    pays += l.sellPriceKobo * l.units;
+    load += l.loadPriceKobo * l.units;
+  }
+  return (customerPaysKobo: pays, loadValueKobo: load, extraKobo: pays - load);
+}

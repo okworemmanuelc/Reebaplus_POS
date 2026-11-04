@@ -97,6 +97,7 @@ OrderWithItems _roadSale({
   return OrderWithItems(
     OrderData(
       kind: 'sale',
+      driverExtraKobo: 0,
       id: id,
       businessId: _biz,
       orderNumber: id,

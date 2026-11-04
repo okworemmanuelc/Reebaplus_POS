@@ -165,5 +165,18 @@ on recorded road sales.
 - The dormant legacy `drivers` / `delivery_receipts` tables are **ignored**, not
   reused: a van-sales driver is a `users` row with the Driver role.
 
+## Amendment (#730, 2026-11-04) - the driver's extra is recorded apart
+
+The driver may sell above the load price. The order and its lines keep the load
+price exactly (so every revenue, profit, closing, Van Sales, driver-balance and
+reconcile figure is unchanged); the extra rides on the side in
+`order_items.charged_unit_price_kobo` (nullable) and `orders.driver_extra_kobo`
+(default 0), both bigint in the cloud. It is the driver's: never shop revenue,
+never owed to the shop. The receipt and My Trip (Collected, Your extra) read
+it; nothing that sums revenue may. A cancelled road sale drops its extra, and a
+sale synced after close counts toward its own trip via `van_trip_id`. Not
+carried by the v2 `pos_record_sale_v2` envelope (flag held off); extend it
+before that flag is ever enabled.
+
 Full design, worked money trail, and the complete edge-case list:
 `docs/design/van-sales-spec.md`. Product record: PRD #139 as amended by PRD #161.

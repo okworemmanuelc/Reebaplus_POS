@@ -2095,6 +2095,15 @@ class Orders extends Table {
   /// with no local FK (like `OnlineOrders.linkedOrderId`): a pulled adjustment
   /// must never wait on its parent row. The cloud column is a real FK.
   TextColumn get adjustsOrderId => text().nullable()();
+
+  /// #730 (ADR 0019) — a van driver's EXTRA: what the customer paid above the
+  /// load price, on this order. 0 on every ordinary sale and every road sale
+  /// sold at the load price. It is NEVER part of [totalAmountKobo] /
+  /// [netAmountKobo] / [amountPaidKobo], which stay at the load price so every
+  /// shop figure (sales, profit, closing, Van Sales, driver balance, reconcile)
+  /// is untouched. The customer actually paid `netAmountKobo + driverExtraKobo`.
+  /// Mirrors supabase/migrations/0250_van_driver_extra.sql.
+  IntColumn get driverExtraKobo => integer().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
       dateTime().withDefault(currentDateAndTime)();
@@ -2223,6 +2232,12 @@ class OrderItems extends Table {
   // catalogue price exists). Nullable + additive; no sync_registry change
   // (Restore.plain pass-through) — the cloud column must exist first (0158).
   IntColumn get cataloguePriceKobo => integer().nullable()();
+
+  /// #730 (ADR 0019) — the per-unit price a van driver actually charged when it
+  /// was ABOVE the load price in [unitPriceKobo] (which stays the load price so
+  /// shop figures are untouched). NULL = no extra on this line. The receipt
+  /// shows `chargedUnitPriceKobo ?? unitPriceKobo`; no report reads it.
+  IntColumn get chargedUnitPriceKobo => integer().nullable()();
   TextColumn get priceSnapshot => text().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastUpdatedAt =>
@@ -3436,7 +3451,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 106;
+  int get schemaVersion => 107;
 
   /// The v90 (#473) listing columns, pinned to their defaults in every older
   /// products rebuild: TableMigration copies from the CURRENT schema, so a
@@ -7363,6 +7378,22 @@ class AppDatabase extends _$AppDatabase {
           'monthly_repayment_kobo',
         )) {
           await m.addColumn(payrollEntries, payrollEntries.monthlyRepaymentKobo);
+        }
+      }
+
+      if (from < 107) {
+        // ── v107 — #730: van driver extra. Mirrors
+        // supabase/migrations/0250_van_driver_extra.sql. Two additive columns;
+        // guard each so a DB stepped back re-upgrades cleanly.
+        Future<bool> has(String table, String col) async =>
+            (await customSelect(
+              "SELECT 1 FROM pragma_table_info('$table') WHERE name = '$col'",
+            ).get()).isNotEmpty;
+        if (!await has('orders', 'driver_extra_kobo')) {
+          await m.addColumn(orders, orders.driverExtraKobo);
+        }
+        if (!await has('order_items', 'charged_unit_price_kobo')) {
+          await m.addColumn(orderItems, orderItems.chargedUnitPriceKobo);
         }
       }
     },
