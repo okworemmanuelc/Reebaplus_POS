@@ -299,6 +299,8 @@ These rules implement the storage model defined in `architecture.md`. They are n
 - IDs for all business-data rows are **UUIDv7**, generated on the client at write time in `lib/core/`. Do not use auto-increment integers or UUIDv4 for rows that pass through the outbox.
 - Money is stored in **minor units (kobo)** as integers, never floats. In the **cloud (Postgres) every `*_kobo` column MUST be `bigint`, never `integer`** — int4 caps at ₦21,474,836.47 and any larger amount is rejected on push with `22003 out of range`, permanently jamming the outbox (the value stores fine locally, since SQLite/Dart ints are 64-bit, so the row becomes silently un-pushable). This bit us once and was fixed wholesale in migration `0130`; any new `_kobo` column added to a synced table must be declared `bigint` in its migration.
 
+- **Screens must not load a whole history table on the screen's thread** (#683, PRD #680). A screen that shows one period (a day, week or month) reads a period-bounded query: the period's rows plus every row whose effect lands in it (a sale cancelled on a later day counts on its cancel day, #549; the stock card rewinds the movements after the period; a point-in-time balance may need more), and feeds them to the same pure Dart sum the whole-history path uses. Never move a money sum into SQL to get there, and never write a second copy of a money rule. Prove the window with a comparison test (whole history vs bounded rows, every day / week / month, every scope) and a revert check. Example: `reconPeriodRowsProvider` (`recon_period_rows.dart`) for the Daily Reconciliation detail and day close.
+
 ---
 
 ## Import Order

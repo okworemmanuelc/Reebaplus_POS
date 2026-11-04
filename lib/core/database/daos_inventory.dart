@@ -45,6 +45,79 @@ class InventoryDao extends DatabaseAccessor<AppDatabase>
         .watch();
   }
 
+  /// #683 — the `stock_adjustments` rows one reconciliation period
+  /// `[start, endExclusive)` needs, newest first like [watchAllAdjustments]:
+  ///  * every row dated in the period (damages, product-delete write-offs);
+  ///  * every row a period stock movement points at, so the stock card can
+  ///    classify that movement by its reason;
+  ///  * the stock-count shortage rows inside `(countRowsAfter, countRowsUpTo]`
+  ///    — the window the period's count sessions can own (#186; see
+  ///    `StockCountsDao.getCountWindowForPeriod`). A null [countRowsAfter]
+  ///    means "from the start of history" (a store whose first count is in
+  ///    the period owns every earlier shortage row). A null [countRowsUpTo]
+  ///    means the period has no count, so no shortage rows are needed.
+  ///
+  /// The `LIKE` is a superset of `isCountReconciliationReason` (SQLite `LIKE`
+  /// ignores ASCII case); the report math classifies rows itself.
+  Future<List<StockAdjustmentData>> getAdjustmentsForPeriod(
+    DateTime start,
+    DateTime endExclusive, {
+    DateTime? countRowsAfter,
+    DateTime? countRowsUpTo,
+  }) {
+    final end = endExclusive.add(const Duration(seconds: 1));
+    final movedIds = selectOnly(stockTransactions)
+      ..addColumns([stockTransactions.adjustmentId])
+      ..where(
+        whereBusiness(stockTransactions) &
+            stockTransactions.adjustmentId.isNotNull() &
+            stockTransactions.createdAt.isBiggerOrEqualValue(start) &
+            stockTransactions.createdAt.isSmallerThanValue(end),
+      );
+    return (select(stockAdjustments)
+          ..where((t) {
+            var want =
+                (t.createdAt.isBiggerOrEqualValue(start) &
+                    t.createdAt.isSmallerThanValue(end)) |
+                t.id.isInQuery(movedIds);
+            if (countRowsUpTo != null) {
+              var countWindow =
+                  t.reason.like('%stock count%') &
+                  t.createdAt.isSmallerOrEqualValue(countRowsUpTo);
+              if (countRowsAfter != null) {
+                countWindow =
+                    countWindow & t.createdAt.isBiggerThanValue(countRowsAfter);
+              }
+              want = want | countWindow;
+            }
+            return whereBusiness(t) & want;
+          })
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+        .get();
+  }
+
+  /// #683 — the `damaged` / `full_crate_damage` crate movements dated inside
+  /// one reconciliation period, newest first like [watchAllCrateDamages].
+  Future<List<CrateLedgerData>> getCrateDamagesForPeriod(
+    DateTime start,
+    DateTime endExclusive,
+  ) {
+    final end = endExclusive.add(const Duration(seconds: 1));
+    return (select(crateLedger)
+          ..where(
+            (t) =>
+                whereBusiness(t) &
+                t.movementType.isIn([
+                  kCrateMovementDamaged,
+                  kCrateMovementFullCrateDamage,
+                ]) &
+                t.createdAt.isBiggerOrEqualValue(start) &
+                t.createdAt.isSmallerThanValue(end),
+          )
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+        .get();
+  }
+
   Stream<List<ManufacturerData>> watchAllManufacturers() {
     return (select(manufacturers)
           ..where((t) => whereBusiness(t) & t.isDeleted.not())
@@ -949,6 +1022,24 @@ class StockLedgerDao extends DatabaseAccessor<AppDatabase>
   /// 0014): opening and expected-closing stock are reconstructed by rewinding
   /// these deltas from the current on-hand figure, valued at current cost.
   /// Store scope is applied in the report from each row's `locationId`.
+  /// #683 — the non-voided stock movements a reconciliation period starting
+  /// at [start] needs: every one dated at or after [start]. The period's own
+  /// rows give the flow lines, and the LATER rows are what the stock card
+  /// rewinds from today's on-hand figure to find the period's closing and
+  /// opening stock — so the window is open-ended on purpose. Rows before
+  /// [start] never change a figure. Newest first like [watchAllTransactions].
+  Future<List<StockTransactionData>> getTransactionsFrom(DateTime start) {
+    return (select(stockTransactions)
+          ..where(
+            (s) =>
+                whereBusiness(s) &
+                s.voidedAt.isNull() &
+                s.createdAt.isBiggerOrEqualValue(start),
+          )
+          ..orderBy([(s) => OrderingTerm.desc(s.createdAt)]))
+        .get();
+  }
+
   Stream<List<StockTransactionData>> watchAllTransactions() {
     return (select(stockTransactions)
           ..where((s) => whereBusiness(s) & s.voidedAt.isNull())
@@ -2753,6 +2844,101 @@ class StockCountsDao extends DatabaseAccessor<AppDatabase>
             (t) => OrderingTerm.desc(t.createdAt),
           ]))
         .watch();
+  }
+
+  /// #683 — the count sessions one reconciliation period needs, and the
+  /// window of shortage rows they can own.
+  ///
+  /// The period's figures read the sessions whose `business_date` is in the
+  /// period. But a session's shortage MONEY comes from the shortage rows it
+  /// wrote, matched by time (#186, `countShortageRowsBySession`): a row
+  /// belongs to the first session of its store saved at or after it. So for
+  /// the match to come out the same as over the whole history, this also
+  /// returns every session saved between the latest earlier session of each
+  /// counted store and the last period session, and the row window
+  /// `(rowsAfter, rowsUpTo]` that covers them. `rowsAfter` is null when some
+  /// store's first ever count is in the period (it owns every earlier row);
+  /// `rowsUpTo` is null when the period has no count at all.
+  ///
+  /// Sessions come newest first like [watchAllForBusiness]; the business
+  /// dates are compared as `YYYY-MM-DD` text, padded by a day either side
+  /// (the report applies the exact span).
+  Future<
+    ({List<StockCountData> sessions, DateTime? rowsAfter, DateTime? rowsUpTo})
+  >
+  getCountWindowForPeriod(DateTime start, DateTime endExclusive) async {
+    String key(DateTime d) =>
+        '${d.year.toString().padLeft(4, '0')}-'
+        '${d.month.toString().padLeft(2, '0')}-'
+        '${d.day.toString().padLeft(2, '0')}';
+    final fromKey = key(start.subtract(const Duration(days: 1)));
+    final toKey = key(endExclusive.add(const Duration(days: 1)));
+    final inPeriod =
+        await (select(stockCounts)..where(
+              (t) =>
+                  whereBusiness(t) &
+                  t.businessDate.isBiggerOrEqualValue(fromKey) &
+                  t.businessDate.isSmallerOrEqualValue(toKey),
+            ))
+            .get();
+    if (inPeriod.isEmpty) {
+      return (sessions: const <StockCountData>[], rowsAfter: null, rowsUpTo: null);
+    }
+    var upTo = inPeriod.first.createdAt;
+    final earliestByStore = <String, DateTime>{};
+    for (final c in inPeriod) {
+      if (c.createdAt.isAfter(upTo)) upTo = c.createdAt;
+      final store = c.storeId;
+      if (store == null) continue; // owns no rows (shortage rows have a store)
+      final e = earliestByStore[store];
+      if (e == null || c.createdAt.isBefore(e)) {
+        earliestByStore[store] = c.createdAt;
+      }
+    }
+    // The latest earlier session of each counted store bounds the rows the
+    // period's sessions can own from below.
+    DateTime? after;
+    var unbounded = false;
+    for (final entry in earliestByStore.entries) {
+      final prev =
+          await (select(stockCounts)
+                ..where(
+                  (t) =>
+                      whereBusiness(t) &
+                      t.storeId.equals(entry.key) &
+                      t.createdAt.isSmallerThanValue(entry.value),
+                )
+                ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
+                ..limit(1))
+              .getSingleOrNull();
+      if (prev == null) {
+        unbounded = true;
+        continue;
+      }
+      if (after == null || prev.createdAt.isBefore(after)) {
+        after = prev.createdAt;
+      }
+    }
+    if (unbounded || earliestByStore.isEmpty) after = null;
+    final rowsAfter = earliestByStore.isEmpty ? upTo : after;
+    final sessions =
+        await (select(stockCounts)
+              ..where((t) {
+                var w = t.createdAt.isSmallerOrEqualValue(upTo);
+                if (rowsAfter != null) {
+                  w = w & t.createdAt.isBiggerOrEqualValue(rowsAfter);
+                }
+                return whereBusiness(t) &
+                    (w |
+                        (t.businessDate.isBiggerOrEqualValue(fromKey) &
+                            t.businessDate.isSmallerOrEqualValue(toKey)));
+              })
+              ..orderBy([
+                (t) => OrderingTerm.desc(t.businessDate),
+                (t) => OrderingTerm.desc(t.createdAt),
+              ]))
+            .get();
+    return (sessions: sessions, rowsAfter: rowsAfter, rowsUpTo: upTo);
   }
 
   /// Saved counts for a given store + day (the report's per-day drill-down).

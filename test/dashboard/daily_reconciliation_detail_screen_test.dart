@@ -305,7 +305,11 @@ void main() {
         start: _dayStart,
         endExclusive: _dayEnd,
         overrides: [
-          allOrdersProvider.overrideWith((ref) => never<List<OrderWithItems>>()),
+          // #683 — the orders (and the other seven period lists) arrive in
+          // one feed; hold it un-emitted.
+          reconPeriodRowsProvider.overrideWith(
+            (ref, period) => never<ReconPeriodRows>(),
+          ),
         ],
       );
 
@@ -343,8 +347,10 @@ void main() {
         endExclusive: _dayEnd,
         business: _business(crates: true),
         overrides: [
-          crateForfeitRowsProvider
-              .overrideWith((ref) => never<List<WalletTransactionData>>()),
+          // #683 — the kept-deposit rows ride in the period-rows feed.
+          reconPeriodRowsProvider.overrideWith(
+            (ref, period) => never<ReconPeriodRows>(),
+          ),
         ],
       );
 
@@ -365,8 +371,10 @@ void main() {
         endExclusive: _dayEnd,
         business: _business(crates: true),
         overrides: [
-          allCrateDamagesProvider
-              .overrideWith((ref) => never<List<CrateLedgerData>>()),
+          // #683 — the damaged-empties rows ride in the period-rows feed.
+          reconPeriodRowsProvider.overrideWith(
+            (ref, period) => never<ReconPeriodRows>(),
+          ),
         ],
       );
 

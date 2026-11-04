@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/features/dashboard/reconciliation/recon_period_rows.dart';
 
 import '../helpers/screen_harness.dart';
 
@@ -175,6 +176,13 @@ List<Override> reportOverrides(ScreenTestEnvironment env, DateTime orderAt) => [
   ),
   periodOrdersProvider.overrideWith(
     (ref, window) => Stream.value(sampleReportOrders(env, orderAt)),
+  ),
+  // #683 — the reconciliation detail reads its period's rows from this feed
+  // instead of the whole-history streams; the same sample orders, so every
+  // figure and golden is unchanged.
+  reconPeriodRowsProvider.overrideWith(
+    (ref, period) =>
+        Stream.value(ReconPeriodRows(orders: sampleReportOrders(env, orderAt))),
   ),
   crateDepositSummaryProvider.overrideWith(
     (ref) => Stream.value(

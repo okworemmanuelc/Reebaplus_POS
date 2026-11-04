@@ -104,26 +104,25 @@ class _DailyReconciliationDetailScreenState
   /// open — or wait on — that stream. The manufacturer and crate-damage streams
   /// are watched unconditionally by the gather, so naming them here opens nothing
   /// new for anyone.
+  ///
+  /// #683 — the eight period lists, the damaged-empties rows and the kept
+  /// deposit (forfeit) rows all arrive in ONE feed, [reconPeriodRowsProvider],
+  /// so one readiness check covers them; for a non-crate business the forfeit
+  /// rows it carries are simply never read.
   bool _frozenFiguresReady(String? activeStoreId, {required bool showCrates}) {
     bool ready<T>(ProviderListenable<AsyncValue<T>> p) => ref.watch(p).hasValue;
-    return ready(allOrdersProvider) &&
-        ready(allPaymentTransactionsProvider) &&
-        ready(allExpensesProvider) &&
+    return ready(reconPeriodRowsProvider(_period)) &&
         // #669 — Daily allowances are in the frozen net profit and cash out.
         ready(allStaffPayTotalsProvider) &&
-        ready(allStockAdjustmentsProvider) &&
-        ready(allStockTransactionsProvider) &&
-        ready(allStockCountsProvider) &&
-        ready(allSupplierLedgerEntriesProvider) &&
         ready(productsWithStockProvider(activeStoreId)) &&
-        // Crate-deposit forfeiture on a damaged bottle / stored empty — both
-        // subtracted from the frozen net profit.
-        ready(allManufacturersProvider) &&
-        ready(allCrateDamagesProvider) &&
-        // Kept deposits, ADDED to the frozen net profit. Short-circuits for a
-        // non-crate business so no crate stream is opened at all.
-        (!showCrates || ready(crateForfeitRowsProvider));
+        // Crate-deposit forfeiture on a damaged bottle / stored empty — the
+        // per-manufacturer rates are subtracted from the frozen net profit.
+        ready(allManufacturersProvider);
   }
+
+  /// This screen's period — the [reconPeriodRowsProvider] key (#683).
+  ReconPeriod get _period =>
+      (start: widget.start, endExclusive: widget.endExclusive);
 
   /// Freezes the day's computed figures as a `daily_closings` snapshot the FIRST
   /// time a permitted user (Manager+ via [Gates.dailyReconciliation]) opens a
@@ -174,6 +173,12 @@ class _DailyReconciliationDetailScreenState
     final start = widget.start;
     final endExclusive = widget.endExclusive;
     final title = widget.title;
+    // #683 — only this period's rows (plus the rows whose effect lands in it),
+    // never the whole history. Empty until the first load lands, exactly like
+    // the streams it replaces; the snapshot gate below waits for it.
+    final rows =
+        ref.watch(reconPeriodRowsProvider(_period)).valueOrNull ??
+        ReconPeriodRows.empty;
     final d = perfLog(
       'recon ${grouping.name} build',
       () => computeReconData(
@@ -181,6 +186,7 @@ class _DailyReconciliationDetailScreenState
         start: start,
         endExclusive: endExclusive,
         isCeo: isCeo,
+        rows: rows,
       ),
     );
 
@@ -210,6 +216,7 @@ class _DailyReconciliationDetailScreenState
               endExclusive: endExclusive,
               isCeo: true,
               businessWide: true,
+              rows: rows,
             ),
           )
         : null;
@@ -246,6 +253,7 @@ class _DailyReconciliationDetailScreenState
             start: start,
             endExclusive: endExclusive,
             grouping: grouping.finer!,
+            rows: rows,
           );
 
     // ── Which frozen figures each card actually FLAGS (#192) ────────────────

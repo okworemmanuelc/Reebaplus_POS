@@ -142,14 +142,23 @@ class _BucketAccum {
 /// Buckets (at [grouping]) that have data within `[start, endExclusive)` — one
 /// per Day/Week/Month/Year that recorded sales or a stock count in the active
 /// store scope, newest first. `start`/`end` null = unbounded (the top-level list).
+///
+/// [rows] (#683): a bounded caller (a detail screen's drill-down) passes its
+/// period's rows instead of reading the whole-history streams; they hold every
+/// order and count session the span can show.
 List<ReconBucket> buildReconBuckets(
   WidgetRef ref, {
   DateTime? start,
   DateTime? endExclusive,
   required ReconGrouping grouping,
+  ReconPeriodRows? rows,
 }) {
-  final orders = ref.watch(allOrdersProvider).valueOrNull ?? const [];
-  final counts = ref.watch(allStockCountsProvider).valueOrNull ?? const [];
+  final orders =
+      rows?.orders ?? ref.watch(allOrdersProvider).valueOrNull ?? const [];
+  final counts =
+      rows?.stockCounts ??
+      ref.watch(allStockCountsProvider).valueOrNull ??
+      const [];
   final inScope = reconStoreFilter(ref);
   bool inSpan(DateTime t) =>
       (start == null || !t.isBefore(start)) &&
@@ -1103,6 +1112,7 @@ class ReconInputs {
     this.expenses = const [],
     this.adjustments = const [],
     this.supplierLedger = const [],
+    this.supplierBalanceLedger,
     this.payments = const [],
     this.stockTxns = const [],
     this.stockCounts = const [],
@@ -1134,6 +1144,13 @@ class ReconInputs {
   final List<ExpenseWithCategory> expenses;
   final List<StockAdjustmentData> adjustments;
   final List<SupplierLedgerEntryData> supplierLedger;
+
+  /// #683 — the entries the point-in-time supplier payable is summed over
+  /// (it needs every entry, not the period's). Null = [supplierLedger], which
+  /// is the whole ledger on the legacy path. A period-rows caller passes the
+  /// whole ledger here for a CEO's view, or nothing where the payable is not
+  /// read (a Manager, the day-close basis).
+  final List<SupplierLedgerEntryData>? supplierBalanceLedger;
   final List<PaymentTransactionData> payments;
   final List<StockTransactionData> stockTxns;
   final List<StockCountData> stockCounts;
@@ -1760,18 +1777,23 @@ ReconData reconDataFrom(ReconInputs input) {
   var supplierPaidKobo = 0;
   var supplierPayableKobo = 0;
   if (isCeo) {
-    for (final l in ledger) {
+    // The point-in-time payable, over every entry (#683: the period's rows
+    // alone cannot give a balance, so it may come from its own list).
+    for (final l in input.supplierBalanceLedger ?? ledger) {
       // Skip both halves of a voided pair (original carries voidedAt; the
       // compensating reversal is referenceType 'void') for clean gross flows.
       if (l.voidedAt != null || l.referenceType == 'void') continue;
       if (!inScope(l.storeId)) continue;
-      
       if (l.referenceType == 'invoice') {
         supplierPayableKobo += l.amountKobo;
       } else if (l.referenceType.startsWith('payment_')) {
         supplierPayableKobo -= l.amountKobo;
       }
-
+    }
+    // The period flows, under the same void and store rules.
+    for (final l in ledger) {
+      if (l.voidedAt != null || l.referenceType == 'void') continue;
+      if (!inScope(l.storeId)) continue;
       if (!inSpan(l.activityDate)) continue;
       if (l.referenceType == 'invoice') {
         goodsReceivedKobo += l.amountKobo;

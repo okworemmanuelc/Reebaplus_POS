@@ -7,6 +7,8 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/settings/vat_settings.dart';
 import 'package:reebaplus_pos/features/dashboard/reconciliation/recon_data.dart';
 
+export 'package:reebaplus_pos/features/dashboard/reconciliation/recon_period_rows.dart';
+
 /// Thin provider-reading adapter for the reconciliation engine: reads the
 /// providers, builds [ReconInputs], and hands them to the pure engine
 /// ([reconcile]). No arithmetic belongs here (#574).
@@ -66,12 +68,23 @@ bool Function(String?) reconStoreFilter(
 /// This is the **gather** half only (#195): every `ref.watch` lives here and the
 /// arithmetic lives in the pure [reconDataFrom]. Keep it that way — a provider
 /// read that sneaks into the math is a figure that can no longer be tested.
+///
+/// [rows] (#683) are the period's own rows from [reconPeriodRowsProvider]. A
+/// screen showing one period passes them so it never loads the whole history
+/// on its thread; the figures are identical because [reconDataFrom] applies
+/// the same period rules to whatever it is handed (see [ReconPeriodRows] for
+/// the window per list). Without [rows] the whole-history `all*` streams are
+/// read, as before. With [rows], the CEO's point-in-time supplier payable
+/// still reads the whole supplier ledger (a balance needs every entry); the
+/// day-close basis ([businessWide]) skips it, because the payable is not a
+/// frozen figure.
 ReconData computeReconData(
   WidgetRef ref, {
   DateTime? start,
   DateTime? endExclusive,
   required bool isCeo,
   bool businessWide = false,
+  ReconPeriodRows? rows,
 }) {
   // Inventory-on-hand must honour the active-store scope like every other
   // figure here (§12.1): pass the locked store so a single-store view doesn't
@@ -87,17 +100,34 @@ ReconData computeReconData(
   final showCrates = businessTracksCrates(ref.watch(currentBusinessProvider));
   return reconDataFrom(
     ReconInputs(
-      orders: ref.watch(allOrdersProvider).valueOrNull ?? const [],
-      expenses: ref.watch(allExpensesProvider).valueOrNull ?? const [],
-      adjustments:
-          ref.watch(allStockAdjustmentsProvider).valueOrNull ?? const [],
-      supplierLedger:
-          ref.watch(allSupplierLedgerEntriesProvider).valueOrNull ?? const [],
-      payments:
-          ref.watch(allPaymentTransactionsProvider).valueOrNull ?? const [],
-      stockTxns:
-          ref.watch(allStockTransactionsProvider).valueOrNull ?? const [],
-      stockCounts: ref.watch(allStockCountsProvider).valueOrNull ?? const [],
+      orders: rows?.orders ??
+          ref.watch(allOrdersProvider).valueOrNull ??
+          const [],
+      expenses: rows?.expenses ??
+          ref.watch(allExpensesProvider).valueOrNull ??
+          const [],
+      adjustments: rows?.adjustments ??
+          ref.watch(allStockAdjustmentsProvider).valueOrNull ??
+          const [],
+      supplierLedger: rows?.supplierLedger ??
+          ref.watch(allSupplierLedgerEntriesProvider).valueOrNull ??
+          const [],
+      // #683 — with period rows, only a CEO's own view shows the payable.
+      supplierBalanceLedger: rows == null
+          ? null
+          : (isCeo && !businessWide
+                ? (ref.watch(allSupplierLedgerEntriesProvider).valueOrNull ??
+                      const [])
+                : const []),
+      payments: rows?.payments ??
+          ref.watch(allPaymentTransactionsProvider).valueOrNull ??
+          const [],
+      stockTxns: rows?.stockTxns ??
+          ref.watch(allStockTransactionsProvider).valueOrNull ??
+          const [],
+      stockCounts: rows?.stockCounts ??
+          ref.watch(allStockCountsProvider).valueOrNull ??
+          const [],
       productsWithStock:
           ref.watch(productsWithStockProvider(storeScope)).valueOrNull ??
           const [],
@@ -107,13 +137,17 @@ ReconData computeReconData(
           ref.watch(allManufacturersProvider).valueOrNull ?? const [],
       emptyCrateCounts:
           ref.watch(emptyCratesByManufacturerProvider).valueOrNull ?? const {},
-      crateDamages: ref.watch(allCrateDamagesProvider).valueOrNull ?? const [],
+      crateDamages: rows?.crateDamages ??
+          ref.watch(allCrateDamagesProvider).valueOrNull ??
+          const [],
       usersById: ref.watch(usersByBusinessProvider).valueOrNull ?? const {},
       inTransitTransfers:
           ref.watch(allInTransitTransfersProvider).valueOrNull ?? const [],
       vanTrips: ref.watch(allVanTripsProvider).valueOrNull ?? const [],
       crateForfeitRows: showCrates
-          ? (ref.watch(crateForfeitRowsProvider).valueOrNull ?? const [])
+          ? (rows?.crateForfeitRows ??
+                ref.watch(crateForfeitRowsProvider).valueOrNull ??
+                const [])
           : const [],
       vat: ref.watch(vatConfigProvider).valueOrNull ?? VatConfig.off,
       showCrates: showCrates,
