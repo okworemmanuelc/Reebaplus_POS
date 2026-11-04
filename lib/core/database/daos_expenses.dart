@@ -31,6 +31,38 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
+  /// #683 — the expenses one reconciliation period `[start, endExclusive)`
+  /// reports: those whose `expense_date` (the reporting basis, #198) is in
+  /// the period. Same shape and order as [watchAll]. The cash leg of an
+  /// expense is a `payment_transactions` row, read separately on its own date.
+  Future<List<ExpenseWithCategory>> getForPeriod(
+    DateTime start,
+    DateTime endExclusive,
+  ) async {
+    final end = endExclusive.add(const Duration(seconds: 1));
+    final query = select(expenses).join([
+      leftOuterJoin(
+        expenseCategories,
+        expenseCategories.id.equalsExp(expenses.categoryId),
+      ),
+    ]);
+    query.where(
+      whereBusiness(expenses) &
+          expenses.isDeleted.not() &
+          expenses.expenseDate.isBiggerOrEqualValue(start) &
+          expenses.expenseDate.isSmallerThanValue(end),
+    );
+    query.orderBy([OrderingTerm.desc(expenses.createdAt)]);
+    final rows = await query.get();
+    return [
+      for (final row in rows)
+        ExpenseWithCategory(
+          expense: row.readTable(expenses),
+          category: row.readTableOrNull(expenseCategories),
+        ),
+    ];
+  }
+
   /// What this staff member has recorded in expenses in the bound business —
   /// one of the Staff detail screen's activity figures (#205). Soft-deleted rows
   /// drop out; every status counts (approved, pending and rejected alike),

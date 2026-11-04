@@ -1,9 +1,13 @@
 // The Van Sales on/off switch — the one place that decides whether anybody can
 // see or use van sales (PRD #139 / ADR 0019).
 //
-// Van Sales v1 is built and its cloud migrations (0161–0165) are live, but it
-// is SWITCHED OFF until it has been fully tested. Flip [kVanSalesEnabled] to
-// `true` and release to turn it back on — nothing else needs to change.
+// Van Sales v1 is built and its cloud migrations (0161–0165) are live. It was
+// switched off while it was tested and is SWITCHED ON again from 2026-11-04
+// (owner). Selling through the driver terminal is OPTIONAL: what the business
+// must track is what each van went out with, what came back and what the
+// driver handed in — a sale the driver never rang shows as "not brought back"
+// and the driver's cash pays for it. Flip [kVanSalesEnabled] to `false` and
+// release to hide the feature again — nothing else needs to change.
 //
 // What the switch hides (the user-facing surface):
 //  * both van gates — `Gates.vanManage` and `Gates.vanSell` deny for everyone,
@@ -29,8 +33,8 @@ import 'package:flutter/foundation.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/stores/van_store.dart';
 
-/// Whether Van Sales ships switched on. `false` until it has been fully tested.
-const bool kVanSalesEnabled = false;
+/// Whether Van Sales ships switched on. On since 2026-11-04.
+const bool kVanSalesEnabled = true;
 
 /// The permission keys that belong to Van Sales. Hidden from every permission
 /// editor while the feature is off.

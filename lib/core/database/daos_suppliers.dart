@@ -145,6 +145,34 @@ class SupplierLedgerDao extends DatabaseAccessor<AppDatabase>
         .watch();
   }
 
+  /// #683 — the ledger entries whose `activity_date` is inside one
+  /// reconciliation period: the basis of every period supplier flow (goods
+  /// received, paid to suppliers, cash paid to suppliers). The point-in-time
+  /// supplier payable needs the whole ledger and is not read from here. Same
+  /// order as [watchAllHistory].
+  Future<List<SupplierLedgerEntryData>> getForPeriod(
+    DateTime start,
+    DateTime endExclusive,
+  ) {
+    final end = endExclusive.add(const Duration(seconds: 1));
+    return (select(supplierLedgerEntries)
+          ..where(
+            (t) =>
+                _scope(null) &
+                t.activityDate.isBiggerOrEqualValue(start) &
+                t.activityDate.isSmallerThanValue(end),
+          )
+          ..orderBy([
+            (t) =>
+                OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
+            (t) => OrderingTerm(
+              expression: t.signedAmountKobo,
+              mode: OrderingMode.asc,
+            ),
+          ]))
+        .get();
+  }
+
   /// Voids an entry by marking the original voided AND appending an opposite-sign
   /// `void` compensating entry (append-only — §21.7, CEO only at the UI). Plain
   /// enqueue path (no domain RPC in Phase 1).

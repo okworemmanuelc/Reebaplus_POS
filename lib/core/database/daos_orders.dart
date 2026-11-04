@@ -304,28 +304,78 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     }
     query.orderBy([OrderingTerm.desc(orders.createdAt)]);
 
-    return query.watch().map((rows) {
-      // Fold flat join rows into structured OrderWithItems
-      final Map<String, OrderWithItems> result = {};
-      for (final row in rows) {
-        final order = row.readTable(orders);
-        final item = row.readTableOrNull(orderItems);
-        final customer = row.readTableOrNull(customers);
-        final product = row.readTableOrNull(products);
+    return query.watch().map(_foldOrdersWithItems);
+  }
 
-        result.putIfAbsent(order.id, () => OrderWithItems(order, [], customer));
+  /// Folds flat order ⨝ item ⨝ customer ⨝ product join rows into one
+  /// [OrderWithItems] per order, keeping the query's order.
+  List<OrderWithItems> _foldOrdersWithItems(List<TypedResult> rows) {
+    final Map<String, OrderWithItems> result = {};
+    for (final row in rows) {
+      final order = row.readTable(orders);
+      final item = row.readTableOrNull(orderItems);
+      final customer = row.readTableOrNull(customers);
+      final product = row.readTableOrNull(products);
 
-        // Keep the line even when product is null — a Quick Sale (§12.3) has no
-        // product; its name comes from the order item's price snapshot via
-        // OrderItemDataWithProductData.displayName.
-        if (item != null) {
-          result[order.id]!.items.add(
-            OrderItemDataWithProductData(item, product),
-          );
-        }
+      result.putIfAbsent(order.id, () => OrderWithItems(order, [], customer));
+
+      // Keep the line even when product is null — a Quick Sale (§12.3) has no
+      // product; its name comes from the order item's price snapshot via
+      // OrderItemDataWithProductData.displayName.
+      if (item != null) {
+        result[order.id]!.items.add(
+          OrderItemDataWithProductData(item, product),
+        );
       }
-      return result.values.toList();
-    });
+    }
+    return result.values.toList();
+  }
+
+  /// #683 — the orders one reconciliation period `[start, endExclusive)` needs,
+  /// in the same shape and order as [watchAllOrdersWithItems]: every order
+  /// CREATED in the period, plus every order CANCELLED in it. The second half is
+  /// the #549 rule: a cancelled sale stays on its creation day and books a
+  /// negative entry on its cancel day, so a sale made last month and cancelled
+  /// today must be loaded for today. Bounds are padded by a second (the column
+  /// is epoch seconds); the pure report math applies the exact span.
+  Future<List<OrderWithItems>> getOrdersWithItemsForPeriod(
+    DateTime start,
+    DateTime endExclusive,
+  ) async {
+    final end = endExclusive.add(const Duration(seconds: 1));
+    final query = select(orders).join([
+      leftOuterJoin(orderItems, orderItems.orderId.equalsExp(orders.id)),
+      leftOuterJoin(customers, customers.id.equalsExp(orders.customerId)),
+      leftOuterJoin(products, products.id.equalsExp(orderItems.productId)),
+    ]);
+    query.where(
+      whereBusiness(orders) &
+          ((orders.createdAt.isBiggerOrEqualValue(start) &
+                  orders.createdAt.isSmallerThanValue(end)) |
+              (orders.cancelledAt.isBiggerOrEqualValue(start) &
+                  orders.cancelledAt.isSmallerThanValue(end))),
+    );
+    query.orderBy([OrderingTerm.desc(orders.createdAt)]);
+    return _foldOrdersWithItems(await query.get());
+  }
+
+  /// #683 — the `payment_transactions` rows dated inside one reconciliation
+  /// period (every payment figure counts a row on its own `created_at`), newest
+  /// first like [watchAllPaymentTransactions].
+  Future<List<PaymentTransactionData>> getPaymentTransactionsForPeriod(
+    DateTime start,
+    DateTime endExclusive,
+  ) {
+    final end = endExclusive.add(const Duration(seconds: 1));
+    return (select(paymentTransactions)
+          ..where(
+            (p) =>
+                whereBusiness(p) &
+                p.createdAt.isBiggerOrEqualValue(start) &
+                p.createdAt.isSmallerThanValue(end),
+          )
+          ..orderBy([(p) => OrderingTerm.desc(p.createdAt)]))
+        .get();
   }
 
   Stream<List<OrderWithItems>> watchPendingOrdersWithItems({String? storeId}) {

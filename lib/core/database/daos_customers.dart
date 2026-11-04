@@ -471,6 +471,29 @@ class WalletTransactionsDao extends DatabaseAccessor<AppDatabase>
         .watch();
   }
 
+  /// #683 — the [watchForfeitRows] rows dated inside one reconciliation
+  /// period (forfeit income counts each row on its own `created_at`).
+  Future<List<WalletTransactionData>> getForfeitRowsForPeriod(
+    DateTime start,
+    DateTime endExclusive,
+  ) {
+    final end = endExclusive.add(const Duration(seconds: 1));
+    return (select(walletTransactions)
+          ..where(
+            (t) =>
+                whereBusiness(t) &
+                t.referenceType.equals('crate_deposit_forfeited') &
+                t.voidedAt.isNull() &
+                t.createdAt.isBiggerOrEqualValue(start) &
+                t.createdAt.isSmallerThanValue(end),
+          )
+          ..orderBy([
+            (t) =>
+                OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
+          ]))
+        .get();
+  }
+
   /// Order number by order id for [orderIds], business scoped. Labels a
   /// cancelled sale's wallet legs on the statement (#709).
   Future<Map<String, String>> orderNumbersFor(Set<String> orderIds) async {
