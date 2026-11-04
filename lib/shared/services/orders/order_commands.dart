@@ -550,6 +550,61 @@ class OrderCommands {
     return outcome;
   }
 
+  /// **Edit a completed sale** (#713, ADR 0035): ONE adjustment holding the
+  /// difference (minus lines = a part return, plus lines = new goods at today's
+  /// price), one money settlement. Behind [Gates.editSale] (`sales.cancel`),
+  /// enforced here at the write boundary. Audit entry is best-effort.
+  Future<EditSaleOutcome> editCompletedSale({
+    required String orderId,
+    required Map<String, double> newQtyByLineId,
+    List<EditAddedLine> addedLines = const [],
+    required String reason,
+    required String staffId,
+    required GateContext gateContext,
+    RefundDestination refundDestination = RefundDestination.cashOrTransfer,
+    String? refundMethod,
+    int? amountPaidKobo,
+    String paymentMethod = 'cash',
+    Map<String, int> depositPaidByManufacturer = const {},
+  }) async {
+    const gate = Gates.editSale;
+    if (!gate.evaluate(gateContext)) {
+      throw GateDeniedError(gateName: gate.name, action: gate.action);
+    }
+    final outcome = await _ordersDao.editCompletedSale(
+      orderId: orderId,
+      newQtyByLineId: newQtyByLineId,
+      addedLines: addedLines,
+      reason: reason,
+      staffId: staffId,
+      deviceTag: await _orderDeviceTag(),
+      refundDestination: refundDestination,
+      refundMethod: refundMethod,
+      amountPaidKobo: amountPaidKobo,
+      paymentMethod: paymentMethod,
+      depositPaidByManufacturer: depositPaidByManufacturer,
+    );
+    try {
+      await _db.activityLogDao.log(
+        action: 'sale_edited',
+        description:
+            'Sale ${outcome.parentOrderNumber} edited '
+            '(${outcome.adjustmentOrderNumber}): '
+            '${formatCurrency(outcome.addedKobo / 100)} added, '
+            '${formatCurrency(outcome.returnedKobo / 100)} returned, '
+            '${formatCurrency(outcome.refundKobo / 100)} refunded, '
+            '${formatCurrency(outcome.collectedKobo / 100)} collected. '
+            'Reason: $reason',
+        staffId: staffId,
+        storeId: outcome.storeId,
+        orderId: outcome.adjustmentOrderId,
+      );
+    } catch (e) {
+      debugPrint('[OrderCommands] edit-sale audit failed: $e');
+    }
+    return outcome;
+  }
+
   /// Activity-log entry + `sale_returned` warning to CEO + Manager. Best-effort:
   /// the Return is already committed and this can never fail it.
   Future<void> _auditReturn({

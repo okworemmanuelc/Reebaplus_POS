@@ -7,6 +7,8 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #713: Edit a completed sale, CEO/Manager (2026-11-04, branch `feat/713-edit-sale`)
+- `OrdersDao.editCompletedSale`/`planEditSale` (daos_sale_adjustments.dart), `Gates.editSale` (sales.cancel), command+service, Edit sale button + editor (`edit_sale_sheet.dart`) + Edit slip. Reports split plus/minus. New cloud `0249` (recost counts plus lines) NOT deployed. Tests: test/orders/edit_sale_test.dart. ADR 0035 addendum. Open: pos-parity issue in reebaplus-web on merge; edit-time crate deposit UI not exposed (crates tracked).
 ### Issue #682: Smooth screens S1 — measure first (2026-11-03, branch `feat/682-measure-first`)
 - Test shop generator `test/support/history_shop_generator.dart` (N months, seeded, deterministic): sales + lines, later-day cancels, van trips/sales, deposits held/released/forfeited, expenses, supplier entries, adjustments/damages, stock receipts, stock counts, crate damages. Goes through `OrderService.addOrder` / DAOs; rows are then re-stamped onto each simulated day (drops the `_immutable` ledger triggers on the throwaway DB only). `test/support/history_reports.dart` loads the 8 `all*` lists and runs `reconDataFrom`.
 - Timing logs: `lib/core/utils/perf_log.dart` (`perfLog`, `perfLogAsync`, `PerfClock`) print `[perf] <label> <ms>ms <extra>` in debug + profile, nothing in release. Wrapped: recon build (day/week/month/year), Profit `_compute`, Product Details open + refresh, Confirm Payment save, sync restore loop (`sync-save <table>` + `sync-save TOTAL`).

@@ -52,6 +52,7 @@ import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/features/orders/widgets/crate_return_modal.dart';
 import 'package:reebaplus_pos/features/orders/widgets/return_sale_dialog.dart';
 import 'package:reebaplus_pos/features/orders/widgets/refund_destination_dialog.dart';
+import 'package:reebaplus_pos/features/orders/widgets/edit_sale_sheet.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/features/customers/screens/customer_detail_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/slide_route.dart';
@@ -811,6 +812,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                     status: status,
                     onViewReceipt: () => _viewReceipt(context, item),
                     onReturn: () => _returnCompletedSale(item),
+                    onEdit: () => _editCompletedSale(item),
                   );
                 }
                 return _OrderCard(
@@ -903,6 +905,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                     status: status,
                     onViewReceipt: () => _viewReceipt(context, item),
                     onReturn: () => _returnCompletedSale(item),
+                    onEdit: () => _editCompletedSale(item),
                   );
                 }
                 return _OrderCard(
@@ -1260,6 +1263,137 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     }
   }
 
+
+  /// #713: Edit a completed sale (CEO / Manager). The editor and pop-ups only
+  /// collect input; the Order Module's command does every write and re-checks
+  /// the Gate.
+  Future<void> _editCompletedSale(OrderWithItems item) async {
+    final order = item.order;
+    try {
+      Gates.editSale.require(ref);
+    } on GateDeniedError {
+      showGateDenied(context, Gates.editSale);
+      return;
+    }
+    final svc = ref.read(orderServiceProvider);
+    final standing = await svc.returnableQtyByLine(order.id);
+    if (!mounted) return;
+    final input = await showEditSaleEditor(
+      context,
+      orderNumber: order.orderNumber,
+      storeId: order.storeId,
+      priceTier: item.customer?.priceTier ?? 'retailer',
+      lines: [
+        for (final l in item.items)
+          if ((standing[l.item.id] ?? 0) > 0)
+            EditLineSeed(
+              lineId: l.item.id,
+              name: l.displayName,
+              current: standing[l.item.id]!,
+              unitPriceKobo: l.item.unitPriceKobo,
+              canRaise: l.item.productId != null,
+              allowParts: l.product?.allowFractionalSales ?? false,
+            ),
+      ],
+    );
+    if (input == null || !mounted) return;
+
+    EditSalePlan plan;
+    try {
+      plan = await svc.planEditSale(
+        order.id,
+        input.newQtyByLineId,
+        input.addedLines,
+      );
+    } on ReturnRefusedException catch (e) {
+      if (mounted) AppNotification.showError(context, e.message);
+      return;
+    }
+    if (!mounted) return;
+
+    var destination = RefundDestination.cashOrTransfer;
+    String? refundMethod;
+    int? paid;
+    var payMethod = 'cash';
+    if (plan.netKobo > 0) {
+      final m = await showEditMoneyDialog(
+        context,
+        dueKobo: plan.netKobo,
+        hasCustomer: order.customerId != null,
+      );
+      if (m == null || !mounted) return;
+      paid = m.paidKobo;
+      payMethod = m.method;
+    } else {
+      final back = plan.paidOutKobo + (plan.minus?.depositRefundKobo ?? 0);
+      if (back > 0) {
+        final choice = await showRefundDestinationDialog(
+          context,
+          paidKobo: back,
+          hasCustomer: order.customerId != null,
+        );
+        if (choice == null || !mounted) return;
+        destination = choice.destination;
+        refundMethod = choice.method;
+      }
+    }
+    try {
+      Gates.editSale.require(ref);
+    } on GateDeniedError {
+      showGateDenied(context, Gates.editSale);
+      return;
+    }
+    try {
+      final out = await svc.editCompletedSale(
+        orderId: order.id,
+        newQtyByLineId: input.newQtyByLineId,
+        addedLines: input.addedLines,
+        reason: input.reason,
+        staffId: ref.read(authProvider).currentUser?.id ?? '',
+        gateContext: ref.read(gateContextProvider),
+        refundDestination: destination,
+        refundMethod: refundMethod,
+        amountPaidKobo: paid,
+        paymentMethod: payMethod,
+      );
+      if (!mounted) return;
+      AppNotification.showSuccess(
+        context,
+        'Sale ${order.orderNumber} changed (${out.adjustmentOrderNumber}).',
+      );
+      await _printEditSlip(item, out.adjustmentOrderId);
+    } on GateDeniedError {
+      if (mounted) showGateDenied(context, Gates.editSale);
+    } on ReturnRefusedException catch (e) {
+      if (mounted) AppNotification.showError(context, e.message);
+    } on InsufficientStockException {
+      if (mounted) {
+        AppNotification.showError(context, 'Not enough stock for an added item.');
+      }
+    } catch (e) {
+      if (mounted) {
+        AppNotification.showError(context, 'Could not change the sale: $e');
+      }
+    }
+  }
+
+  /// Prints the "Edit slip" for adjustment [adjustmentId]; the original receipt
+  /// is not touched.
+  Future<void> _printEditSlip(OrderWithItems parent, String adjustmentId) async {
+    final rows = await ref
+        .read(orderServiceProvider)
+        .watchAdjustmentsWithLines(parent.order.id)
+        .first;
+    final match = rows.where((r) => r.adjustment.id == adjustmentId);
+    if (match.isEmpty || !mounted) return;
+    final adj = match.first;
+    await _printReceipt(
+      context,
+      OrderWithItems(adj.adjustment, adj.lines, parent.customer),
+      slipTitle: 'Edit slip - ${adj.adjustment.orderNumber}',
+    );
+  }
+
   void _showRiderSelection(BuildContext context, String orderId) async {
     // Staff/riders are no longer tracked. Mark the order as pick-up by default.
     try {
@@ -1500,6 +1634,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     BuildContext context,
     OrderWithItems richOrder, {
     String? storeAddress,
+    String? slipTitle,
   }) async {
     final order = richOrder.order;
 
@@ -1577,7 +1712,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                 ? order.netAmountKobo / 100.0
                 : order.amountPaidKobo / 100.0,
             walletBalance: walletBalance,
-            reprintDate: DateTime.now(),
+            reprintDate: slipTitle == null ? DateTime.now() : null,
+            slipTitle: slipTitle,
             orderStatus: order.status,
             refundAmount: order.amountPaidKobo / 100.0,
             storeAddress: finalStoreAddress,
@@ -1735,6 +1871,7 @@ class _ReturnableCard extends ConsumerStatefulWidget {
   final String status;
   final VoidCallback onViewReceipt;
   final Future<void> Function() onReturn;
+  final Future<void> Function() onEdit;
 
   const _ReturnableCard({
     super.key,
@@ -1742,6 +1879,7 @@ class _ReturnableCard extends ConsumerStatefulWidget {
     required this.status,
     required this.onViewReceipt,
     required this.onReturn,
+    required this.onEdit,
   });
 
   @override
@@ -1779,6 +1917,10 @@ class _ReturnableCardState extends ConsumerState<_ReturnableCard> {
         orderWithItems: widget.orderWithItems,
         status: widget.status,
         onRefund: snap.data == true ? widget.onReturn : null,
+        // #713 — Edit sale: same Gate key, re-checked in the command.
+        onEdit: (snap.data == true && Gates.editSale.allows(ref))
+            ? widget.onEdit
+            : null,
         onViewReceipt: widget.onViewReceipt,
       ),
     );
@@ -1815,7 +1957,7 @@ class _ReturnedLines extends ConsumerWidget {
             children: [
               for (final a in adjs)
                 Text(
-                  'Returned: ${[
+                  '${a.lines.any((l) => l.item.quantity > 0) ? 'Edited' : 'Returned'}: ${[
                     for (final l in a.lines)
                       '${formatQty(-l.item.quantity)} × ${l.displayName}',
                   ].join(', ')}'
@@ -1839,6 +1981,7 @@ class _OrderCard extends ConsumerWidget {
   // §19.7: fires on the Pending tab only (Refund). Null hides the button —
   // either the order isn't pending, or the user lacks sales.cancel.
   final Future<void> Function()? onRefund;
+  final Future<void> Function()? onEdit;
   final VoidCallback onViewReceipt;
 
   const _OrderCard({
@@ -1847,6 +1990,7 @@ class _OrderCard extends ConsumerWidget {
     this.onMarkAsDelivered,
     this.onAssignRider,
     this.onRefund,
+    this.onEdit,
     required this.onViewReceipt,
   });
 
@@ -2438,6 +2582,7 @@ class _OrderCard extends ConsumerWidget {
                                   (status == 'pending' ||
                                               status == 'completed') &&
                                           (onRefund != null ||
+                                              onEdit != null ||
                                               onMarkAsDelivered != null)
                                       ? 0
                                       : 12,
@@ -2461,7 +2606,9 @@ class _OrderCard extends ConsumerWidget {
 
                           // ── Footer actions (pending; completed = Return) ──
                           if ((status == 'pending' || status == 'completed') &&
-                              (onRefund != null || onMarkAsDelivered != null))
+                              (onRefund != null ||
+                                  onEdit != null ||
+                                  onMarkAsDelivered != null))
                             Container(
                               padding: EdgeInsets.fromLTRB(
                                 context.getRSize(12),
@@ -2487,6 +2634,19 @@ class _OrderCard extends ConsumerWidget {
                                         variant: AppButtonVariant.danger,
                                         height: kMinInteractiveDimension,
                                         onAsyncPressed: onRefund,
+                                      ),
+                                    ),
+                                    SizedBox(width: context.getRSize(12)),
+                                  ],
+                                  if (onEdit != null) ...[
+                                    Expanded(
+                                      child: AppButton(
+                                        key: OrdersKeys.editSale,
+                                        text: 'Edit sale',
+                                        icon: AppIcons.edit,
+                                        variant: AppButtonVariant.secondary,
+                                        height: kMinInteractiveDimension,
+                                        onAsyncPressed: onEdit,
                                       ),
                                     ),
                                     SizedBox(width: context.getRSize(12)),

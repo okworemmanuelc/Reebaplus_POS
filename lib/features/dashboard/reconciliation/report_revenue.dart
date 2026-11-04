@@ -45,10 +45,27 @@ int computeTotalSalesKobo(
   var returns = 0;
   for (final e in saleDayEntries(orders)) {
     if (!inSpan(e.day)) continue;
+    // #712/#713 — a sale adjustment is +1 on its own day. Its MINUS lines (and
+    // the discount share they took back) are Returns; its PLUS lines (an edit's
+    // added goods, #713) are Sales.
+    if (e.sign > 0 && e.o.order.kind == 'adjustment') {
+      var plus = 0;
+      var minus = 0;
+      for (final line in e.o.items) {
+        if (!(inScope(line.item.storeId))) continue;
+        final t = lineTotalKobo(line.item.unitPriceKobo, line.item.quantity);
+        if (line.item.quantity > 0) {
+          plus += t;
+        } else {
+          minus += t;
+        }
+      }
+      sales += plus;
+      returns += minus - orderDiscountKobo(e.o, inScope: inScope);
+      continue;
+    }
     final v = e.sign * orderGoodsNetKobo(e.o, inScope: inScope);
-    // #712 — a sale adjustment is +1 on its own day with MINUS lines, so its
-    // value is negative: it belongs under Returns, not Sales.
-    if (e.sign > 0 && e.o.order.kind != 'adjustment') {
+    if (e.sign > 0) {
       sales += v;
     } else {
       returns += v;

@@ -3858,6 +3858,12 @@ enum ReturnRefusal {
   noCustomerBalance(
     'A walk-in sale has no customer balance. Give the money back as cash or '
     'transfer.',
+  ),
+  nothingChanged('Change a quantity or add an item first.'),
+  badEditQty('One of the quantities in this edit is not valid.'),
+  notForRoadSale('Items cannot be added to a van sale. Return items instead.'),
+  walkInMustPay(
+    'A walk-in customer has no balance, so the full amount must be paid now.',
   );
 
   const ReturnRefusal(this.message);

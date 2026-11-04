@@ -78,3 +78,28 @@ units come back as their own restore layer (id derived from the minus line).
   ride every `orders` upsert); deploy `0247` first.
 - The web console must count adjustments in its sales figures (pos-parity).
 - Editing a completed sale (slice 6) is the same record with plus lines.
+
+## Addendum: Edit a completed sale (#713, PRD #707 slice 6)
+
+CEO/Manager only (`Gates.editSale`, on the existing `sales.cancel` key; checked
+at render and again in `OrderCommands.editCompletedSale`). Saving writes ONE
+adjustment (`OrdersDao.editCompletedSale`) holding the DIFFERENCE:
+- lowered/removed lines = minus lines, exactly a part return (same rows, same
+  claim); raised/added lines = plus lines (positive quantity) at TODAY's price for
+  the customer's tier, written like checkout (stock `sale` out, FIFO draw-down,
+  crate issue / deposit, payment + wallet legs), all referencing the adjustment.
+- Header total/net = added - returned goods; `amount_paid_kobo` stays
+  `-paidShare` released from the sale (so paid-standing stays derivable). Plus
+  lines are not returnable through the sale.
+- Money (A added, G returned, P paid share of G): freed paid money covers A
+  first, so only `R = max(0, P - A)` leaves via the #710 refund choice; net due
+  (A - G) is collected (cash/transfer) with the rest charged to a named
+  customer's balance; a walk-in must pay in full.
+- Claim: only minus lines ride `p_lines`; an add-only edit sends an empty claim
+  (the cloud RPC accepts it and still checks the sale is `completed`).
+- Reports: `computeSalesSplitKobo` files an adjustment's plus lines under Sales
+  and minus lines (+ discount share) under Returns, on the adjustment's day.
+- Cloud `0249` makes the recost replay count adjustment PLUS lines (0247 skipped
+  all adjustments). Not deployed.
+- Edit slip: `buildReceiptLines(slipTitle:)` stamps "EDIT SLIP - ORD-..." (text
+  print only). Out of scope: price edits, customer/store change, van sales adds.
