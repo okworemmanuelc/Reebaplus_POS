@@ -325,7 +325,7 @@ goods are its lines plus its adjustments' plus lines, one `ReturnableGoods` per
 product and store. `allocateReturn` (`lib/core/orders/sale_return_allocation.dart`,
 pure) consumes original lines first, then the oldest edit's; each minus line
 carries the consumed line's price and cost and its id in `adjusts_line_id`, and
-the claim names the same ids (cloud `0251`). A sale with any adjustment is returned
+the claim names the same ids (cloud `0252`). A sale with any adjustment is returned
 whole by a final adjustment, never `returnCompletedSale`.
 
 **Return a Completed crate sale (#711).** `ReturnRefusal.crateBearing` is gone.

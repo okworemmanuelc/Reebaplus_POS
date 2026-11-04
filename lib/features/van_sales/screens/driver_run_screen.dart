@@ -53,7 +53,7 @@ class DriverRunScreen extends ConsumerWidget {
     }
 
     final trip = ref.watch(vanTripProvider(tripId)).valueOrNull;
-    final driverId = trip?.driverUserId;
+    final driverId = trip?.vanDriverId;
     final balanceKobo = driverId == null
         ? 0
         : ref.watch(driverBalanceProvider(driverId)).valueOrNull ?? 0;

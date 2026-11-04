@@ -26,6 +26,16 @@ Sources this file consolidates:
 
 ---
 
+> **Amendment #748 (2026-11-04).** Wherever this spec says the driver is a
+> `users` row with the Driver role, read instead: a driver is a plain
+> `van_drivers` row (name, optional phone; no invite, no sign-in, not a
+> customer) and is optional. The ledger's balance axis is the DRIVER, across all
+> their trips and vans; a ledger row with a trip belongs to that trip's current
+> driver, a tripless row to its own `van_driver_id`, and driverless trips form a
+> "No driver assigned" account per van. `driver_user_id` is legacy and nullable.
+> One open trip per van stays; one driver may be out on two vans. See ADR 0019
+> (#748 amendment). The money math in sections 5 and 6 is unchanged.
+
 ## 1. The problem in one paragraph
 
 A driver loads a van with drinks from a warehouse and sells route-to-route,

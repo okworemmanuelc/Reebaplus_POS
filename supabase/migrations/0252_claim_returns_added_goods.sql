@@ -1,4 +1,4 @@
--- 0251_claim_returns_added_goods.sql
+-- 0252_claim_returns_added_goods.sql
 --
 -- #732 (PR B, ADR 0035 addendum): goods added to a completed sale by an edit can
 -- be returned. The phone now names, in p_lines, the line it consumed: a sale line
@@ -79,7 +79,7 @@ BEGIN
     IF v_line.quantity <= 0 THEN
       RAISE EXCEPTION 'bad_adjustment_quantity' USING ERRCODE = 'P0001';
     END IF;
-    -- 0251 (#732): a sale line, or a plus line of an adjustment of this sale.
+    -- 0252 (#732): a sale line, or a plus line of an adjustment of this sale.
     -- A minus line is never a target.
     SELECT oi.quantity INTO v_sold
       FROM public.order_items oi

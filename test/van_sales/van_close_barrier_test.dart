@@ -53,6 +53,7 @@ VanTripData _trip() => VanTripData(
   businessId: 'biz',
   vanStoreId: 'van',
   driverUserId: 'driver',
+  vanDriverId: null,
   sourceStoreId: 'wh',
   status: kVanTripStatusOpen,
   openedAt: DateTime(2026, 7, 30),

@@ -191,6 +191,7 @@ VanTripData _tripRow({
   businessId: _biz,
   vanStoreId: _van,
   driverUserId: 'driver-1',
+  vanDriverId: null,
   sourceStoreId: _warehouse,
   status: status,
   openedAt: DateTime(2026, 7, 20),

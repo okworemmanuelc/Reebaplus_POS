@@ -27,6 +27,7 @@ import 'package:reebaplus_pos/core/crates/crate_shortfall.dart';
 import 'package:reebaplus_pos/core/crates/manufacturer_crate_position.dart';
 import 'package:reebaplus_pos/core/data/marketplace_categories.dart';
 import 'package:reebaplus_pos/core/industry/industry.dart';
+import 'package:reebaplus_pos/core/utils/name_case.dart';
 // #427: the Online Order answer vocabulary (decline reasons, link choice).
 import 'package:reebaplus_pos/core/online_orders/online_order_answer.dart';
 import 'package:reebaplus_pos/core/online_orders/online_order_slip.dart';
@@ -36,6 +37,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/business_scoped_dao.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/database/sync_helpers.dart';
+import 'package:reebaplus_pos/shared/services/orders/sale_totals.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
 // #141: the van predicate. The DAO layer normally takes van-ness as an id set
 // from its caller (see `OrdersDao._outsideStores`), but the two van WRITE

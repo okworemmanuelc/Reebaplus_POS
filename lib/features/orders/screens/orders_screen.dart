@@ -1364,27 +1364,36 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     String? refundMethod;
     int? paid;
     var payMethod = 'cash';
-    if (plan.netKobo > 0) {
+    var deposit = const <String, int>{};
+    final hasCustomer = order.customerId != null;
+    // #732 — added crates with a crate value open the money step even when the
+    // edit would otherwise only refund: the deposit nets against that refund.
+    final depositBrands = editDepositBrands(plan, hasCustomer: hasCustomer);
+    if (plan.settlement().dueKobo > 0 || depositBrands.isNotEmpty) {
       final m = await showEditMoneyDialog(
         context,
-        dueKobo: plan.netKobo,
-        hasCustomer: order.customerId != null,
+        settlement: plan.settlement(),
+        hasCustomer: hasCustomer,
+        crateBrands: depositBrands,
       );
       if (m == null || !mounted) return;
       paid = m.paidKobo;
       payMethod = m.method;
-    } else {
-      final back = plan.paidOutKobo + (plan.minus?.depositRefundKobo ?? 0);
-      if (back > 0) {
-        final choice = await showRefundDestinationDialog(
-          context,
-          paidKobo: back,
-          hasCustomer: order.customerId != null,
-        );
-        if (choice == null || !mounted) return;
-        destination = choice.destination;
-        refundMethod = choice.method;
-      }
+      deposit = m.depositByManufacturer;
+    }
+    final settle = plan.settlement(deposit.values.fold(0, (a, b) => a + b));
+    if (settle.handBackKobo > 0) {
+      final choice = await showRefundDestinationDialog(
+        context,
+        paidKobo: settle.handBackKobo,
+        hasCustomer: hasCustomer,
+      );
+      if (choice == null || !mounted) return;
+      destination = choice.destination;
+      refundMethod = choice.method;
+    } else if (settle.offsetKobo > 0) {
+      // Money set off against the amount due moves on the tender just picked.
+      refundMethod = payMethod;
     }
     try {
       Gates.editSale.require(ref);
@@ -1404,13 +1413,14 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         refundMethod: refundMethod,
         amountPaidKobo: paid,
         paymentMethod: payMethod,
+        depositPaidByManufacturer: deposit,
       );
       if (!mounted) return;
       AppNotification.showSuccess(
         context,
         'Sale ${order.orderNumber} changed (${out.adjustmentOrderNumber}).',
       );
-      await _printEditSlip(item, out.adjustmentOrderId);
+      await _printEditSlip(item, out.adjustmentOrderId, out.depositKobo);
     } on GateDeniedError {
       if (mounted) showGateDenied(context, Gates.editSale);
     } on ReturnRefusedException catch (e) {
@@ -1427,8 +1437,13 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
   }
 
   /// Prints the "Edit slip" for adjustment [adjustmentId]; the original receipt
-  /// is not touched.
-  Future<void> _printEditSlip(OrderWithItems parent, String adjustmentId) async {
+  /// is not touched. [depositKobo] is printed as at checkout, on top of the
+  /// goods; the stored header never carries it (ADR 0035).
+  Future<void> _printEditSlip(
+    OrderWithItems parent,
+    String adjustmentId,
+    int depositKobo,
+  ) async {
     final rows = await ref
         .read(orderServiceProvider)
         .watchAdjustmentsWithLines(parent.order.id)
@@ -1438,7 +1453,14 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     final adj = match.first;
     await _printReceipt(
       context,
-      OrderWithItems(adj.adjustment, adj.lines, parent.customer),
+      OrderWithItems(
+        adj.adjustment.copyWith(
+          totalAmountKobo: adj.adjustment.totalAmountKobo + depositKobo,
+          crateDepositPaidKobo: depositKobo,
+        ),
+        adj.lines,
+        parent.customer,
+      ),
       slipTitle: 'Edit slip - ${adj.adjustment.orderNumber}',
     );
   }

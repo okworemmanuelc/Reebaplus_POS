@@ -7,28 +7,30 @@
 library;
 
 /// `crate_ledger.reason` prefix on the pool credit a van return writes. The full
-/// reason is `van_return:<tripId>:<driverUserId>`.
+/// reason is `van_return:<tripId>` (#748: a driver is optional and can change, so
+/// it is no longer part of the reason). Rows written before #748 are
+/// `van_return:<tripId>:<driverUserId>` and still parse.
 const String kVanReturnEmptiesReasonPrefix = 'van_return:';
 
 /// The reason string for a van return's pool credit.
-String vanReturnEmptiesReason({
-  required String tripId,
-  required String driverUserId,
-}) => '$kVanReturnEmptiesReasonPrefix$tripId:$driverUserId';
+String vanReturnEmptiesReason({required String tripId}) =>
+    '$kVanReturnEmptiesReasonPrefix$tripId';
 
 /// True when [reason] marks a van-return pool credit.
 bool isVanReturnEmptiesReason(String? reason) =>
     reason != null && reason.startsWith(kVanReturnEmptiesReasonPrefix);
 
-/// The `(tripId, driverUserId)` a van-return reason names, or null when
-/// [reason] is not one.
-({String tripId, String driverUserId})? parseVanReturnEmptiesReason(
+/// The trip a van-return reason names (and, on a pre-#748 row, the driver user
+/// id it also carried), or null when [reason] is not one.
+({String tripId, String? driverUserId})? parseVanReturnEmptiesReason(
   String? reason,
 ) {
   if (!isVanReturnEmptiesReason(reason)) return null;
   final parts = reason!
       .substring(kVanReturnEmptiesReasonPrefix.length)
       .split(':');
-  if (parts.length != 2 || parts.any((p) => p.isEmpty)) return null;
-  return (tripId: parts[0], driverUserId: parts[1]);
+  if (parts.isEmpty || parts.length > 2 || parts.any((p) => p.isEmpty)) {
+    return null;
+  }
+  return (tripId: parts[0], driverUserId: parts.length == 2 ? parts[1] : null);
 }

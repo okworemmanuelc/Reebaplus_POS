@@ -7,8 +7,10 @@ import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/shared/services/orders/sale_totals.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/shared/widgets/crate_deposit_sheet.dart';
 
 /// Keys for tests (#713).
 abstract final class EditSaleKeys {
@@ -18,6 +20,13 @@ abstract final class EditSaleKeys {
   static const continueButton = Key('edit-sale-continue');
   static const moneyDialog = Key('edit-sale-money-dialog');
   static const moneyConfirm = Key('edit-sale-money-confirm');
+  static const amountDue = Key('edit-sale-amount-due');
+  static const depositSection = Key('edit-sale-deposit-section');
+  static const depositSheet = Key('edit-sale-deposit-sheet');
+  static const depositNotCovered = Key('edit-sale-deposit-not-covered');
+  static const onBalance = Key('edit-sale-on-balance');
+  static Key depositRow(String manufacturerId) =>
+      Key('edit-sale-deposit-row-$manufacturerId');
 }
 
 /// What the editor collected. The editor performs no writes.
@@ -356,33 +365,70 @@ class _ProductSearchSheetState extends State<_ProductSearchSheet> {
   }
 }
 
+/// The added crates that need the deposit section (#732): a registered customer
+/// and a crate value set for the brand. A brand with no value has nothing to
+/// collect, as at Checkout.
+List<EditCrateBrand> editDepositBrands(
+  EditSalePlan plan, {
+  required bool hasCustomer,
+}) => hasCustomer
+    ? [
+        for (final b in plan.crateBrands)
+          if (b.line.rateKobo > 0) b,
+      ]
+    : const [];
+
 /// What the cashier chose in the money step of an edit.
 class EditMoneyChoice {
-  const EditMoneyChoice({this.method = 'cash', this.paidKobo});
+  const EditMoneyChoice({
+    this.method = 'cash',
+    this.paidKobo,
+    this.depositByManufacturer = const {},
+  });
   final String method;
 
   /// Null = the full amount due.
   final int? paidKobo;
+
+  /// The crate deposit per brand (#732): 0 = crates tracked.
+  final Map<String, int> depositByManufacturer;
 }
 
-/// #713 — the pop-up for money the customer owes after an edit. Only shown for
-/// a net amount due. A walk-in must pay all of it; a named customer may pay
-/// less and the rest goes on their balance. Returns null when dismissed.
+const String _onBalance = 'balance';
+
+/// #713 — the pop-up for money the customer owes after an edit, and (#732) the
+/// crate deposit on added crates. Shown for an amount due or for [crateBrands].
+/// The deposit starts at the full amount per brand and can go down to zero (zero
+/// = crates tracked). It is on top of the goods and nets against any money the
+/// edit frees ([settlement], given with no deposit). A walk-in must pay all of
+/// it; a named customer may pay less, down to the deposit, and the rest goes on
+/// their balance. "Balance" charges it all, so no deposit is taken, as a
+/// Credit Sale at Checkout. Returns null when dismissed.
 Future<EditMoneyChoice?> showEditMoneyDialog(
   BuildContext context, {
-  required int dueKobo,
+  required EditSettlement settlement,
   required bool hasCustomer,
+  List<EditCrateBrand> crateBrands = const [],
 }) {
   return showDialog<EditMoneyChoice>(
     context: context,
-    builder: (_) => _EditMoneyDialog(dueKobo: dueKobo, hasCustomer: hasCustomer),
+    builder: (_) => _EditMoneyDialog(
+      settlement: settlement,
+      hasCustomer: hasCustomer,
+      crateBrands: crateBrands,
+    ),
   );
 }
 
 class _EditMoneyDialog extends StatefulWidget {
-  const _EditMoneyDialog({required this.dueKobo, required this.hasCustomer});
-  final int dueKobo;
+  const _EditMoneyDialog({
+    required this.settlement,
+    required this.hasCustomer,
+    required this.crateBrands,
+  });
+  final EditSettlement settlement;
   final bool hasCustomer;
+  final List<EditCrateBrand> crateBrands;
 
   @override
   State<_EditMoneyDialog> createState() => _EditMoneyDialogState();
@@ -390,9 +436,33 @@ class _EditMoneyDialog extends StatefulWidget {
 
 class _EditMoneyDialogState extends State<_EditMoneyDialog> {
   String _method = 'cash';
+  late final Map<String, int> _depositByBrand = {
+    for (final b in widget.crateBrands)
+      b.line.manufacturerId: b.line.fullDepositKobo,
+  };
   late final TextEditingController _paid = TextEditingController(
-    text: (widget.dueKobo / 100).toStringAsFixed(2),
+    text: _amountText(_settle.dueKobo),
   );
+
+  static String _amountText(int kobo) => (kobo / 100).toStringAsFixed(2);
+
+  /// The Checkout rule, not a copy of it.
+  SaleTotals get _totals => SaleTotals.compute(
+    goodsTotalNaira: widget.settlement.goodsDueKobo / 100.0,
+    crateLines: [for (final b in widget.crateBrands) b.line],
+    isWalkIn: !widget.hasCustomer,
+    isCashTransfer: _method != _onBalance,
+    isCrateBusiness: true,
+    depositByManufacturer: _depositByBrand,
+  );
+
+  EditSettlement get _settle =>
+      widget.settlement.withDeposit(_totals.depositKobo);
+
+  bool get _canPutOnBalance =>
+      widget.hasCustomer &&
+      widget.crateBrands.isNotEmpty &&
+      widget.settlement.dueKobo > 0;
 
   @override
   void dispose() {
@@ -401,44 +471,156 @@ class _EditMoneyDialogState extends State<_EditMoneyDialog> {
   }
 
   int get _paidKobo {
+    if (_method == _onBalance) return 0;
     final v = double.tryParse(_paid.text.replaceAll(',', '')) ?? 0;
-    return (v * 100).round().clamp(0, widget.dueKobo).toInt();
+    return (v * 100).round().clamp(0, _settle.dueKobo).toInt();
+  }
+
+  /// Deposit or tender changed: the amount due moved, so the field follows it.
+  void _change(VoidCallback fn) {
+    setState(() {
+      fn();
+      _paid.text = _amountText(_settle.dueKobo);
+    });
+  }
+
+  Future<void> _editDeposit(EditCrateBrand brand) async {
+    final id = brand.line.manufacturerId;
+    final kobo = await showCrateDepositSheet(
+      context,
+      name: brand.name,
+      fullKobo: brand.line.fullDepositKobo,
+      savedKobo: _depositByBrand[id] ?? 0,
+      sheetKey: EditSaleKeys.depositSheet,
+      onRootNavigator: true,
+    );
+    if (kobo == null || !mounted) return;
+    _change(() => _depositByBrand[id] = kobo);
+  }
+
+  Widget _depositSection() {
+    final cs = Theme.of(context).colorScheme;
+    return Column(
+      key: EditSaleKeys.depositSection,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Crate deposit', style: context.boldStyle(14)),
+        SizedBox(height: context.getRSize(4)),
+        Text(
+          'Refundable, held for the added crates. Tap a brand to change it. '
+          '${formatCurrency(0)} means no deposit: the crates are tracked '
+          'instead.',
+          style: context.regularStyle(12).copyWith(color: cs.onSurfaceVariant),
+        ),
+        for (final b in widget.crateBrands)
+          ListTile(
+            key: EditSaleKeys.depositRow(b.line.manufacturerId),
+            contentPadding: EdgeInsets.zero,
+            title: Text(b.name),
+            subtitle: Text(
+              '${formatQty(b.line.crates)} '
+              'crate${b.line.crates == 1 ? '' : 's'} · '
+              'Full ${formatCurrency(b.line.fullDepositKobo / 100.0)}',
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  formatCurrency(
+                    (_depositByBrand[b.line.manufacturerId] ?? 0) / 100.0,
+                  ),
+                  style: context.boldStyle(14).copyWith(color: cs.primary),
+                ),
+                SizedBox(width: context.getRSize(6)),
+                Icon(
+                  AppIcons.edit,
+                  size: context.getRSize(16),
+                  color: cs.onSurfaceVariant,
+                ),
+              ],
+            ),
+            onTap: () => _editDeposit(b),
+          ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final due = formatCurrency(widget.dueKobo / 100.0);
-    final rest = widget.dueKobo - _paidKobo;
+    final settle = _settle;
+    final deposit = settle.depositKobo;
+    final owes = settle.dueKobo > 0;
+    final due = formatCurrency(settle.dueKobo / 100.0);
+    final rest = settle.dueKobo - _paidKobo;
+    final uncovered = owes && _paidKobo < settle.minPayKobo;
     return AlertDialog(
       key: EditSaleKeys.moneyDialog,
       scrollable: true,
-      title: const Text('Customer owes more'),
+      title: Text(owes ? 'Customer owes more' : 'Crate deposit'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('After this change the customer owes $due.'),
-          SizedBox(height: context.getRSize(8)),
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'cash', label: Text('Cash')),
-              ButtonSegment(value: 'transfer', label: Text('Transfer')),
-            ],
-            selected: {_method},
-            onSelectionChanged: (s) => setState(() => _method = s.first),
+          Text(
+            key: EditSaleKeys.amountDue,
+            owes
+                ? 'After this change the customer owes $due.'
+                : settle.handBackKobo > 0
+                ? 'After this change the customer gets back '
+                      '${formatCurrency(settle.handBackKobo / 100.0)}.'
+                : 'After this change nothing more is owed.',
           ),
-          SizedBox(height: context.getRSize(8)),
-          TextField(
-            controller: _paid,
-            enabled: widget.hasCustomer,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-            ],
-            onChanged: (_) => setState(() {}),
-            decoration: const InputDecoration(labelText: 'Customer pays now'),
-          ),
-          if (widget.hasCustomer && rest > 0)
+          if (deposit > 0)
+            Text(
+              'This includes the ${formatCurrency(deposit / 100.0)} crate '
+              'deposit.',
+            ),
+          if (_totals.depositApplies) ...[
+            SizedBox(height: context.getRSize(8)),
+            _depositSection(),
+          ],
+          if (owes || _method == _onBalance) ...[
+            SizedBox(height: context.getRSize(8)),
+            SegmentedButton<String>(
+              segments: [
+                const ButtonSegment(value: 'cash', label: Text('Cash')),
+                const ButtonSegment(value: 'transfer', label: Text('Transfer')),
+                if (_canPutOnBalance)
+                  const ButtonSegment(
+                    value: _onBalance,
+                    label: Text('Balance', key: EditSaleKeys.onBalance),
+                  ),
+              ],
+              selected: {_method},
+              onSelectionChanged: (s) => _change(() => _method = s.first),
+            ),
+          ],
+          if (owes) ...[
+            SizedBox(height: context.getRSize(8)),
+            TextField(
+              controller: _paid,
+              enabled: widget.hasCustomer && _method != _onBalance,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+              ],
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(labelText: 'Customer pays now'),
+            ),
+          ],
+          if (uncovered)
+            Padding(
+              key: EditSaleKeys.depositNotCovered,
+              padding: EdgeInsets.only(top: context.getRSize(8)),
+              child: Text(
+                'Amount paid must cover the crate deposit of '
+                '${formatCurrency(settle.minPayKobo / 100.0)}. '
+                'Reduce the deposit or collect more.',
+              ),
+            )
+          else if (widget.hasCustomer && rest > 0)
             Padding(
               padding: EdgeInsets.only(top: context.getRSize(8)),
               child: Text(
@@ -457,15 +639,20 @@ class _EditMoneyDialogState extends State<_EditMoneyDialog> {
         ),
         AppButton(
           key: EditSaleKeys.moneyConfirm,
-          text: 'Save changes',
+          text: settle.handBackKobo > 0 ? 'Continue' : 'Save changes',
           isFullWidth: false,
-          onAsyncPressed: () async => Navigator.pop(
-            context,
-            EditMoneyChoice(
-              method: _method,
-              paidKobo: widget.hasCustomer ? _paidKobo : widget.dueKobo,
-            ),
-          ),
+          onAsyncPressed: uncovered
+              ? null
+              : () async => Navigator.pop(
+                  context,
+                  EditMoneyChoice(
+                    method: _method == _onBalance ? 'cash' : _method,
+                    paidKobo: widget.hasCustomer ? _paidKobo : settle.dueKobo,
+                    depositByManufacturer: _totals.depositApplies
+                        ? Map.of(_depositByBrand)
+                        : const {},
+                  ),
+                ),
         ),
       ],
     );

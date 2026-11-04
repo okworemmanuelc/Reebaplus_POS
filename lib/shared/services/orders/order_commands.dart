@@ -597,7 +597,8 @@ class OrderCommands {
             '${formatCurrency(outcome.addedKobo / 100)} added, '
             '${formatCurrency(outcome.returnedKobo / 100)} returned, '
             '${formatCurrency(outcome.refundKobo / 100)} refunded, '
-            '${formatCurrency(outcome.collectedKobo / 100)} collected. '
+            '${formatCurrency(outcome.collectedKobo / 100)} collected'
+            '${outcome.depositKobo > 0 ? ' (${formatCurrency(outcome.depositKobo / 100)} crate deposit held)' : ''}. '
             'Reason: $reason',
         staffId: staffId,
         storeId: outcome.storeId,

@@ -7,6 +7,8 @@
 /// Behaviour-preserving: each rounding step is carried over verbatim.
 library;
 
+import 'dart:math' as math;
+
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
 
 /// Naira (as the cart carries it) to whole kobo, rounding half away from zero.
@@ -113,4 +115,65 @@ class SaleTotals {
 
   /// Tendered minus payable: positive = change / excess, negative = shortfall.
   int changeKobo(int tenderedKobo) => tenderedKobo - payableKobo;
+}
+
+/// What an edit of a completed sale settles (#732, ADR 0035). The edit takes the
+/// goods still due plus the crate deposit; it frees the paid money left after the
+/// added goods plus any deposit released. One nets against the other, the same
+/// rule the edit already applies between its minus and plus sides: the customer
+/// hands over [dueKobo] or gets back [handBackKobo], never both, and the till
+/// moves by exactly that.
+class EditSettlement {
+  const EditSettlement({
+    required this.goodsDueKobo,
+    required this.depositKobo,
+    required this.paidBackKobo,
+    required this.depositBackKobo,
+  });
+
+  /// Net goods the customer owes for the edit (0 when goods went down).
+  final int goodsDueKobo;
+
+  /// Crate deposit on the added crates: held, never revenue.
+  final int depositKobo;
+
+  /// Paid money freed by the minus side, after the added goods took theirs.
+  final int paidBackKobo;
+
+  /// Deposit released by the crates coming back.
+  final int depositBackKobo;
+
+  int get _takeKobo => goodsDueKobo + depositKobo;
+  int get _backKobo => paidBackKobo + depositBackKobo;
+
+  /// The part of each side set off against the other: no money changes hands.
+  int get offsetKobo => math.min(_takeKobo, _backKobo);
+
+  /// Of [offsetKobo], what comes out of [paidBackKobo].
+  int get paidOffsetKobo => math.min(paidBackKobo, offsetKobo);
+
+  /// Of [offsetKobo], what comes out of [depositBackKobo].
+  int get depositOffsetKobo => offsetKobo - paidOffsetKobo;
+
+  /// What the customer hands over.
+  int get dueKobo => _takeKobo - offsetKobo;
+
+  /// What the customer gets back (or keeps as credit).
+  int get handBackKobo => _backKobo - offsetKobo;
+
+  /// The least the customer may hand over: a deposit is held money, so unlike
+  /// goods it cannot go on the balance (the Checkout rule).
+  int get minPayKobo => math.max(0, depositKobo - _backKobo);
+
+  /// Of [handedKobo] (toward [dueKobo]), what pays for goods.
+  int goodsTenderedKobo(int handedKobo) =>
+      (handedKobo - depositKobo + _backKobo).clamp(0, goodsDueKobo).toInt();
+
+  /// The same edit with [kobo] of crate deposit instead.
+  EditSettlement withDeposit(int kobo) => EditSettlement(
+    goodsDueKobo: goodsDueKobo,
+    depositKobo: kobo,
+    paidBackKobo: paidBackKobo,
+    depositBackKobo: depositBackKobo,
+  );
 }

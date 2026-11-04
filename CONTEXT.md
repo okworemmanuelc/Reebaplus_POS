@@ -230,6 +230,14 @@ claim (`pos_claim_sale_adjustment`) stops two phones returning more than a line
 holds.
 _Avoid_: edit, amend, partial cancel.
 
+**Edit settlement** (#732, `EditSettlement` in `sale_totals.dart`):
+What an edit of a completed sale settles. It takes the goods still due plus the
+Crate Deposit on added crates; it frees the paid money left after the added goods
+plus any deposit released. One nets against the other, so the customer hands over
+one amount or gets one back, never both, and the till moves by exactly that. The
+deposit must be covered by money (Checkout's rule); goods may go on the balance.
+_Avoid_: asking for the deposit and paying the refund as two amounts.
+
 **Refund destination** (#710):
 Where refunded money goes: back out as cash or transfer (a `refund` row, method
 picked), or "Add to customer's balance" (no cash-out row; the paid amount stays
@@ -511,7 +519,12 @@ column as a rate when a brand exists (a stale value there once made a full
 deposit read as a *part* deposit and settle down the partial path); conflating
 the deposit *money* flow with the crate *count*, which #156 makes trustworthy. The inflow leg (money customers pay
 us) is [Held Deposit]; the outflow leg (money we pay a supplier) is
-[Placed Deposit] — see ADR 0023.
+[Placed Deposit] — see ADR 0023. Crates added by an **edit** take a deposit by the
+Checkout rule (registered customer paying Cash/Transfer, per-brand rate, zero =
+Crate-Track, #732), auto-filled to the full deposit. It is held on the adjustment's
+`order_crate_lines`, payment and wallet rows, never on the adjustment's header. A
+return releases what was actually paid per crate of the brand, only for crates
+beyond what is owed, and a crate that releases a deposit hands back no empties.
 
 **Held Deposit**:
 Deposit money the shop is currently holding for a customer against crates they
