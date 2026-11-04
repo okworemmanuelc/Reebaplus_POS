@@ -268,12 +268,16 @@ void main() {
         .map((i) => i.value)
         .toList();
 
-    tearDown(() => debugOverrideVanSalesEnabled(null));
+    tearDown(() {
+    debugOverrideVanSalesEnabled(null);
+    debugOverrideDriverScreensEnabled(null);
+  });
 
     testWidgets('switched off: no van store and no Driver role on offer', (
       tester,
     ) async {
       debugOverrideVanSalesEnabled(false);
+      debugOverrideDriverScreensEnabled(false);
       await pumpAsCeo(tester);
 
       expect(storeOptions(tester), unorderedEquals([store1Id, store2Id]));
@@ -284,6 +288,7 @@ void main() {
       tester,
     ) async {
       debugOverrideVanSalesEnabled(true);
+      debugOverrideDriverScreensEnabled(true);
       await pumpAsCeo(tester);
 
       expect(storeOptions(tester), contains(vanId));

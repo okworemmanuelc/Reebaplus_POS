@@ -66,6 +66,7 @@ void main() {
 
     setUp(() async {
       debugOverrideVanSalesEnabled(true);
+      debugOverrideDriverScreensEnabled(true);
       env = await setupScreenTestEnvironment(businessType: 'drinks');
       final db = env.db;
       final b = env.businessId;
@@ -202,6 +203,7 @@ void main() {
 
     tearDown(() async {
       debugOverrideVanSalesEnabled(null);
+      debugOverrideDriverScreensEnabled(null);
       await env.dispose();
     });
 
@@ -240,6 +242,7 @@ void main() {
 
     setUp(() async {
       debugOverrideVanSalesEnabled(true);
+      debugOverrideDriverScreensEnabled(true);
       env = await setupScreenTestEnvironment(businessType: 'drinks');
       final db = env.db;
       final b = env.businessId;
@@ -278,6 +281,7 @@ void main() {
 
     tearDown(() async {
       debugOverrideVanSalesEnabled(null);
+      debugOverrideDriverScreensEnabled(null);
       await env.dispose();
     });
 
@@ -320,6 +324,7 @@ void main() {
 
     setUp(() async {
       debugOverrideVanSalesEnabled(true);
+      debugOverrideDriverScreensEnabled(true);
       env = await setupScreenTestEnvironment(businessType: 'drinks');
       final db = env.db;
       final b = env.businessId;
@@ -439,6 +444,7 @@ void main() {
 
     tearDown(() async {
       debugOverrideVanSalesEnabled(null);
+      debugOverrideDriverScreensEnabled(null);
       await env.dispose();
     });
 

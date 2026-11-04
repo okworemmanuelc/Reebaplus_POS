@@ -759,7 +759,9 @@ abstract final class Gates {
   //
   // Both gates also require the Van Sales switch (`isVanSalesEnabled`, see
   // `van_sales_switch.dart`). While the feature is off they deny for everyone —
-  // CEO included — which hides every van surface that cites them.
+  // CEO included — which hides every van surface that cites them. `vanSell`
+  // additionally requires the driver-screens switch (`isDriverScreensEnabled`,
+  // #747), so the driver side can be off while `vanManage` stays on.
 
   /// Set up and run the van side of the business (`van.manage`, CEO + Manager
   /// by default) — registering a van location today, and from #141 the load,
@@ -780,7 +782,10 @@ abstract final class Gates {
   static const NamedGate vanSell = NamedGate(
     name: 'vanSell',
     action: 'Sell From a Van',
-    rule: AndGate(Gate.when(isVanSalesEnabled), Gate.key('van.sell')),
+    rule: AndGate(
+      Gate.when(isDriverScreensEnabled),
+      Gate.key('van.sell'),
+    ),
   );
 
   // ── Payroll (#667, PRD #666 / ADR 0034) ───────────────────────────────────

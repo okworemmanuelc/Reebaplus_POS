@@ -513,23 +513,12 @@ class _MovementCard extends StatelessWidget {
             label: 'Returned damaged (${position.damagedUnits})',
             value: formatCurrency(position.damageValueKobo / 100),
           ),
-          // Selling through the app is optional: a driver may sell on the
-          // road without ringing it up. Whatever left on the van and did not
-          // come back is therefore "sold or missing", not presumed lost — the
-          // cash the driver hands in pays for it, exactly as for a rung sale.
+          // Selling through the app is optional, so these units are not
+          // presumed lost: the cash the driver hands in pays for them.
           _Row(
-            label: 'Not brought back (${position.shortageUnits})',
+            label: 'Not returned (${position.shortageUnits})',
             value: formatCurrency(position.shortageValueKobo / 100),
           ),
-          if (position.shortageUnits > 0)
-            Padding(
-              padding: EdgeInsets.only(bottom: context.getRSize(6)),
-              child: Text(
-                'Sold without the app, or missing. The cash the driver '
-                'hands in pays for these.',
-                style: t.textTheme.bodySmall?.copyWith(color: t.hintColor),
-              ),
-            ),
           Divider(color: t.dividerColor, height: context.getRSize(22)),
           _Row(
             label: 'Handed in so far',
