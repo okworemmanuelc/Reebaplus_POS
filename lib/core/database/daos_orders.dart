@@ -4108,6 +4108,11 @@ enum ReturnRefusal {
   walkInMustPay(
     'A walk-in customer has no balance, so the full amount must be paid now.',
   ),
+  badDeposit('A crate deposit in this edit is not valid.'),
+  depositNotCovered(
+    'Amount paid must cover the crate deposit. Reduce the deposit or collect '
+    'more.',
+  ),
   hasAdjustments(
     'This sale has been changed since it was made. Return its items from the '
     'list instead.',

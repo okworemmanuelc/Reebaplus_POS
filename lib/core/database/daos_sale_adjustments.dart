@@ -30,9 +30,11 @@ part of 'daos.dart';
 //     tendered on the sale and on every edit, plus what each edit kept back to
 //     pay for its added goods, minus what the headers released.
 //   * Crates of crate-tracked bottle lines: see
-//     [CratePoolDao.returnCratesForAdjustment]; deposit still held is released
-//     pro rata by the crates that are not cancelling a debt, so one returned
-//     crate never both cancels a debt and releases a deposit.
+//     [CratePoolDao.returnCratesForAdjustment]. A returned crate cancels what is
+//     owed first; the crates beyond that release the deposit still held, at what
+//     was actually paid per crate of that brand (a part deposit at its own rate);
+//     only the crates after those hand empties back. So one returned crate never
+//     does two of these.
 
 /// What a part return would do, computed once and used both by the pop-up
 /// (preview) and by the write.
@@ -47,6 +49,7 @@ class PartReturnPlan {
     required this.paidShareKobo,
     required this.depositRefundKobo,
     required this.cratesByBrand,
+    required this.depositCratesByBrand,
     required this.emptiesToHandBack,
     required this.coversEverythingLeft,
   });
@@ -71,6 +74,10 @@ class PartReturnPlan {
 
   /// Brand id -> crates coming back (crate-tracked bottle lines only).
   final Map<String, double> cratesByBrand;
+
+  /// Of [cratesByBrand], the crates that release a deposit: never also handed
+  /// back as empties.
+  final Map<String, double> depositCratesByBrand;
   final List<ReturnEmpties> emptiesToHandBack;
 
   /// True when this return takes every unit still returnable.
@@ -434,24 +441,59 @@ extension SaleAdjustments on OrdersDao {
     // A returned crate cancels what is still owed first; only the crates beyond
     // that are the deposit's, so none cancels a debt AND releases a deposit.
     final owed = await db.cratePoolDao.cratesOwedByBrand(orderIds);
-    double beyondOwed(Map<String, double> crates) => crates.entries.fold(
+    double beyondOwed(String brand, double crates) =>
+        math.max(0.0, crates - (owed[brand] ?? 0));
+    double sumBeyondOwed(Map<String, double> crates) => crates.entries.fold(
       0,
-      (s, e) => s + math.max(0.0, e.value - (owed[e.key] ?? 0)),
+      (s, e) => s + beyondOwed(e.key, e.value),
     );
-    final returnedCrates = beyondOwed(crateReturned);
-    final leftCrates = beyondOwed(crateLeft);
+
+    // Those crates release what was actually paid per crate of their brand
+    // (#732): a part deposit at its own rate, and a crate that carried no
+    // deposit (the sale's own crates, settled at Confirm) releases nothing.
+    final paidLines = await (select(db.orderCrateLines)..where(
+          (l) =>
+              whereBusiness(l) &
+              l.orderId.isIn(orderIds) &
+              l.depositPaidKobo.isBiggerThanValue(0),
+        ))
+        .get();
+    final paidByBrand = <String, int>{};
+    final carriedByBrand = <String, double>{};
+    for (final l in paidLines) {
+      final brand = l.manufacturerId;
+      paidByBrand[brand] = (paidByBrand[brand] ?? 0) + l.depositPaidKobo;
+      carriedByBrand[brand] = (carriedByBrand[brand] ?? 0) + l.cratesTaken;
+    }
+    var heldLeft = held;
+    final depositCrates = <String, double>{};
+    for (final brand in crateReturned.keys.toList()..sort()) {
+      final paid = paidByBrand[brand] ?? 0;
+      final carried = carriedByBrand[brand] ?? 0;
+      if (heldLeft <= 0 || paid <= 0 || carried <= 0) continue;
+      final crates = math.min(
+        beyondOwed(brand, crateReturned[brand]!),
+        carried,
+      );
+      final worth = (paid * crates / carried).round();
+      final value = math.min(heldLeft, worth);
+      if (value <= 0) continue;
+      heldLeft -= value;
+      depositCrates[brand] = value == worth ? crates : value * carried / paid;
+    }
+    final returnedCrates = sumBeyondOwed(crateReturned);
+    final takesAllDeposit =
+        coversAll ||
+        (returnedCrates > 0 && returnedCrates >= sumBeyondOwed(crateLeft));
     final deposit = held == 0 || crateReturned.isEmpty
         ? 0
-        : (coversAll || (returnedCrates > 0 && returnedCrates >= leftCrates)
-              ? held
-              : (leftCrates > 0
-                    ? (held * returnedCrates / leftCrates).round()
-                    : 0));
+        : (takesAllDeposit ? held : held - heldLeft);
 
     // Empties to hand back (preview of what returnCratesForAdjustment will do).
     final back = await db.cratePoolDao.emptiesBackFor(
       orderIds: orderIds,
       returnedByBrand: crateReturned,
+      depositCratesByBrand: depositCrates,
     );
     final names = <ReturnEmpties>[];
     if (back.isNotEmpty) {
@@ -474,6 +516,7 @@ extension SaleAdjustments on OrdersDao {
       paidShareKobo: paid,
       depositRefundKobo: deposit,
       cratesByBrand: crateReturned,
+      depositCratesByBrand: depositCrates,
       emptiesToHandBack: names,
       coversEverythingLeft: coversAll,
     );
@@ -679,6 +722,7 @@ extension SaleAdjustments on OrdersDao {
         orderIds: [orderId, for (final a in adjs) a.id],
         adjustmentOrderId: adjustmentId,
         returnedByBrand: plan.cratesByBrand,
+        depositCratesByBrand: plan.depositCratesByBrand,
         staffId: staffId,
       );
 
@@ -739,12 +783,18 @@ extension SaleAdjustments on OrdersDao {
     required String? refundMethod,
     required DateTime now,
     int? paidOutKobo,
+    int? depositOutKobo,
+    String? depositMethod,
   }) async {
     final toBalance = destination == RefundDestination.balance;
     final parent = plan.parent;
     // #713 — an edit that also adds goods spends part of the freed paid money
     // on them, so only `paidOutKobo` (<= the paid share) leaves as a refund.
-    final paidOut = paidOutKobo ?? plan.paidShareKobo;
+    // #732 — likewise `depositOutKobo` of the deposit released: what stays a
+    // credit (the balance destination) never leaves the till.
+    final paidOut = paidOutKobo ?? (toBalance ? 0 : plan.paidShareKobo);
+    final depositOut =
+        depositOutKobo ?? (toBalance ? 0 : plan.depositRefundKobo);
     final goods = plan.goodsKobo;
     final customerId = parent.customerId;
     // #732 — the tender can sit on an edit: a credit sale's added goods paid
@@ -767,7 +817,7 @@ extension SaleAdjustments on OrdersDao {
           ..orderBy([(p) => OrderingTerm.asc(p.createdAt)])
           ..limit(1))
         .getSingleOrNull();
-    if (paidOut > 0 && !toBalance && salePay != null) {
+    if (paidOut > 0 && salePay != null) {
       await db.paymentTransactionsDao.postReversalPayment(
         original: salePay.copyWith(orderId: Value(adjustmentId)),
         reversalType: 'refund',
@@ -814,19 +864,19 @@ extension SaleAdjustments on OrdersDao {
       // The goods debit comes back off the account in full...
       await leg('credit', goods, 'refund');
       // ...and the paid part leaves with the cash (or stays as credit).
-      if (!toBalance && salePay != null) {
-        await leg('debit', paidOut, 'void');
-      }
+      if (salePay != null) await leg('debit', paidOut, 'void');
 
-      // The deposit still held, pro rata by crates.
+      // The deposit released: what does not leave the till stays as credit.
       if (plan.depositRefundKobo > 0) {
         await leg('debit', plan.depositRefundKobo, 'crate_deposit_refunded');
-        if (toBalance) {
-          await leg('credit', plan.depositRefundKobo, 'crate_refund');
-        }
+        await leg(
+          'credit',
+          plan.depositRefundKobo - depositOut,
+          'crate_refund',
+        );
       }
     }
-    if (plan.depositRefundKobo > 0 && !toBalance) {
+    if (depositOut > 0) {
       final depositPay = await (select(paymentTransactions)
             ..where(
               (p) =>
@@ -844,9 +894,10 @@ extension SaleAdjustments on OrdersDao {
           original: depositPay.copyWith(orderId: Value(adjustmentId)),
           reversalType: 'crate_deposit',
           performedBy: staffId,
-          amountKobo: -plan.depositRefundKobo,
+          amountKobo: -depositOut,
           reason: 'order_part_returned: $reason',
           at: now,
+          method: depositMethod,
         );
       }
     }
@@ -928,6 +979,13 @@ extension SaleAdjustments on OrdersDao {
 //     debt on the account.
 //   * the paid-for part of the minus side never leaves as cash while the added
 //     goods still need it, so the till moves by exactly the net.
+//   * a crate deposit D on the added crates (#732) is on top of the goods and is
+//     never revenue. Freed money pays it too: see [EditSettlement]. The refund
+//     and `crate_deposit` rows stay gross (the refund row is still R, so the
+//     Returns figures do not move) and between them the till moves by exactly
+//     what the customer hands over or gets back. D rides neither the header
+//     totals nor `crate_deposit_paid_kobo`: the header stays added - returned
+//     goods; D lives on `order_crate_lines`, the payment and the wallet rows.
 
 /// One product added in the editor (quantity > 0).
 class EditAddedLine {
@@ -936,12 +994,17 @@ class EditAddedLine {
   final double quantity;
 }
 
+/// One crate brand an edit adds: the crates and rate in [line], named for the
+/// deposit section.
+typedef EditCrateBrand = ({SaleCrateLine line, String name});
+
 /// What an edit would do, for the pop-up (preview) and the write.
 class EditSalePlan {
   const EditSalePlan({
     required this.parent,
     required this.minus,
     required this.plusLines,
+    required this.crateBrands,
     required this.addedKobo,
     required this.returnedKobo,
     required this.paidOutKobo,
@@ -953,6 +1016,10 @@ class EditSalePlan {
 
   /// Plus lines in order: product, units, today's unit price (kobo).
   final List<({ProductData product, double qty, int unitPriceKobo})> plusLines;
+
+  /// Crates the plus lines add, per brand (crate-tracked bottles of a business
+  /// that tracks crates). Who pays a deposit on them is [SaleTotals]' rule.
+  final List<EditCrateBrand> crateBrands;
   final int addedKobo;
   final int returnedKobo;
 
@@ -962,6 +1029,14 @@ class EditSalePlan {
   int get netKobo => addedKobo - returnedKobo;
   bool get hasMinus => minus != null;
   bool get hasPlus => plusLines.isNotEmpty;
+
+  /// What this edit settles with [depositKobo] of crate deposit on top.
+  EditSettlement settlement([int depositKobo = 0]) => EditSettlement(
+    goodsDueKobo: math.max(0, netKobo),
+    depositKobo: depositKobo,
+    paidBackKobo: paidOutKobo,
+    depositBackKobo: minus?.depositRefundKobo ?? 0,
+  );
 }
 
 /// The result of an edit, for the audit trail, the message and the slip.
@@ -976,6 +1051,7 @@ class EditSaleOutcome {
     required this.refundKobo,
     required this.collectedKobo,
     required this.chargedKobo,
+    this.depositKobo = 0,
   });
   final String adjustmentOrderId;
   final String adjustmentOrderNumber;
@@ -986,6 +1062,9 @@ class EditSaleOutcome {
   final int refundKobo;
   final int collectedKobo;
   final int chargedKobo;
+
+  /// Crate deposit held on the added crates (#732).
+  final int depositKobo;
   int get netKobo => addedKobo - returnedKobo;
 }
 
@@ -1082,6 +1161,7 @@ extension EditCompletedSale on OrdersDao {
       0,
       (s, l) => s + lineTotalKobo(l.unitPriceKobo, l.qty),
     );
+    final crateBrands = await _addedCrateBrands(plus);
 
     final PartReturnPlan? minus = lower.isEmpty
         ? null
@@ -1092,10 +1172,52 @@ extension EditCompletedSale on OrdersDao {
       parent: parent,
       minus: minus,
       plusLines: plus,
+      crateBrands: crateBrands,
       addedKobo: added,
       returnedKobo: returned,
       paidOutKobo: math.max(0, paid - added),
     );
+  }
+
+  /// The crates [plus] adds, per brand, at each brand's live rate. Empty when
+  /// the business does not track crates. The same basis as
+  /// `cratesTakenByManufacturer`, which writes them.
+  Future<List<EditCrateBrand>> _addedCrateBrands(
+    List<({ProductData product, double qty, int unitPriceKobo})> plus,
+  ) async {
+    final biz = await (select(businesses)
+          ..where((b) => b.id.equals(requireBusinessId()))
+          ..limit(1))
+        .getSingleOrNull();
+    final tracksCrates = crateTrackingOn(
+      businessType: biz?.type,
+      tracksEmptyCrates: biz?.tracksEmptyCrates,
+    );
+    if (!tracksCrates) return const [];
+    final crates = <String, double>{};
+    for (final l in plus) {
+      final mfr = l.product.manufacturerId;
+      if (mfr == null) continue;
+      final facts = (unit: l.product.unit, trackEmpties: l.product.trackEmpties);
+      if (!isCrateTrackedBottle(facts)) continue;
+      crates[mfr] = (crates[mfr] ?? 0) + l.qty;
+    }
+    final out = <EditCrateBrand>[];
+    for (final e in crates.entries) {
+      final mfr = await (select(manufacturers)
+            ..where((m) => m.id.equals(e.key) & whereBusiness(m))
+            ..limit(1))
+          .getSingleOrNull();
+      out.add((
+        line: SaleCrateLine(
+          manufacturerId: e.key,
+          crates: e.value,
+          rateKobo: mfr?.depositAmountKobo ?? 0,
+        ),
+        name: mfr?.name ?? 'Brand',
+      ));
+    }
+    return out;
   }
 
   /// **Edit a completed sale** (#713): ONE transaction, ONE adjustment order,
@@ -1104,10 +1226,12 @@ extension EditCompletedSale on OrdersDao {
   /// claim, which still proves the sale is `completed`). The caller (command)
   /// has checked the Gate; the DAO re-checks nothing about people, only data.
   ///
-  /// [amountPaidKobo] is what the customer hands over toward a net amount due
-  /// (default: all of it); the rest is charged to a named customer's balance.
-  /// A walk-in must pay it in full. [depositPaidByManufacturer] is the crate
-  /// deposit taken on the ADDED crates, as at checkout (empty = crates tracked).
+  /// [amountPaidKobo] is what the customer hands over toward the amount due
+  /// ([EditSettlement.dueKobo], default: all of it); what is left of the goods is
+  /// charged to a named customer's balance. A walk-in must pay it in full.
+  /// [depositPaidByManufacturer] is the crate deposit taken on the ADDED crates,
+  /// as at checkout: at most the brand's full deposit, 0 or absent = crates
+  /// tracked, and it must be covered by money (never charged to the balance).
   Future<EditSaleOutcome> editCompletedSale({
     required String orderId,
     required Map<String, double> newQtyByLineId,
@@ -1132,18 +1256,23 @@ extension EditCompletedSale on OrdersDao {
       if (toBalance && customerId == null && plan.paidOutKobo > 0) {
         throw const ReturnRefusedException(ReturnRefusal.noCustomerBalance);
       }
-      final deposit = depositPaidByManufacturer.values.fold<int>(0, (a, b) => a + b);
-      if (deposit > 0 && customerId == null) {
-        throw const ReturnRefusedException(ReturnRefusal.badEditQty);
+      final deposit = _checkedEditDeposit(plan, depositPaidByManufacturer);
+      final settle = plan.settlement(deposit);
+      final due = settle.goodsDueKobo;
+      // What the customer hands over; the goods' share of it, after the deposit
+      // and whatever the freed money already covers.
+      final handed = (amountPaidKobo ?? settle.dueKobo)
+          .clamp(0, settle.dueKobo)
+          .toInt();
+      if (handed < settle.minPayKobo) {
+        throw const ReturnRefusedException(ReturnRefusal.depositNotCovered);
       }
-      // Net due: what the customer pays now; the rest goes on the balance.
-      final due = math.max(0, net);
-      final tendered = net > 0
-          ? (amountPaidKobo ?? due).clamp(0, due).toInt()
-          : 0;
+      final tendered = settle.goodsTenderedKobo(handed);
       if (net > 0 && customerId == null && tendered < due) {
         throw const ReturnRefusedException(ReturnRefusal.walkInMustPay);
       }
+      // Set-off moves no money, so both of its legs carry one tender.
+      final settleMethod = refundMethod ?? paymentMethod;
 
       final now = DateTime.now();
       final adjustmentId = UuidV7.generate();
@@ -1258,6 +1387,7 @@ extension EditCompletedSale on OrdersDao {
           orderIds: [orderId, for (final a in adjs) a.id],
           adjustmentOrderId: adjustmentId,
           returnedByBrand: minus.cratesByBrand,
+          depositCratesByBrand: minus.depositCratesByBrand,
           staffId: staffId,
         );
       }
@@ -1385,7 +1515,6 @@ extension EditCompletedSale on OrdersDao {
         }
 
         // Cash taken now (goods + deposit), then the wallet legs.
-        final depositHeld = tracksCrates ? deposit : 0;
         await _insertCheckoutPaymentRow(
           orderId: adjustmentId,
           storeId: saleStore,
@@ -1397,8 +1526,8 @@ extension EditCompletedSale on OrdersDao {
         await _insertCheckoutPaymentRow(
           orderId: adjustmentId,
           storeId: saleStore,
-          amountKobo: depositHeld,
-          method: paymentMethod,
+          amountKobo: deposit,
+          method: deposit > 0 ? settleMethod : paymentMethod,
           type: 'crate_deposit',
           staffId: staffId,
         );
@@ -1410,11 +1539,11 @@ extension EditCompletedSale on OrdersDao {
             customerId: customerId,
             orderId: adjustmentId,
             staffId: staffId,
-            totalAmountKobo: plan.addedKobo + depositHeld,
-            amountPaidKobo: tendered + depositHeld,
+            totalAmountKobo: plan.addedKobo + deposit,
+            amountPaidKobo: tendered + deposit,
             paymentMethod: paymentMethod,
             crateDepositPaidByManufacturer:
-                depositHeld > 0 ? depositPaidByManufacturer : const {},
+                deposit > 0 ? depositPaidByManufacturer : const {},
           );
         }
       }
@@ -1427,9 +1556,15 @@ extension EditCompletedSale on OrdersDao {
           staffId: staffId,
           reason: reason,
           destination: refundDestination,
-          refundMethod: refundMethod,
+          refundMethod: deposit > 0 ? settleMethod : refundMethod,
           now: now,
-          paidOutKobo: plan.paidOutKobo,
+          // Money set off against what this edit takes always moves through
+          // the rows; only the rest follows the refund choice.
+          paidOutKobo: toBalance ? settle.paidOffsetKobo : plan.paidOutKobo,
+          depositOutKobo: toBalance
+              ? settle.depositOffsetKobo
+              : minus.depositRefundKobo,
+          depositMethod: deposit > 0 ? settleMethod : null,
         );
       }
 
@@ -1455,7 +1590,9 @@ extension EditCompletedSale on OrdersDao {
       );
       await db.syncDao.holdRowsByOrder(held, guard.reversalId);
 
-      final refunded = (!toBalance && minus != null) ? plan.paidOutKobo : 0;
+      final refunded = (!toBalance && minus != null)
+          ? plan.paidOutKobo - settle.paidOffsetKobo
+          : 0;
       return EditSaleOutcome(
         adjustmentOrderId: adjustmentId,
         adjustmentOrderNumber: adjustmentNumber,
@@ -1464,10 +1601,29 @@ extension EditCompletedSale on OrdersDao {
         addedKobo: plan.addedKobo,
         returnedKobo: goodsReturned,
         refundKobo: refunded,
-        collectedKobo: tendered,
+        collectedKobo: handed,
         chargedKobo: due - tendered,
+        depositKobo: deposit,
       );
     });
+  }
+
+  /// The deposit total of [byBrand], refused unless every amount fits its
+  /// brand's added crates, as at checkout: a named customer only, nothing above
+  /// the full deposit.
+  int _checkedEditDeposit(EditSalePlan plan, Map<String, int> byBrand) {
+    var total = 0;
+    for (final e in byBrand.entries) {
+      if (e.value == 0) continue;
+      final full = plan.crateBrands
+          .where((b) => b.line.manufacturerId == e.key)
+          .fold<int>(0, (s, b) => s + b.line.fullDepositKobo);
+      if (e.value < 0 || e.value > full || plan.parent.customerId == null) {
+        throw const ReturnRefusedException(ReturnRefusal.badDeposit);
+      }
+      total += e.value;
+    }
+    return total;
   }
 
   Future<String> _firstStoreOf(String orderId) async {

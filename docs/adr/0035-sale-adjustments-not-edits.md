@@ -152,3 +152,47 @@ decision, 2026-11-04. The 30-day window stays keyed on the parent sale's
 - Receipts are unchanged. The Orders card shows the combined quantity with a note
   ("12× Star (+2 added 4 Nov)").
 - Deploy `0251` before any phone build carrying this.
+
+## Addendum: Crate deposit on crates added by an edit (#732)
+
+Owner decision, 2026-11-04: added crates take a deposit the same as at checkout.
+
+- **Who.** `SaleTotals.compute` decides, as at checkout: a registered customer
+  paying Cash/Transfer with crate brands. Same crate gate (`crateTrackingOn`,
+  `isCrateTrackedBottle`) and the brand's live rate. A walk-in takes none; choosing
+  "Balance" in the money step charges it all and takes none, like a Credit Sale.
+- **Amount.** Filled to the full deposit per brand (checkout starts at zero; the
+  owner asked for this on edits), editable down to zero. Zero is Crate-Track: an
+  `issued` row and crates owed. A part deposit issues no debt, as at checkout. The
+  brand sheet is shared with checkout (`showCrateDepositSheet`).
+- **Rows.** `order_crate_lines` (rate + paid), a `crate_deposit` payment row and a
+  `crate_deposit` wallet credit, all on the adjustment. The header stays added -
+  returned goods and `crate_deposit_paid_kobo` stays 0: `amount_paid_kobo` is not
+  cash on an adjustment, so the header's deposit column would corrupt the paid-now
+  split. Sales, profit and paid-standing read none of these rows. The Edit slip
+  prints the deposit from an in-memory copy of the header.
+- **Netting** (`EditSettlement`). The edit takes goods due + deposit D; it frees R
+  (`max(0, P - A)`) + E (deposit released). The smaller is set off and only the
+  difference changes hands. So freed money covers A, then D, then the customer gets
+  the rest, the same rule as between the minus and plus sides. The rows stay gross
+  (`refund` R, `crate_deposit` +D), so Returns do not move and the till moves by
+  exactly the difference. D is never charged to the balance: the customer must hand
+  over at least `max(0, D - R - E)` or the edit is refused (`depositNotCovered`).
+- **Add to balance.** Set-off still moves through the rows, on one tender, and only
+  the rest stays credit. The refund pop-up is asked only for the rest.
+- **A released deposit now also nets on a money-due edit.** Before, an edit that
+  released a deposit while the customer owed more paid it out unmentioned.
+- **Return.** This replaces the pro rata in the addendum above. Per brand, crates
+  beyond what is owed release what was actually paid per crate on the lines that
+  carried a deposit, capped at what is still held. Crates that carried none (the
+  sale's own, settled at Confirm) release nothing, so they no longer water the
+  deposit down. A return of everything left takes all that is held.
+- **Empties.** A crate that releases a deposit hands back no empties
+  (`depositCratesByBrand`): order is debt, deposit, then empties.
+- **Refused edit:** the payment, wallet and crate rows go through
+  `kWithdrawableReversalTables`, the crate line through
+  `removeRejectedAdjustmentRows`. No change was needed.
+- **Cloud:** no migration. All rows are ordinary upserts held behind the claim.
+- **Known gap:** an edit has no Confirm step, so empties brought back alone (goods
+  kept) do not settle this deposit. It stays held until the crates are returned
+  through the sale or the held deposit is paid out from the customer's account.

@@ -1149,7 +1149,9 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
   /// crate rows of all of them are one running position. Per brand, in order:
   ///   1. the crates the customer still owes for this sale are cancelled first
   ///      (a customer `adjusted` row, [kOrderPartReturnedReason]);
-  ///   2. any remainder hands empties back: a negative pool row that lowers the
+  ///   2. [depositCratesByBrand] of the rest are crates a deposit is released
+  ///      for (#732): the customer gets the money, so no empties for them;
+  ///   3. any remainder hands empties back: a negative pool row that lowers the
   ///      shop's empty count, from the Checkout exchange credits first
   ///      ([kCheckoutExchangeReversalReason]) then Confirm's
   ///      ([kOrderReturnedEmptiesReason]). Never more than was credited.
@@ -1160,6 +1162,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     required List<String> orderIds,
     required String adjustmentOrderId,
     required Map<String, double> returnedByBrand,
+    Map<String, double> depositCratesByBrand = const {},
     required String staffId,
   }) async {
     final now = DateTime.now();
@@ -1215,7 +1218,10 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
         rest -= cancel;
       }
 
-      // 2. Hand empties back, exchange credits first, then Confirm's.
+      // 2. Crates the deposit pays for keep no claim on the empties.
+      rest -= depositCratesByBrand[brand] ?? 0;
+
+      // 3. Hand empties back, exchange credits first, then Confirm's.
       for (final reasons in <({List<String?> credit, String reversalReason})>[
         (
           credit: const [kCheckoutExchangeReason, kCheckoutExchangeReversalReason],
@@ -1307,6 +1313,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
   Future<Map<String, double>> emptiesBackFor({
     required List<String> orderIds,
     required Map<String, double> returnedByBrand,
+    Map<String, double> depositCratesByBrand = const {},
   }) async {
     final out = <String, double>{};
     for (final entry in returnedByBrand.entries) {
@@ -1336,6 +1343,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
       for (final o in owed.values) {
         if (o > 0) rest -= o < rest ? o : rest;
       }
+      rest -= depositCratesByBrand[brand] ?? 0;
       final back = rest < credited ? rest : credited;
       if (back > 0) out[brand] = back;
     }
