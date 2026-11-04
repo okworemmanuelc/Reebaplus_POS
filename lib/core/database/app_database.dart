@@ -7,17 +7,15 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
-import 'package:drift/native.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart';
 import 'package:reebaplus_pos/core/crates/crate_deposit_ledger_types.dart';
 import 'package:reebaplus_pos/core/crates/crate_money_arrangement.dart';
 import 'package:reebaplus_pos/core/crates/crate_shortfall.dart';
 import 'package:reebaplus_pos/core/database/daos.dart';
+import 'package:reebaplus_pos/core/database/local_database_connection.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/diagnostics/schema_audit.dart';
-import 'package:reebaplus_pos/core/services/backup_exclusion_service.dart';
 import 'package:reebaplus_pos/core/services/first_load_marker_service.dart';
 import 'package:reebaplus_pos/core/services/local_photo_files.dart';
 import 'package:reebaplus_pos/core/services/sync_cursor_reset_service.dart';
@@ -8068,20 +8066,7 @@ void markDbReadyWithError([Object? error]) {
 
 LazyDatabase _openConnection() {
   return LazyDatabase(() async {
-    final dbFolder = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dbFolder.path, kLocalDatabaseFileName));
-
-    return NativeDatabase(
-      file,
-      logStatements: false,
-      setup: (db) {
-        db.execute('PRAGMA journal_mode = WAL');
-        db.execute('PRAGMA synchronous = NORMAL');
-        db.execute('PRAGMA cache_size = -8000');
-        db.execute('PRAGMA temp_store = MEMORY');
-        db.execute('PRAGMA foreign_keys = ON');
-      },
-    );
+    return openRememberedLocalDatabase(await getApplicationDocumentsDirectory());
   });
 }
 

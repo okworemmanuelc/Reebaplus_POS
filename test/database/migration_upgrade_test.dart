@@ -22,9 +22,23 @@ import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/database/local_database_connection.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 
+// The background run uses the production connection, open steps included.
+QueryExecutor _openPlain(File file, LocalDatabaseHome home) =>
+    home == LocalDatabaseHome.screenThread
+    ? NativeDatabase(file)
+    : openLocalDatabaseFile(file, home);
+
 void main() {
+  _upgradeTests(LocalDatabaseHome.screenThread);
+  group('through the background connection (#687)', () {
+    _upgradeTests(LocalDatabaseHome.backgroundWorker);
+  });
+}
+
+void _upgradeTests(LocalDatabaseHome home) {
   late Directory tmpDir;
   late File dbFile;
 
@@ -40,7 +54,7 @@ void main() {
   // Opens AppDatabase on the temp file and forces the open (which runs
   // onCreate on a fresh file, or onUpgrade when user_version < schemaVersion).
   Future<AppDatabase> openAndInit() async {
-    final db = AppDatabase.forTesting(NativeDatabase(dbFile));
+    final db = AppDatabase.forTesting(_openPlain(dbFile, home));
     await db.customSelect('SELECT 1').get();
     return db;
   }
@@ -1162,10 +1176,12 @@ void main() {
       // this local open is what gives the regression teeth. The v36 block must
       // NOT throw 787 — reaching past the forced open at all proves the fix.
       final db2 = AppDatabase.forTesting(
-        NativeDatabase(
-          dbFile,
-          setup: (raw) => raw.execute('PRAGMA foreign_keys = ON'),
-        ),
+        home == LocalDatabaseHome.screenThread
+            ? NativeDatabase(
+                dbFile,
+                setup: (raw) => raw.execute('PRAGMA foreign_keys = ON'),
+              )
+            : openLocalDatabaseFile(dbFile, home),
       );
       addTearDown(db2.close);
       await db2.customSelect('SELECT 1').get();

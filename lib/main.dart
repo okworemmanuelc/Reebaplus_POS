@@ -15,6 +15,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/db_wipe.dart';
 import 'package:reebaplus_pos/core/services/backup_exclusion_service.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
+import 'package:reebaplus_pos/core/services/db_worker_switch_watcher.dart';
 import 'package:reebaplus_pos/core/diagnostics/overflow_route_reporter.dart';
 import 'package:reebaplus_pos/shared/widgets/error_fallback.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
@@ -118,6 +119,11 @@ Future<void> _bootstrap() async {
         .timeout(const Duration(seconds: 5));
   } catch (_) {}
   markDbReady();
+
+  // #687: remember the cloud off switch for the next app open. Not awaited, and
+  // it does not need the database, so a phone whose worker failed can still
+  // receive the "off" answer.
+  DbWorkerSwitchWatcher().start();
 
   // #285: the database file now exists, so mark it (and its WAL sidecars) as
   // excluded from iCloud backup. Android does the same declaratively in the
