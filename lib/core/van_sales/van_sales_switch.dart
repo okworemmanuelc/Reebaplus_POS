@@ -5,7 +5,7 @@
 // switched off while it was tested and is SWITCHED ON again from 2026-11-04
 // (owner). Selling through the driver terminal is OPTIONAL: what the business
 // must track is what each van went out with, what came back and what the
-// driver handed in — a sale the driver never rang shows as "not brought back"
+// driver handed in — a sale the driver never rang shows as "not returned"
 // and the driver's cash pays for it. Flip [kVanSalesEnabled] to `false` and
 // release to hide the feature again — nothing else needs to change.
 //
