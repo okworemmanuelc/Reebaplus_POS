@@ -322,7 +322,7 @@ void main() {
     } finally { await db.close(); }
   });
 
-  test('v104 to v105 adds the worker job + payday and the loan plan',
+  test('v105 to v106 adds the worker job + payday and the loan plan',
       () async {
     var db = await openAndInit();
     final businessId = UuidV7.generate();
@@ -339,7 +339,7 @@ void main() {
       "INSERT INTO payroll_entries (id, business_id, worker_id, store_id, "
       "type, amount_kobo, entry_date) VALUES ('e1', '$businessId', "
       "'$workerId', '$storeId', 'loan_given', 100, '2026-11-01')");
-    // As v104 had them: neither column. payday_day sits in a CHECK, so the
+    // As v105 had them: neither column. payday_day sits in a CHECK, so the
     // workers table is rebuilt without it rather than dropped in place.
     final workersSql = (await db.customSelect(
       "SELECT sql FROM sqlite_master WHERE type = 'table' "
@@ -353,23 +353,23 @@ void main() {
                 r'AND 31\)'),
             '')
         .replaceFirst('CREATE TABLE "payroll_workers"',
-            'CREATE TABLE "payroll_workers_v104"')
+            'CREATE TABLE "payroll_workers_v105"')
         .replaceFirst('CREATE TABLE payroll_workers',
-            'CREATE TABLE payroll_workers_v104');
+            'CREATE TABLE payroll_workers_v105');
     expect(oldWorkersSql, isNot(contains('payday_day')));
     expect(oldWorkersSql, isNot(contains('job_title')));
     await db.customStatement('PRAGMA foreign_keys = OFF');
     await db.customStatement(oldWorkersSql);
-    final keep = (await columnsOf(db, 'payroll_workers_v104')).join(', ');
-    await db.customStatement('INSERT INTO payroll_workers_v104 ($keep) '
+    final keep = (await columnsOf(db, 'payroll_workers_v105')).join(', ');
+    await db.customStatement('INSERT INTO payroll_workers_v105 ($keep) '
         'SELECT $keep FROM payroll_workers');
     await db.customStatement('DROP TABLE payroll_workers');
     await db.customStatement(
-        'ALTER TABLE payroll_workers_v104 RENAME TO payroll_workers');
+        'ALTER TABLE payroll_workers_v105 RENAME TO payroll_workers');
     await db.customStatement('PRAGMA foreign_keys = ON');
     await db.customStatement(
         'ALTER TABLE payroll_entries DROP COLUMN monthly_repayment_kobo');
-    await db.customStatement('PRAGMA user_version = 104');
+    await db.customStatement('PRAGMA user_version = 105');
     await db.close();
     db = await openAndInit();
     try {
@@ -383,7 +383,7 @@ void main() {
       expect(entry.id, 'e1');
       expect(entry.monthlyRepaymentKobo, isNull);
       // Re-running the step is idempotent.
-      await db.customStatement('PRAGMA user_version = 104');
+      await db.customStatement('PRAGMA user_version = 105');
       await db.close();
       db = await openAndInit();
       expect((await db.select(db.payrollEntries).get()).single.id, 'e1');
