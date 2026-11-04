@@ -386,7 +386,7 @@ repriced a product.
 A consequence worth naming: `soldValue` is the **accountability** value at load
 price, which is not necessarily what the terminal rang. What was actually rung
 is carried separately as `rungValue` and shown on the reconcile screen — the gap
-is the driver's off-book street markup (§9.2 #9), which v1 does not capture.
+is the driver's street markup (§9.2 #9), recorded apart from shop sales since #730.
 
 #### The three-way split is a waterfall
 
@@ -422,7 +422,7 @@ good + 3 damaged, remit ₦900,000, close.
 | Day | Physical reality | What the books now show |
 |---|---|---|
 | **Mon** (load) | 100 crates + 100 shells drive off; driver signs for ₦1,150,000 | Warehouse batch drawn 100 × ₦10,000 = **₦1,000,000 leaves the batch queue**; lot stamped `unit_cost 10,000`, `load_price 11,500`, `shells_out 100`. Driver ledger −₦1,150,000. Inventory moved warehouse→van; **All-Stores worth unchanged** (van stock is company stock). No revenue, no cash. |
-| **Tue** (route) | Driver takes ₦720,000 (₦690,000 at load price + ₦30,000 street markup, off-book by design) | Van order tagged to the trip, **no payment row**, no per-sale COGS. Per-store figures: silent. All-Stores: revenue +₦690,000 shown only in the aggregated Van Sales line, with the open-trip caveat; **cash figure unchanged** — the money is in a pocket. |
+| **Tue** (route) | Driver takes ₦720,000 (₦690,000 at load price + ₦30,000 street markup, recorded apart as the driver extra, #730) | Van order tagged to the trip, **no payment row**, no per-sale COGS. Per-store figures: silent. All-Stores: revenue +₦690,000 shown only in the aggregated Van Sales line, with the open-trip caveat; **cash figure unchanged** — the money is in a pocket. |
 | **Wed** | Restock 40 @ ₦11,500; sell 30 | Second lot, second batch draw (40 × ₦10,000), ledger −₦460,000. Running balance −₦1,610,000. |
 | **Thu** (close) | 45 good back, 3 damaged, ₦900,000 remitted | Good return: credit 45 × ₦11,500 = ₦517,500; **warehouse re-batched 45 @ ₦10,000** so those units sell at real COGS next time. Damaged 3: no credit, loss booked at 3 × ₦10,000 = ₦30,000 if written off. Remittance: ledger +₦900,000 **and** a `van_remittance` payment row → **"Cash from drivers ₦900,000"** on Thursday's reconciliation. |
 
@@ -589,8 +589,15 @@ when the crate pass lands.
 8. **A van sale is cancelled** — the order cancels normally (stock returns to the
    van, no payment row existed so there is nothing to compensate), and the trip's
    `sold` recomputes. If the trip is already closed, §9.4 applies.
-9. **Driver's street markup** — off-book by design in v1. The receipt prints the
-   load price; anything above it is the driver's and is not recorded.
+9. **Driver's street markup (extra)** — #730: the terminal lets the driver sell
+   ABOVE the load price (never below it). The receipt shows the selling price and
+   what the customer actually paid. The order and its lines keep the LOAD price,
+   so shop sales, profit, the closing report, the Van Sales total, the driver
+   balance and the reconcile split are untouched; the extra is stored on the
+   side (`order_items.charged_unit_price_kobo`, `orders.driver_extra_kobo`), is
+   the driver's, and is never owed to the shop. My Trip shows Collected (what
+   customers paid) and Your extra. A cancelled sale drops its extra; a sale
+   synced after close counts toward its own trip (it carries `van_trip_id`).
 
 ### 9.3 Returns
 

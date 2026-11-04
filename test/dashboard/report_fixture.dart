@@ -31,6 +31,7 @@ OrderWithItems reportOrder(
   final gross = lines.fold<int>(0, (s, l) => s + l.$2 * l.$3);
   final order = OrderData(
     kind: 'sale',
+    driverExtraKobo: 0,
     id: orderId,
     businessId: env.businessId,
     orderNumber: 'ORD-00000$n-ABC123',

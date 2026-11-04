@@ -17717,6 +17717,18 @@ class $OrdersTable extends Orders with TableInfo<$OrdersTable, OrderData> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _driverExtraKoboMeta = const VerificationMeta(
+    'driverExtraKobo',
+  );
+  @override
+  late final GeneratedColumn<int> driverExtraKobo = GeneratedColumn<int>(
+    'driver_extra_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -17766,6 +17778,7 @@ class $OrdersTable extends Orders with TableInfo<$OrdersTable, OrderData> {
     cancelledAt,
     kind,
     adjustsOrderId,
+    driverExtraKobo,
     createdAt,
     lastUpdatedAt,
   ];
@@ -17958,6 +17971,15 @@ class $OrdersTable extends Orders with TableInfo<$OrdersTable, OrderData> {
         ),
       );
     }
+    if (data.containsKey('driver_extra_kobo')) {
+      context.handle(
+        _driverExtraKoboMeta,
+        driverExtraKobo.isAcceptableOrUnknown(
+          data['driver_extra_kobo']!,
+          _driverExtraKoboMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -18070,6 +18092,10 @@ class $OrdersTable extends Orders with TableInfo<$OrdersTable, OrderData> {
         DriftSqlType.string,
         data['${effectivePrefix}adjusts_order_id'],
       ),
+      driverExtraKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}driver_extra_kobo'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -18138,6 +18164,15 @@ class OrderData extends DataClass implements Insertable<OrderData> {
   /// with no local FK (like `OnlineOrders.linkedOrderId`): a pulled adjustment
   /// must never wait on its parent row. The cloud column is a real FK.
   final String? adjustsOrderId;
+
+  /// #730 (ADR 0019) — a van driver's EXTRA: what the customer paid above the
+  /// load price, on this order. 0 on every ordinary sale and every road sale
+  /// sold at the load price. It is NEVER part of [totalAmountKobo] /
+  /// [netAmountKobo] / [amountPaidKobo], which stay at the load price so every
+  /// shop figure (sales, profit, closing, Van Sales, driver balance, reconcile)
+  /// is untouched. The customer actually paid `netAmountKobo + driverExtraKobo`.
+  /// Mirrors supabase/migrations/0249_van_driver_extra.sql.
+  final int driverExtraKobo;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
   const OrderData({
@@ -18163,6 +18198,7 @@ class OrderData extends DataClass implements Insertable<OrderData> {
     this.cancelledAt,
     required this.kind,
     this.adjustsOrderId,
+    required this.driverExtraKobo,
     required this.createdAt,
     required this.lastUpdatedAt,
   });
@@ -18211,6 +18247,7 @@ class OrderData extends DataClass implements Insertable<OrderData> {
     if (!nullToAbsent || adjustsOrderId != null) {
       map['adjusts_order_id'] = Variable<String>(adjustsOrderId);
     }
+    map['driver_extra_kobo'] = Variable<int>(driverExtraKobo);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
     return map;
@@ -18260,6 +18297,7 @@ class OrderData extends DataClass implements Insertable<OrderData> {
       adjustsOrderId: adjustsOrderId == null && nullToAbsent
           ? const Value.absent()
           : Value(adjustsOrderId),
+      driverExtraKobo: Value(driverExtraKobo),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
     );
@@ -18297,6 +18335,7 @@ class OrderData extends DataClass implements Insertable<OrderData> {
       cancelledAt: serializer.fromJson<DateTime?>(json['cancelledAt']),
       kind: serializer.fromJson<String>(json['kind']),
       adjustsOrderId: serializer.fromJson<String?>(json['adjustsOrderId']),
+      driverExtraKobo: serializer.fromJson<int>(json['driverExtraKobo']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
     );
@@ -18327,6 +18366,7 @@ class OrderData extends DataClass implements Insertable<OrderData> {
       'cancelledAt': serializer.toJson<DateTime?>(cancelledAt),
       'kind': serializer.toJson<String>(kind),
       'adjustsOrderId': serializer.toJson<String?>(adjustsOrderId),
+      'driverExtraKobo': serializer.toJson<int>(driverExtraKobo),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
     };
@@ -18355,6 +18395,7 @@ class OrderData extends DataClass implements Insertable<OrderData> {
     Value<DateTime?> cancelledAt = const Value.absent(),
     String? kind,
     Value<String?> adjustsOrderId = const Value.absent(),
+    int? driverExtraKobo,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
   }) => OrderData(
@@ -18384,6 +18425,7 @@ class OrderData extends DataClass implements Insertable<OrderData> {
     adjustsOrderId: adjustsOrderId.present
         ? adjustsOrderId.value
         : this.adjustsOrderId,
+    driverExtraKobo: driverExtraKobo ?? this.driverExtraKobo,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
   );
@@ -18439,6 +18481,9 @@ class OrderData extends DataClass implements Insertable<OrderData> {
       adjustsOrderId: data.adjustsOrderId.present
           ? data.adjustsOrderId.value
           : this.adjustsOrderId,
+      driverExtraKobo: data.driverExtraKobo.present
+          ? data.driverExtraKobo.value
+          : this.driverExtraKobo,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       lastUpdatedAt: data.lastUpdatedAt.present
           ? data.lastUpdatedAt.value
@@ -18471,6 +18516,7 @@ class OrderData extends DataClass implements Insertable<OrderData> {
           ..write('cancelledAt: $cancelledAt, ')
           ..write('kind: $kind, ')
           ..write('adjustsOrderId: $adjustsOrderId, ')
+          ..write('driverExtraKobo: $driverExtraKobo, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
           ..write(')'))
@@ -18501,6 +18547,7 @@ class OrderData extends DataClass implements Insertable<OrderData> {
     cancelledAt,
     kind,
     adjustsOrderId,
+    driverExtraKobo,
     createdAt,
     lastUpdatedAt,
   ]);
@@ -18530,6 +18577,7 @@ class OrderData extends DataClass implements Insertable<OrderData> {
           other.cancelledAt == this.cancelledAt &&
           other.kind == this.kind &&
           other.adjustsOrderId == this.adjustsOrderId &&
+          other.driverExtraKobo == this.driverExtraKobo &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
 }
@@ -18557,6 +18605,7 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
   final Value<DateTime?> cancelledAt;
   final Value<String> kind;
   final Value<String?> adjustsOrderId;
+  final Value<int> driverExtraKobo;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
   final Value<int> rowid;
@@ -18583,6 +18632,7 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
     this.cancelledAt = const Value.absent(),
     this.kind = const Value.absent(),
     this.adjustsOrderId = const Value.absent(),
+    this.driverExtraKobo = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -18610,6 +18660,7 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
     this.cancelledAt = const Value.absent(),
     this.kind = const Value.absent(),
     this.adjustsOrderId = const Value.absent(),
+    this.driverExtraKobo = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -18642,6 +18693,7 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
     Expression<DateTime>? cancelledAt,
     Expression<String>? kind,
     Expression<String>? adjustsOrderId,
+    Expression<int>? driverExtraKobo,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
     Expression<int>? rowid,
@@ -18670,6 +18722,7 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
       if (cancelledAt != null) 'cancelled_at': cancelledAt,
       if (kind != null) 'kind': kind,
       if (adjustsOrderId != null) 'adjusts_order_id': adjustsOrderId,
+      if (driverExtraKobo != null) 'driver_extra_kobo': driverExtraKobo,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -18699,6 +18752,7 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
     Value<DateTime?>? cancelledAt,
     Value<String>? kind,
     Value<String?>? adjustsOrderId,
+    Value<int>? driverExtraKobo,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
     Value<int>? rowid,
@@ -18726,6 +18780,7 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
       cancelledAt: cancelledAt ?? this.cancelledAt,
       kind: kind ?? this.kind,
       adjustsOrderId: adjustsOrderId ?? this.adjustsOrderId,
+      driverExtraKobo: driverExtraKobo ?? this.driverExtraKobo,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
       rowid: rowid ?? this.rowid,
@@ -18803,6 +18858,9 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
     if (adjustsOrderId.present) {
       map['adjusts_order_id'] = Variable<String>(adjustsOrderId.value);
     }
+    if (driverExtraKobo.present) {
+      map['driver_extra_kobo'] = Variable<int>(driverExtraKobo.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -18840,6 +18898,7 @@ class OrdersCompanion extends UpdateCompanion<OrderData> {
           ..write('cancelledAt: $cancelledAt, ')
           ..write('kind: $kind, ')
           ..write('adjustsOrderId: $adjustsOrderId, ')
+          ..write('driverExtraKobo: $driverExtraKobo, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
           ..write('rowid: $rowid')
@@ -28974,6 +29033,16 @@ class $OrderItemsTable extends OrderItems
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _chargedUnitPriceKoboMeta =
+      const VerificationMeta('chargedUnitPriceKobo');
+  @override
+  late final GeneratedColumn<int> chargedUnitPriceKobo = GeneratedColumn<int>(
+    'charged_unit_price_kobo',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _priceSnapshotMeta = const VerificationMeta(
     'priceSnapshot',
   );
@@ -29022,6 +29091,7 @@ class $OrderItemsTable extends OrderItems
     buyingPriceKobo,
     totalKobo,
     cataloguePriceKobo,
+    chargedUnitPriceKobo,
     priceSnapshot,
     createdAt,
     lastUpdatedAt,
@@ -29116,6 +29186,15 @@ class $OrderItemsTable extends OrderItems
         ),
       );
     }
+    if (data.containsKey('charged_unit_price_kobo')) {
+      context.handle(
+        _chargedUnitPriceKoboMeta,
+        chargedUnitPriceKobo.isAcceptableOrUnknown(
+          data['charged_unit_price_kobo']!,
+          _chargedUnitPriceKoboMeta,
+        ),
+      );
+    }
     if (data.containsKey('price_snapshot')) {
       context.handle(
         _priceSnapshotMeta,
@@ -29189,6 +29268,10 @@ class $OrderItemsTable extends OrderItems
         DriftSqlType.int,
         data['${effectivePrefix}catalogue_price_kobo'],
       ),
+      chargedUnitPriceKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}charged_unit_price_kobo'],
+      ),
       priceSnapshot: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}price_snapshot'],
@@ -29221,6 +29304,12 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
   final int buyingPriceKobo;
   final int totalKobo;
   final int? cataloguePriceKobo;
+
+  /// #730 (ADR 0019) — the per-unit price a van driver actually charged when it
+  /// was ABOVE the load price in [unitPriceKobo] (which stays the load price so
+  /// shop figures are untouched). NULL = no extra on this line. The receipt
+  /// shows `chargedUnitPriceKobo ?? unitPriceKobo`; no report reads it.
+  final int? chargedUnitPriceKobo;
   final String? priceSnapshot;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
@@ -29235,6 +29324,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
     required this.buyingPriceKobo,
     required this.totalKobo,
     this.cataloguePriceKobo,
+    this.chargedUnitPriceKobo,
     this.priceSnapshot,
     required this.createdAt,
     required this.lastUpdatedAt,
@@ -29255,6 +29345,9 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
     map['total_kobo'] = Variable<int>(totalKobo);
     if (!nullToAbsent || cataloguePriceKobo != null) {
       map['catalogue_price_kobo'] = Variable<int>(cataloguePriceKobo);
+    }
+    if (!nullToAbsent || chargedUnitPriceKobo != null) {
+      map['charged_unit_price_kobo'] = Variable<int>(chargedUnitPriceKobo);
     }
     if (!nullToAbsent || priceSnapshot != null) {
       map['price_snapshot'] = Variable<String>(priceSnapshot);
@@ -29280,6 +29373,9 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
       cataloguePriceKobo: cataloguePriceKobo == null && nullToAbsent
           ? const Value.absent()
           : Value(cataloguePriceKobo),
+      chargedUnitPriceKobo: chargedUnitPriceKobo == null && nullToAbsent
+          ? const Value.absent()
+          : Value(chargedUnitPriceKobo),
       priceSnapshot: priceSnapshot == null && nullToAbsent
           ? const Value.absent()
           : Value(priceSnapshot),
@@ -29304,6 +29400,9 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
       buyingPriceKobo: serializer.fromJson<int>(json['buyingPriceKobo']),
       totalKobo: serializer.fromJson<int>(json['totalKobo']),
       cataloguePriceKobo: serializer.fromJson<int?>(json['cataloguePriceKobo']),
+      chargedUnitPriceKobo: serializer.fromJson<int?>(
+        json['chargedUnitPriceKobo'],
+      ),
       priceSnapshot: serializer.fromJson<String?>(json['priceSnapshot']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
@@ -29323,6 +29422,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
       'buyingPriceKobo': serializer.toJson<int>(buyingPriceKobo),
       'totalKobo': serializer.toJson<int>(totalKobo),
       'cataloguePriceKobo': serializer.toJson<int?>(cataloguePriceKobo),
+      'chargedUnitPriceKobo': serializer.toJson<int?>(chargedUnitPriceKobo),
       'priceSnapshot': serializer.toJson<String?>(priceSnapshot),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
@@ -29340,6 +29440,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
     int? buyingPriceKobo,
     int? totalKobo,
     Value<int?> cataloguePriceKobo = const Value.absent(),
+    Value<int?> chargedUnitPriceKobo = const Value.absent(),
     Value<String?> priceSnapshot = const Value.absent(),
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
@@ -29356,6 +29457,9 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
     cataloguePriceKobo: cataloguePriceKobo.present
         ? cataloguePriceKobo.value
         : this.cataloguePriceKobo,
+    chargedUnitPriceKobo: chargedUnitPriceKobo.present
+        ? chargedUnitPriceKobo.value
+        : this.chargedUnitPriceKobo,
     priceSnapshot: priceSnapshot.present
         ? priceSnapshot.value
         : this.priceSnapshot,
@@ -29382,6 +29486,9 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
       cataloguePriceKobo: data.cataloguePriceKobo.present
           ? data.cataloguePriceKobo.value
           : this.cataloguePriceKobo,
+      chargedUnitPriceKobo: data.chargedUnitPriceKobo.present
+          ? data.chargedUnitPriceKobo.value
+          : this.chargedUnitPriceKobo,
       priceSnapshot: data.priceSnapshot.present
           ? data.priceSnapshot.value
           : this.priceSnapshot,
@@ -29405,6 +29512,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
           ..write('buyingPriceKobo: $buyingPriceKobo, ')
           ..write('totalKobo: $totalKobo, ')
           ..write('cataloguePriceKobo: $cataloguePriceKobo, ')
+          ..write('chargedUnitPriceKobo: $chargedUnitPriceKobo, ')
           ..write('priceSnapshot: $priceSnapshot, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt')
@@ -29424,6 +29532,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
     buyingPriceKobo,
     totalKobo,
     cataloguePriceKobo,
+    chargedUnitPriceKobo,
     priceSnapshot,
     createdAt,
     lastUpdatedAt,
@@ -29442,6 +29551,7 @@ class OrderItemData extends DataClass implements Insertable<OrderItemData> {
           other.buyingPriceKobo == this.buyingPriceKobo &&
           other.totalKobo == this.totalKobo &&
           other.cataloguePriceKobo == this.cataloguePriceKobo &&
+          other.chargedUnitPriceKobo == this.chargedUnitPriceKobo &&
           other.priceSnapshot == this.priceSnapshot &&
           other.createdAt == this.createdAt &&
           other.lastUpdatedAt == this.lastUpdatedAt);
@@ -29458,6 +29568,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
   final Value<int> buyingPriceKobo;
   final Value<int> totalKobo;
   final Value<int?> cataloguePriceKobo;
+  final Value<int?> chargedUnitPriceKobo;
   final Value<String?> priceSnapshot;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
@@ -29473,6 +29584,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
     this.buyingPriceKobo = const Value.absent(),
     this.totalKobo = const Value.absent(),
     this.cataloguePriceKobo = const Value.absent(),
+    this.chargedUnitPriceKobo = const Value.absent(),
     this.priceSnapshot = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -29489,6 +29601,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
     this.buyingPriceKobo = const Value.absent(),
     required int totalKobo,
     this.cataloguePriceKobo = const Value.absent(),
+    this.chargedUnitPriceKobo = const Value.absent(),
     this.priceSnapshot = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
@@ -29510,6 +29623,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
     Expression<int>? buyingPriceKobo,
     Expression<int>? totalKobo,
     Expression<int>? cataloguePriceKobo,
+    Expression<int>? chargedUnitPriceKobo,
     Expression<String>? priceSnapshot,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
@@ -29527,6 +29641,8 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
       if (totalKobo != null) 'total_kobo': totalKobo,
       if (cataloguePriceKobo != null)
         'catalogue_price_kobo': cataloguePriceKobo,
+      if (chargedUnitPriceKobo != null)
+        'charged_unit_price_kobo': chargedUnitPriceKobo,
       if (priceSnapshot != null) 'price_snapshot': priceSnapshot,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
@@ -29545,6 +29661,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
     Value<int>? buyingPriceKobo,
     Value<int>? totalKobo,
     Value<int?>? cataloguePriceKobo,
+    Value<int?>? chargedUnitPriceKobo,
     Value<String?>? priceSnapshot,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
@@ -29561,6 +29678,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
       buyingPriceKobo: buyingPriceKobo ?? this.buyingPriceKobo,
       totalKobo: totalKobo ?? this.totalKobo,
       cataloguePriceKobo: cataloguePriceKobo ?? this.cataloguePriceKobo,
+      chargedUnitPriceKobo: chargedUnitPriceKobo ?? this.chargedUnitPriceKobo,
       priceSnapshot: priceSnapshot ?? this.priceSnapshot,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
@@ -29601,6 +29719,11 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
     if (cataloguePriceKobo.present) {
       map['catalogue_price_kobo'] = Variable<int>(cataloguePriceKobo.value);
     }
+    if (chargedUnitPriceKobo.present) {
+      map['charged_unit_price_kobo'] = Variable<int>(
+        chargedUnitPriceKobo.value,
+      );
+    }
     if (priceSnapshot.present) {
       map['price_snapshot'] = Variable<String>(priceSnapshot.value);
     }
@@ -29629,6 +29752,7 @@ class OrderItemsCompanion extends UpdateCompanion<OrderItemData> {
           ..write('buyingPriceKobo: $buyingPriceKobo, ')
           ..write('totalKobo: $totalKobo, ')
           ..write('cataloguePriceKobo: $cataloguePriceKobo, ')
+          ..write('chargedUnitPriceKobo: $chargedUnitPriceKobo, ')
           ..write('priceSnapshot: $priceSnapshot, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
@@ -87781,6 +87905,7 @@ typedef $$OrdersTableCreateCompanionBuilder =
       Value<DateTime?> cancelledAt,
       Value<String> kind,
       Value<String?> adjustsOrderId,
+      Value<int> driverExtraKobo,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
       Value<int> rowid,
@@ -87809,6 +87934,7 @@ typedef $$OrdersTableUpdateCompanionBuilder =
       Value<DateTime?> cancelledAt,
       Value<String> kind,
       Value<String?> adjustsOrderId,
+      Value<int> driverExtraKobo,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
       Value<int> rowid,
@@ -88198,6 +88324,11 @@ class $$OrdersTableFilterComposer
 
   ColumnFilters<String> get adjustsOrderId => $composableBuilder(
     column: $table.adjustsOrderId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get driverExtraKobo => $composableBuilder(
+    column: $table.driverExtraKobo,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -88639,6 +88770,11 @@ class $$OrdersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get driverExtraKobo => $composableBuilder(
+    column: $table.driverExtraKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -88864,6 +89000,11 @@ class $$OrdersTableAnnotationComposer
 
   GeneratedColumn<String> get adjustsOrderId => $composableBuilder(
     column: $table.adjustsOrderId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get driverExtraKobo => $composableBuilder(
+    column: $table.driverExtraKobo,
     builder: (column) => column,
   );
 
@@ -89283,6 +89424,7 @@ class $$OrdersTableTableManager
                 Value<DateTime?> cancelledAt = const Value.absent(),
                 Value<String> kind = const Value.absent(),
                 Value<String?> adjustsOrderId = const Value.absent(),
+                Value<int> driverExtraKobo = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -89309,6 +89451,7 @@ class $$OrdersTableTableManager
                 cancelledAt: cancelledAt,
                 kind: kind,
                 adjustsOrderId: adjustsOrderId,
+                driverExtraKobo: driverExtraKobo,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
                 rowid: rowid,
@@ -89337,6 +89480,7 @@ class $$OrdersTableTableManager
                 Value<DateTime?> cancelledAt = const Value.absent(),
                 Value<String> kind = const Value.absent(),
                 Value<String?> adjustsOrderId = const Value.absent(),
+                Value<int> driverExtraKobo = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -89363,6 +89507,7 @@ class $$OrdersTableTableManager
                 cancelledAt: cancelledAt,
                 kind: kind,
                 adjustsOrderId: adjustsOrderId,
+                driverExtraKobo: driverExtraKobo,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
                 rowid: rowid,
@@ -101726,6 +101871,7 @@ typedef $$OrderItemsTableCreateCompanionBuilder =
       Value<int> buyingPriceKobo,
       required int totalKobo,
       Value<int?> cataloguePriceKobo,
+      Value<int?> chargedUnitPriceKobo,
       Value<String?> priceSnapshot,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -101743,6 +101889,7 @@ typedef $$OrderItemsTableUpdateCompanionBuilder =
       Value<int> buyingPriceKobo,
       Value<int> totalKobo,
       Value<int?> cataloguePriceKobo,
+      Value<int?> chargedUnitPriceKobo,
       Value<String?> priceSnapshot,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
@@ -101864,6 +102011,11 @@ class $$OrderItemsTableFilterComposer
 
   ColumnFilters<int> get cataloguePriceKobo => $composableBuilder(
     column: $table.cataloguePriceKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get chargedUnitPriceKobo => $composableBuilder(
+    column: $table.chargedUnitPriceKobo,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -102014,6 +102166,11 @@ class $$OrderItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get chargedUnitPriceKobo => $composableBuilder(
+    column: $table.chargedUnitPriceKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get priceSnapshot => $composableBuilder(
     column: $table.priceSnapshot,
     builder: (column) => ColumnOrderings(column),
@@ -102152,6 +102309,11 @@ class $$OrderItemsTableAnnotationComposer
 
   GeneratedColumn<int> get cataloguePriceKobo => $composableBuilder(
     column: $table.cataloguePriceKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get chargedUnitPriceKobo => $composableBuilder(
+    column: $table.chargedUnitPriceKobo,
     builder: (column) => column,
   );
 
@@ -102304,6 +102466,7 @@ class $$OrderItemsTableTableManager
                 Value<int> buyingPriceKobo = const Value.absent(),
                 Value<int> totalKobo = const Value.absent(),
                 Value<int?> cataloguePriceKobo = const Value.absent(),
+                Value<int?> chargedUnitPriceKobo = const Value.absent(),
                 Value<String?> priceSnapshot = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -102319,6 +102482,7 @@ class $$OrderItemsTableTableManager
                 buyingPriceKobo: buyingPriceKobo,
                 totalKobo: totalKobo,
                 cataloguePriceKobo: cataloguePriceKobo,
+                chargedUnitPriceKobo: chargedUnitPriceKobo,
                 priceSnapshot: priceSnapshot,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
@@ -102336,6 +102500,7 @@ class $$OrderItemsTableTableManager
                 Value<int> buyingPriceKobo = const Value.absent(),
                 required int totalKobo,
                 Value<int?> cataloguePriceKobo = const Value.absent(),
+                Value<int?> chargedUnitPriceKobo = const Value.absent(),
                 Value<String?> priceSnapshot = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
@@ -102351,6 +102516,7 @@ class $$OrderItemsTableTableManager
                 buyingPriceKobo: buyingPriceKobo,
                 totalKobo: totalKobo,
                 cataloguePriceKobo: cataloguePriceKobo,
+                chargedUnitPriceKobo: chargedUnitPriceKobo,
                 priceSnapshot: priceSnapshot,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,

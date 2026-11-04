@@ -26,8 +26,10 @@ import 'package:reebaplus_pos/shared/models/order_status.dart';
 ///  * **You owe** is the driver's cross-trip ledger balance
 ///    (`loaded − returned − paid`). Selling does not change it; it goes down
 ///    only when a manager records cash or goods brought back.
-///  * **Collected** is `soldValue`: road takings at load price. It is NOT cash
-///    the business holds (a road sale writes no payment row, ADR 0019).
+///  * **Collected** is what customers paid: `soldValue` (load price) plus the
+///    driver's extra (#730). It is NOT cash the business holds (a road sale
+///    writes no payment row, ADR 0019). **Your extra** is the part above the
+///    load price; it is the driver's and is never owed to the shop.
 ///  * **Waiting / Sent** per sale comes from the real outbox
 ///    ([driverTripSaleStatesProvider]).
 class DriverRunScreen extends ConsumerWidget {
@@ -64,6 +66,8 @@ class DriverRunScreen extends ConsumerWidget {
         const <VanTripLotData>[];
     final soldKobo =
         ref.watch(vanTripSoldValueProvider(tripId)).valueOrNull ?? 0;
+    final extraKobo =
+        ref.watch(vanTripDriverExtraProvider(tripId)).valueOrNull ?? 0;
     final withItems = driverId == null
         ? const <OrderWithItems>[]
         : ref.watch(driverVanSalesProvider(driverId)).valueOrNull ??
@@ -118,7 +122,10 @@ class DriverRunScreen extends ConsumerWidget {
     final banner = pending > 0 ? _WaitingBanner(count: pending) : null;
     final soldSection = _SoldSection(
       salesCount: recognised,
-      collectedKobo: soldKobo,
+      // #730: Collected is what customers PAID (load value + the driver's
+      // extra). `You owe` is untouched: it never reads the extra.
+      collectedKobo: soldKobo + extraKobo,
+      extraKobo: extraKobo,
       sales: sales,
       states: states,
       tripId: tripId,
@@ -339,6 +346,7 @@ class _WaitingBanner extends StatelessWidget {
 class _SoldSection extends StatelessWidget {
   final int salesCount;
   final int collectedKobo;
+  final int extraKobo;
   final List<OrderWithItems> sales;
   final Map<String, SaleEnvelopeState> states;
   final String tripId;
@@ -346,6 +354,7 @@ class _SoldSection extends StatelessWidget {
   const _SoldSection({
     required this.salesCount,
     required this.collectedKobo,
+    required this.extraKobo,
     required this.sales,
     required this.states,
     required this.tripId,
@@ -378,6 +387,17 @@ class _SoldSection extends StatelessWidget {
                 value: formatCurrency(collectedKobo / 100),
               ),
             ),
+            if (extraKobo > 0) ...[
+              SizedBox(width: context.getRSize(10)),
+              Expanded(
+                flex: 2,
+                child: _StatBox(
+                  key: const ValueKey('van-trip-extra'),
+                  label: 'Your extra',
+                  value: formatCurrency(extraKobo / 100),
+                ),
+              ),
+            ],
           ],
         ),
         SizedBox(height: context.getRSize(12)),
@@ -417,7 +437,7 @@ class _SoldSection extends StatelessWidget {
 class _StatBox extends StatelessWidget {
   final String label;
   final String value;
-  const _StatBox({required this.label, required this.value});
+  const _StatBox({super.key, required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -492,7 +512,10 @@ class _SaleRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                formatCurrency(order.netAmountKobo / 100),
+                // #730: the driver's own list shows what the customer paid.
+                formatCurrency(
+                  (order.netAmountKobo + order.driverExtraKobo) / 100,
+                ),
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   color: reversed ? t.disabledColor : null,

@@ -830,6 +830,18 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
+  /// #730 — the driver's EXTRA on [tripId]: `Σ driver_extra_kobo` over its
+  /// RECOGNISED orders. A cancelled road sale drops out (its extra with it), and
+  /// a sale that syncs after the trip closed still lands here because it carries
+  /// its own `van_trip_id`. Never a shop figure and never owed to the shop.
+  Stream<int> watchDriverExtraKoboForTrip(String tripId) {
+    return watchSalesForTrip(tripId).map(
+      (rows) => rows
+          .where((o) => orderCountsAsSale(o.status))
+          .fold<int>(0, (sum, o) => sum + o.driverExtraKobo),
+    );
+  }
+
   // ── Load-below-cost warning (spec §9.1 #1) ────────────────────────────────
 
   /// The subset of [lines] whose load price is below what those goods currently
