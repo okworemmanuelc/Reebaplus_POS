@@ -1834,9 +1834,13 @@ Future<void> _restoreOrders(
   for (final r in rows) {
     // #712 — a cloud without 0247 (or an older row/fixture) carries no `kind`;
     // every such order is a sale. Without this the pull would throw.
-    final data = OrderData.fromJson(
-      r['kind'] == null ? {...r, 'kind': 'sale'} : r,
-    );
+    // #730 — likewise a cloud without 0250 (or an older row) carries no
+    // `driverExtraKobo`; no extra was ever recorded on such an order.
+    final data = OrderData.fromJson({
+      ...r,
+      if (r['kind'] == null) 'kind': 'sale',
+      if (r['driverExtraKobo'] == null) 'driverExtraKobo': 0,
+    });
     await ex.insertResilient(
       'orders',
       r,
