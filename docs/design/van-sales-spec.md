@@ -663,7 +663,26 @@ shells. Without the memo a trip closes "balance 0 = settled" having lost every
 shell, and the data to reconstruct it never existed. The memo is cheap and it
 preserves history.
 
-The full pass — van crate cargo, deposits on the road, valuing shell loss at the
+**Amendment (#726, 2026-11-04) — what v1 now does.** The van is still a store.
+ * *Load screen*: the box is "Crates to bring back": crates leaving with the load
+   (the full crates' own shells plus any extra empties for swaps).
+ * *Return screen*: unsold FULL crates (the line count) and EMPTIES are separate
+   boxes. For a crate-tracked product (crate business, `Bottle`, track-empties
+   on, has a brand) the empties box is required; 0 is allowed.
+ * *Warehouse*: the empties are credited to the trip's SOURCE warehouse pool by
+   manufacturer, in the return's transaction, as an `adjusted` `crate_ledger`
+   row (`reason` = `van_return:<tripId>:<driverUserId>`, id derived from the
+   return event so a retry or sync replay credits once). Full crates are never
+   counted as empties.
+ * *Lost crates*: `computeVanTripPosition` now receives the shell lines
+   (`positionForTrip`): lost = out - (empties + unsold full crates back), per
+   manufacturer, floored at 0, valued at `manufacturers.deposit_amount_kobo`.
+   Shown on the reconcile screen and the driver profile (Crates tab). **Outside
+   every money total**: balance, outstanding, COGS and profit are identical with
+   and without lost crates; the driver is not charged. Nothing depends on
+   recorded road sales (the figure is an upper bound until sales are rung).
+
+The original v1 text above is kept for history. The full pass — van crate cargo, deposits on the road, valuing shell loss at the
 manufacturer deposit rate inside `computeVanTripPosition` — is **Van Sales v2**,
 filed as its own issue and cross-linked from #139. The walk-in same-time-exchange
 question (crate audit §B4) must be resolved before that pass, since every van

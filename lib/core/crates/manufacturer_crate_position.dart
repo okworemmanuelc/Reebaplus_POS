@@ -16,6 +16,7 @@
 library;
 
 import 'package:reebaplus_pos/core/crates/crate_exchange.dart';
+import 'package:reebaplus_pos/core/crates/van_return_empties.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
 
 export 'package:reebaplus_pos/core/crates/crate_shortage.dart'
@@ -367,6 +368,7 @@ String labelForCrateDamageReason(String reason) {
     case kOrderReturnedEmptiesReason:
       return 'Handed back, sale returned';
     default:
+      if (isVanReturnEmptiesReason(reason)) return 'Returned from a van trip';
       if (reason.isEmpty) return reason;
       final spaced = reason.replaceAll('_', ' ');
       return '${spaced[0].toUpperCase()}${spaced.substring(1).toLowerCase()}';

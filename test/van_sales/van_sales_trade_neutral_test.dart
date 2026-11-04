@@ -280,7 +280,7 @@ void main() {
 
         expect(find.text('Empty crates'), findsOneWidget);
         expect(
-          find.textContaining('Loaded with 20 shells, 14 came back'),
+          find.textContaining('Loaded with 20 crates, 14 empties came back'),
           findsOneWidget,
         );
         expect(

@@ -311,7 +311,10 @@ class VanReconcileScreen extends ConsumerWidget {
               Text(
                 'Loaded with ${position.shellsOut} '
                 '${position.shellsOut == 1 ? 'shell' : 'shells'}, '
-                '${position.shellsBack} came back.',
+                '${position.shellsBack} empties came back.'
+                '${position.hasShellLoss ? ' Lost crates: ${position.shellsLostUnits}'
+                          '${position.shellsLostValueKobo > 0 ? ' (${formatCurrency(position.shellsLostValueKobo / 100)})' : ''}'
+                          ' — not charged.' : ''}',
                 style: t.textTheme.bodyMedium,
               ),
               SizedBox(height: context.getRSize(10)),
@@ -610,16 +613,26 @@ class _ShellMemoCard extends StatelessWidget {
           SizedBox(height: context.getRSize(10)),
           Text(
             'Loaded with ${position.shellsOut} '
-            '${position.shellsOut == 1 ? 'shell' : 'shells'}, '
-            '${position.shellsBack} came back.',
+            '${position.shellsOut == 1 ? 'crate' : 'crates'}, '
+            '${position.shellsBack} empties came back.',
             style: t.textTheme.bodyMedium,
           ),
-          if (short > 0) ...[
+          if (position.hasShellLoss) ...[
             SizedBox(height: context.getRSize(6)),
             Text(
-              '$short not returned. Counted only for now — no deposit money is '
-              'moved.',
+              'Lost crates: ${position.shellsLostUnits}'
+              '${position.shellsLostValueKobo > 0 ? ' (${formatCurrency(position.shellsLostValueKobo / 100)})' : ''}. '
+              'Shown only — not charged to the driver and not in any total '
+              'above.',
+              key: const ValueKey('reconcile-lost-crates'),
               style: t.textTheme.bodySmall?.copyWith(color: semantic.warning),
+            ),
+          ] else if (short > 0) ...[
+            SizedBox(height: context.getRSize(6)),
+            Text(
+              '$short not returned as empties. Unsold full crates that came '
+              'back are not lost.',
+              style: t.textTheme.bodySmall?.copyWith(color: t.hintColor),
             ),
           ],
         ],
