@@ -57,7 +57,10 @@ class PayrollDao extends DatabaseAccessor<AppDatabase>
     int monthlySalaryKobo = 0,
     int dailyAllowanceKobo = 0,
     String? allowanceStartDate,
+    int? paydayDay,
+    String? jobTitle,
   }) async {
+    _checkPaydayDay(paydayDay);
     final businessId = await _requireAccess();
     final id = UuidV7.generate();
     final now = DateTime.now();
@@ -70,6 +73,8 @@ class PayrollDao extends DatabaseAccessor<AppDatabase>
       monthlySalaryKobo: Value(monthlySalaryKobo),
       dailyAllowanceKobo: Value(dailyAllowanceKobo),
       allowanceStartDate: Value(allowanceStartDate),
+      paydayDay: Value(paydayDay),
+      jobTitle: Value(_cleanJob(jobTitle)),
       isRemoved: const Value(false),
       createdBy: Value(currentUserId),
       createdAt: Value(now),
@@ -105,7 +110,12 @@ class PayrollDao extends DatabaseAccessor<AppDatabase>
     required String storeId,
     required int monthlySalaryKobo,
     required int dailyAllowanceKobo,
+    // #723: absent = keep the worker's payday; Value(null) = last day.
+    Value<int?> paydayDay = const Value.absent(),
+    // #723: absent = keep the job; Value(null) or blank = no job.
+    Value<String?> jobTitle = const Value.absent(),
   }) async {
+    if (paydayDay.present) _checkPaydayDay(paydayDay.value);
     final businessId = await _requireAccess();
     await transaction(() async {
       final worker =
@@ -123,6 +133,10 @@ class PayrollDao extends DatabaseAccessor<AppDatabase>
           monthlySalaryKobo: Value(monthlySalaryKobo),
           dailyAllowanceKobo: Value(dailyAllowanceKobo),
           allowanceStartDate: Value(startDate),
+          paydayDay: paydayDay,
+          jobTitle: jobTitle.present
+              ? Value(_cleanJob(jobTitle.value))
+              : const Value.absent(),
           lastUpdatedAt: Value(DateTime.now()),
         ),
       );
@@ -153,6 +167,18 @@ class PayrollDao extends DatabaseAccessor<AppDatabase>
         }
       }
     });
+  }
+
+  static String? _cleanJob(String? job) {
+    final t = job?.trim() ?? '';
+    return t.isEmpty ? null : t;
+  }
+
+  /// #723: a payday is a day of the month, 1–31 (null = the last day).
+  static void _checkPaydayDay(int? day) {
+    if (day != null && (day < 1 || day > 31)) {
+      throw ArgumentError.value(day, 'paydayDay', 'must be 1–31');
+    }
   }
 
   /// Takes a worker off Payroll: no further allowances, every entry and
