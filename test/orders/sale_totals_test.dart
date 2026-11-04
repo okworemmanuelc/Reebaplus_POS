@@ -106,4 +106,57 @@ void main() {
     expect(l.crates, 3);
     expect(l.fullDepositKobo, 0);
   });
+
+  group('EditSettlement (#732)', () {
+    EditSettlement settle({
+      int goods = 0,
+      int deposit = 0,
+      int paidBack = 0,
+      int depositBack = 0,
+    }) => EditSettlement(
+      goodsDueKobo: goods,
+      depositKobo: deposit,
+      paidBackKobo: paidBack,
+      depositBackKobo: depositBack,
+    );
+
+    test('the deposit is on top of the goods and cannot go on the balance', () {
+      final s = settle(goods: 2000, deposit: 500);
+      expect(s.dueKobo, 2500);
+      expect(s.handBackKobo, 0);
+      expect(s.minPayKobo, 500);
+      expect(s.goodsTenderedKobo(2500), 2000);
+      expect(s.goodsTenderedKobo(500), 0);
+    });
+
+    test('freed money pays the deposit first; the rest goes back', () {
+      final s = settle(deposit: 500, paidBack: 2000);
+      expect(s.dueKobo, 0);
+      expect(s.handBackKobo, 1500);
+      expect(s.minPayKobo, 0);
+      expect(s.paidOffsetKobo, 500);
+      expect(s.depositOffsetKobo, 0);
+    });
+
+    test('a deposit above the freed money leaves the difference due', () {
+      final s = settle(deposit: 500, paidBack: 200);
+      expect(s.dueKobo, 300);
+      expect(s.handBackKobo, 0);
+      expect(s.minPayKobo, 300);
+    });
+
+    test('a deposit released pays toward goods and a new deposit', () {
+      final s = settle(goods: 1000, deposit: 500, depositBack: 400);
+      expect(s.dueKobo, 1100);
+      expect(s.minPayKobo, 100);
+      expect(s.depositOffsetKobo, 400);
+      expect(s.goodsTenderedKobo(1100), 1000);
+    });
+
+    test('with no deposit it is just the edit it always was', () {
+      expect(settle(goods: 700).dueKobo, 700);
+      expect(settle(paidBack: 700).handBackKobo, 700);
+      expect(settle(goods: 700).withDeposit(100).dueKobo, 800);
+    });
+  });
 }
