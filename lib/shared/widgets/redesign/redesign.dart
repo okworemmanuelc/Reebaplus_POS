@@ -2,6 +2,7 @@
 /// Waves 1 and 2; see CONTEXT/ui-context.md "Shared parts".
 library;
 
+export 'app_segmented.dart';
 export 'cart_line.dart';
 export 'category_chip.dart';
 export 'category_visual.dart';

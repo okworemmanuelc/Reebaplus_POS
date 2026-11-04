@@ -134,7 +134,7 @@ void main() {
         roleRank: GateTier.ceo,
         theme: AppTheme.light(),
         overrides: [
-          allOrdersProvider.overrideWith((ref) => Stream.value(orders)),
+          periodOrdersProvider.overrideWith((ref, w) => Stream.value(orders)),
         ],
         settle: false,
       );

@@ -257,9 +257,21 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   /// [staffId] narrows to one member's own orders in SQL — the Profile screen
   /// shows only the signed-in user's activity, and filtering the whole
   /// business's join in Dart would stream every order to read one person's.
+  ///
+  /// [entryDayFrom] / [entryDayTo] (#685, PRD #680) narrow the read to the
+  /// orders that can put a report ENTRY on a day in `[from, to]` (either bound
+  /// may be null = open): an order lands on its `createdAt` day, and a
+  /// cancelled one ALSO on its `cancelledAt` day (#549, see [saleDayStamps]).
+  /// So a row is loaded when `createdAt` OR (cancelled AND `cancelledAt`) is in
+  /// the window - a sale made before the window but cancelled inside it is
+  /// kept, because its -1 return entry lands inside. This is a SUPERSET of the
+  /// orders contributing to the window; the report's own entry/period test
+  /// still decides what counts, so the figures are unchanged. No SQL sums.
   Stream<List<OrderWithItems>> watchAllOrdersWithItems({
     String? storeId,
     String? staffId,
+    DateTime? entryDayFrom,
+    DateTime? entryDayTo,
   }) {
     final query = select(orders).join([
       leftOuterJoin(orderItems, orderItems.orderId.equalsExp(orders.id)),
@@ -272,6 +284,23 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     }
     if (staffId != null) {
       query.where(orders.staffId.equals(staffId));
+    }
+    if (entryDayFrom != null || entryDayTo != null) {
+      Expression<bool> within(Expression<DateTime> col) {
+        Expression<bool> e = const Constant(true);
+        if (entryDayFrom != null) {
+          e = e & col.isBiggerOrEqualValue(entryDayFrom);
+        }
+        if (entryDayTo != null) {
+          e = e & col.isSmallerOrEqualValue(entryDayTo);
+        }
+        return e;
+      }
+
+      query.where(
+        within(orders.createdAt) |
+            (orders.status.equals('cancelled') & within(orders.cancelledAt)),
+      );
     }
     query.orderBy([OrderingTerm.desc(orders.createdAt)]);
 

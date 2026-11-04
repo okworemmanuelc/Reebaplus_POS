@@ -713,6 +713,7 @@ Pages behind CEO Settings follow the CEO Settings menu (no mockups). **Restyle o
 - **Profile**: header card (avatar initials in the avatar colour, ExtraBold 20 name, role tag, pills), stat cards (40 `IconTile` in fixed green / purple / primary), `Account Details` card (48dp rows). `profile_ui.dart` is shared with Staff Detail.
 - **Business Info / Appearance / Display / Receipt printer** (PR 2): `SectionHeader` (group) over a `SettingsCard`; fields are `AppInput` / `AppDropdown`, switches are Bold 15 title + Regular 13 muted subtitle rows, Save is a full-width `AppButton`. Appearance cards keep their keys; Display and Appearance mark the active choice with a 2dp outline.
 - **Security / Subscription / Activity Logs access / Activity Logs / Delete Business** (PR 3): toggles and info are `SettingsCard` + `SettingsControlRow`; the Subscription status is a fixed-tone `TagPill`; Activity Logs is a drawer root (`MenuButton` + `NotificationBell`, 720 list cap, `IconTile` + `TagPill` log cards); Delete Business is a danger-tint banner over a danger `AppButton`.
+- **Receipt printer** (#742, from the owner's mockups): `receipt_printer_parts.dart`. Phone: helper line, `LAST USED` + one `PrinterCard` (always with Test Print), then an `Other devices (n)` card that shows the rest, most recently used first (#724). A card opens its settings in place (2dp primary outline, one open at a time); it starts closed. From a measured 720 wide (a sideways phone too) the body is a list (32%, 280 to 380) beside a settings panel, `Search Again` replaces the refresh icon, and the 720 cap does not apply. The panel puts settings two to a row from a measured 460. Other devices starts open when nothing has been used yet or it holds a plugged-in USB printer, so one is never hidden.
 - **Edit Profile** (`EditProfileSheet.show`): theme sheet, `ScreenHeader`, `AppInput`, 8 hex swatches (48dp targets), `AppButton`; scrolls above the keyboard.
 ### Staff (`lib/features/staff/`, #440, PRD #346 Wave 2 C)
 
@@ -909,6 +910,10 @@ centred: danger `IconTile` (verified-person icon) + red "18+" `TagPill`,
 ExtraBold 17 "Are you 18 or older?", muted 14 body, full-width primary
 "I am 18 or older" and outline "Not now" `AppButton`s. Goldens
 `age_confirmation_390x844_light` / `_844x390_dark`.
+
+## `AppSegmented` (`lib/shared/widgets/redesign/app_segmented.dart`, #742)
+
+A choice between a few short options: Surface 2 track, the chosen item on a surface tile, or filled primary with `solid`. `value: null` shows nothing chosen. Use it instead of Material's `SegmentedButton` on restyled screens.
 
 ## Buttons that save, print or navigate (#659)
 

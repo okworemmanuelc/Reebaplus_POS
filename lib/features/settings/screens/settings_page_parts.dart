@@ -214,14 +214,26 @@ class SettingsControlRow extends StatelessWidget {
     required this.icon,
     required this.tone,
     required this.title,
+    this.iconColor,
     this.subtitle,
+    this.subtitleSize = 13,
+    this.tileSize = 48,
     this.trailing,
   });
 
   final IconData icon;
   final IconTileTone tone;
+
+  /// Overrides the tone's icon colour.
+  final Color? iconColor;
   final String title;
   final String? subtitle;
+
+  /// Base size of the subtitle.
+  final double subtitleSize;
+
+  /// Base edge of the icon tile.
+  final double tileSize;
   final Widget? trailing;
 
   @override
@@ -232,7 +244,12 @@ class SettingsControlRow extends StatelessWidget {
       constraints: const BoxConstraints(minHeight: kMinInteractiveDimension),
       child: Row(
         children: [
-          IconTile(icon: icon, tone: tone, size: 48),
+          IconTile(
+            icon: icon,
+            tone: tone,
+            iconColor: iconColor,
+            size: tileSize,
+          ),
           SizedBox(width: context.getRSize(14)),
           Expanded(
             child: Column(
@@ -252,7 +269,9 @@ class SettingsControlRow extends StatelessWidget {
                     subtitle!,
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
-                    style: context.regularStyle(13).copyWith(color: muted),
+                    style: context
+                        .regularStyle(subtitleSize)
+                        .copyWith(color: muted),
                   ),
               ],
             ),
