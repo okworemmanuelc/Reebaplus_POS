@@ -160,6 +160,10 @@ class OrderService {
   Future<Map<String, double>> returnableQtyByLine(String orderId) =>
       _queries.returnableQtyByLine(orderId);
 
+  /// #732 — a sale's goods per product, added goods included.
+  Future<List<ReturnableGoods>> returnableGoods(String orderId) =>
+      _queries.returnableGoods(orderId);
+
   /// #712 — preview of a part return (money, deposit, empties). No writes.
   Future<PartReturnPlan> planPartReturn(
     String orderId,
@@ -201,8 +205,7 @@ class OrderService {
   );
 
   /// #712 — a sale's part returns with their minus lines, live.
-  Stream<List<({OrderData adjustment, List<OrderItemDataWithProductData> lines})>>
-  watchAdjustmentsWithLines(String orderId) =>
+  Stream<List<SaleAdjustmentLines>> watchAdjustmentsWithLines(String orderId) =>
       _queries.watchAdjustmentsWithLines(orderId);
 
   /// **Part return** (#712). See [OrderCommands.returnPartOfSale].

@@ -143,6 +143,11 @@ class OrderQueries {
   Future<Map<String, double>> returnableQtyByLine(String orderId) =>
       _ordersDao.returnableQtyByLine(orderId);
 
+  /// #732 — a sale's goods per product, added goods included, for the Return
+  /// and Edit sheets.
+  Future<List<ReturnableGoods>> returnableGoods(String orderId) =>
+      _ordersDao.returnableGoods(orderId);
+
   /// #712 — what a part return of [qtyByLineId] would do, without writing.
   Future<PartReturnPlan> planPartReturn(
     String orderId,
@@ -157,8 +162,7 @@ class OrderQueries {
   ) => _ordersDao.planEditSale(orderId, newQtyByLineId, addedLines);
 
   /// #712 — the part returns of a sale with their minus lines, live.
-  Stream<List<({OrderData adjustment, List<OrderItemDataWithProductData> lines})>>
-  watchAdjustmentsWithLines(String orderId) =>
+  Stream<List<SaleAdjustmentLines>> watchAdjustmentsWithLines(String orderId) =>
       _ordersDao.watchAdjustmentsWithLines(orderId);
 
   /// #711 — empties to hand back and deposit to pay back on a Return.

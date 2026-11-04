@@ -278,6 +278,62 @@ void main() {
     queued.forEach((layerId, qty) => expect(qty, now[layerId]));
   });
 
+  test('#732 a refused edit takes with it a queued return of the goods it '
+      'added, and that claim is never sent', () async {
+    final a = await product('Rice');
+    final b = await product('Beans');
+    final id = await completedSale({a: 2});
+    final stockBefore = await stock();
+    final edit = await db.ordersDao.editCompletedSale(
+      orderId: id,
+      newQtyByLineId: const {},
+      addedLines: [EditAddedLine(productId: b, quantity: 3)],
+      reason: 'customer changed order',
+      staffId: staffId,
+      deviceTag: 'TESTAB',
+    );
+    await db.ordersDao.returnPartOfSale(
+      orderId: id,
+      qtyByLineId: {await lineOf(edit.adjustmentOrderId, b): 1},
+      reason: 'brought one back',
+      staffId: staffId,
+      deviceTag: 'TESTAB',
+      refundMethod: 'cash',
+    );
+    final claims = await (db.select(db.syncQueue)
+          ..where((t) => t.actionType.equals(kAdjustmentClaimAction)))
+        .get();
+    expect(claims.length, 2);
+    final editClaim = claims.singleWhere(
+      (c) => decodePayload(c)['p_adjustment_order_id'] == edit.adjustmentOrderId,
+    );
+    final ordered = [editClaim, ...claims.where((c) => c.id != editClaim.id)];
+
+    transport.failRpc(
+      _claimRpc,
+      const PostgrestException(
+        message: 'adjustment_exceeds_returnable',
+        code: 'P0001',
+      ),
+    );
+    await sync.pushDomainItemsForTesting(ordered, businessId, 'auth-1');
+
+    expect(await db.ordersDao.adjustmentsOf(id), isEmpty);
+    expect(await stock(), stockBefore);
+    expect(
+      (await db.select(db.syncQueueOrphans).get())
+          .where((o) => o.actionType == kAdjustmentClaimAction)
+          .length,
+      2,
+    );
+    expect(
+      await (db.select(db.syncQueue)
+            ..where((t) => t.actionType.equals(kAdjustmentClaimAction)))
+          .get(),
+      isEmpty,
+    );
+  });
+
   test('a refused part return still reads as a return, not an edit', () async {
     final a = await product('Rice');
     final id = await completedSale({a: 4});

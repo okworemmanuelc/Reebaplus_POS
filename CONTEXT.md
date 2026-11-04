@@ -220,12 +220,23 @@ _Avoid_: void, delete; dropping a cancelled sale from its creation day.
 **Sale adjustment** (#712, ADR 0035):
 The record a part return writes: a new `orders` row (`kind = 'adjustment'`,
 `adjusts_order_id` = the sale), born `completed` today, with MINUS lines at the
-original price and cost. Its stock, money and crate rows reference it; the sale
-is never changed. Never its own row in the Orders list: it shows as "Returned:
-…" inside the sale. Reports count it on its own day under Returns. Returnable
-per line = sold minus everything already returned; a cloud claim
-(`pos_claim_sale_adjustment`) stops two phones returning more than was sold.
+line's own price and cost. Its stock, money and crate rows reference it; the
+sale is never changed. Never its own row in the Orders list: it shows as
+"Returned: …" inside the sale. Reports count it on its own day under Returns.
+Returnable per product = the sale's lines plus every edit's added lines, minus
+everything already returned (#732). A return consumes the original lines first,
+then added lines, oldest edit first, each at its own price and cost. A cloud
+claim (`pos_claim_sale_adjustment`) stops two phones returning more than a line
+holds.
 _Avoid_: edit, amend, partial cancel.
+
+**Edit settlement** (#732, `EditSettlement` in `sale_totals.dart`):
+What an edit of a completed sale settles. It takes the goods still due plus the
+Crate Deposit on added crates; it frees the paid money left after the added goods
+plus any deposit released. One nets against the other, so the customer hands over
+one amount or gets one back, never both, and the till moves by exactly that. The
+deposit must be covered by money (Checkout's rule); goods may go on the balance.
+_Avoid_: asking for the deposit and paying the refund as two amounts.
 
 **Refund destination** (#710):
 Where refunded money goes: back out as cash or transfer (a `refund` row, method
@@ -245,7 +256,10 @@ damaged units are written off as `damage:<key>` stock adjustments, inside the
 same guarded reversal. Money collected after Checkout (Mark as paid / Record
 Payment) stays as customer credit, never a cash refund. Writes an activity-log
 entry and a `sale_returned` warning to CEO and Managers (best-effort). Partial
-returns are a **Sale adjustment** (#712); Online Order handling is out of scope.
+returns are a **Sale adjustment** (#712), and so is the whole return of a sale
+that already has one: its final adjustment takes everything left, added goods
+included, and the sale stays `completed` (#732). Online Order handling is out of
+scope.
 **Refund window** (#733): a sale whose ORIGINAL `created_at` is more than
 `kRefundWindowDays` (30) days old can't be Returned, part returned or edited
 (`ReturnRefusal.tooOld`, checked first in `returnRefusal`), and a Pending
@@ -505,7 +519,12 @@ column as a rate when a brand exists (a stale value there once made a full
 deposit read as a *part* deposit and settle down the partial path); conflating
 the deposit *money* flow with the crate *count*, which #156 makes trustworthy. The inflow leg (money customers pay
 us) is [Held Deposit]; the outflow leg (money we pay a supplier) is
-[Placed Deposit] — see ADR 0023.
+[Placed Deposit] — see ADR 0023. Crates added by an **edit** take a deposit by the
+Checkout rule (registered customer paying Cash/Transfer, per-brand rate, zero =
+Crate-Track, #732), auto-filled to the full deposit. It is held on the adjustment's
+`order_crate_lines`, payment and wallet rows, never on the adjustment's header. A
+return releases what was actually paid per crate of the brand, only for crates
+beyond what is owed, and a crate that releases a deposit hands back no empties.
 
 **Held Deposit**:
 Deposit money the shop is currently holding for a customer against crates they

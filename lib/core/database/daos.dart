@@ -37,6 +37,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/business_scoped_dao.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/database/sync_helpers.dart';
+import 'package:reebaplus_pos/shared/services/orders/sale_totals.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
 // #141: the van predicate. The DAO layer normally takes van-ness as an id set
 // from its caller (see `OrdersDao._outsideStores`), but the two van WRITE
@@ -60,6 +61,9 @@ import 'package:reebaplus_pos/core/van_sales/van_trip_position.dart';
 // predicate, never a bare `status == 'completed'`
 // ([[project_revenue_recognized_at_checkout]]).
 import 'package:reebaplus_pos/shared/models/order_status.dart';
+
+// #732: which lines a return consumes, and the goods the sheets list.
+export 'package:reebaplus_pos/core/orders/sale_return_allocation.dart';
 
 part 'daos.g.dart';
 

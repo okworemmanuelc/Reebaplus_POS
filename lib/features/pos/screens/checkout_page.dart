@@ -40,6 +40,7 @@ import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/store_address.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
+import 'package:reebaplus_pos/shared/widgets/crate_deposit_sheet.dart';
 import 'package:reebaplus_pos/shared/widgets/printer_picker.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_paper_size.dart';
 import 'package:reebaplus_pos/shared/services/printer_service.dart';
@@ -952,140 +953,21 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     );
   }
 
-  /// Edit the deposit paid for one brand. Pre-fills the current value (blank =
-  /// ₦0); the "Use full (₦X)" shortcut fills the full deposit; clearing/0 marks
-  /// the brand "No deposit" (crate-track). Modal-style sheet (back / Save only).
-  /// Amounts are kobo-exact both ways (#401), and an amount above [fullKobo]
-  /// can't be saved: an inline message shows and Save is disabled.
-  void _editBrandDeposit(String mfrId, String name, int fullKobo) {
-    final savedKobo = _depositByMfr[mfrId] ?? 0;
-    final ctrl = TextEditingController(
-      text: savedKobo == 0 ? '' : koboToInputText(savedKobo),
+  /// Edit the deposit paid for one brand (see [showCrateDepositSheet]).
+  Future<void> _editBrandDeposit(
+    String mfrId,
+    String name,
+    int fullKobo,
+  ) async {
+    final kobo = await showCrateDepositSheet(
+      context,
+      name: name,
+      fullKobo: fullKobo,
+      savedKobo: _depositByMfr[mfrId] ?? 0,
+      sheetKey: CheckoutKeys.depositSheet,
     );
-    int enteredKobo() => (parseCurrency(ctrl.text) * 100).round();
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (sheetCtx) {
-        return SingleChildScrollView(
-          key: CheckoutKeys.depositSheet,
-          // nav-only inset (NOT deviceBottomInset). This sheet is shown from
-          // Checkout, which is pushed on the TAB navigator under MainLayout —
-          // whose Scaffold (resizeToAvoidBottomInset defaults true) already
-          // resizes the tab body up by the keyboard, lifting this sheet above
-          // it. Adding the keyboard again via deviceBottomInset double-counts it
-          // and the sheet leaps up "like an extra keyboard". deviceBottomPadding
-          // clears the system nav bar when the keyboard is down and collapses to
-          // 0 when it's up (the resize covers that case).
-          padding: EdgeInsets.fromLTRB(
-            context.getRSize(20),
-            context.getRSize(12),
-            context.getRSize(20),
-            context.deviceBottomPadding + context.getRSize(20),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SalesSheetHeader(
-                title: 'Deposit — $name',
-                leading: const IconTile(
-                  icon: AppIcons.crates,
-                  tone: IconTileTone.warning,
-                  size: 44,
-                ),
-              ),
-              SizedBox(height: context.getRSize(8)),
-              Text(
-                'Full deposit is ${formatCurrency(fullKobo / 100.0)}. '
-                'Leave blank or 0 for no deposit (crates tracked instead).',
-                style: context.regularStyle(13).copyWith(color: _subtext),
-              ),
-              SizedBox(height: context.getRSize(16)),
-              AppInput(
-                controller: ctrl,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                inputFormatters: [CurrencyInputFormatter()],
-                autofocus: true,
-                prefixText: '$activeCurrencySymbol ',
-                hintText: '0',
-              ),
-              SizedBox(height: context.getRSize(8)),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  style: TextButton.styleFrom(
-                    minimumSize: const Size(0, kMinInteractiveDimension),
-                    foregroundColor: _primary,
-                    textStyle: context.boldStyle(13),
-                  ),
-                  onPressed: () {
-                    ctrl.text = koboToInputText(fullKobo);
-                  },
-                  icon: AppIcon(AppIcons.magic, size: context.getRSize(16)),
-                  label: Text('Use full (${formatCurrency(fullKobo / 100.0)})'),
-                ),
-              ),
-              // Rebuilds the cap message + Save as the amount changes.
-              ValueListenableBuilder<TextEditingValue>(
-                valueListenable: ctrl,
-                builder: (_, _, _) {
-                  final overFull = enteredKobo() > fullKobo;
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (overFull)
-                        Padding(
-                          padding: EdgeInsets.only(top: context.getRSize(4)),
-                          child: Text(
-                            "Can't be more than the full deposit "
-                            '$activeCurrencySymbol${koboToInputText(fullKobo)}',
-                            style: context
-                                .semiBoldStyle(12)
-                                .copyWith(color: _fixed.danger),
-                          ),
-                        ),
-                      SizedBox(height: context.getRSize(12)),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: AppButton(
-                              text: 'Back',
-                              variant: AppButtonVariant.ghost,
-                              onPressed: () => Navigator.pop(sheetCtx),
-                            ),
-                          ),
-                          SizedBox(width: context.getRSize(12)),
-                          Expanded(
-                            child: AppButton(
-                              text: 'Save',
-                              variant: AppButtonVariant.primary,
-                              onPressed: overFull
-                                  ? null
-                                  : () {
-                                      final val = enteredKobo();
-                                      setState(
-                                        () => _depositByMfr[mfrId] = val < 0
-                                            ? 0
-                                            : val,
-                                      );
-                                      Navigator.pop(sheetCtx);
-                                    },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
+    if (kobo == null || !mounted) return;
+    setState(() => _depositByMfr[mfrId] = kobo);
   }
 
   // ── Cart staleness ─────────────────────────────────────────────────────────

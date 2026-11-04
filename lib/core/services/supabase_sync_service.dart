@@ -1470,6 +1470,8 @@ class SupabaseSyncService {
     Set<({String productId, String storeId})>? recostPairs,
   }) async {
     for (final item in items) {
+      // #732 — withdrawn earlier in this drain with the edit it depended on.
+      if (_withdrawnClaims.remove(item.id)) continue;
       await _db.syncDao.markInProgressBatch([item.id]);
 
       Map<String, dynamic> payload;
@@ -1626,6 +1628,10 @@ class SupabaseSyncService {
     }
   }
 
+  /// #732 — claim queue rows [_undoLostAdjustment] withdrew while a drain was
+  /// running: the drain's own list still holds them.
+  final Set<String> _withdrawnClaims = {};
+
   /// #550 — the losing phone's side of "first reversal wins": withdraw the
   /// rejected reversal's local rows, restore the order header from the cloud's
   /// copy carried in the rejection's DETAIL, and alert the CEO / Managers.
@@ -1681,12 +1687,29 @@ class SupabaseSyncService {
     final isEdit = _isEditEnvelope(payload);
     final actorId = payload['p_actor_id'];
     try {
+      // #732 — a later return on this phone of goods this edit added cannot
+      // stand without them: its claim could only fail for ever.
+      final dependents = await _db.ordersDao.queuedClaimsReturningGoodsOf(
+        adjustmentId,
+      );
       final undone = await _db.ordersDao.undoRejectedReversal(
         reversalId: reversalId,
         orderId: parentId,
         adjustmentOrderId: adjustmentId,
         costDraws: _costDrawsOf(payload),
       );
+      for (final claim in dependents) {
+        await _undoLostAdjustment(
+          jsonDecode(claim.payload) as Map<String, dynamic>,
+        );
+        await _db.syncDao.markFailed(
+          claim.id,
+          'this return took back goods from an edit that was refused; it was '
+          'undone here',
+          permanent: true,
+        );
+        _withdrawnClaims.add(claim.id);
+      }
       if (undone) {
         await _db.ordersDao.alertRefundRejected(
           parentId,

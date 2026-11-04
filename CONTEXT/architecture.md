@@ -320,6 +320,14 @@ are INCLUDED in the reports feed (`watchAllOrdersWithItems`); `saleDayEntries`
 signs them +1 and the Sales/Returns split files negative `adjustment` entries
 under Returns; the cloud recost ignores `kind = 'adjustment'`.
 
+**Goods added by an edit are returnable (#732, ADR 0035 addendum).** A sale's
+goods are its lines plus its adjustments' plus lines, one `ReturnableGoods` per
+product and store. `allocateReturn` (`lib/core/orders/sale_return_allocation.dart`,
+pure) consumes original lines first, then the oldest edit's; each minus line
+carries the consumed line's price and cost and its id in `adjusts_line_id`, and
+the claim names the same ids (cloud `0252`). A sale with any adjustment is returned
+whole by a final adjustment, never `returnCompletedSale`.
+
 **Return a Completed crate sale (#711).** `ReturnRefusal.crateBearing` is gone.
 Inside the same guarded reversal, per brand: (1) the customer's crate debt is
 cancelled for what is STILL owed only (`_reverseIssuedByCustomer` now nets every

@@ -21,12 +21,16 @@ class ReturnLineInput {
   /// False for a Quick Sale line (no product): shown without a stepper.
   final bool canBeDamaged;
 
+  /// Goods added by an edit in this row, with their price (#732).
+  final String? addedNote;
+
   const ReturnLineInput({
     required this.lineId,
     required this.name,
     required this.quantity,
     required this.canBeDamaged,
     this.returnable,
+    this.addedNote,
   });
 
   double get upTo => returnable ?? quantity;
@@ -198,11 +202,23 @@ class _ReturnSaleDialogState extends State<_ReturnSaleDialog> {
                 child: Row(
                   children: [
                     Expanded(
-                      child: Text(
-                        '${l.name} (up to ${formatQty(l.upTo)})',
-                        style: context.regularStyle(13).copyWith(
-                          color: cs.onSurface,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${l.name} (up to ${formatQty(l.upTo)})',
+                            style: context.regularStyle(13).copyWith(
+                              color: cs.onSurface,
+                            ),
+                          ),
+                          if (l.addedNote != null)
+                            Text(
+                              l.addedNote!,
+                              style: context.regularStyle(12).copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                     IconButton(

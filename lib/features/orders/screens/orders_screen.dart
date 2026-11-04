@@ -51,6 +51,7 @@ import 'package:reebaplus_pos/features/pos/services/receipt_builder.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/features/orders/widgets/crate_return_modal.dart';
 import 'package:reebaplus_pos/features/orders/widgets/return_sale_dialog.dart';
+import 'package:reebaplus_pos/features/orders/widgets/sale_card_rows.dart';
 import 'package:reebaplus_pos/features/orders/widgets/refund_destination_dialog.dart';
 import 'package:reebaplus_pos/features/orders/widgets/edit_sale_sheet.dart';
 import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
@@ -1175,33 +1176,51 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
   Future<void> _returnCompletedSale(OrderWithItems item) async {
     final order = item.order;
     final svc = ref.read(orderServiceProvider);
-    final plan = await svc.returnPlan(order.id);
-    // #712 — units still returnable per line ("up to N").
-    final returnable = await svc.returnableQtyByLine(order.id);
+    var plan = await svc.returnPlan(order.id);
+    // #712 — units still returnable per product ("up to N"), #732 — goods added
+    // by an edit included.
+    final goods = await svc.returnableGoods(order.id);
+    // A sale with no adjustment returned whole is the full Return
+    // (markCancelled); anything else is a sale adjustment, and taking
+    // everything left is the final one (#712).
+    final adjusted = saleHasAdjustments(goods);
+    var refundKobo = order.amountPaidKobo;
+    if (adjusted) {
+      try {
+        final whole = await svc.planPartReturn(order.id, {
+          for (final g in goods)
+            if (g.standing > 0) g.lineId: g.standing,
+        });
+        refundKobo = whole.refundableKobo;
+        plan = ReturnCratePlan(
+          emptiesToHandBack: whole.emptiesToHandBack,
+          depositRefundKobo: whole.depositRefundKobo,
+        );
+      } on ReturnRefusedException catch (e) {
+        if (mounted) AppNotification.showError(context, e.message);
+        return;
+      }
+    }
     if (!mounted) return;
     final input = await showReturnSaleDialog(
       context,
       emptiesToHandBack: plan.emptiesToHandBack,
       orderNumber: order.orderNumber,
-      refundLabel: formatCurrency(order.amountPaidKobo / 100.0),
+      refundLabel: formatCurrency(refundKobo / 100.0),
       lines: [
-        for (final l in item.items)
+        for (final g in goods)
           ReturnLineInput(
-            lineId: l.item.id,
-            name: l.displayName,
-            quantity: l.item.quantity,
-            returnable: returnable[l.item.id] ?? l.item.quantity,
-            canBeDamaged: l.item.productId != null,
+            lineId: g.lineId,
+            name: g.first.name,
+            quantity: g.sold,
+            returnable: g.standing,
+            canBeDamaged: g.first.productId != null,
+            addedNote: addedGoodsNote(g),
           ),
       ],
     );
     if (input == null || !mounted) return;
-    // A sale never part-returned and returned whole is the full Return
-    // (markCancelled); anything else is a sale adjustment (#712).
-    final earlierPartReturn = item.items.any(
-      (l) => (returnable[l.item.id] ?? l.item.quantity) < l.item.quantity,
-    );
-    final isPart = earlierPartReturn || !input.returnsEverythingLeft;
+    final isPart = adjusted || !input.returnsEverythingLeft;
 
     // #710 — money was paid: ask where it goes (skipped for a pure credit sale).
     PartReturnPlan? partPlan;
@@ -1305,7 +1324,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       return;
     }
     final svc = ref.read(orderServiceProvider);
-    final standing = await svc.returnableQtyByLine(order.id);
+    final goods = await svc.returnableGoods(order.id);
     if (!mounted) return;
     final input = await showEditSaleEditor(
       context,
@@ -1313,15 +1332,16 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       storeId: order.storeId,
       priceTier: item.customer?.priceTier ?? 'retailer',
       lines: [
-        for (final l in item.items)
-          if ((standing[l.item.id] ?? 0) > 0)
+        for (final g in goods)
+          if (g.standing > 0)
             EditLineSeed(
-              lineId: l.item.id,
-              name: l.displayName,
-              current: standing[l.item.id]!,
-              unitPriceKobo: l.item.unitPriceKobo,
-              canRaise: l.item.productId != null,
-              allowParts: l.product?.allowFractionalSales ?? false,
+              lineId: g.lineId,
+              name: g.first.name,
+              current: g.standing,
+              unitPriceKobo: g.first.unitPriceKobo,
+              canRaise: g.first.productId != null,
+              allowParts: g.first.allowParts,
+              addedNote: addedGoodsNote(g),
             ),
       ],
     );
@@ -1344,27 +1364,36 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     String? refundMethod;
     int? paid;
     var payMethod = 'cash';
-    if (plan.netKobo > 0) {
+    var deposit = const <String, int>{};
+    final hasCustomer = order.customerId != null;
+    // #732 — added crates with a crate value open the money step even when the
+    // edit would otherwise only refund: the deposit nets against that refund.
+    final depositBrands = editDepositBrands(plan, hasCustomer: hasCustomer);
+    if (plan.settlement().dueKobo > 0 || depositBrands.isNotEmpty) {
       final m = await showEditMoneyDialog(
         context,
-        dueKobo: plan.netKobo,
-        hasCustomer: order.customerId != null,
+        settlement: plan.settlement(),
+        hasCustomer: hasCustomer,
+        crateBrands: depositBrands,
       );
       if (m == null || !mounted) return;
       paid = m.paidKobo;
       payMethod = m.method;
-    } else {
-      final back = plan.paidOutKobo + (plan.minus?.depositRefundKobo ?? 0);
-      if (back > 0) {
-        final choice = await showRefundDestinationDialog(
-          context,
-          paidKobo: back,
-          hasCustomer: order.customerId != null,
-        );
-        if (choice == null || !mounted) return;
-        destination = choice.destination;
-        refundMethod = choice.method;
-      }
+      deposit = m.depositByManufacturer;
+    }
+    final settle = plan.settlement(deposit.values.fold(0, (a, b) => a + b));
+    if (settle.handBackKobo > 0) {
+      final choice = await showRefundDestinationDialog(
+        context,
+        paidKobo: settle.handBackKobo,
+        hasCustomer: hasCustomer,
+      );
+      if (choice == null || !mounted) return;
+      destination = choice.destination;
+      refundMethod = choice.method;
+    } else if (settle.offsetKobo > 0) {
+      // Money set off against the amount due moves on the tender just picked.
+      refundMethod = payMethod;
     }
     try {
       Gates.editSale.require(ref);
@@ -1384,13 +1413,14 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         refundMethod: refundMethod,
         amountPaidKobo: paid,
         paymentMethod: payMethod,
+        depositPaidByManufacturer: deposit,
       );
       if (!mounted) return;
       AppNotification.showSuccess(
         context,
         'Sale ${order.orderNumber} changed (${out.adjustmentOrderNumber}).',
       );
-      await _printEditSlip(item, out.adjustmentOrderId);
+      await _printEditSlip(item, out.adjustmentOrderId, out.depositKobo);
     } on GateDeniedError {
       if (mounted) showGateDenied(context, Gates.editSale);
     } on ReturnRefusedException catch (e) {
@@ -1407,8 +1437,13 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
   }
 
   /// Prints the "Edit slip" for adjustment [adjustmentId]; the original receipt
-  /// is not touched.
-  Future<void> _printEditSlip(OrderWithItems parent, String adjustmentId) async {
+  /// is not touched. [depositKobo] is printed as at checkout, on top of the
+  /// goods; the stored header never carries it (ADR 0035).
+  Future<void> _printEditSlip(
+    OrderWithItems parent,
+    String adjustmentId,
+    int depositKobo,
+  ) async {
     final rows = await ref
         .read(orderServiceProvider)
         .watchAdjustmentsWithLines(parent.order.id)
@@ -1418,7 +1453,14 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     final adj = match.first;
     await _printReceipt(
       context,
-      OrderWithItems(adj.adjustment, adj.lines, parent.customer),
+      OrderWithItems(
+        adj.adjustment.copyWith(
+          totalAmountKobo: adj.adjustment.totalAmountKobo + depositKobo,
+          crateDepositPaidKobo: depositKobo,
+        ),
+        adj.lines,
+        parent.customer,
+      ),
       slipTitle: 'Edit slip - ${adj.adjustment.orderNumber}',
     );
   }
@@ -1988,43 +2030,122 @@ class _RefundWindowGateState extends ConsumerState<_RefundWindowGate> {
 /// #712 — "Returned: …" lines on the parent sale: one per part return, with the
 /// adjustment's own number. Renders nothing for a sale with no part return, so
 /// an ordinary card is unchanged.
-class _ReturnedLines extends ConsumerWidget {
-  final String orderId;
+class _ReturnedLines extends StatelessWidget {
+  final List<SaleAdjustmentLines> adjustments;
   final bool showMoney;
 
-  const _ReturnedLines({required this.orderId, required this.showMoney});
+  const _ReturnedLines({required this.adjustments, required this.showMoney});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final subtextCol = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
+    if (adjustments.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: EdgeInsets.only(
+        left: context.getRSize(13),
+        top: context.getRSize(4),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final a in adjustments)
+            Text(
+              adjustmentSummary(a, showMoney: showMoney),
+              style: context.regularStyle(12).copyWith(color: subtextCol),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The card's item rows, the "Returned: …" lines and "+N more". Added goods
+/// join their product's row (#732); a sale with no adjustment reads its items.
+class _OrderItemRows extends ConsumerWidget {
+  final OrderWithItems orderWithItems;
+  final bool canSeeMoney;
+
+  const _OrderItemRows({
+    required this.orderWithItems,
+    required this.canSeeMoney,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final t = Theme.of(context);
-    final subtextCol = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
-    return StreamBuilder<
-      List<({OrderData adjustment, List<OrderItemDataWithProductData> lines})>
-    >(
-      stream: ref.read(orderServiceProvider).watchAdjustmentsWithLines(orderId),
+    final order = orderWithItems.order;
+    final isSale = order.kind == 'sale';
+    return StreamBuilder<List<SaleAdjustmentLines>>(
+      stream: isSale
+          ? ref.read(orderServiceProvider).watchAdjustmentsWithLines(order.id)
+          : null,
       builder: (context, snap) {
-        final adjs = snap.data ?? const [];
-        if (adjs.isEmpty) return const SizedBox.shrink();
-        return Padding(
-          padding: EdgeInsets.only(
-            left: context.getRSize(13),
-            top: context.getRSize(4),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (final a in adjs)
-                Text(
-                  '${a.lines.any((l) => l.item.quantity > 0) ? 'Edited' : 'Returned'}: ${[
-                    for (final l in a.lines)
-                      '${formatQty(-l.item.quantity)} × ${l.displayName}',
-                  ].join(', ')}'
-                  '${showMoney ? ' · ${formatCurrency(-a.adjustment.netAmountKobo / 100.0)}' : ''}'
-                  ' · ${a.adjustment.orderNumber}',
-                  style: context.regularStyle(12).copyWith(color: subtextCol),
+        final adjustments = snap.data ?? const <SaleAdjustmentLines>[];
+        final t = Theme.of(context);
+        final textCol = t.colorScheme.onSurface;
+        final subtextCol = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
+        final rows = saleCardRows(orderWithItems.items, adjustments);
+        // Items display — show first 2, then "+N more"
+        final displayRows = rows.length > 2 ? rows.sublist(0, 2) : rows;
+        final extraCount = rows.length - displayRows.length;
+        return Column(
+          children: [
+            ...displayRows.map((row) {
+              return Padding(
+                padding: EdgeInsets.only(bottom: context.getRSize(4)),
+                child: Row(
+                  children: [
+                    Container(
+                      width: context.getRSize(5),
+                      height: context.getRSize(5),
+                      margin: EdgeInsets.only(right: context.getRSize(8)),
+                      decoration: BoxDecoration(
+                        color: subtextCol,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        row.label,
+                        style: context.mediumStyle(13).copyWith(color: textCol),
+                      ),
+                    ),
+                    if (canSeeMoney)
+                      Text(
+                        formatCurrency(row.totalKobo / 100.0),
+                        style: context
+                            .semiBoldStyle(13)
+                            .copyWith(color: textCol),
+                      ),
+                  ],
                 ),
-            ],
-          ),
+              );
+            }),
+            if (isSale)
+              _ReturnedLines(
+                adjustments: adjustments,
+                showMoney: canSeeMoney,
+              ),
+            if (extraCount > 0)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    left: context.getRSize(13),
+                    top: context.getRSize(2),
+                  ),
+                  child: Text(
+                    '+$extraCount more item${extraCount > 1 ? 's' : ''}',
+                    style: context
+                        .regularStyle(12)
+                        .copyWith(
+                          color: subtextCol,
+                          fontStyle: FontStyle.italic,
+                        ),
+                  ),
+                ),
+              ),
+          ],
         );
       },
     );
@@ -2119,7 +2240,6 @@ class _OrderCard extends ConsumerWidget {
 
     final order = orderWithItems.order;
     final customer = orderWithItems.customer;
-    final items = orderWithItems.items;
 
     // §19.3: roles below Manager see items + quantities only — no monetary
     // values (line prices, total, paid, discount, wallet-debt) anywhere on the
@@ -2180,10 +2300,6 @@ class _OrderCard extends ConsumerWidget {
     final dateStr = _formatDate(time);
     final timeStr =
         '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-
-    // Items display — show first 2, then "+N more"
-    final displayItems = items.length > 2 ? items.sublist(0, 2) : items;
-    final extraCount = items.length - displayItems.length;
 
     final radius = BorderRadius.circular(AppSpacing.borderRadiusL);
 
@@ -2423,73 +2539,9 @@ class _OrderCard extends ConsumerWidget {
                               context.getRSize(12),
                               0,
                             ),
-                            child: Column(
-                              children: [
-                                ...displayItems.map((richItem) {
-                                  final item = richItem.item;
-                                  return Padding(
-                                    padding: EdgeInsets.only(
-                                      bottom: context.getRSize(4),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          width: context.getRSize(5),
-                                          height: context.getRSize(5),
-                                          margin: EdgeInsets.only(
-                                            right: context.getRSize(8),
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: subtextCol,
-                                            shape: BoxShape.circle,
-                                          ),
-                                        ),
-                                        Expanded(
-                                          child: Text(
-                                            '${formatQty(item.quantity)}× ${richItem.displayName}',
-                                            style: context
-                                                .mediumStyle(13)
-                                                .copyWith(color: textCol),
-                                          ),
-                                        ),
-                                        if (canSeeMoney)
-                                          Text(
-                                            formatCurrency(
-                                              item.totalKobo / 100.0,
-                                            ),
-                                            style: context
-                                                .semiBoldStyle(13)
-                                                .copyWith(color: textCol),
-                                          ),
-                                      ],
-                                    ),
-                                  );
-                                }),
-                                if (order.kind == 'sale')
-                                  _ReturnedLines(
-                                    orderId: order.id,
-                                    showMoney: canSeeMoney,
-                                  ),
-                                if (extraCount > 0)
-                                  Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Padding(
-                                      padding: EdgeInsets.only(
-                                        left: context.getRSize(13),
-                                        top: context.getRSize(2),
-                                      ),
-                                      child: Text(
-                                        '+$extraCount more item${extraCount > 1 ? 's' : ''}',
-                                        style: context
-                                            .regularStyle(12)
-                                            .copyWith(
-                                              color: subtextCol,
-                                              fontStyle: FontStyle.italic,
-                                            ),
-                                      ),
-                                    ),
-                                  ),
-                              ],
+                            child: _OrderItemRows(
+                              orderWithItems: orderWithItems,
+                              canSeeMoney: canSeeMoney,
                             ),
                           ),
 
