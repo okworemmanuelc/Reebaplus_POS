@@ -99,7 +99,7 @@ adjustment (`OrdersDao.editCompletedSale`) holding the DIFFERENCE:
   (the cloud RPC accepts it and still checks the sale is `completed`).
 - Reports: `computeSalesSplitKobo` files an adjustment's plus lines under Sales
   and minus lines (+ discount share) under Returns, on the adjustment's day.
-- Cloud `0248` makes the recost replay count adjustment PLUS lines (0247 skipped
+- Cloud `0249` makes the recost replay count adjustment PLUS lines (0247 skipped
   all adjustments). Not deployed.
 - Edit slip: `buildReceiptLines(slipTitle:)` stamps "EDIT SLIP - ORD-..." (text
   print only). Out of scope: price edits, customer/store change, van sales adds.

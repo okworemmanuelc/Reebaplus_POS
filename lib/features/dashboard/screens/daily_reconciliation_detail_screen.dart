@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/core/utils/perf_log.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -173,11 +174,14 @@ class _DailyReconciliationDetailScreenState
     final start = widget.start;
     final endExclusive = widget.endExclusive;
     final title = widget.title;
-    final d = computeReconData(
-      ref,
-      start: start,
-      endExclusive: endExclusive,
-      isCeo: isCeo,
+    final d = perfLog(
+      'recon ${grouping.name} build',
+      () => computeReconData(
+        ref,
+        start: start,
+        endExclusive: endExclusive,
+        isCeo: isCeo,
+      ),
     );
 
     // The day close's basis (#191, ADR 0022): the BUSINESS-WIDE figures, so one
@@ -198,12 +202,15 @@ class _DailyReconciliationDetailScreenState
     // the frozen figure set, so this changes no number today; it removes the way
     // one could start to.
     final dayCloseBasis = _isFinishedDay
-        ? computeReconData(
-            ref,
-            start: start,
-            endExclusive: endExclusive,
-            isCeo: true,
-            businessWide: true,
+        ? perfLog(
+            'recon ${grouping.name} day-close basis',
+            () => computeReconData(
+              ref,
+              start: start,
+              endExclusive: endExclusive,
+              isCeo: true,
+              businessWide: true,
+            ),
           )
         : null;
     if (dayCloseBasis != null) {

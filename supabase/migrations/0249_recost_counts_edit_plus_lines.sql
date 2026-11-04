@@ -1,4 +1,4 @@
--- 0248_recost_counts_edit_plus_lines.sql
+-- 0249_recost_counts_edit_plus_lines.sql
 --
 -- #713 (PRD #707 slice 6, ADR 0035 addendum): an edited sale's adjustment can
 -- carry PLUS lines (added goods, positive quantity) that draw FIFO layers like a
@@ -97,7 +97,7 @@ BEGIN
                         extensions.uuid_ns_url(), 'cancel_restore:' || oi.id::text)
                   AND rb.business_id = p_business_id)))
     AND o.van_trip_id IS NULL                                      -- #142 delta
-    -- 0247 (#712): a sale ADJUSTMENT's minus lines are not sales. 0248 (#713):
+    -- 0247 (#712): a sale ADJUSTMENT's minus lines are not sales. 0249 (#713):
     -- but an edit's PLUS lines (quantity > 0) ARE sales: they drew FIFO layers
     -- at the time, so the replay must consume them too.
     AND (o.kind = 'sale' OR oi.quantity > 0);

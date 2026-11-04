@@ -7,6 +7,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:reebaplus_pos/core/utils/perf_log.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/online_orders/online_order_answer.dart';
 import 'package:reebaplus_pos/core/services/cloud_transport.dart';
@@ -3246,6 +3247,7 @@ class SupabaseSyncService {
     // the field armed for the realtime path to append into.
     _fkOrphanedRows = <String, List<Map<String, dynamic>>>{};
     Map<String, List<Map<String, dynamic>>>? orphanedRows;
+    final saveClock = PerfClock();
     try {
       for (final table in restoreList) {
         final data = snapshot[table]!;
@@ -3262,8 +3264,12 @@ class SupabaseSyncService {
         // byte-for-byte preserved. Only a genuinely fatal (rethrown) error rolls
         // the table back, which already aborts the pull and forces a full
         // re-pull next time, so no row is lost.
-        await _db.transaction(
-          () => _restoreTableData(table, data, fkSkipped: fkSkipped),
+        await perfLogAsync(
+          'sync-save $table',
+          () => _db.transaction(
+            () => _restoreTableData(table, data, fkSkipped: fkSkipped),
+          ),
+          extra: '${data.length} rows',
         );
         restoreDone++;
         rowsDone += data.length;
@@ -3277,6 +3283,10 @@ class SupabaseSyncService {
     } finally {
       orphanedRows = _fkOrphanedRows;
       _fkOrphanedRows = null;
+      saveClock.log(
+        'sync-save TOTAL',
+        extra: '$rowsDone/$rowsTotal rows, $restoreDone tables',
+      );
     }
     // §3.7 targeted parent fetch (A2): before holding the cursor for a full
     // re-pull, try to heal FK-orphans inline — fetch just the missing

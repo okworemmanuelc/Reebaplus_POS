@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/core/utils/perf_log.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -258,7 +259,11 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
     final orders = ref.watch(allOrdersProvider).valueOrNull ?? const [];
     // #195 — the §12.1 active store, the viewer's confinement and the van
     // exclusion, in the one predicate the Daily Reconciliation uses.
-    final data = _compute(orders, _period, reconStoreFilter(ref));
+    final data = perfLog(
+      'profit compute $_period',
+      () => _compute(orders, _period, reconStoreFilter(ref)),
+      extra: '${orders.length} orders',
+    );
     final hasCostedData = data.products.isNotEmpty;
     final hasAnySales = hasCostedData || data.uncostedItems > 0;
 

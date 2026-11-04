@@ -949,6 +949,51 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
+  /// **Van-return empties** (#726): credit the SOURCE warehouse pool with the
+  /// [quantity] empties a driver brought back, linked to [tripId] and
+  /// [driverUserId] through the row's `reason`. Same `adjusted` movement as the
+  /// Empties Exchange, so the pool derivation (ADR 0020) needs no change.
+  ///
+  /// [eventId] is the `van_return_events` row this credit belongs to and keys a
+  /// DETERMINISTIC ledger id, so a retry or a second device replaying the same
+  /// return mints the same row and the cloud primary-key upsert collapses it.
+  /// Returns false (writing nothing) when that row already exists. No own
+  /// transaction: the caller is inside the return's.
+  Future<bool> creditVanReturnEmpties({
+    required String manufacturerId,
+    required double quantity,
+    required String storeId,
+    required String tripId,
+    required String driverUserId,
+    required String eventId,
+    required String performedBy,
+  }) async {
+    if (quantity <= 0) return false;
+    final id = UuidV7.deterministic('crate_pool:van_return:$eventId');
+    final existing = await (select(
+      crateLedger,
+    )..where((l) => l.id.equals(id))).getSingleOrNull();
+    if (existing != null) return false;
+    await _movePoolProjection(
+      manufacturerId,
+      storeId: storeId,
+      delta: quantity,
+    );
+    await _appendPoolLedgerRow(
+      manufacturerId: manufacturerId,
+      storeId: storeId,
+      quantityDelta: quantity,
+      movementType: kCrateMovementAdjusted,
+      performedBy: performedBy,
+      reason: vanReturnEmptiesReason(
+        tripId: tripId,
+        driverUserId: driverUserId,
+      ),
+      idKey: 'van_return:$eventId',
+    );
+    return true;
+  }
+
   /// The crates still credited to the pool by [orderId]'s Empties Exchange, per
   /// brand: exchange rows net of their reversals. Business scoped.
   Future<Map<String, double>> exchangeEmptiesForOrder(String orderId) async {
@@ -3211,10 +3256,13 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     int? ratePerCrateKobo,
     String? reason,
     String? idSeed,
+    String? idKey,
   }) async {
     final ledgerComp = CrateLedgerCompanion.insert(
       id: Value(
-        orderId == null
+        idKey != null
+            ? UuidV7.deterministic('crate_pool:$idKey')
+            : orderId == null
             ? UuidV7.generate()
             : UuidV7.deterministic(
                 'crate_pool:$orderId:$manufacturerId:${idSeed ?? movementType}',

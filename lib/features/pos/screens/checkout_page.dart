@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/core/utils/perf_log.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:share_plus/share_plus.dart';
@@ -1406,37 +1407,40 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         }
       }
 
-      final orderNo = await ref
-          .read(orderServiceProvider)
-          .addOrder(
-            customerId: _initialCustomer?.id,
-            cart: widget.cart,
-            totalAmountKobo: totalKobo,
-            amountPaidKobo: amountPaidKobo,
-            paymentType: paymentLabel,
-            staffId: auth.currentUser?.id,
-            storeId: storeId,
-            // §13.4 Ring 3/6 — the per-brand deposit captured above. The total
-            // (sum) tags the order as non-revenue; the map drives createOrder's
-            // held-deposit wallet leg + order_crate_lines + issued gating. Both
-            // are 0/empty unless the deposit applies (registered + Cash/Transfer).
-            crateDepositPaidKobo: _depositTotalKobo,
-            crateDepositPaidByManufacturer: _depositApplies
-                ? Map<String, int>.from(_depositByMfr)
-                : const {},
-            // #649 — netted inside the sale's transaction: it decides the
-            // status and leaves only outstanding crates on the order.
-            cratesReturnedByManufacturer: _emptiesReturned,
-            discountKobo: _discountTotalKobo,
-            // 'wallet' debits the whole total from the wallet (no cash lands);
-            // 'cash' covers Cash / Transfer and Credit Sale — the entered amount
-            // (0 for a credit sale) credits the wallet, netting against the total.
-            paymentSubType: paymentSubType,
-            walletBalanceKobo: oldWalletKobo,
-            // #431 — a Cart sent to the till from an accepted Online Order:
-            // the sale marks it Sent out, in the same transaction.
-            onlineOrderId: CartService.onlineOrderIdOf(widget.cart),
-          );
+      final orderNo = await perfLogAsync(
+        'confirm-payment save',
+        () => ref
+            .read(orderServiceProvider)
+            .addOrder(
+              customerId: _initialCustomer?.id,
+              cart: widget.cart,
+              totalAmountKobo: totalKobo,
+              amountPaidKobo: amountPaidKobo,
+              paymentType: paymentLabel,
+              staffId: auth.currentUser?.id,
+              storeId: storeId,
+              // §13.4 Ring 3/6 — the per-brand deposit captured above. The total
+              // (sum) tags the order as non-revenue; the map drives createOrder's
+              // held-deposit wallet leg + order_crate_lines + issued gating. Both
+              // are 0/empty unless the deposit applies (registered + Cash/Transfer).
+              crateDepositPaidKobo: _depositTotalKobo,
+              crateDepositPaidByManufacturer: _depositApplies
+                  ? Map<String, int>.from(_depositByMfr)
+                  : const {},
+              // #649 — netted inside the sale's transaction: it decides the
+              // status and leaves only outstanding crates on the order.
+              cratesReturnedByManufacturer: _emptiesReturned,
+              discountKobo: _discountTotalKobo,
+              // 'wallet' debits the whole total from the wallet (no cash lands);
+              // 'cash' covers Cash / Transfer and Credit Sale — the entered amount
+              // (0 for a credit sale) credits the wallet, netting against the total.
+              paymentSubType: paymentSubType,
+              walletBalanceKobo: oldWalletKobo,
+              // #431 — a Cart sent to the till from an accepted Online Order:
+              // the sale marks it Sent out, in the same transaction.
+              onlineOrderId: CartService.onlineOrderIdOf(widget.cart),
+            ),
+      );
 
       // ── Success Flow ────────────────────────────────────────────────
       // #605 — read AFTER the order is written so the crate balance includes it.
@@ -1809,7 +1813,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         ReceiptPaperSize paperSize,
       ) async => ThermalReceiptService.buildReceipt(
         printStyle: await printer.currentPrintStyle(),
-            receiptSize: await printer.currentReceiptSize(),
+        receiptSize: await printer.currentReceiptSize(),
         orderId: _currentOrderId,
         cart: widget.cart,
         subtotal: widget.subtotal,
