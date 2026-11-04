@@ -326,7 +326,8 @@ void main() {
       expect(await debt(m), 10);
       await edit(id, add: [EditAddedLine(productId: p, quantity: 5)], paid: 500000);
       expect(await debt(m), 15, reason: 'the 5 added crates are issued');
-      await edit(id, newQty: 7);
+      // #732 — the editor's quantity is everything on the sale: 15 down to 12.
+      await edit(id, newQty: 12);
       expect(await debt(m), 12, reason: '3 of the original crates came back');
       expect(await inv(p), 100 - 10 - 5 + 3);
     });

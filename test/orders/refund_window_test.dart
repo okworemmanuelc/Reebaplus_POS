@@ -201,8 +201,15 @@ void main() {
           reason: 'brought one back',
           staffId: staffId,
           deviceTag: 'TESTAB');
-      await db.ordersDao.returnCompletedSale(
-          orderId: id, reason: 'rest', staffId: staffId);
+      // #732 — the rest is a final adjustment, never the full Return.
+      final rest = (await db.ordersDao.returnableQtyByLine(id))[lid]!;
+      await db.ordersDao.returnPartOfSale(
+          orderId: id,
+          qtyByLineId: {lid: rest},
+          reason: 'rest',
+          staffId: staffId,
+          deviceTag: 'TESTAB');
+      expect((await db.ordersDao.returnableQtyByLine(id))[lid], 0);
     });
 
     test('full Return goes through', () async {
