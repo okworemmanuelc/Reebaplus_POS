@@ -159,7 +159,7 @@ class _RecordDriverPaymentSheetState
   Widget build(BuildContext context) {
     final semantic = Theme.of(context).extension<AppSemanticColors>()!;
     final balanceKobo = ref
-        .watch(driverBalanceProvider(widget.trip.driverUserId))
+        .watch(tripOwnerBalanceProvider(widget.trip.id))
         .valueOrNull;
     final stores =
         ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[];

@@ -57,7 +57,7 @@ class DriverPaymentsScreen extends ConsumerWidget {
         const <DriverLedgerEntryData>[];
     final balanceKobo = trip == null
         ? null
-        : ref.watch(driverBalanceProvider(trip.driverUserId)).valueOrNull;
+        : ref.watch(tripOwnerBalanceProvider(tripId)).valueOrNull;
 
     return GlassyScaffold(
       title: 'Driver Payments',

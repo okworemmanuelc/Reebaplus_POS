@@ -117,7 +117,7 @@ void main() {
     );
     final load = await db.vanTripsDao.dispatchLoad(
       vanStoreId: vanId,
-      driverUserId: driverId,
+      vanDriverId: driverId,
       sourceStoreId: warehouseId,
       performedBy: managerId,
       dispatchEventId: UuidV7.generate(),
@@ -186,7 +186,7 @@ void main() {
       final credit = credits.single;
       expect(credit.id, result.ledgerEntryId);
       expect(credit.type, kDriverLedgerTypePaymentCash);
-      expect(credit.driverUserId, driverId);
+      expect(credit.vanDriverId, driverId);
       expect(credit.tripId, tripId);
       expect(credit.amountKobo, 90000000, reason: 'stored as a magnitude');
       expect(

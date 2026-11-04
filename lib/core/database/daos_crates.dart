@@ -950,8 +950,8 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
   }
 
   /// **Van-return empties** (#726): credit the SOURCE warehouse pool with the
-  /// [quantity] empties a driver brought back, linked to [tripId] and
-  /// [driverUserId] through the row's `reason`. Same `adjusted` movement as the
+  /// [quantity] empties a driver brought back, linked to [tripId] through the
+  /// row's `reason`. Same `adjusted` movement as the
   /// Empties Exchange, so the pool derivation (ADR 0020) needs no change.
   ///
   /// [eventId] is the `van_return_events` row this credit belongs to and keys a
@@ -964,7 +964,6 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
     required double quantity,
     required String storeId,
     required String tripId,
-    required String driverUserId,
     required String eventId,
     required String performedBy,
   }) async {
@@ -985,10 +984,7 @@ class CratePoolDao extends DatabaseAccessor<AppDatabase>
       quantityDelta: quantity,
       movementType: kCrateMovementAdjusted,
       performedBy: performedBy,
-      reason: vanReturnEmptiesReason(
-        tripId: tripId,
-        driverUserId: driverUserId,
-      ),
+      reason: vanReturnEmptiesReason(tripId: tripId),
       idKey: 'van_return:$eventId',
     );
     return true;

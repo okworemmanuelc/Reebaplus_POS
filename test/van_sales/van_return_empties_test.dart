@@ -112,7 +112,7 @@ void main() {
   Future<String> load() async {
     final r = await db.vanTripsDao.dispatchLoad(
       vanStoreId: vanId,
-      driverUserId: driverId,
+      vanDriverId: driverId,
       sourceStoreId: warehouseId,
       performedBy: managerId,
       dispatchEventId: UuidV7.generate(),
@@ -178,7 +178,7 @@ void main() {
     expect(rows.single.manufacturerId, starBrand);
     final link = parseVanReturnEmptiesReason(rows.single.reason)!;
     expect(link.tripId, tripId);
-    expect(link.driverUserId, driverId);
+    expect(link.driverUserId, isNull, reason: '#748: the reason names the trip only');
   });
 
   test('a retried return credits the warehouse once', () async {

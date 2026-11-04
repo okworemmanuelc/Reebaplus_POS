@@ -27,6 +27,7 @@ import 'package:reebaplus_pos/core/crates/crate_shortfall.dart';
 import 'package:reebaplus_pos/core/crates/manufacturer_crate_position.dart';
 import 'package:reebaplus_pos/core/data/marketplace_categories.dart';
 import 'package:reebaplus_pos/core/industry/industry.dart';
+import 'package:reebaplus_pos/core/utils/name_case.dart';
 // #427: the Online Order answer vocabulary (decline reasons, link choice).
 import 'package:reebaplus_pos/core/online_orders/online_order_answer.dart';
 import 'package:reebaplus_pos/core/online_orders/online_order_slip.dart';

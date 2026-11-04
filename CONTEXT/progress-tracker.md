@@ -7,6 +7,14 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #748: A driver is a plain name; each driver's debt is their own (2026-11-04, branch `feat/748-standalone-van`)
+- Drift v108 + cloud `0251_van_drivers.sql`: new synced `van_drivers`; `stores.van_driver_id`, `van_trips.van_driver_id`, ledger `van_store_id` + `van_driver_id`; `driver_user_id` nullable on trips and ledger (real table rebuilds), old drivers backfilled to `van_drivers` (id = old user id). A van loads with no driver.
+- Balance/history/payments key on the driver; a ledger row follows its trip's current driver (assign later moves the debt, no amount edited); driverless trips = "No driver assigned" per van. One open trip per van; per-driver open rule dropped. Reason `van_return:<tripId>` (old form parses).
+- Screens: Drivers list/profile read `van_drivers` with Add driver, No driver assigned group, Set/Change driver on a trip, Assign to a van; Load Van driver box optional with inline add.
+- NO TESTS WERE RUN (owner instruction). Tests written, unexecuted: `van_standalone_test`, `van_drivers_pull_test`, v107 to v108 block in `migration_upgrade_test`; existing van tests updated for the new API. `flutter analyze` clean.
+- Deploy: apply 0251 BEFORE v108 clients push. pos-parity issue for reebaplus-web drafted in the PR (web #233/#237 assumed a driver user id); not yet opened.
+
+
 ### Issue #684: Smooth screens S3 — Daily Reconciliation period list from light reads (2026-11-04, branch `feat/684-recon-periods-list`, based on the unmerged #683 branch: merge #683 first)
 - The list screen builds its periods from `ReconListFacts` (`reconListFactsProvider`): one light row per sale line (status, created/cancelled dates, cancel reason, store, quantity) via `OrdersDao.getSaleDayLines`, and one per count session (store, business date, saved time, shortage units) via `StockCountsDao.getCountListFacts`. No whole orders, customers, products or count line JSON. The list is today's list exactly: days with a sale line in scope or a count; expense/payment/stock-only days were never listed and still are not. Rules live in the pure `reconBucketsFrom` (`buildReconBuckets` calls it; detail screen unchanged).
 - `changedReviewedDaysProvider` reads `reviewedDayRowsProvider` (each reviewed day's own rows through #683's bounded reads, stock movements in the day only via new `StockLedgerDao.getTransactionsForPeriod`) and runs the pure `changedReviewedDaysFrom`. Staff pay totals stay a small whole-table read, filed by day.

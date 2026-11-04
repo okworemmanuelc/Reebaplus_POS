@@ -477,14 +477,14 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
         .getSingleOrNull();
   }
 
-  /// The open trip [driverUserId] is out on, or null when they are not out.
+  /// The open trip [vanDriverId] is out on, or null when they are not out.
   /// Cross-van: a driver may hold at most one open trip anywhere.
-  Future<VanTripData?> openTripForDriver(String driverUserId) {
+  Future<VanTripData?> openTripForDriver(String vanDriverId) {
     return (select(vanTrips)
           ..where(
             (t) =>
                 whereBusiness(t) &
-                t.driverUserId.equals(driverUserId) &
+                t.vanDriverId.equals(vanDriverId) &
                 t.status.equals(kVanTripStatusOpen),
           )
           ..limit(1))
@@ -529,9 +529,9 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
   /// the day it went out (spec §4.2), and an open trip has no close date at all.
   /// A month-straddling run therefore sits in the month it left the yard, which
   /// is the month its load debit hit the driver's balance.
-  Stream<List<VanTripData>> watchTripsForDriver(String driverUserId) {
+  Stream<List<VanTripData>> watchTripsForDriver(String vanDriverId) {
     return (select(vanTrips)
-          ..where((t) => whereBusiness(t) & t.driverUserId.equals(driverUserId))
+          ..where((t) => whereBusiness(t) & t.vanDriverId.equals(vanDriverId))
           ..orderBy([
             (t) =>
                 OrderingTerm(expression: t.openedAt, mode: OrderingMode.desc),
@@ -553,7 +553,7 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
   /// is walk-in only (no wallet, no credit, no crate balance), so there is no
   /// customer row to join.
   Stream<List<OrderWithItems>> watchSalesWithItemsForDriver(
-    String driverUserId,
+    String vanDriverId,
   ) {
     final query =
         select(orders).join([
@@ -569,7 +569,7 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
           ])
           ..where(
             whereBusiness(orders) &
-                vanTrips.driverUserId.equals(driverUserId),
+                vanTrips.vanDriverId.equals(vanDriverId),
           )
           ..orderBy([OrderingTerm.desc(orders.createdAt)]);
 
@@ -644,6 +644,27 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
       canAcknowledge: !selfService && check.requiresAcknowledgement,
       message: check.message(driverName, secondPerson: selfService)!,
     );
+  }
+
+  /// Set or clear [vanDriverId] on [tripId] (#748), open or closed. The trip's
+  /// ledger rows resolve to their driver THROUGH the trip, so this moves the
+  /// whole run's debt to the new driver (or to "No driver assigned") without
+  /// editing a single ledger amount.
+  Future<void> assignTripDriver(String tripId, String? vanDriverId) async {
+    await transaction(() async {
+      final trip = await getTrip(tripId);
+      if (trip == null) throw StateError('Trip $tripId not found.');
+      await (update(vanTrips)
+            ..where((t) => t.id.equals(tripId) & whereBusiness(t)))
+          .write(
+            VanTripsCompanion(
+              vanDriverId: Value(vanDriverId),
+              lastUpdatedAt: Value(DateTime.now()),
+            ),
+          );
+      final row = await getTrip(tripId);
+      await db.syncDao.enqueueUpsert('van_trips', row!.toCompanion(true));
+    });
   }
 
   /// Every trip (open and closed) for one van, newest first.
@@ -902,8 +923,8 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
   /// prevents — the caller MUST generate the key once, before the first attempt,
   /// and re-use it across retries.
   ///
-  /// Throws [VanTripAlreadyOpenException] when the van or the driver already
-  /// holds an open trip, and [ArgumentError] on an empty/degenerate load.
+  /// Throws [VanTripAlreadyOpenException] when the van already holds an open
+  /// trip (#748: a driver is a plain name, so one driver may cover two vans), and [ArgumentError] on an empty/degenerate load.
   ///
   /// Duplicate product lines are COLLAPSED (quantities and shells summed, the
   /// LAST price winning) so one dispatch writes at most one lot per product —
@@ -911,7 +932,7 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
   /// constraint enforceable rather than merely intended.
   Future<VanDispatchResult> dispatchLoad({
     required String vanStoreId,
-    required String driverUserId,
+    String? vanDriverId,
     required String sourceStoreId,
     required List<VanLoadLine> lines,
     required String performedBy,
@@ -952,17 +973,6 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
               'trip before loading it again.',
         );
       }
-      final driverOpen = await openTripForDriver(driverUserId);
-      if (driverOpen != null) {
-        throw VanTripAlreadyOpenException(
-          openTripId: driverOpen.id,
-          onVan: false,
-          message:
-              'This driver is already out on a trip. Reconcile and close that '
-              'trip before sending them out again.',
-        );
-      }
-
       // 1. Open the trip. Every synced-and-defaulted column is set explicitly
       //    so the pushed row carries the id the cloud stores
       //    ([[project_synced_write_explicit_id]]).
@@ -971,7 +981,7 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
         id: Value(tripId),
         businessId: requireBusinessId(),
         vanStoreId: vanStoreId,
-        driverUserId: driverUserId,
+        vanDriverId: Value(vanDriverId),
         sourceStoreId: sourceStoreId,
         status: const Value(kVanTripStatusOpen),
         openedAt: Value(now),
@@ -985,7 +995,7 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
       final applied = await _dispatchLinesOnto(
         tripId: tripId,
         vanStoreId: vanStoreId,
-        driverUserId: driverUserId,
+        vanDriverId: vanDriverId,
         sourceStoreId: sourceStoreId,
         lines: merged,
         performedBy: performedBy,
@@ -1097,7 +1107,7 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
   _dispatchLinesOnto({
     required String tripId,
     required String vanStoreId,
-    required String driverUserId,
+    String? vanDriverId,
     required String sourceStoreId,
     required List<VanLoadLine> lines,
     required String performedBy,
@@ -1176,7 +1186,8 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
       //    here, which is what keeps the balance a clean measure of
       //    `loaded − returned − paid`.
       await db.driverLedgerDao.postEntry(
-        driverUserId: driverUserId,
+        vanStoreId: vanStoreId,
+        vanDriverId: vanDriverId,
         tripId: tripId,
         type: entryType,
         amountKobo: line.lineValueKobo,
@@ -1271,7 +1282,7 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
       final applied = await _dispatchLinesOnto(
         tripId: tripId,
         vanStoreId: trip.vanStoreId,
-        driverUserId: trip.driverUserId,
+        vanDriverId: trip.vanDriverId,
         sourceStoreId: trip.sourceStoreId,
         lines: merged,
         performedBy: performedBy,
@@ -1563,7 +1574,6 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
               quantity: line.shellsBack.toDouble(),
               storeId: trip.sourceStoreId,
               tripId: tripId,
-              driverUserId: trip.driverUserId,
               eventId: eventId,
               performedBy: performedBy,
             );
@@ -1617,7 +1627,8 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
           // 5. The ledger CREDIT — this is what moves the running balance the
           //    moment the return is logged.
           await db.driverLedgerDao.postEntry(
-            driverUserId: trip.driverUserId,
+            vanStoreId: trip.vanStoreId,
+            vanDriverId: trip.vanDriverId,
             tripId: tripId,
             type: kDriverLedgerTypeReturnGood,
             amountKobo: creditKobo,
@@ -1688,9 +1699,7 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
         consumed: consumedAll,
         totalCreditKobo: totalCredit,
         totalCostKobo: totalCost,
-        driverBalanceKoboAfter: await db.driverLedgerDao.getBalanceKobo(
-          trip.driverUserId,
-        ),
+        driverBalanceKoboAfter: await db.driverLedgerDao.balanceForTrip(trip),
         alreadyApplied: false,
       );
     });
@@ -1776,7 +1785,7 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
       credit += r.creditKobo;
       cost += r.costKobo;
     }
-    final driverUserId = (await getTrip(tripId))?.driverUserId;
+    final replayTrip = await getTrip(tripId);
     return VanReturnResult(
       tripId: tripId,
       events: rows,
@@ -1785,9 +1794,9 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
       consumed: const [],
       totalCreditKobo: credit,
       totalCostKobo: cost,
-      driverBalanceKoboAfter: driverUserId == null
+      driverBalanceKoboAfter: replayTrip == null
           ? 0
-          : await db.driverLedgerDao.getBalanceKobo(driverUserId),
+          : await db.driverLedgerDao.balanceForTrip(replayTrip),
       alreadyApplied: true,
     );
   }
@@ -2006,7 +2015,8 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
 
       // Leg 1 — the ledger CREDIT that moves the balance toward zero.
       final ledgerEntryId = await db.driverLedgerDao.postEntry(
-        driverUserId: trip.driverUserId,
+        vanStoreId: trip.vanStoreId,
+            vanDriverId: trip.vanDriverId,
         tripId: tripId,
         type: method == 'cash'
             ? kDriverLedgerTypePaymentCash
@@ -2037,9 +2047,7 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
         ledgerEntryId: ledgerEntryId,
         paymentTransactionId: paymentId,
         amountKobo: amountKobo,
-        driverBalanceKoboAfter: await db.driverLedgerDao.getBalanceKobo(
-          trip.driverUserId,
-        ),
+        driverBalanceKoboAfter: await db.driverLedgerDao.balanceForTrip(trip),
       );
     });
   }
@@ -2272,7 +2280,8 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
       }
 
       final entryId = await db.driverLedgerDao.postEntry(
-        driverUserId: trip.driverUserId,
+        vanStoreId: trip.vanStoreId,
+            vanDriverId: trip.vanDriverId,
         tripId: tripId,
         type: type,
         amountKobo: amountKobo,
@@ -2500,7 +2509,8 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
       // the driver's history reads as one correction rather than two mystery
       // movements.
       await db.driverLedgerDao.postEntry(
-        driverUserId: trip.driverUserId,
+        vanStoreId: trip.vanStoreId,
+            vanDriverId: trip.vanDriverId,
         tripId: tripId,
         type: kDriverLedgerTypeRestatement,
         amountKobo: magnitude,
@@ -2514,7 +2524,8 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
             : 'Shortage restored — a road sale was cancelled after close',
       );
       await db.driverLedgerDao.postEntry(
-        driverUserId: trip.driverUserId,
+        vanStoreId: trip.vanStoreId,
+            vanDriverId: trip.vanDriverId,
         tripId: tripId,
         type: kDriverLedgerTypeRestatement,
         amountKobo: magnitude,
@@ -2617,58 +2628,136 @@ class VanTripCloseResult {
 /// Modelled on [SupplierLedgerDao] down to the void semantics: the original is
 /// marked voided AND an opposite-sign compensating row is appended, so the
 /// balance nets out without any row ever being edited or deleted.
-@DriftAccessor(tables: [DriverLedgerEntries, VanTrips, Users])
+@DriftAccessor(tables: [DriverLedgerEntries, VanTrips, Users, VanDrivers])
 class DriverLedgerDao extends DatabaseAccessor<AppDatabase>
     with _$DriverLedgerDaoMixin, BusinessScopedDao<AppDatabase> {
   DriverLedgerDao(super.db);
 
   // ── Balances ─────────────────────────────────────────────────────────────
 
-  /// [driverUserId]'s current balance (kobo). Negative = they owe.
+  /// Which ledger rows belong to [vanDriverId] (#748). **Debt is per driver**:
+  /// a row with a trip belongs to whoever that trip's `van_driver_id` is NOW
+  /// (so re-assigning a trip moves its debt, no ledger amount edited); a row
+  /// with no trip (a payment or write-off not tied to a run) belongs to the
+  /// driver it carries.
+  Expression<bool> _ownedByDriver(DriverLedgerEntries t, String vanDriverId) {
+    final tripsOfDriver = selectOnly(vanTrips)
+      ..addColumns([vanTrips.id])
+      ..where(
+        whereBusiness(vanTrips) & vanTrips.vanDriverId.equals(vanDriverId),
+      );
+    return t.tripId.isInQuery(tripsOfDriver) |
+        (t.tripId.isNull() & t.vanDriverId.equals(vanDriverId));
+  }
+
+  /// Rows on [vanStoreId]'s trips that have NO driver — the "No driver
+  /// assigned" bucket for that van.
+  Expression<bool> _ownedByNoDriver(DriverLedgerEntries t, String vanStoreId) {
+    final tripsWithoutDriver = selectOnly(vanTrips)
+      ..addColumns([vanTrips.id])
+      ..where(
+        whereBusiness(vanTrips) &
+            vanTrips.vanStoreId.equals(vanStoreId) &
+            vanTrips.vanDriverId.isNull(),
+      );
+    return t.tripId.isInQuery(tripsWithoutDriver);
+  }
+
+  JoinedSelectStatement<HasResultSet, dynamic> _sumWhere(
+    Expression<bool> Function(DriverLedgerEntries t) owned,
+    Expression<int> sumExpr,
+  ) {
+    return selectOnly(driverLedgerEntries)
+      ..addColumns([sumExpr])
+      ..where(whereBusiness(driverLedgerEntries) & owned(driverLedgerEntries));
+  }
+
+  /// [vanDriverId]'s current balance (kobo), across ALL their trips and vans.
+  /// Negative = they owe.
   ///
   /// Voided rows are deliberately NOT filtered out: a void appends an
   /// opposite-sign compensating row, so the pair already nets to zero. Filtering
   /// as well would double-reverse it (the same rule as the wallet and supplier
   /// ledgers).
-  Future<int> getBalanceKobo(String driverUserId) async {
+  Future<int> getBalanceKobo(String vanDriverId) async {
     final sumExpr = driverLedgerEntries.signedAmountKobo.sum();
-    final query = selectOnly(driverLedgerEntries)
-      ..addColumns([sumExpr])
-      ..where(
-        whereBusiness(driverLedgerEntries) &
-            driverLedgerEntries.driverUserId.equals(driverUserId),
-      );
-    final row = await query.getSingleOrNull();
+    final row = await _sumWhere(
+      (t) => _ownedByDriver(t, vanDriverId),
+      sumExpr,
+    ).getSingleOrNull();
     return row?.read(sumExpr) ?? 0;
   }
 
-  /// Live [getBalanceKobo] — the driver chip on the Van Sales hub.
-  Stream<int> watchBalanceKobo(String driverUserId) {
+  /// Live [getBalanceKobo].
+  Stream<int> watchBalanceKobo(String vanDriverId) {
     final sumExpr = driverLedgerEntries.signedAmountKobo.sum();
-    final query = selectOnly(driverLedgerEntries)
-      ..addColumns([sumExpr])
-      ..where(
-        whereBusiness(driverLedgerEntries) &
-            driverLedgerEntries.driverUserId.equals(driverUserId),
-      );
-    return query.watchSingleOrNull().map((row) => row?.read(sumExpr) ?? 0);
+    return _sumWhere(
+      (t) => _ownedByDriver(t, vanDriverId),
+      sumExpr,
+    ).watchSingleOrNull().map((row) => row?.read(sumExpr) ?? 0);
   }
 
-  /// driverUserId → balance (kobo), for the Drivers list (#146). Drivers with
-  /// no entries at all are simply absent — the caller renders them at 0.
-  Stream<Map<String, int>> watchAllBalancesKobo() {
+  /// What [vanStoreId]'s trips with no driver owe (kobo; negative = owed).
+  Future<int> getNoDriverBalanceKobo(String vanStoreId) async {
     final sumExpr = driverLedgerEntries.signedAmountKobo.sum();
-    final query = selectOnly(driverLedgerEntries)
-      ..addColumns([driverLedgerEntries.driverUserId, sumExpr])
-      ..where(whereBusiness(driverLedgerEntries))
-      ..groupBy([driverLedgerEntries.driverUserId]);
+    final row = await _sumWhere(
+      (t) => _ownedByNoDriver(t, vanStoreId),
+      sumExpr,
+    ).getSingleOrNull();
+    return row?.read(sumExpr) ?? 0;
+  }
+
+  /// Live [getNoDriverBalanceKobo].
+  Stream<int> watchNoDriverBalanceKobo(String vanStoreId) {
+    final sumExpr = driverLedgerEntries.signedAmountKobo.sum();
+    return _sumWhere(
+      (t) => _ownedByNoDriver(t, vanStoreId),
+      sumExpr,
+    ).watchSingleOrNull().map((row) => row?.read(sumExpr) ?? 0);
+  }
+
+  /// The balance the owner of [trip] carries right now: its driver's, or the
+  /// van's no-driver bucket when the trip has none.
+  Future<int> balanceForTrip(VanTripData trip) {
+    final driverId = trip.vanDriverId;
+    return driverId != null
+        ? getBalanceKobo(driverId)
+        : getNoDriverBalanceKobo(trip.vanStoreId);
+  }
+
+  /// Live [balanceForTrip] (the payment sheet's "owes" line).
+  Stream<int> watchBalanceForTrip(VanTripData trip) {
+    final driverId = trip.vanDriverId;
+    return driverId != null
+        ? watchBalanceKobo(driverId)
+        : watchNoDriverBalanceKobo(trip.vanStoreId);
+  }
+
+  /// Every balance, resolved per owner (#748), for the Drivers list. One pass
+  /// over the ledger joined to its trip, so the trip decides ownership exactly
+  /// as [getBalanceKobo] does. Owners with no entries are simply absent.
+  Stream<DriverBalances> watchAllBalances() {
+    final query = select(driverLedgerEntries).join([
+      leftOuterJoin(
+        vanTrips,
+        vanTrips.id.equalsExp(driverLedgerEntries.tripId),
+      ),
+    ])..where(whereBusiness(driverLedgerEntries));
     return query.watch().map((rows) {
-      final out = <String, int>{};
+      final byDriver = <String, int>{};
+      final noDriverByVan = <String, int>{};
       for (final r in rows) {
-        final id = r.read(driverLedgerEntries.driverUserId);
-        if (id != null) out[id] = r.read(sumExpr) ?? 0;
+        final e = r.readTable(driverLedgerEntries);
+        final trip = r.readTableOrNull(vanTrips);
+        final owner = trip != null ? trip.vanDriverId : e.vanDriverId;
+        if (owner != null) {
+          byDriver[owner] = (byDriver[owner] ?? 0) + e.signedAmountKobo;
+        } else if (trip != null) {
+          noDriverByVan[trip.vanStoreId] =
+              (noDriverByVan[trip.vanStoreId] ?? 0) + e.signedAmountKobo;
+        }
       }
-      return out;
+      return DriverBalances(byDriver, noDriverByVan);
     });
   }
 
@@ -2692,9 +2781,24 @@ class DriverLedgerDao extends DatabaseAccessor<AppDatabase>
   /// One driver's ledger, newest first. Same deterministic tiebreak as the
   /// supplier ledger: `createdAt DESC`, then `signedAmountKobo ASC`, so a debit
   /// sorts above a credit posted in the same second.
-  Stream<List<DriverLedgerEntryData>> watchHistory(String driverUserId) {
+  Stream<List<DriverLedgerEntryData>> watchHistory(String vanDriverId) {
     return (select(driverLedgerEntries)
-          ..where((t) => whereBusiness(t) & t.driverUserId.equals(driverUserId))
+          ..where((t) => whereBusiness(t) & _ownedByDriver(t, vanDriverId))
+          ..orderBy([
+            (t) =>
+                OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
+            (t) => OrderingTerm(
+              expression: t.signedAmountKobo,
+              mode: OrderingMode.asc,
+            ),
+          ]))
+        .watch();
+  }
+
+  /// The ledger of [vanStoreId]'s trips that have no driver, newest first.
+  Stream<List<DriverLedgerEntryData>> watchNoDriverHistory(String vanStoreId) {
+    return (select(driverLedgerEntries)
+          ..where((t) => whereBusiness(t) & _ownedByNoDriver(t, vanStoreId))
           ..orderBy([
             (t) =>
                 OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
@@ -2744,7 +2848,8 @@ class DriverLedgerDao extends DatabaseAccessor<AppDatabase>
   /// other writes (a dispatch, a remittance) — a ledger row that survives a
   /// failed stock move is worse than no row at all.
   Future<String> postEntry({
-    required String driverUserId,
+    required String vanStoreId,
+    String? vanDriverId,
     String? tripId,
     required String type,
     required int amountKobo,
@@ -2771,7 +2876,8 @@ class DriverLedgerDao extends DatabaseAccessor<AppDatabase>
     final row = DriverLedgerEntriesCompanion.insert(
       id: Value(id),
       businessId: requireBusinessId(),
-      driverUserId: driverUserId,
+      vanStoreId: Value(vanStoreId),
+      vanDriverId: Value(vanDriverId),
       tripId: Value(tripId),
       type: type,
       amountKobo: amountKobo,
@@ -2789,6 +2895,20 @@ class DriverLedgerDao extends DatabaseAccessor<AppDatabase>
     await into(driverLedgerEntries).insert(row);
     await db.syncDao.enqueueUpsert('driver_ledger_entries', row);
     return id;
+  }
+
+  /// The van a legacy (v107, unattributed) row's trip ran on; throws when it
+  /// cannot be worked out, because a new row must always carry its van.
+  Future<String> _vanOfTrip(String? tripId) async {
+    final trip = tripId == null
+        ? null
+        : await (select(
+            vanTrips,
+          )..where((t) => whereBusiness(t) & t.id.equals(tripId))).getSingleOrNull();
+    if (trip == null) {
+      throw StateError('Cannot work out which van this entry belongs to.');
+    }
+    return trip.vanStoreId;
   }
 
   /// Void [entryId]: mark the original voided AND append an opposite-sign
@@ -2824,7 +2944,8 @@ class DriverLedgerDao extends DatabaseAccessor<AppDatabase>
           );
 
       await postEntry(
-        driverUserId: original.driverUserId,
+        vanStoreId: original.vanStoreId ?? await _vanOfTrip(original.tripId),
+        vanDriverId: original.vanDriverId,
         tripId: original.tripId,
         type: kDriverLedgerTypeVoid,
         amountKobo: original.amountKobo,
@@ -2846,5 +2967,131 @@ class DriverLedgerDao extends DatabaseAccessor<AppDatabase>
       );
       return true;
     });
+  }
+}
+
+/// Every driver-ledger balance, resolved per owner (#748): [byDriver] is
+/// `vanDriverId -> kobo` and [noDriverByVan] is `vanStoreId -> kobo` for trips
+/// with no driver assigned. **Negative = owed.** Absent means zero.
+class DriverBalances {
+  final Map<String, int> byDriver;
+  final Map<String, int> noDriverByVan;
+  const DriverBalances(this.byDriver, this.noDriverByVan);
+  static const empty = DriverBalances({}, {});
+}
+
+/// Van drivers (#748): a plain name and optional phone — no sign-in, no invite,
+/// not a user, not a customer. Soft-deleted only, so a former driver who still
+/// owes stays visible.
+@DriftAccessor(tables: [VanDrivers, Stores])
+class VanDriversDao extends DatabaseAccessor<AppDatabase>
+    with _$VanDriversDaoMixin, BusinessScopedDao<AppDatabase> {
+  VanDriversDao(super.db);
+
+  /// Every driver not deleted, by name.
+  Stream<List<VanDriverData>> watchAll() {
+    return (select(vanDrivers)
+          ..where((d) => whereBusiness(d) & d.isDeleted.equals(false))
+          ..orderBy([(d) => OrderingTerm(expression: d.name.lower())]))
+        .watch();
+  }
+
+  /// Every driver INCLUDING deleted ones — the Drivers list needs a deleted
+  /// driver who still owes.
+  Stream<List<VanDriverData>> watchEvery() {
+    return (select(vanDrivers)
+          ..where(whereBusiness)
+          ..orderBy([(d) => OrderingTerm(expression: d.name.lower())]))
+        .watch();
+  }
+
+  Future<VanDriverData?> getDriver(String id) {
+    return (select(
+      vanDrivers,
+    )..where((d) => whereBusiness(d) & d.id.equals(id))).getSingleOrNull();
+  }
+
+  /// Add a driver. Returns the new id. [name] is required.
+  Future<String> addDriver({required String name, String? phone}) async {
+    final clean = name.trim();
+    if (clean.isEmpty) throw ArgumentError('A driver needs a name.');
+    final id = UuidV7.generate();
+    final now = DateTime.now();
+    final row = VanDriversCompanion.insert(
+      id: Value(id),
+      businessId: requireBusinessId(),
+      name: toNameCase(clean),
+      phone: Value(_cleanPhone(phone)),
+      isDeleted: const Value(false),
+      createdAt: Value(now),
+      lastUpdatedAt: Value(now),
+    );
+    await into(vanDrivers).insert(row);
+    await db.syncDao.enqueueUpsert('van_drivers', row);
+    return id;
+  }
+
+  Future<void> updateDriver(
+    String id, {
+    required String name,
+    String? phone,
+  }) async {
+    final clean = name.trim();
+    if (clean.isEmpty) throw ArgumentError('A driver needs a name.');
+    await (update(
+      vanDrivers,
+    )..where((d) => whereBusiness(d) & d.id.equals(id))).write(
+      VanDriversCompanion(
+        name: Value(toNameCase(clean)),
+        phone: Value(_cleanPhone(phone)),
+        lastUpdatedAt: Value(DateTime.now()),
+      ),
+    );
+    await _push(id);
+  }
+
+  /// Remove a driver from the pick lists. Never deletes the row or any ledger
+  /// entry; a driver who still owes stays on the Drivers list.
+  Future<void> removeDriver(String id) async {
+    await (update(
+      vanDrivers,
+    )..where((d) => whereBusiness(d) & d.id.equals(id))).write(
+      VanDriversCompanion(
+        isDeleted: const Value(true),
+        lastUpdatedAt: Value(DateTime.now()),
+      ),
+    );
+    await _push(id);
+  }
+
+  /// Set (or clear, with null) the van's default driver. Pre-fills the next
+  /// load; open trips keep the driver they were loaded with.
+  Future<void> assignToVan(String vanStoreId, String? vanDriverId) async {
+    await (update(
+      stores,
+    )..where((s) => whereBusiness(s) & s.id.equals(vanStoreId))).write(
+      StoresCompanion(
+        vanDriverId: Value(vanDriverId),
+        lastUpdatedAt: Value(DateTime.now()),
+      ),
+    );
+    final row = await (select(stores)
+          ..where((s) => whereBusiness(s) & s.id.equals(vanStoreId)))
+        .getSingleOrNull();
+    if (row != null) {
+      await db.syncDao.enqueueUpsert('stores', row.toCompanion(true));
+    }
+  }
+
+  Future<void> _push(String id) async {
+    final row = await getDriver(id);
+    if (row != null) {
+      await db.syncDao.enqueueUpsert('van_drivers', row.toCompanion(true));
+    }
+  }
+
+  String? _cleanPhone(String? phone) {
+    final t = phone?.trim();
+    return (t == null || t.isEmpty) ? null : t;
   }
 }

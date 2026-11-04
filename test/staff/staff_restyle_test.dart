@@ -369,12 +369,21 @@ void main() {
       ) async {
         // A driver who still owes: removal asks for a typed name.
         await env.db
+            .into(env.db.vanDrivers)
+            .insert(
+              VanDriversCompanion.insert(
+                id: Value(fx.userIds['Ngozi']!),
+                businessId: env.businessId,
+                name: 'Ngozi',
+              ),
+            );
+        await env.db
             .into(env.db.driverLedgerEntries)
             .insert(
               DriverLedgerEntriesCompanion.insert(
                 id: Value(UuidV7.generate()),
                 businessId: env.businessId,
-                driverUserId: fx.userIds['Ngozi']!,
+                vanDriverId: Value(fx.userIds['Ngozi']!),
                 type: kDriverLedgerTypeLoad,
                 amountKobo: 500000,
                 signedAmountKobo: -500000,

@@ -10,26 +10,23 @@ import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/van_sales/driver_directory.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/driver_profile_screen.dart';
+import 'package:reebaplus_pos/features/van_sales/widgets/van_driver_pickers.dart';
 import 'package:reebaplus_pos/shared/widgets/app_refresh_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
 
-/// The Drivers list (#146, PRD #139 / ADR 0019, van-sales spec §9.5).
+/// The Drivers list (#146, reworked by #748; PRD #139 / ADR 0019, spec §9.5).
 ///
-/// The customers/suppliers list, for people who carry stock instead of buying
-/// it: each driver, what they currently owe, and the way through to their whole
-/// money story.
+/// Each driver, what they currently owe, and the way through to their whole
+/// money story. A driver is just a name (and optional phone): no invite, no
+/// sign-in. Debt is the DRIVER's, across every trip and every van — a new driver
+/// never inherits the last driver's debt.
 ///
-/// **Why a removed driver can still be on this list.** Offboarding must not be
-/// able to hide a debt (spec §9.5 #19). A former driver whose ledger balance is
-/// not zero stays here, badged, until it is settled or deliberately written
-/// off. The rule lives in the pure [buildDriversList]; this screen only renders
-/// it. Its other half is the guard on the removal path itself
-/// (`VanTripsDao.assertDriverOffboardable`, spec §9.5 #20) — together they mean
-/// a driver's debt cannot be made to disappear from either end.
+/// **A removed driver can still be on this list** while they owe (spec §9.5 #19):
+/// removing someone from the pick lists must not hide a debt. The rule lives in
+/// the pure [buildDriversList]. Trips that were loaded with no driver and still
+/// owe appear under "No driver assigned", one row per van.
 ///
-/// Gated `van.manage`, like the rest of the hub: a driver holds `van.sell` and
-/// never reaches this, which is what makes "a driver settles their own account"
-/// impossible by construction rather than merely unreachable (spec §9.5 #21).
+/// Gated `van.manage`, like the rest of the hub.
 class DriversListScreen extends ConsumerWidget {
   const DriversListScreen({super.key});
 
@@ -56,7 +53,12 @@ class _DriversListBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final drivers = ref.watch(vanDriverEntriesProvider);
-    final owing = drivers.where((d) => d.owes).length;
+    final noDriver = ref.watch(noDriverGroupsProvider);
+    final vanNames = {
+      for (final v in ref.watch(vansProvider)) v.id: v.name,
+    };
+    final owing = drivers.where((d) => d.owes).length + noDriver.length;
+    final isEmpty = drivers.isEmpty && noDriver.isEmpty;
 
     return GlassyScaffold(
       title: 'Drivers',
@@ -64,8 +66,15 @@ class _DriversListBody extends ConsumerWidget {
           ? null
           : '${drivers.length} ${drivers.length == 1 ? 'driver' : 'drivers'}'
                 '${owing == 0 ? '' : ' • $owing owing'}',
+      actions: [
+        IconButton(
+          tooltip: 'Add a driver',
+          icon: const Icon(Icons.person_add_alt_1),
+          onPressed: () => showAddVanDriverDialog(context, ref),
+        ),
+      ],
       body: AppRefreshWrapper(
-        child: drivers.isEmpty
+        child: isEmpty
             ? ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 children: [
@@ -74,12 +83,12 @@ class _DriversListBody extends ConsumerWidget {
                     icon: AppIcons.managerRole,
                     title: 'No drivers yet',
                     message:
-                        'Invite a staff member with the Driver role, then load '
-                        'a van for them from Van Sales.',
+                        'Tap the add button to put in a driver\'s name. A van '
+                        'can also go out with no driver at all.',
                   ),
                 ],
               )
-            : ListView.builder(
+            : ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: EdgeInsets.fromLTRB(
                   context.getRSize(16),
@@ -87,21 +96,109 @@ class _DriversListBody extends ConsumerWidget {
                   context.getRSize(16),
                   context.getRSize(24) + context.deviceBottomPadding,
                 ),
-                itemCount: drivers.length,
-                itemBuilder: (_, i) {
-                  final entry = drivers[i];
-                  return _DriverRow(
-                    entry: entry,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            DriverProfileScreen(driverUserId: entry.userId),
+                children: [
+                  for (final entry in drivers)
+                    _DriverRow(
+                      entry: entry,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              DriverProfileScreen(vanDriverId: entry.driverId),
+                        ),
                       ),
                     ),
-                  );
-                },
+                  for (final g in noDriver)
+                    _NoDriverRow(
+                      vanName: vanNames[g.vanStoreId] ?? 'Van',
+                      balanceKobo: g.balanceKobo,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => DriverProfileScreen(
+                            noDriverVanStoreId: g.vanStoreId,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
+      ),
+    );
+  }
+}
+
+/// A van's "No driver assigned" group: what its driverless trips owe.
+class _NoDriverRow extends StatelessWidget {
+  final String vanName;
+  final int balanceKobo;
+  final VoidCallback onTap;
+
+  const _NoDriverRow({
+    required this.vanName,
+    required this.balanceKobo,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final subtext = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: EdgeInsets.only(bottom: context.getRSize(12)),
+        padding: EdgeInsets.all(context.getRSize(16)),
+        decoration: BoxDecoration(
+          color: t.cardColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: t.dividerColor),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'No driver assigned',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: context.getRFontSize(16),
+                      color: t.colorScheme.onSurface,
+                    ),
+                  ),
+                  SizedBox(height: context.getRSize(4)),
+                  Text(
+                    vanName,
+                    style: TextStyle(
+                      color: subtext,
+                      fontSize: context.getRFontSize(13),
+                    ),
+                  ),
+                  SizedBox(height: context.getRSize(4)),
+                  Text(
+                    balanceKobo < 0
+                        ? 'Owes ${formatCurrency(-balanceKobo / 100)}'
+                        : 'In credit ${formatCurrency(balanceKobo / 100)}',
+                    style: TextStyle(
+                      color: balanceKobo < 0
+                          ? t.colorScheme.error
+                          : subtext,
+                      fontSize: context.getRFontSize(13),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              AppIcons.chevronRight,
+              color: subtext,
+              size: context.getRSize(20),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -165,7 +262,7 @@ class _DriverRow extends StatelessWidget {
                     children: [
                       Flexible(
                         child: Text(
-                          entry.user.name,
+                          entry.driver.name,
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: context.getRFontSize(16),
@@ -175,16 +272,16 @@ class _DriverRow extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      if (entry.standing != DriverStanding.active) ...[
+                      if (entry.isFormerDriver) ...[
                         SizedBox(width: context.getRSize(8)),
-                        DriverStandingBadge(standing: entry.standing),
+                        const RemovedDriverBadge(),
                       ],
                     ],
                   ),
-                  if ((entry.user.phone ?? '').isNotEmpty) ...[
+                  if ((entry.driver.phone ?? '').isNotEmpty) ...[
                     SizedBox(height: context.getRSize(4)),
                     Text(
-                      entry.user.phone!,
+                      entry.driver.phone!,
                       style: TextStyle(
                         color: subtext,
                         fontSize: context.getRFontSize(13),
@@ -213,25 +310,16 @@ class _DriverRow extends StatelessWidget {
   }
 }
 
-/// The "Removed" / "Suspended" pill (#146, spec §9.5 #19).
-///
-/// Public because the profile header shows the same badge: a manager who opens
-/// a former driver from the list must not lose the one fact that explains why
-/// the screen has no actions on it.
-class DriverStandingBadge extends StatelessWidget {
-  final DriverStanding standing;
-
-  const DriverStandingBadge({super.key, required this.standing});
+/// The "Removed" pill (#146, spec §9.5 #19). Public because the profile header
+/// shows the same badge: a manager who opens a removed driver from the list must
+/// not lose the one fact that explains why the screen has no actions on it.
+class RemovedDriverBadge extends StatelessWidget {
+  const RemovedDriverBadge({super.key});
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    final semantic = t.extension<AppSemanticColors>()!;
-    final (label, color) = switch (standing) {
-      DriverStanding.active => ('Driver', semantic.success),
-      DriverStanding.suspended => ('Suspended', semantic.warning),
-      DriverStanding.removed => ('Removed', t.colorScheme.error),
-    };
+    final color = t.colorScheme.error;
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: context.getRSize(8),
@@ -242,7 +330,7 @@ class DriverStandingBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        label,
+        'Removed',
         style: t.textTheme.labelSmall?.copyWith(
           color: color,
           fontWeight: FontWeight.w700,

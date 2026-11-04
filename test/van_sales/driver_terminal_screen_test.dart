@@ -50,6 +50,7 @@ VanTripData _trip() => VanTripData(
   businessId: 'biz-1',
   vanStoreId: 'van-1',
   driverUserId: 'driver-1',
+  vanDriverId: null,
   sourceStoreId: 'wh-1',
   status: kVanTripStatusOpen,
   openedAt: DateTime.now(),

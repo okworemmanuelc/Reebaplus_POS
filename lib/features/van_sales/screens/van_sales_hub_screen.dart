@@ -37,10 +37,17 @@ class VanSalesHubScreen extends ConsumerWidget {
     final openTrips =
         ref.watch(openVanTripsProvider).valueOrNull ?? const <VanTripData>[];
     final balances =
-        ref.watch(driverBalancesProvider).valueOrNull ?? const <String, int>{};
-    final users =
-        ref.watch(usersByBusinessProvider).valueOrNull ??
-        const <String, UserData>{};
+        ref.watch(driverBalancesProvider).valueOrNull ?? DriverBalances.empty;
+    final driversById = {
+      for (final d
+          in ref.watch(vanDriverRowsProvider).valueOrNull ??
+              const <VanDriverData>[])
+        d.id: d,
+    };
+    // #748: who answers for a trip. A trip with no driver says so plainly.
+    String nameOf(VanTripData t) => t.vanDriverId == null
+        ? 'No driver assigned'
+        : driversById[t.vanDriverId]?.name ?? 'Driver';
 
     // Open trip by van id — at most one each, guaranteed by the DAO block and
     // the cloud's partial-unique index.
@@ -94,10 +101,12 @@ class VanSalesHubScreen extends ConsumerWidget {
                 if (index == 0) {
                   return _DriversLink(
                     driverCount: ref.watch(vanDriverEntriesProvider).length,
-                    owingCount: ref
-                        .watch(vanDriverEntriesProvider)
-                        .where((d) => d.owes)
-                        .length,
+                    owingCount:
+                        ref
+                            .watch(vanDriverEntriesProvider)
+                            .where((d) => d.owes)
+                            .length +
+                        ref.watch(noDriverGroupsProvider).length,
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -112,12 +121,12 @@ class VanSalesHubScreen extends ConsumerWidget {
                 return _VanCard(
                   van: van,
                   trip: trip,
-                  driverName: trip == null
-                      ? null
-                      : users[trip.driverUserId]?.name ?? 'Driver',
+                  driverName: trip == null ? null : nameOf(trip),
                   driverBalanceKobo: trip == null
                       ? null
-                      : balances[trip.driverUserId] ?? 0,
+                      : trip.vanDriverId == null
+                      ? balances.noDriverByVan[trip.vanStoreId] ?? 0
+                      : balances.byDriver[trip.vanDriverId] ?? 0,
                   onLoad: trip != null
                       ? null
                       : () => Navigator.push(
@@ -133,8 +142,7 @@ class VanSalesHubScreen extends ConsumerWidget {
                           MaterialPageRoute(
                             builder: (_) => DriverPaymentsScreen(
                               tripId: trip.id,
-                              driverName:
-                                  users[trip.driverUserId]?.name ?? 'Driver',
+                              driverName: nameOf(trip),
                               vanName: van.name,
                             ),
                           ),
@@ -160,8 +168,7 @@ class VanSalesHubScreen extends ConsumerWidget {
                           MaterialPageRoute(
                             builder: (_) => VanReturnScreen(
                               trip: trip,
-                              driverName:
-                                  users[trip.driverUserId]?.name ?? 'Driver',
+                              driverName: nameOf(trip),
                               vanName: van.name,
                             ),
                           ),
@@ -174,8 +181,7 @@ class VanSalesHubScreen extends ConsumerWidget {
                           MaterialPageRoute(
                             builder: (_) => VanReconcileScreen(
                               tripId: trip.id,
-                              driverName:
-                                  users[trip.driverUserId]?.name ?? 'Driver',
+                              driverName: nameOf(trip),
                               vanName: van.name,
                             ),
                           ),

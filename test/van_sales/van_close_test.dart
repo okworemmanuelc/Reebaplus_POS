@@ -136,7 +136,7 @@ void main() {
   }) async {
     final r = await db.vanTripsDao.dispatchLoad(
       vanStoreId: van,
-      driverUserId: driver,
+      vanDriverId: driver,
       sourceStoreId: warehouseId,
       lines: [
         VanLoadLine(
