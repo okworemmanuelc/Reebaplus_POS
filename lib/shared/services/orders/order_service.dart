@@ -274,6 +274,11 @@ class OrderService {
   Stream<List<OrderWithItems>> watchAllOrdersWithItems() =>
       _queries.watchAllOrdersWithItems();
 
+  Stream<List<OrderWithItems>> watchOrdersWithItemsForEntryDays({
+    DateTime? from,
+    DateTime? to,
+  }) => _queries.watchOrdersWithItemsForEntryDays(from: from, to: to);
+
   Stream<List<OrderWithItems>> watchPendingOrdersWithItems({String? storeId}) =>
       _queries.watchPendingOrdersWithItems(storeId: storeId);
 

@@ -34,6 +34,18 @@ class OrderQueries {
     return _ordersDao.watchAllOrdersWithItems();
   }
 
+  /// #685 - only the orders that can put a report entry on a day in
+  /// `[from, to]` (see `OrdersDao.watchAllOrdersWithItems`).
+  Stream<List<OrderWithItems>> watchOrdersWithItemsForEntryDays({
+    DateTime? from,
+    DateTime? to,
+  }) {
+    return _ordersDao.watchAllOrdersWithItems(
+      entryDayFrom: from,
+      entryDayTo: to,
+    );
+  }
+
   Stream<List<OrderWithItems>> watchPendingOrdersWithItems({String? storeId}) {
     return _ordersDao.watchPendingOrdersWithItems(storeId: storeId);
   }
