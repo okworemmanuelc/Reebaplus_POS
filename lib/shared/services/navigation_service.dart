@@ -84,7 +84,8 @@ class NavigationService {
 
   final ValueNotifier<bool> drawerOpenNotifier = ValueNotifier<bool>(false);
 
-  /// How many [AppDrawer]s are mounted right now.
+  /// How many [AppDrawer]s are mounted and on screen right now. A drawer left
+  /// mid-close on a hidden tab is not counted (#764, see `DrawerPresence`).
   ///
   /// Under 600dp wide the drawer does **not** belong to MainLayout's Scaffold —
   /// every screen builds its own via [SharedScaffold], and a handful build one
@@ -97,13 +98,15 @@ class NavigationService {
   /// animating.
   int _drawersMounted = 0;
 
-  /// Called by [AppDrawer] as it mounts. Paired with [drawerDismounted].
+  /// Called by [AppDrawer] as it mounts or comes back on screen. Paired with
+  /// [drawerDismounted].
   void drawerMounted() {
     _drawersMounted++;
     if (_drawersMounted == 1) drawerOpenNotifier.value = true;
   }
 
-  /// Called by [AppDrawer] as it unmounts. Paired with [drawerMounted].
+  /// Called by [AppDrawer] as it unmounts or goes off screen. Paired with
+  /// [drawerMounted].
   void drawerDismounted() {
     if (_drawersMounted > 0) _drawersMounted--;
     if (_drawersMounted == 0) drawerOpenNotifier.value = false;
