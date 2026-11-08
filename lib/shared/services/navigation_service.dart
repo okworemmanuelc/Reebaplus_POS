@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:reebaplus_pos/shared/services/active_store_memory.dart';
@@ -84,7 +85,8 @@ class NavigationService {
 
   final ValueNotifier<bool> drawerOpenNotifier = ValueNotifier<bool>(false);
 
-  /// How many [AppDrawer]s are mounted right now.
+  /// How many [AppDrawer]s are mounted and on screen right now. A drawer left
+  /// mid-close on a hidden tab is not counted (#764, see `DrawerPresence`).
   ///
   /// Under 600dp wide the drawer does **not** belong to MainLayout's Scaffold —
   /// every screen builds its own via [SharedScaffold], and a handful build one
@@ -97,13 +99,15 @@ class NavigationService {
   /// animating.
   int _drawersMounted = 0;
 
-  /// Called by [AppDrawer] as it mounts. Paired with [drawerDismounted].
+  /// Called by [AppDrawer] as it mounts or comes back on screen. Paired with
+  /// [drawerDismounted].
   void drawerMounted() {
     _drawersMounted++;
     if (_drawersMounted == 1) drawerOpenNotifier.value = true;
   }
 
-  /// Called by [AppDrawer] as it unmounts. Paired with [drawerMounted].
+  /// Called by [AppDrawer] as it unmounts or goes off screen. Paired with
+  /// [drawerMounted].
   void drawerDismounted() {
     if (_drawersMounted > 0) _drawersMounted--;
     if (_drawersMounted == 0) drawerOpenNotifier.value = false;
@@ -355,7 +359,11 @@ class NavigationService {
       return;
     }
 
-    // Step 2: pop nested screen within the current tab
+    // Step 2: go back from the inner screen on the current tab. `maybePop`,
+    // not `pop`, so the screen's own PopScope is honoured exactly as its
+    // on-screen back arrow honours it (#764): Checkout refuses to be left
+    // while a sale is saving (`canPop: !_isProcessing`), and `pop` walked
+    // straight past that, leaving a cart that could be sold twice.
     final tabNav =
         tabNavigatorKeys.isNotEmpty &&
             currentIndex.value < tabNavigatorKeys.length
@@ -363,7 +371,7 @@ class NavigationService {
         : null;
 
     if (tabNav != null && tabNav.canPop()) {
-      tabNav.pop();
+      unawaited(tabNav.maybePop());
       return;
     }
 
