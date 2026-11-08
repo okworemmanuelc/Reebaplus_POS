@@ -40,7 +40,8 @@ PlanLimits limitsForPlan(String? plan) => switch (plan) {
     maxStaff: null,
     warehouseAllowed: true,
   ),
-  _ => const PlanLimits(maxStores: 1, maxStaff: 1, warehouseAllowed: false),
+  // Free = owner + 1 staff (raised from owner-only in migration 0255).
+  _ => const PlanLimits(maxStores: 1, maxStaff: 2, warehouseAllowed: false),
 };
 
 /// The plan whose limits apply right now. Mirrors `business_effective_plan()`:

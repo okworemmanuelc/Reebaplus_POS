@@ -9,7 +9,7 @@ void main() {
   group('limitsForPlan', () {
     test('free / basic / premium match business_plan_limits()', () {
       final f = limitsForPlan(kPlanFree);
-      expect((f.maxStores, f.maxStaff, f.warehouseAllowed), (1, 1, false));
+      expect((f.maxStores, f.maxStaff, f.warehouseAllowed), (1, 2, false));
       final b = limitsForPlan(kPlanBasic);
       expect((b.maxStores, b.maxStaff, b.warehouseAllowed), (1, 5, false));
       final p = limitsForPlan(kPlanPremium);
@@ -17,9 +17,9 @@ void main() {
     });
 
     test('unknown or legacy plan names are treated as free', () {
-      expect(limitsForPlan('local').maxStaff, 1);
+      expect(limitsForPlan('local').maxStaff, 2);
       expect(limitsForPlan('international').maxStores, 1);
-      expect(limitsForPlan(null).maxStaff, 1);
+      expect(limitsForPlan(null).maxStaff, 2);
     });
   });
 
@@ -50,6 +50,14 @@ void main() {
     test('inactive is free', () {
       expect(eff('inactive', kPlanPremium, future, future), kPlanFree);
     });
+  });
+
+  test('planSummary: Free allows the owner plus one staff', () {
+    expect(planSummary(kPlanFree), '1 store, up to 2 staff');
+    expect(
+      planLimitMessage(PlanLimitKind.staff, plan: kPlanFree),
+      contains('allows 2 staff accounts'),
+    );
   });
 
   test('pricesInNaira follows default_currency', () {
@@ -107,9 +115,10 @@ void main() {
         isNull,
       );
     });
-    test('staff counts the owner: free blocks any invite, basic the 6th', () {
+    test('staff counts the owner: free blocks the 3rd, basic the 6th', () {
+      expect(checkAddStaff(limitsForPlan(kPlanFree), currentStaff: 1), isNull);
       expect(
-        checkAddStaff(limitsForPlan(kPlanFree), currentStaff: 1),
+        checkAddStaff(limitsForPlan(kPlanFree), currentStaff: 2),
         PlanLimitKind.staff,
       );
       expect(checkAddStaff(limitsForPlan(kPlanBasic), currentStaff: 4), isNull);
@@ -147,13 +156,13 @@ void main() {
         (id: ids[i], createdAt: t0.add(Duration(days: i))),
     ];
 
-    test('free pauses everyone but the owner, even a newer owner', () {
+    test('free keeps the owner + 1 longest-serving, even a newer owner', () {
       final paused = pausedStaffIds(
         limitsForPlan(kPlanFree),
         activeStaff: items(['a', 'b', 'owner']),
         ownerIds: {'owner'},
       );
-      expect(paused, {'a', 'b'});
+      expect(paused, {'b'});
     });
     test('basic keeps owner + 4 longest-serving', () {
       final paused = pausedStaffIds(

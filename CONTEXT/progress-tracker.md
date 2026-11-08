@@ -7,6 +7,11 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Free plan allows 2 staff accounts (2026-11-08, branch `feat/free-plan-two-staff`, web parity reebaplus-web#245)
+- Owner decision: every shop on Free (all new shops) can have the owner + 1 staff. Migration `0255_free_plan_two_staff.sql` changes only `business_plan_limits('free')` (max_staff 1 → 2); the 0238 add/activate guard and the 0230 pause sweep both read it. App `limitsForPlan` mirrors it; the paywall summary now reads "1 store, up to 2 staff". Existing Free shops get the same allowance.
+- Phones on older builds still block the 2nd staff invite on the device until they update (the device pre-check uses the old limit); the server already allows it once 0255 is live.
+- Cause of the "still asks to upgrade" report: the console saved a shop as Active while its plan stayed Free (Active + Free = Free limits). Shop fixed on prod (Premium). Console editor fixed in reebaplus-web PR #246 (merged).
+
 ### Issue #767: Customer Details no longer crashes when closed mid-load (2026-11-08, branch `fix/767-customer-detail-ref`)
 - Cause: `_loadReversalOrderNumbers` read `ref.read(databaseProvider)` from a stream callback; Riverpod invalidates `ref` before `State.mounted` flips, so leaving the screen mid-load threw `StateError` (25 fatal prod reports, 1.0.9+9).
 - Fix: `customer_detail_screen.dart` captures the database, customer service and printer service in `initState` (AutoLockWrapper pattern) and uses them after any `await`; the receipt print reads its business values before its first `await`.
