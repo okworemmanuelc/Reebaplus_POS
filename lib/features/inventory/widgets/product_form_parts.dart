@@ -128,9 +128,14 @@ class ProductPhotoBox extends StatelessWidget {
     this.pendingBytes,
     this.existingPath,
     this.onRemove,
+    this.busy = false,
   });
 
   final Uint8List? pendingBytes;
+
+  /// Spins over the box, which ignores taps, while a picked photo is being
+  /// shrunk (#763).
+  final bool busy;
 
   /// The saved photo's local file, shown until a new one is picked (Edit
   /// Product, #487 PR 4).
@@ -165,7 +170,7 @@ class ProductPhotoBox extends StatelessWidget {
                 borderRadius: radius,
                 clipBehavior: Clip.antiAlias,
                 child: InkWell(
-                  onTap: onPick,
+                  onTap: busy ? null : onPick,
                   child: bytes != null
                       ? Image.memory(bytes, fit: BoxFit.cover)
                       : saved != null
@@ -204,7 +209,19 @@ class ProductPhotoBox extends StatelessWidget {
               ),
             ),
           ),
-          if (bytes != null && onRemove != null)
+          if (busy)
+            Positioned.fill(
+              child: ClipRRect(
+                borderRadius: radius,
+                child: Container(
+                  key: const Key('product-photo-box-busy'),
+                  color: Colors.black38,
+                  alignment: Alignment.center,
+                  child: const CircularProgressIndicator(),
+                ),
+              ),
+            ),
+          if (bytes != null && onRemove != null && !busy)
             PositionedDirectional(
               top: 0,
               end: 0,

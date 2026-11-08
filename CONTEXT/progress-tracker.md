@@ -7,6 +7,11 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #763: Product photos: crash on add, no loading, no camera (2026-11-08, branch `fix/763-product-photo-camera-crash`)
+- Crash cause: `pickImage(imageQuality: 90)` makes `image_picker_android` decode the whole photo (its sample size never reads the photo's size), so a 50–108 MP photo runs out of memory; then `package:image` decoded it again on the UI thread (freeze, frozen spinner). Native, so nothing in `error_logs`.
+- Fix: Android picks with no quality/size; `ProductImageService.shrinkPicked` decodes via `instantiateImageCodecWithSize` to ≤800px (EXIF upright) + `encodePremultipliedRgbaJpeg` on `Isolate.run`. iOS keeps q90 + 1600px native cap.
+- Camera: `choosePhotoSource` sheet (Take photo / Choose from gallery) on Add/Edit Product, Product Details photo, shop-photos card. Spinners: `ProductPhotoBox.busy`; the shop-photos card is busy from the moment a source is chosen; Add Product now sets `suppressNextResume`.
+- Tests: `product_photo_shrink_test.dart` (9), `product_photo_tap_lock_test.dart` (4, updated for the sheet). Related photo + golden files: 193 pass. Owner phone check owed: camera on a real phone, a 50 MP+ photo.
 ### Issue #764: Phone back button stops working after using the side menu (2026-11-08, branch `fix/764-back-stuck-after-menu`)
 - Cause: the menu's tab switch closes the drawer and hides its tab at once; MainLayout's `TickerMode(enabled: false)` on hidden tabs froze the close, the `AppDrawer` stayed mounted, and `handleBackPress` Step 1 kept trying to close it, so back never went back on any tab.
 - Fix: `DrawerPresence` reports to `NavigationService` (count + closer) only while `TickerMode.valuesOf(context).enabled`; a drawer frozen off screen is not counted; it counts again if its tab comes back mid-close.

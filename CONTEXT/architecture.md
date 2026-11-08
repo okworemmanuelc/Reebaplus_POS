@@ -74,7 +74,12 @@ path):
   product photos in bucket `product-images` at `<businessId>/<productId>.jpg`
   (JPEG q80, ≤800px, transparency flattened onto white — #340; pre-#340
   objects are `.png`; a save leaves them in place — only an explicit photo
-  delete removes them, #343). The public
+  delete removes them, #343). A picked photo (camera or gallery, #763) is
+  never decoded at full size: on Android the picker is given no quality or
+  size (asking it to shrink loads the whole photo and a 50–108 MP shot runs
+  the app out of memory), then `shrinkPicked` decodes it with the engine's
+  codec straight to ≤800px (upright from its EXIF) and JPEG-encodes it on a
+  background isolate. The public
   URL written to `products.image_url` carries `?v=<millis>`, so a replaced photo
   has a new url. The device copy (`ProductPhotoCache`) lives at
   `<appDocs>/product_images/<productId>.png` — a stable path, because the synced
