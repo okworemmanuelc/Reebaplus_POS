@@ -341,9 +341,13 @@ void main() {
       expect(NavigationService().currentIndex.value, NavigationService.posTab);
 
       // System back: first pops checkout, then closes the slide-in panel.
+      // Back goes through `maybePop` (it honours Checkout's "not while
+      // saving" guard, #764), which pops during the next frame, so the
+      // slide-out starts one frame later: one extra pump before the wait.
       await tester.binding.handlePopRoute();
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
       expect(find.byType(CheckoutPage), findsNothing);
       expect(panelShowing(), isTrue);
 

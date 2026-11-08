@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:reebaplus_pos/shared/services/active_store_memory.dart';
@@ -358,7 +359,11 @@ class NavigationService {
       return;
     }
 
-    // Step 2: pop nested screen within the current tab
+    // Step 2: go back from the inner screen on the current tab. `maybePop`,
+    // not `pop`, so the screen's own PopScope is honoured exactly as its
+    // on-screen back arrow honours it (#764): Checkout refuses to be left
+    // while a sale is saving (`canPop: !_isProcessing`), and `pop` walked
+    // straight past that, leaving a cart that could be sold twice.
     final tabNav =
         tabNavigatorKeys.isNotEmpty &&
             currentIndex.value < tabNavigatorKeys.length
@@ -366,7 +371,7 @@ class NavigationService {
         : null;
 
     if (tabNav != null && tabNav.canPop()) {
-      tabNav.pop();
+      unawaited(tabNav.maybePop());
       return;
     }
 
