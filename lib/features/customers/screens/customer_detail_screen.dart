@@ -12,6 +12,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:screenshot/screenshot.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/features/customers/data/services/customer_service.dart';
+import 'package:reebaplus_pos/shared/services/printer_service.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -83,9 +85,19 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
   StreamSubscription<List<OrderData>>? _ordersSub;
   StreamSubscription<List<CrateBalanceEntry>>? _cratesSub;
 
+  // Captured at initState: the async methods below run across `await`s and
+  // must NOT touch `ref` after them (Riverpod invalidates `ref` when the
+  // element unmounts, BEFORE State.mounted flips) — #767.
+  late final AppDatabase _db;
+  late final CustomerService _customerService;
+  late final PrinterService _printer;
+
   @override
   void initState() {
     super.initState();
+    _db = ref.read(databaseProvider);
+    _customerService = ref.read(customerServiceProvider);
+    _printer = ref.read(printerServiceProvider);
     _tabKeys = _resolveTabKeys(
       businessTracksCrates(ref.read(currentBusinessProvider)),
     );
@@ -102,7 +114,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
       return;
     }
 
-    final db = ref.read(databaseProvider);
+    final db = _db;
 
     _customerSub = db.customersDao.watchCustomerById(id).listen((data) {
       if (mounted) setState(() => _customerData = data);
@@ -224,7 +236,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
             (t.referenceType == 'refund' || t.referenceType == 'void'))
           t.orderId!,
     };
-    final dao = ref.read(databaseProvider).walletTransactionsDao;
+    final dao = _db.walletTransactionsDao;
     final numbers = await dao.orderNumbersFor(ids);
     final adjustments = await dao.adjustmentIdsAmong(ids);
     if (mounted) {
@@ -333,7 +345,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
     }
 
     // What can actually be refunded: held deposit + positive spendable credit.
-    final db = ref.read(databaseProvider);
+    final db = _db;
     final heldKobo = await db.walletTransactionsDao.getDepositsHeldKobo(id);
     final spendableKobo = await db.walletTransactionsDao.getBalanceKobo(id);
     final depositAvail = heldKobo > 0 ? heldKobo : 0;
@@ -545,8 +557,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                           // (#194). Same store resolution as Add Credit above.
                           final storeId = ref.read(activeWriteStoreProvider).id;
                           try {
-                            final refundedKobo = await ref
-                                .read(customerServiceProvider)
+                            final refundedKobo = await _customerService
                                 .refundCashFromWallet(
                                   customerId: id,
                                   amountKobo: amountKobo,
@@ -681,8 +692,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                     if (id == null) return;
                     final messenger = ScaffoldMessenger.of(context);
                     try {
-                      await ref
-                          .read(customerServiceProvider)
+                      await _customerService
                           .updateWalletLimit(id, amount);
                       // Close only after the save, and only if this sheet is
                       // still the top route.
@@ -756,7 +766,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
     final messenger = ScaffoldMessenger.of(context);
     final name = _name;
     try {
-      await ref.read(customerServiceProvider).softDeleteCustomer(id);
+      await _customerService.softDeleteCustomer(id);
       if (!mounted) return;
       Navigator.pop(context); // back to the customers list
       messenger.showSnackBar(
@@ -822,8 +832,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
     final messenger = ScaffoldMessenger.of(context);
     final reason = reasonCtrl.text.trim();
     try {
-      final voided = await ref
-          .read(customerServiceProvider)
+      final voided = await _customerService
           .voidTopup(
             walletTxnId: txn.id,
             staffId: staffId,
@@ -876,7 +885,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
   Future<ReceiptExtras> _receiptExtrasFor(OrderData order) async {
     try {
       return await loadReceiptExtrasForOrder(
-        ref.read(databaseProvider),
+        _db,
         order,
         business: ref.read(currentBusinessProvider),
         vat: await ref.read(vatConfigProvider.future),
@@ -887,7 +896,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
   }
 
   void _showReceipt(OrderData order) async {
-    final db = ref.read(databaseProvider);
+    final db = _db;
     final itemRows = await (db.select(db.orderItems).join([
       innerJoin(db.products, db.products.id.equalsExp(db.orderItems.productId)),
     ])..where(db.orderItems.orderId.equals(order.id))).get();
@@ -1075,10 +1084,12 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
     String? storeAddress,
     Map<String, String>? manufacturerNames,
   ) async {
+    // Read before the first await (see _db note above).
+    final business = ref.read(currentBusinessProvider);
+    final businessName = ref.read(currentBusinessNameProvider);
+    final payLabel = ref.read(payOnDeliveryByOrderProvider)[order.id]?.label;
     try {
-      final granted = await ref
-          .read(printerServiceProvider)
-          .requestPermissions();
+      final granted = await _printer.requestPermissions();
       if (!granted) {
         if (!ctx.mounted) return;
         AppNotification.showError(ctx, 'Bluetooth permissions denied');
@@ -1086,7 +1097,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
       }
 
       final extras = await _receiptExtrasFor(order);
-      final printer = ref.read(printerServiceProvider);
+      final printer = _printer;
       // #200 / US 33 — same shared derivation as the on-screen reprint, so the
       // paper copy carries the identical Subtotal / Discount / Total.
       final totals = receiptTotalsFromOrder(
@@ -1107,7 +1118,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
             crateDeposit: totals.depositKobo / 100.0,
             total: totals.totalKobo / 100.0,
             paymentMethod:
-                ref.read(payOnDeliveryByOrderProvider)[order.id]?.label ??
+                payLabel ??
                 paymentMethodLabel(order.paymentType),
             customerName: _name,
             cashReceived: order.amountPaidKobo / 100.0,
@@ -1115,7 +1126,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
             orderStatus: order.status,
             refundAmount: order.amountPaidKobo / 100.0,
             storeAddress: storeAddress,
-            businessName: ref.read(currentBusinessNameProvider),
+            businessName: businessName,
             businessPhone: extras.businessPhone,
             businessEmail: extras.businessEmail,
             cashierName: extras.cashierName,
@@ -1127,9 +1138,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
             cratesTotalOwedByManufacturer:
                 extras.cratesTotalOwedByManufacturer,
             crateDepositFull: extras.crateDepositFull,
-            tracksCrates: businessTracksCrates(
-              ref.read(currentBusinessProvider),
-            ),
+            tracksCrates: businessTracksCrates(business),
             manufacturerNames: manufacturerNames,
             paperSize: paperSize,
           );
@@ -1794,7 +1803,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
       AppNotification.showError(context, 'No active session.');
       return;
     }
-    final db = ref.read(databaseProvider);
+    final db = _db;
     final manufacturers = await db.inventoryDao.getAllManufacturers();
     if (!mounted) return;
     if (manufacturers.isEmpty) {

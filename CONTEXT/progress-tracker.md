@@ -7,6 +7,10 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #767: Customer Details no longer crashes when closed mid-load (2026-11-08, branch `fix/767-customer-detail-ref`)
+- Cause: `_loadReversalOrderNumbers` read `ref.read(databaseProvider)` from a stream callback; Riverpod invalidates `ref` before `State.mounted` flips, so leaving the screen mid-load threw `StateError` (25 fatal prod reports, 1.0.9+9).
+- Fix: `customer_detail_screen.dart` captures the database, customer service and printer service in `initState` (AutoLockWrapper pattern) and uses them after any `await`; the receipt print reads its business values before its first `await`.
+- Test: `test/customers/customer_detail_dispose_mid_load_test.dart` (closes the screen mid-load, expects no exception; passes with and without the fix, so it is a guard rather than a proven repro). The screen's other tests pass.
 ### Issue #687: Smooth screens S6 - local database on Drift's background worker, behind a cloud off switch (2026-11-04, branch `feat/687-background-db`)
 - `lib/core/database/local_database_connection.dart` owns the open: `NativeDatabase.createInBackground` with one connection and no read pool; the same five PRAGMAs on both paths. `off` is the old open on the screen's thread. The worker finds SQLite the same way the main isolate does (`source: system`: `libsqlite3.so` bundled on Android, system `libsqlite3.dylib` on iOS and macOS).
 - Off switch: `app_config` key `db_background_worker` (migration 0253, seeded `on`; push is the supervisor's). `DbWorkerSwitchWatcher` reads it on launch and resume (never awaited, 1 minute gap) and remembers it in the file `.db_background_worker` beside the database. Applied only at the next open; nothing remembered, junk or a read failure means the worker. The file survives a logout wipe on purpose.
