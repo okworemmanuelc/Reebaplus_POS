@@ -613,14 +613,23 @@ class AppDrawer extends ConsumerWidget {
 // Current MainLayout directly imports screens, but keeping definitions for reference
 // or until all feature-to-drawer links are fully migrated to NvigationService.
 
-/// Reports the drawer's existence to [NavigationService] for as long as it is
-/// mounted.
+/// Reports the drawer to [NavigationService] for as long as it is mounted
+/// *and on screen*.
 ///
 /// Flutter's `DrawerController` does not build its child while the drawer is
 /// dismissed, so "an [AppDrawer] is mounted" is the same statement as "a drawer
 /// is open or animating" — and unlike `Scaffold.onDrawerChanged`, it is true
 /// wherever the drawer was declared — a screen's own Scaffold under 600dp
 /// wide, MainLayout's at 600dp+ (#352).
+///
+/// "On screen" is read from [TickerMode] (#764). The menu's tab switch closes
+/// the drawer and hides its tab in the same moment, and MainLayout turns
+/// tickers off on hidden tabs, so the close animation freezes part-way and the
+/// drawer stays mounted until that tab comes back. Counted as open, it made
+/// every back press, on every tab, try to close a drawer nobody could see, and
+/// never go back. A drawer whose tickers are off (a hidden tab, or under a
+/// covering page) is therefore not counted and not offered as the one to
+/// close; it counts again if its tab returns before it has finished closing.
 ///
 /// Both edges are deferred past the current frame: the tour's overlay listens
 /// to `drawerOpenNotifier` from a sibling `Stack` entry, and marking a sibling
@@ -635,6 +644,10 @@ class DrawerPresence extends StatefulWidget {
 }
 
 class _DrawerPresenceState extends State<DrawerPresence> {
+  /// Whether this drawer is currently reported to [NavigationService]: true
+  /// while mounted with its tickers on. See [DrawerPresence].
+  bool _reported = false;
+
   /// Closes the drawer through the Scaffold that actually declares it — this
   /// widget sits inside that Scaffold's `drawer:`, so it can reach it, while
   /// `NavigationService.mainScaffoldKey` cannot. Resolved lazily: the lookup is
@@ -648,17 +661,29 @@ class _DrawerPresenceState extends State<DrawerPresence> {
   }
 
   @override
-  void initState() {
-    super.initState();
-    frameSafe(NavigationService().drawerMounted);
-    NavigationService().registerModalDrawerCloser(_closeOwningDrawer);
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _report(TickerMode.valuesOf(context).enabled);
   }
 
   @override
   void dispose() {
-    NavigationService().unregisterModalDrawerCloser(_closeOwningDrawer);
-    frameSafe(NavigationService().drawerDismounted);
+    _report(false);
     super.dispose();
+  }
+
+  /// Moves this drawer in or out of [NavigationService]'s count and closer
+  /// list. Idempotent, so the two edges always pair up.
+  void _report(bool onScreen) {
+    if (onScreen == _reported) return;
+    _reported = onScreen;
+    if (onScreen) {
+      frameSafe(NavigationService().drawerMounted);
+      NavigationService().registerModalDrawerCloser(_closeOwningDrawer);
+    } else {
+      NavigationService().unregisterModalDrawerCloser(_closeOwningDrawer);
+      frameSafe(NavigationService().drawerDismounted);
+    }
   }
 
   @override
