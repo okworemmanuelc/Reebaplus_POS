@@ -106,8 +106,26 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadData());
   }
 
+  /// Cancels every stream. Pull-to-refresh calls [_loadData] again, so the
+  /// previous subscriptions must go first or they leak past the screen (#770).
+  void _cancelSubs() {
+    _customerSub?.cancel();
+    _balanceSub?.cancel();
+    _depositsHeldSub?.cancel();
+    _historySub?.cancel();
+    _ordersSub?.cancel();
+    _cratesSub?.cancel();
+    _customerSub = null;
+    _balanceSub = null;
+    _depositsHeldSub = null;
+    _historySub = null;
+    _ordersSub = null;
+    _cratesSub = null;
+  }
+
   void _loadData() {
     if (!mounted) return;
+    _cancelSubs();
     final id = widget.customer?.id;
     if (id == null || id.isEmpty || id == Customer.walkInId) {
       setState(() => _contentReady = true);
@@ -153,13 +171,8 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
 
   @override
   void dispose() {
+    _cancelSubs();
     _tabController.dispose();
-    _customerSub?.cancel();
-    _balanceSub?.cancel();
-    _depositsHeldSub?.cancel();
-    _historySub?.cancel();
-    _ordersSub?.cancel();
-    _cratesSub?.cancel();
     super.dispose();
   }
 
