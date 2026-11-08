@@ -26,6 +26,7 @@ import 'package:reebaplus_pos/core/result.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 
 import 'package:reebaplus_pos/shared/widgets/auto_lock_wrapper.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/photo_source_sheet.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 
@@ -742,37 +743,48 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       return;
     }
     if (_savingPhotos) return;
-    AutoLockWrapper.suppressNextResume = true;
-    final picked = await ref.read(productImageServiceProvider).pickAndProcess();
-    if (!mounted) return;
-    final Uint8List bytes;
-    switch (picked) {
-      case Ok(:final value):
-        bytes = value;
-      case Err(:final error):
-        if (!error.isCancelled) {
-          AppNotification.showError(context, 'Could not load image.');
-        }
-        return;
-    }
-    setState(() => _savingPhotos = true);
-    final result = await _galleryService().addPhoto(
-      productId: widget.item.id,
-      bytes: bytes,
-      gateContext: ref.read(gateContextProvider),
-    );
-    if (!mounted) return;
-    setState(() => _savingPhotos = false);
-    switch (result) {
-      case Ok(:final value):
-        AppNotification.showSuccess(
-          context,
-          value
-              ? 'Photo added'
-              : 'Photo saved. It uploads when you are back online.',
-        );
-      case Err(:final error):
-        AppNotification.showError(context, error.message);
+    // Held from the tap (#659); the card shows "Adding photo…" from the moment
+    // a source is chosen, through the shrink and the upload (#763).
+    _savingPhotos = true;
+    try {
+      final source = await choosePhotoSource(context);
+      if (source == null || !mounted) return;
+      setState(() {});
+      AutoLockWrapper.suppressNextResume = true;
+      final picked = await ref
+          .read(productImageServiceProvider)
+          .pickAndProcess(source: source);
+      if (!mounted) return;
+      final Uint8List bytes;
+      switch (picked) {
+        case Ok(:final value):
+          bytes = value;
+        case Err(:final error):
+          if (!error.isCancelled) {
+            AppNotification.showError(context, 'Could not load image.');
+          }
+          return;
+      }
+      final result = await _galleryService().addPhoto(
+        productId: widget.item.id,
+        bytes: bytes,
+        gateContext: ref.read(gateContextProvider),
+      );
+      if (!mounted) return;
+      switch (result) {
+        case Ok(:final value):
+          AppNotification.showSuccess(
+            context,
+            value
+                ? 'Photo added'
+                : 'Photo saved. It uploads when you are back online.',
+          );
+        case Err(:final error):
+          AppNotification.showError(context, error.message);
+      }
+    } finally {
+      _savingPhotos = false;
+      if (mounted) setState(() {});
     }
   }
 
@@ -1303,14 +1315,17 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       return;
     }
 
-    // Synchronous guard: held through the picker and the upload (#659).
+    // Synchronous guard: held through the choice, the picker and the upload
+    // (#659). The photo spins once a source is chosen (#763).
     if (_photoBusy || _sharingPhoto) return;
     _photoBusy = true;
-    setState(() {});
     try {
+      final source = await choosePhotoSource(context);
+      if (source == null || !mounted) return;
+      setState(() {});
       AutoLockWrapper.suppressNextResume = true;
       final imgSvc = ref.read(productImageServiceProvider);
-      final picked = await imgSvc.pickAndProcess();
+      final picked = await imgSvc.pickAndProcess(source: source);
       if (!mounted) return;
 
       final Uint8List bytes;

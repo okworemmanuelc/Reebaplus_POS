@@ -33,6 +33,7 @@ import 'package:reebaplus_pos/features/inventory/models/product_form_rules.dart'
 import 'package:reebaplus_pos/features/inventory/widgets/catalogue_filled_note.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/inventory_parts.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/listing_content_fields.dart';
+import 'package:reebaplus_pos/features/inventory/widgets/photo_source_sheet.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/product_details_route.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/product_form_parts.dart';
 import 'package:reebaplus_pos/features/payments/widgets/supplier_form_sheet.dart';
@@ -40,6 +41,7 @@ import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
+import 'package:reebaplus_pos/shared/widgets/auto_lock_wrapper.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
 /// Keys the Add Product tests find its boxes and buttons by (#487).
@@ -201,6 +203,13 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   bool _isNameFromCatalogue = false;
   bool _isUnitFromCatalogue = false;
   bool _isPhotoFromCatalogue = false;
+
+  /// Held from the first tap on the photo box until the picked photo is ready
+  /// (#659 tap lock), so a second tap opens nothing.
+  bool _photoPicking = false;
+
+  /// True while a picked photo is being shrunk: the photo box spins (#763).
+  bool _photoProcessing = false;
 
   /// A catalogue-suggested unit missing from the business's starter list, kept
   /// so [_loadData] re-adds it when it rebuilds [_dynamicUnits].
@@ -1367,21 +1376,37 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
   }
 
   /// Pick + process an optional product photo, held in memory until the product
-  /// is saved (#78). Cancelling or a decode error leaves the current selection.
+  /// is saved (#78). Asks camera or gallery first, and the photo box spins
+  /// while the photo is shrunk (#763). Cancelling or a decode error leaves the
+  /// current selection.
   Future<void> _pickPhoto() async {
-    final svc = ref.read(productImageServiceProvider);
-    final result = await svc.pickAndProcess();
-    if (!mounted) return;
-    switch (result) {
-      case Ok(:final value):
-        setState(() {
-          _pendingImageBytes = value;
-          _isPhotoFromCatalogue = false;
-        });
-      case Err(:final error):
-        if (!error.isCancelled) {
-          AppNotification.showError(context, 'Could not load image.');
-        }
+    if (_photoPicking) return;
+    _photoPicking = true;
+    try {
+      final source = await choosePhotoSource(context);
+      if (source == null || !mounted) return;
+      setState(() => _photoProcessing = true);
+      // Coming back from the camera or gallery is not a return from the
+      // background: no auto-lock check, no catch-up download meanwhile.
+      AutoLockWrapper.suppressNextResume = true;
+      final result = await ref
+          .read(productImageServiceProvider)
+          .pickAndProcess(source: source);
+      if (!mounted) return;
+      switch (result) {
+        case Ok(:final value):
+          setState(() {
+            _pendingImageBytes = value;
+            _isPhotoFromCatalogue = false;
+          });
+        case Err(:final error):
+          if (!error.isCancelled) {
+            AppNotification.showError(context, 'Could not load image.');
+          }
+      }
+    } finally {
+      _photoPicking = false;
+      if (mounted) setState(() => _photoProcessing = false);
     }
   }
 
@@ -1642,6 +1667,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
             ProductPhotoBox(
               pendingBytes: _pendingImageBytes,
               existingPath: _existingImagePath,
+              busy: _photoProcessing,
               onPick: _pickPhoto,
               onRemove: () => setState(() {
                 _pendingImageBytes = null;

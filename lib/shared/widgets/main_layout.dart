@@ -972,7 +972,9 @@ class _MainLayoutState extends ConsumerState<MainLayout>
     if (!onPos) return false;
     final panelNav = _panelNavigatorKey.currentState;
     if (panelNav != null && panelNav.canPop()) {
-      panelNav.pop();
+      // `maybePop` so Checkout's "not while saving" guard holds here too, as
+      // it does for its on-screen back arrow (#764).
+      unawaited(panelNav.maybePop());
       return true;
     }
     if (mode == _CartPanelMode.slideIn) {

@@ -22,6 +22,51 @@ Uint8List encodePhotoJpeg(
   return Uint8List.fromList(img.encodeJpg(flat, quality: quality));
 }
 
+/// A JPEG from premultiplied RGBA [rgba] pixels — what the engine's
+/// `Image.toByteData(format: ImageByteFormat.rawRgba)` gives — with any
+/// transparency laid onto white, as [flattenOntoWhite] does for a decoded
+/// image. The pixels are used at the size given: a picked photo is already
+/// shrunk by the engine's codec before it gets here (#763).
+///
+/// Pure and top-level, so it can run on a background isolate.
+Uint8List encodePremultipliedRgbaJpeg(
+  Uint8List rgba,
+  int width,
+  int height, {
+  int quality = kPhotoJpegQuality,
+}) {
+  final rgb = Uint8List(width * height * 3);
+  for (var i = 0, j = 0; j < rgb.length; i += 4, j += 3) {
+    // Premultiplied: a colour channel is at most its alpha, so adding the
+    // clear part as white stays within 255 (clamped in case it is not).
+    final clear = 255 - rgba[i + 3];
+    rgb[j] = (rgba[i] + clear).clamp(0, 255);
+    rgb[j + 1] = (rgba[i + 1] + clear).clamp(0, 255);
+    rgb[j + 2] = (rgba[i + 2] + clear).clamp(0, 255);
+  }
+  final image = img.Image.fromBytes(
+    width: width,
+    height: height,
+    bytes: rgb.buffer,
+    numChannels: 3,
+  );
+  return Uint8List.fromList(img.encodeJpg(image, quality: quality));
+}
+
+/// The size a [width]×[height] picture shrinks to so its longer side is at
+/// most [maxDimension] (aspect kept; never under 1px). Unchanged when it
+/// already fits.
+({int width, int height}) fitWithin(int width, int height, int maxDimension) {
+  if (width <= maxDimension && height <= maxDimension) {
+    return (width: width, height: height);
+  }
+  final ratio = width > height ? maxDimension / width : maxDimension / height;
+  return (
+    width: (width * ratio).round().clamp(1, maxDimension),
+    height: (height * ratio).round().clamp(1, maxDimension),
+  );
+}
+
 /// Returns [src] unchanged when it already fits inside [maxDimension]; else a
 /// linear-resampled copy whose longer side is exactly [maxDimension].
 img.Image resizeToFit(img.Image src, int maxDimension) {
