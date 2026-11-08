@@ -7,6 +7,11 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #763: Product photos: crash on add, no loading, no camera (2026-11-08, branch `fix/763-product-photo-camera-crash`)
+- Crash cause: `pickImage(imageQuality: 90)` makes `image_picker_android` decode the whole photo (its sample size never reads the photo's size), so a 50–108 MP photo runs out of memory; then `package:image` decoded it again on the UI thread (freeze, frozen spinner). Native, so nothing in `error_logs`.
+- Fix: Android picks with no quality/size; `ProductImageService.shrinkPicked` decodes via `instantiateImageCodecWithSize` to ≤800px (EXIF upright) + `encodePremultipliedRgbaJpeg` on `Isolate.run`. iOS keeps q90 + 1600px native cap.
+- Camera: `choosePhotoSource` sheet (Take photo / Choose from gallery) on Add/Edit Product, Product Details photo, shop-photos card. Spinners: `ProductPhotoBox.busy`; the shop-photos card is busy from the moment a source is chosen; Add Product now sets `suppressNextResume`.
+- Tests: `product_photo_shrink_test.dart` (9), `product_photo_tap_lock_test.dart` (4, updated for the sheet). Related photo + golden files: 193 pass. Owner phone check owed: camera on a real phone, a 50 MP+ photo.
 ### Issue #687: Smooth screens S6 - local database on Drift's background worker, behind a cloud off switch (2026-11-04, branch `feat/687-background-db`)
 - `lib/core/database/local_database_connection.dart` owns the open: `NativeDatabase.createInBackground` with one connection and no read pool; the same five PRAGMAs on both paths. `off` is the old open on the screen's thread. The worker finds SQLite the same way the main isolate does (`source: system`: `libsqlite3.so` bundled on Android, system `libsqlite3.dylib` on iOS and macOS).
 - Off switch: `app_config` key `db_background_worker` (migration 0253, seeded `on`; push is the supervisor's). `DbWorkerSwitchWatcher` reads it on launch and resume (never awaited, 1 minute gap) and remembers it in the file `.db_background_worker` beside the database. Applied only at the next open; nothing remembered, junk or a read failure means the worker. The file survives a logout wipe on purpose.

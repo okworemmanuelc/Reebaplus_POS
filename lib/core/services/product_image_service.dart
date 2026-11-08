@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, visibleForTesting;
 import 'package:flutter/painting.dart' show FileImage;
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
@@ -57,20 +60,91 @@ class ProductImageService {
 
   // ── Pick + resize ──────────────────────────────────────────────────────────
 
-  /// Opens the image picker (gallery), decodes, and returns a ≤800×800 JPEG
-  /// (transparency flattened onto white). Returns [Result.err] if the user
-  /// cancels or the image can't be decoded.
+  /// Whether this device can take a photo with the camera from inside the app
+  /// (#763). False on desktop, where only a file can be chosen.
+  static bool get cameraAvailable {
+    try {
+      return ImagePicker().supportsImageSource(ImageSource.camera);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Opens the camera or the gallery ([source]) and returns the photo as a
+  /// ≤800×800 JPEG (transparency flattened onto white), via [shrinkPicked].
+  /// Returns [Result.err] if the user cancels or the image can't be decoded.
+  ///
+  /// On Android the picker is asked for no quality or size (#763). Asking it
+  /// to shrink or re-compress makes it load the whole photo at full size first
+  /// (its downsampling never reads the photo's size), and a 50–108 MP phone
+  /// photo then runs the app out of memory and kills it. Untouched, it simply
+  /// hands back the file. iOS shrinks natively without that cost, so it keeps
+  /// its limits (and its conversion of HEIC photos to JPEG).
   Future<Result<Uint8List, AppError>> pickAndProcess({
     ImageSource source = ImageSource.gallery,
   }) async {
     try {
-      final picker = ImagePicker();
-      final picked = await picker.pickImage(source: source, imageQuality: 90);
+      final android = defaultTargetPlatform == TargetPlatform.android;
+      final picked = await ImagePicker().pickImage(
+        source: source,
+        imageQuality: android ? null : 90,
+        maxWidth: android ? null : _pickerMaxDimension,
+        maxHeight: android ? null : _pickerMaxDimension,
+      );
       if (picked == null) return Result.err(AppError.cancelled());
 
-      return processBytes(await picked.readAsBytes());
+      return shrinkPicked(await picked.readAsBytes());
     } catch (e) {
       return Result.err(AppError.unknown(e));
+    }
+  }
+
+  /// The iOS picker's own size cap: well above [_maxDimension], so the final
+  /// shrink still has detail to work from.
+  static const double _pickerMaxDimension = 1600;
+
+  /// Turns a picked photo's file bytes into the saved form — ≤[maxDimension]
+  /// JPEG, flattened onto white — without ever holding the full-size picture
+  /// or blocking the screen (#763). The engine's codec decodes straight to
+  /// the reduced size (JPEGs are decoded at 1/2, 1/4 or 1/8 scale, never full
+  /// size) and turns the photo upright from its EXIF; the JPEG encode runs on
+  /// a background isolate, so a spinner keeps turning meanwhile.
+  static Future<Result<Uint8List, AppError>> shrinkPicked(
+    Uint8List raw, {
+    int maxDimension = _maxDimension,
+  }) async {
+    ui.Codec? codec;
+    ui.Image? image;
+    try {
+      codec = await ui.instantiateImageCodecWithSize(
+        await ui.ImmutableBuffer.fromUint8List(raw),
+        getTargetSize: (w, h) {
+          final size = fitWithin(w, h, maxDimension);
+          return ui.TargetImageSize(width: size.width, height: size.height);
+        },
+      );
+      image = (await codec.getNextFrame()).image;
+      final width = image.width;
+      final height = image.height;
+      final pixels = await image.toByteData(
+        format: ui.ImageByteFormat.rawRgba,
+      );
+      if (pixels == null) {
+        return Result.err(AppError.io('Could not decode image.'));
+      }
+      final rgba = pixels.buffer.asUint8List(
+        pixels.offsetInBytes,
+        pixels.lengthInBytes,
+      );
+      final jpeg = await Isolate.run(
+        () => encodePremultipliedRgbaJpeg(rgba, width, height),
+      );
+      return Result.ok(jpeg);
+    } catch (_) {
+      return Result.err(AppError.io('Could not decode image.'));
+    } finally {
+      image?.dispose();
+      codec?.dispose();
     }
   }
 
