@@ -7,6 +7,10 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #774: Same-name products in the cart (Coke 35cl PET vs Bottle) (2026-11-10, branch `fix/774-cart-same-name-lines`)
+- Cause: `CartService.addItem` matched lines by product id + name, but `updateQty`, `setLineDiscount`, `setCustomPrice` and `removeItem` matched by name only. With two same-name products, edits landed on the first line (the edit sheet's Save copied one line's qty/price/discount onto the other) and Remove deleted both (Undo restored one).
+- Fix: all four now take `(productId, productName)` and go through one `_isLine` check (id + name; Quick Sale lines have a null id). Callers in the cart screen, Edit Item sheet and Product Details pass the line's id.
+- Tests: `test/pos/cart_custom_price_test.dart` group "same-name products (#774)" (price, qty, discount, remove + undo each hit only the tapped line); existing cart test call sites updated.
 ### Free plan allows 2 staff accounts (2026-11-08, branch `feat/free-plan-two-staff`, web parity reebaplus-web#245)
 - Owner decision: every shop on Free (all new shops) can have the owner + 1 staff. Migration `0255_free_plan_two_staff.sql` changes only `business_plan_limits('free')` (max_staff 1 → 2); the 0238 add/activate guard and the 0230 pause sweep both read it. App `limitsForPlan` mirrors it; the paywall summary now reads "1 store, up to 2 staff". Existing Free shops get the same allowance.
 - Phones on older builds still block the 2nd staff invite on the device until they update (the device pre-check uses the old limit); the server already allows it once 0255 is live.

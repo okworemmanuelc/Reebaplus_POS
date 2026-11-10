@@ -115,6 +115,7 @@ void main() {
     fillMockupCart(cart, crates: crates);
     if (crates) {
       cart.setLineDiscount(
+        null,
         'Star Lager',
         kind: 'naira',
         enteredValue: 500,

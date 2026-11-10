@@ -884,7 +884,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
     final qty = (item['qty'] as num).toDouble();
     final applied = ref
         .read(cartProvider)
-        .updateQty(item['name'] as String, qty + 1);
+        .updateQty(item['id'] as String?, item['name'] as String, qty + 1);
     if (!applied && mounted) {
       final cap = Qty.sellable(
         (item['maxStock'] as num?)?.toDouble() ?? CartService.noCap,
@@ -905,7 +905,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
     final cart = ref.read(cartProvider);
     if (qty <= 1) {
       final removed = Map<String, dynamic>.from(item);
-      cart.removeItem(item['name'] as String);
+      cart.removeItem(item['id'] as String?, item['name'] as String);
       AppNotification.showAction(
         context,
         'Item removed.',
@@ -914,7 +914,7 @@ class _CartScreenState extends ConsumerState<CartScreen>
       );
       return;
     }
-    cart.updateQty(item['name'] as String, qty - 1);
+    cart.updateQty(item['id'] as String?, item['name'] as String, qty - 1);
   }
 
   /// Everything the cart's money display AND the checkout hand-off are computed

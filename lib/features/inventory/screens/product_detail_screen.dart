@@ -1473,7 +1473,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                       '$actorName deleted product: $productName$writeOffNote',
                       productId: productId,
                     );
-                ref.read(cartProvider).removeItem(productName);
+                ref.read(cartProvider).removeItem(productId, productName);
                 if (!context.mounted) return;
                 Navigator.pop(ctx);
                 Navigator.pop(context);

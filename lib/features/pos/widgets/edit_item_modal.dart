@@ -529,7 +529,7 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                         // update if the product is already in the cart, else add.
                         final exists = cart.value.any((i) => i['id'] == id);
                         final accepted = exists
-                            ? cart.updateQty(widget.item['name'], qtyVal)
+                            ? cart.updateQty(id, widget.item['name'], qtyVal)
                             : cart.addItem(
                                 widget.newProduct!,
                                 qty: qtyVal,
@@ -540,6 +540,7 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                         // so the discount clamps to the new line total (§13.4).
                         if (canSetCustomPrice) {
                           cart.setCustomPrice(
+                            widget.item['id'],
                             widget.item['name'],
                             customPriceKobo: hasCustomPrice ? customKobo : null,
                             maxPercent: maxPercent,
@@ -549,6 +550,7 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                         if (discountKobo > 0) {
                           final entered = _enteredDiscount();
                           cart.setLineDiscount(
+                            widget.item['id'],
                             widget.item['name'],
                             kind: _discountKind,
                             enteredValue: entered,
@@ -572,7 +574,9 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                       variant: AppButtonVariant.danger,
                       icon: AppIcons.delete,
                       onPressed: () {
-                        ref.read(cartProvider).removeItem(widget.item['name']);
+                        ref
+                            .read(cartProvider)
+                            .removeItem(widget.item['id'], widget.item['name']);
                         // Return the removed line so the cart can offer Undo.
                         Navigator.pop(context, widget.item);
                       },
@@ -586,11 +590,16 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                       variant: AppButtonVariant.primary,
                       onPressed: qtyError != null ? null : () {
                         final cart = ref.read(cartProvider);
-                        cart.updateQty(widget.item['name'], _typedQty);
+                        cart.updateQty(
+                          widget.item['id'],
+                          widget.item['name'],
+                          _typedQty,
+                        );
                         // Apply (or clear) the custom price before the discount
                         // so the discount clamps to the new line total (§13.4).
                         if (canSetCustomPrice) {
                           cart.setCustomPrice(
+                            widget.item['id'],
                             widget.item['name'],
                             customPriceKobo: hasCustomPrice ? customKobo : null,
                             maxPercent: maxPercent,
@@ -599,6 +608,7 @@ class _EditItemModalState extends ConsumerState<EditItemModal> {
                         // Persist the resolved (role-capped) discount alongside qty.
                         final entered = _enteredDiscount();
                         cart.setLineDiscount(
+                          widget.item['id'],
                           widget.item['name'],
                           kind: _discountKind,
                           enteredValue: entered,

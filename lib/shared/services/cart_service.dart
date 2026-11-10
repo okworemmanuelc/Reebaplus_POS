@@ -173,9 +173,7 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
     final bool allowParts = _allowsParts(product);
 
     final current = List<Map<String, dynamic>>.from(_userCarts[_cartKey] ?? []);
-    final index = current.indexWhere(
-      (item) => item['id'] == id && item['name'] == name,
-    );
+    final index = _indexOfLine(current, id, name);
 
     // Determine the existing qty (0 if not yet in cart) and clamp.
     final double existingQty = index != -1
@@ -207,6 +205,22 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
     value = List.from(current);
     return fullyAccepted;
   }
+
+  /// Whether [item] is the cart line for [productId] + [productName]. A line
+  /// is identified by product id AND name, as [addItem] merges them: products
+  /// can share a name (Coke 35cl PET vs Bottle, #774) and Quick Sale lines
+  /// carry no product id. Every edit and remove goes through this.
+  static bool _isLine(
+    Map<String, dynamic> item,
+    String? productId,
+    String productName,
+  ) => item['id'] == productId && item['name'] == productName;
+
+  static int _indexOfLine(
+    List<Map<String, dynamic>> lines,
+    String? productId,
+    String productName,
+  ) => lines.indexWhere((item) => _isLine(item, productId, productName));
 
   /// Whether [product] (a [ProductData] or a Quick-Sale Map) sells in parts.
   static bool _allowsParts(dynamic product) => product is ProductData
@@ -316,9 +330,9 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
   /// or whole numbers when the product's switch is off). Returns true if the
   /// requested [newQty] was applied as-is, false if it was changed (or the item
   /// wasn't found).
-  bool updateQty(String productName, double newQty) {
+  bool updateQty(String? productId, String productName, double newQty) {
     final current = List<Map<String, dynamic>>.from(_userCarts[_cartKey] ?? []);
-    final index = current.indexWhere((item) => item['name'] == productName);
+    final index = _indexOfLine(current, productId, productName);
     if (index == -1) return false;
 
     if (newQty <= 0) {
@@ -361,6 +375,7 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
   /// If [maxPercent] is provided, enforces that the effective unit price after
   /// discount does not fall below the custom price floor (Option A).
   void setLineDiscount(
+    String? productId,
     String productName, {
     required String kind,
     required double enteredValue,
@@ -368,7 +383,7 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
     int? maxPercent,
   }) {
     final current = List<Map<String, dynamic>>.from(_userCarts[_cartKey] ?? []);
-    final index = current.indexWhere((item) => item['name'] == productName);
+    final index = _indexOfLine(current, productId, productName);
     if (index == -1) return;
 
     final lineTotal = lineGrossKobo(current[index]);
@@ -406,12 +421,13 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
   /// [maxPercent] is the user's role-based maximum discount percentage, used to
   /// enforce the custom price floor: `floor = round(catalogPrice * (100 - maxPercent) / 100)`.
   void setCustomPrice(
+    String? productId,
     String productName, {
     required int? customPriceKobo,
     required int maxPercent,
   }) {
     final current = List<Map<String, dynamic>>.from(_userCarts[_cartKey] ?? []);
-    final index = current.indexWhere((item) => item['name'] == productName);
+    final index = _indexOfLine(current, productId, productName);
     if (index == -1) return;
     final catalogKobo =
         (current[index]['catalogPriceKobo'] as int?) ??
@@ -451,10 +467,12 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
     value = List.from(current);
   }
 
-  void removeItem(String productName) {
-    final current = List<Map<String, dynamic>>.from(
-      _userCarts[_cartKey] ?? [],
-    ).where((item) => item['name'] != productName).toList();
+  /// Removes the ONE cart line for [productId] + [productName]. Two products
+  /// can share a name (Coke 35cl PET and Coke 35cl Bottle, #774), so the name
+  /// alone never identifies a line.
+  void removeItem(String? productId, String productName) {
+    final current = List<Map<String, dynamic>>.from(_userCarts[_cartKey] ?? [])
+      ..removeWhere((item) => _isLine(item, productId, productName));
     _userCarts[_cartKey] = current;
     value = List.from(current);
   }
@@ -465,7 +483,7 @@ class CartService extends ValueNotifier<List<Map<String, dynamic>>> {
   void restoreLine(Map<String, dynamic> item) {
     final current = List<Map<String, dynamic>>.from(_userCarts[_cartKey] ?? []);
     final exists = current.any(
-      (i) => i['id'] == item['id'] && i['name'] == item['name'],
+      (i) => _isLine(i, item['id'] as String?, item['name'] as String),
     );
     if (exists) return;
     current.add(Map<String, dynamic>.from(item));
