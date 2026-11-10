@@ -257,8 +257,9 @@ void main() {
   test('(h) qty, discounts and custom prices survive a sync', () async {
     final p = await readProduct(beerId);
     cart.addItem(p, qty: 4);
-    cart.setCustomPrice(p.name, customPriceKobo: 75000, maxPercent: 50);
+    cart.setCustomPrice(p.id, p.name, customPriceKobo: 75000, maxPercent: 50);
     cart.setLineDiscount(
+      p.id,
       p.name,
       kind: 'naira',
       enteredValue: 100,

@@ -91,16 +91,16 @@ void main() {
       final p = await product();
       expect(cart.addItem(p, qty: 0.5, maxStock: 10), isTrue);
       expect(cart.value.single['qty'], 0.5);
-      expect(cart.updateQty(p.name, 0.25), isTrue);
+      expect(cart.updateQty(p.id, p.name, 0.25), isTrue);
       expect(cart.value.single['qty'], 0.25);
-      expect(cart.updateQty(p.name, 1.75), isTrue);
+      expect(cart.updateQty(p.id, p.name, 1.75), isTrue);
       expect(cart.value.single['qty'], 1.75);
     });
 
     test('a value off the grid snaps down, and says it changed', () async {
       final p = await product();
       cart.addItem(p, qty: 1, maxStock: 10);
-      expect(cart.updateQty(p.name, 1.3), isFalse);
+      expect(cart.updateQty(p.id, p.name, 1.3), isFalse);
       expect(cart.value.single['qty'], 1.25);
     });
 
@@ -109,7 +109,7 @@ void main() {
       expect(cart.addItem(p, qty: 1, maxStock: 1.5), isTrue);
       expect(cart.addItem(p, qty: 1, maxStock: 1.5), isFalse);
       expect(cart.value.single['qty'], 1.5);
-      expect(cart.updateQty(p.name, 3), isFalse);
+      expect(cart.updateQty(p.id, p.name, 3), isFalse);
       expect(cart.value.single['qty'], 1.5);
     });
 
@@ -125,14 +125,14 @@ void main() {
       final p = await product(allowParts: false);
       expect(cart.addItem(p, qty: 1.5, maxStock: 10), isFalse);
       expect(cart.value.single['qty'], 1);
-      expect(cart.updateQty(p.name, 2.5), isFalse);
+      expect(cart.updateQty(p.id, p.name, 2.5), isFalse);
       expect(cart.value.single['qty'], 2);
     });
 
     test('a part below one keeps the line at one, never removes it', () async {
       final p = await product(allowParts: false);
       cart.addItem(p, qty: 2, maxStock: 10);
-      expect(cart.updateQty(p.name, 0.5), isFalse);
+      expect(cart.updateQty(p.id, p.name, 0.5), isFalse);
       expect(cart.value.single['qty'], 1);
     });
 
@@ -188,12 +188,13 @@ void main() {
       final p = await product();
       cart.addItem(p, qty: 1, maxStock: 10);
       cart.setLineDiscount(
+        p.id,
         p.name,
         kind: 'naira',
         enteredValue: 900,
         discountKobo: 90000,
       );
-      cart.updateQty(p.name, 0.5);
+      cart.updateQty(p.id, p.name, 0.5);
       expect(cart.value.single['discountKobo'], 50000);
     });
   });

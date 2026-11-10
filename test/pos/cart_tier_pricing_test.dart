@@ -174,6 +174,7 @@ void main() {
     // retail (100000). It must clamp to the wholesale line total. If the line
     // had been mispriced at retailer, the clamp ceiling would be 90000.
     cart.setLineDiscount(
+      p.id,
       p.name,
       kind: 'naira',
       enteredValue: 900,

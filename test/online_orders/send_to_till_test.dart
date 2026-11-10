@@ -344,7 +344,7 @@ void main() {
     // The same beer ×3 sent to the till from an online order.
     final id = await acceptedOrder();
     cart.loadOnlineOrder((await db.onlineOrdersDao.tillLoad(id))!);
-    cart.removeItem('Eva Water');
+    cart.removeItem(waterId, 'Eva Water');
     final online = await crates(await checkout(customer: customerId));
 
     expect(online.lines, hasLength(till.lines.length));

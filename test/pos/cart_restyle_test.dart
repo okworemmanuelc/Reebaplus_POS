@@ -113,6 +113,7 @@ void main() {
   void Function(CartService) fullFixture({Customer? customer}) => (cart) {
     fillMockupCart(cart, crates: true);
     cart.setLineDiscount(
+      null,
       'Star Lager',
       kind: 'naira',
       enteredValue: 500,

@@ -211,6 +211,7 @@ void main() {
             qty: 2,
           );
           cart.setLineDiscount(
+            null,
             'Star Lager',
             kind: 'naira',
             enteredValue: 500,
