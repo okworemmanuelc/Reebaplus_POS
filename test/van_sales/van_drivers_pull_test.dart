@@ -50,7 +50,13 @@ void main() {
     await sync.restoreTableDataForTesting('van_trips', [
       {'id': trip, 'business_id': businessId, 'van_store_id': van,
        'driver_user_id': user, 'source_store_id': wh, 'status': 'open',
-       'created_at': ts(), 'last_updated_at': ts(), 'opened_at': ts()},
+       'created_at': ts(), 'last_updated_at': ts(), 'opened_at': ts(),
+       // A real cloud row carries every NOT NULL DEFAULT column (0162); only
+       // the #748 columns are absent from an old-cloud row.
+       'closed_with_balance': false, 'shells_out': 0, 'shells_back': 0,
+       'cogs_kobo': 0, 'recovered_kobo': 0, 'unremitted_kobo': 0,
+       'shortage_writeoff_kobo': 0, 'damage_writeoff_kobo': 0,
+       'shortage_loss_kobo': 0, 'damage_loss_kobo': 0, 'profit_kobo': 0},
     ]);
     final t = await (db.select(db.vanTrips)..where((x) => x.id.equals(trip)))
         .getSingleOrNull();

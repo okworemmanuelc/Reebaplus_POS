@@ -90,6 +90,13 @@ void main() {
             pin: '1111',
           ),
         );
+    await db.into(db.vanDrivers).insert(
+      VanDriversCompanion.insert(
+        id: Value(driverId),
+        businessId: businessId,
+        name: 'Driver Dan',
+      ),
+    );
     await db
         .into(db.products)
         .insert(
@@ -498,6 +505,13 @@ void main() {
               kind: const Value(kStoreKindVan),
             ),
           );
+      await db.into(db.vanDrivers).insert(
+        VanDriversCompanion.insert(
+          id: Value(driver2),
+          businessId: businessId,
+          name: 'Driver Dee',
+        ),
+      );
       await db
           .into(db.users)
           .insert(

@@ -89,6 +89,13 @@ void main() {
             pin: '1111',
           ),
         );
+    await db.into(db.vanDrivers).insert(
+      VanDriversCompanion.insert(
+        id: Value(driverId),
+        businessId: businessId,
+        name: 'Driver Dan',
+      ),
+    );
     await db
         .into(db.products)
         .insert(

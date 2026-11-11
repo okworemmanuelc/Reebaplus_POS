@@ -90,6 +90,13 @@ Future<_Run> _boot() async {
           ),
         );
   }
+  await db.into(db.vanDrivers).insert(
+    VanDriversCompanion.insert(
+      id: Value(driverId),
+      businessId: boot.businessId,
+      name: 'Driver Dan',
+    ),
+  );
   await db
       .into(db.products)
       .insert(
