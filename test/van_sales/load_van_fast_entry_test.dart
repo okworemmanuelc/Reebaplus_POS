@@ -122,10 +122,13 @@ void main() {
     await settleFrames(tester);
   }
 
-  Future<void> add(WidgetTester tester, String typed, String name) async {
-    await tester.enterText(find.byKey(const Key('load-van-add')), typed);
+  /// Add one of [productId] the way staff do: open the grid, tap, Done.
+  Future<void> add(WidgetTester tester, String productId) async {
+    await tester.tap(find.byKey(const Key('load-van-browse')));
     await settleFrames(tester);
-    await tester.tap(find.text(name).last);
+    await tester.tap(find.byKey(loadPickerTileKey(productId)));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('load-picker-done')));
     await settleFrames(tester);
   }
 
@@ -134,35 +137,25 @@ void main() {
       .controller!
       .text;
 
-  testWidgets('a picked item becomes a compact row, the add box clears, and '
-      'it is not offered twice', (tester) async {
+  testWidgets('the Add button opens the product grid, and a picked item '
+      'becomes a compact row', (tester) async {
     await open(tester);
-    await add(tester, 'star', 'Star Lager');
+    // One way to add: no type-a-name box any more.
+    expect(find.text('Add products'), findsOneWidget);
+    await add(tester, starId);
 
     expect(find.byKey(Key('load-qty-$starId')), findsOneWidget);
     expect(qtyOf(tester, starId), '1');
     // The price box is tucked away until Edit is tapped.
     expect(find.byKey(Key('load-price-$starId')), findsNothing);
-    // Cleared, ready for the next item.
-    final addBox = tester.widget<EditableText>(
-      find.descendant(
-        of: find.byKey(const Key('load-van-add')),
-        matching: find.byType(EditableText),
-      ),
-    );
-    expect(addBox.controller.text, isEmpty);
-
-    // Typing the same name again offers nothing to pick.
-    await tester.enterText(find.byKey(const Key('load-van-add')), 'star');
-    await settleFrames(tester);
-    expect(find.text('Star Lager'), findsOneWidget); // the row only
+    expect(find.text('Add or change products'), findsOneWidget);
     await disposeScreen(tester);
   });
 
   testWidgets('plus and minus move the quantity, never past stock or below '
       'one; typing sets it', (tester) async {
     await open(tester);
-    await add(tester, 'star', 'Star Lager');
+    await add(tester, starId);
 
     await tester.tap(find.byKey(Key('load-minus-$starId')));
     await tester.pump();
@@ -186,10 +179,10 @@ void main() {
     tester,
   ) async {
     await open(tester);
-    await add(tester, 'star', 'Star Lager');
+    await add(tester, starId);
     await tester.enterText(find.byKey(Key('load-qty-$starId')), '2');
     await tester.pump();
-    await add(tester, 'malt', 'Malta Guinness');
+    await add(tester, maltId);
     await tester.enterText(find.byKey(Key('load-qty-$maltId')), '10');
     await tester.pump();
 

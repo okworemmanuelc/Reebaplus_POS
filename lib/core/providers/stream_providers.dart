@@ -6,6 +6,7 @@ library;
 
 import 'dart:async';
 
+import 'package:rxdart/rxdart.dart';
 import 'package:drift/drift.dart' show Variable;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -1890,17 +1891,17 @@ final driverBalancesProvider = businessScopedStream<DriverBalances>(
 /// van's "No driver assigned" bucket. Follows the trip's driver live, so
 /// re-assigning the trip moves the figure. Null until the trip is known.
 final tripOwnerBalanceProvider = businessScopedStreamFamily<int?, String>(
-  (ref, db, businessId, tripId) async* {
-    await for (final trip in db.vanTripsDao.watchTrip(tripId)) {
-      if (trip == null) {
-        yield null;
-        continue;
-      }
-      // Re-read the balance whenever the trip row OR the ledger changes.
-      yield await db.driverLedgerDao.balanceForTrip(trip);
-      yield* db.driverLedgerDao.watchBalanceForTrip(trip);
-    }
-  },
+  // switchMap, not a generator: each new trip row DROPS the old balance watch
+  // and starts the new owner's. (The old `await for` + `yield*` never got past
+  // its first trip row, because the inner watch never ends, and it did not
+  // shut down cleanly when the screen closed.)
+  (ref, db, businessId, tripId) => db.vanTripsDao
+      .watchTrip(tripId)
+      .switchMap<int?>(
+        (trip) => trip == null
+            ? Stream<int?>.value(null)
+            : db.driverLedgerDao.watchBalanceForTrip(trip),
+      ),
   whenAbsent: null,
 );
 

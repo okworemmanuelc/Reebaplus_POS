@@ -118,23 +118,31 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
     return false;
   }
 
-  void _addProduct(String productId, String productName) {
-    if (_lines.any((l) => l.productId == productId)) {
-      AppNotification.showError(
-        context,
-        '$productName is already on this return — edit its count.',
-      );
-      return;
-    }
-    setState(() {
+  /// Every product that went out on this trip gets a row straight away
+  /// (#790), so nobody types a name: staff only type a count beside what came
+  /// back. What a row carries is the NAME; its count stays empty (the control
+  /// in the class doc is untouched). Waits for the product list, because that
+  /// is what says whether a row's empties must be counted.
+  void _listLoaded(Map<String, String> loadedProducts) {
+    if (!ref.read(productsWithStockProvider(null)).hasValue) return;
+    final listed = {for (final l in _lines) l.productId};
+    final missing = loadedProducts.entries
+        .where((e) => !listed.contains(e.key))
+        .toList();
+    if (missing.isEmpty) return;
+    for (final e in missing) {
       _lines.add(
         _ReturnDraft(
-          productId: productId,
-          productName: productName,
-          crateTracked: _isCrateTracked(productId),
+          productId: e.key,
+          productName: e.value,
+          crateTracked: _isCrateTracked(e.key),
         ),
       );
-    });
+    }
+    _lines.sort(
+      (a, b) =>
+          a.productName.toLowerCase().compareTo(b.productName.toLowerCase()),
+    );
   }
 
   Future<void> _submit() async {
@@ -143,15 +151,20 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
       showGateDenied(context, Gates.vanManage);
       return;
     }
-    if (_lines.isEmpty) {
-      final lex = ref.read(industryLexiconProvider);
+    // Only the rows with something typed are part of this return; the rest
+    // of the list is just what is on the van.
+    final counted = [
+      for (final l in _lines)
+        if (l.quantity > 0 || (l.shellsBack ?? 0) > 0) l,
+    ];
+    if (counted.isEmpty) {
       AppNotification.showError(
         context,
-        'Add at least one ${lex.itemLower} coming back.',
+        'Type how many came back beside at least one item.',
       );
       return;
     }
-    for (final line in _lines) {
+    for (final line in counted) {
       if (line.quantity <= 0) {
         AppNotification.showError(
           context,
@@ -174,21 +187,24 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
 
     setState(() => _submitting = true);
     try {
-      final result = await ref.read(databaseProvider).vanTripsDao.recordReturn(
-        tripId: widget.trip.id,
-        performedBy: currentUser.id,
-        lines: _lines
-            .map(
-              (l) => VanReturnLine(
-                productId: l.productId,
-                quantity: l.quantity,
-                condition: l.condition,
-                shellsBack: l.shellsBack ?? 0,
-                eventId: l.eventId,
-              ),
-            )
-            .toList(growable: false),
-      );
+      final result = await ref
+          .read(databaseProvider)
+          .vanTripsDao
+          .recordReturn(
+            tripId: widget.trip.id,
+            performedBy: currentUser.id,
+            lines: counted
+                .map(
+                  (l) => VanReturnLine(
+                    productId: l.productId,
+                    quantity: l.quantity,
+                    condition: l.condition,
+                    shellsBack: l.shellsBack ?? 0,
+                    eventId: l.eventId,
+                  ),
+                )
+                .toList(growable: false),
+          );
       if (!mounted) return;
 
       AppNotification.showSuccess(
@@ -227,7 +243,9 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
     // medicines off the van, not drinks.
     final lex = ref.watch(industryLexiconProvider);
     // Empties are a Bar/Beverage concept; no other trade is asked to count them.
-    final tracksCrates = businessTracksCrates(ref.watch(currentBusinessProvider));
+    final tracksCrates = businessTracksCrates(
+      ref.watch(currentBusinessProvider),
+    );
 
     // Body guard (layer 2, hard rule #6).
     if (!Gates.vanManage.allows(ref)) {
@@ -260,8 +278,7 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
         () => names[lot.productId] ?? lex.item,
       );
     }
-    final options = loadedProducts.entries.toList()
-      ..sort((a, b) => a.value.toLowerCase().compareTo(b.value.toLowerCase()));
+    _listLoaded(loadedProducts);
 
     final recorded =
         ref.watch(vanTripReturnsProvider(widget.trip.id)).valueOrNull ??
@@ -283,48 +300,20 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
             const _CountItYourselfNote(),
             SizedBox(height: context.getRSize(16)),
 
-            Autocomplete<MapEntry<String, String>>(
-              displayStringForOption: (e) => e.value,
-              optionsBuilder: (TextEditingValue v) {
-                if (v.text.isEmpty) return const Iterable.empty();
-                final q = v.text.toLowerCase();
-                return options.where((e) => e.value.toLowerCase().contains(q));
-              },
-              onSelected: (e) => _addProduct(e.key, e.value),
-              fieldViewBuilder: (ctx, controller, focusNode, onEditingComplete) {
-                return AppInput(
-                  controller: controller,
-                  focusNode: focusNode,
-                  labelText: 'Add a ${lex.itemLower} coming back',
-                  onFieldSubmitted: (_) => onEditingComplete(),
-                  prefixIcon: Icon(
-                    AppIcons.inventory,
-                    size: 14,
-                    color: _subtext,
-                  ),
-                  hintText: options.isEmpty
-                      ? 'Nothing was loaded on this trip'
-                      : 'Start typing a ${lex.itemLower} name…',
-                  enabled: options.isNotEmpty,
-                );
-              },
-            ),
-            SizedBox(height: context.getRSize(12)),
-
             if (_lines.isEmpty)
               Padding(
                 padding: EdgeInsets.symmetric(vertical: context.getRSize(16)),
                 child: Text(
-                  'Nothing on this return yet.',
+                  'Nothing was loaded on this trip.',
                   style: t.textTheme.bodySmall?.copyWith(color: _subtext),
                 ),
               )
             else
               ..._lines.map(
                 (line) => _ReturnLineCard(
+                  key: ValueKey('return-line-${line.productId}'),
                   line: line,
                   onChanged: () => setState(() {}),
-                  onRemove: () => setState(() => _lines.remove(line)),
                 ),
               ),
 
@@ -332,6 +321,7 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
             Guarded(
               gate: Gates.vanManage,
               builder: (context, allow) => AppButton(
+                key: const Key('return-submit'),
                 text: _submitting ? 'Recording…' : 'Record Return',
                 icon: AppIcons.undo,
                 onPressed: _submitting ? null : allow(_submit),
@@ -410,18 +400,17 @@ class _CountItYourselfNote extends StatelessWidget {
   }
 }
 
-/// One line coming back: the typed count, the condition, and — for a crate
-/// business only — the shell memo.
+/// One product that is on the van: its name and an empty count box. The
+/// condition and, for a crate business, the empties box open only once a count
+/// is typed, so a van with twenty products is a short list, not twenty forms.
 class _ReturnLineCard extends StatelessWidget {
   final _ReturnDraft line;
-
   final VoidCallback onChanged;
-  final VoidCallback onRemove;
 
   const _ReturnLineCard({
+    super.key,
     required this.line,
     required this.onChanged,
-    required this.onRemove,
   });
 
   @override
@@ -429,15 +418,23 @@ class _ReturnLineCard extends StatelessWidget {
     final t = Theme.of(context);
     final semantic = t.extension<AppSemanticColors>()!;
     final subtext = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
+    final counted = line.quantity > 0;
 
     return Container(
-      margin: EdgeInsets.only(bottom: context.getRSize(10)),
-      padding: EdgeInsets.all(context.getRSize(14)),
+      margin: EdgeInsets.only(bottom: context.getRSize(8)),
+      padding: EdgeInsets.symmetric(
+        horizontal: context.getRSize(12),
+        vertical: context.getRSize(8),
+      ),
       decoration: BoxDecoration(
         color: t.colorScheme.surface.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(AppSpacing.borderRadiusM),
         border: Border.all(
-          color: line.isGood ? t.dividerColor : semantic.warning,
+          color: !counted
+              ? t.dividerColor
+              : line.isGood
+              ? t.colorScheme.primary
+              : semantic.warning,
         ),
       ),
       child: Column(
@@ -448,90 +445,107 @@ class _ReturnLineCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   line.productName,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: t.textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
-              IconButton(
-                onPressed: onRemove,
-                icon: Icon(
-                  AppIcons.close,
-                  size: context.getRSize(14),
+              SizedBox(width: context.getRSize(8)),
+              SizedBox(
+                width: context.getRSize(96),
+                child: TextField(
+                  key: Key('return-qty-${line.productId}'),
+                  // NO initial value and NO hint number: the emptiness is the
+                  // control (spec §7.3). A "0" hint would still anchor the
+                  // manager.
+                  textAlign: TextAlign.center,
+                  keyboardType: TextInputType.number,
+                  textInputAction: TextInputAction.next,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  style: t.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    hintText: 'Count',
+                    contentPadding: EdgeInsets.symmetric(
+                      vertical: context.getRSize(8),
+                    ),
+                  ),
+                  onChanged: (v) {
+                    line.quantity = int.tryParse(v.trim()) ?? 0;
+                    onChanged();
+                  },
                 ),
-                tooltip: 'Remove',
               ),
             ],
           ),
-          SizedBox(height: context.getRSize(4)),
-          AppInput(
-            labelText: line.crateTracked
-                ? 'Unsold full crates coming back'
-                : 'How many came back',
-            // NO initialValue and NO hint number: the emptiness is the control
-            // (spec §7.3). A "0" hint would still anchor the manager.
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            hintText: 'Count them',
-            onChanged: (v) {
-              line.quantity = int.tryParse(v.trim()) ?? 0;
-              onChanged();
-            },
-          ),
-          SizedBox(height: context.getRSize(12)),
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(
-                value: kVanReturnConditionGood,
-                label: Text('Good'),
-              ),
-              ButtonSegment(
-                value: kVanReturnConditionDamaged,
-                label: Text('Damaged'),
-              ),
-            ],
-            selected: {line.condition},
-            showSelectedIcon: false,
-            onSelectionChanged: (s) {
-              line.condition = s.first;
-              onChanged();
-            },
-          ),
-          SizedBox(height: context.getRSize(8)),
-          Text(
-            line.isGood
-                // The credit is FIFO over the lots (spec §9.3 #10), so the exact
-                // figure is not knowable on this screen without re-implementing
-                // the draw-down. Saying which price it uses is honest; printing
-                // a number this screen would have to guess is not.
-                ? 'Goes back into stock, and comes off what the driver owes at '
-                      'the price it was loaded at.'
-                : 'No credit — the driver still owes for these. The business '
-                      'books the loss at what the goods cost.',
-            style: t.textTheme.bodySmall?.copyWith(
-              color: line.isGood ? subtext : semantic.warning,
+          if (line.crateTracked && !counted)
+            Text(
+              'Unsold full crates',
+              style: t.textTheme.bodySmall?.copyWith(color: subtext),
             ),
-          ),
-          if (line.crateTracked) ...[
-            SizedBox(height: context.getRSize(10)),
-            AppInput(
-              // #726 — counted SEPARATELY from the full crates above, required
-              // (0 is fine), and added to the warehouse's Empties when saved.
-              labelText: 'Empty crates coming back (required)',
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              hintText: 'Count them — 0 if none',
-              onChanged: (v) {
-                line.shellsBack = int.tryParse(v.trim());
+          if (counted) ...[
+            SizedBox(height: context.getRSize(8)),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(
+                  value: kVanReturnConditionGood,
+                  label: Text('Good'),
+                ),
+                ButtonSegment(
+                  value: kVanReturnConditionDamaged,
+                  label: Text('Damaged'),
+                ),
+              ],
+              selected: {line.condition},
+              showSelectedIcon: false,
+              onSelectionChanged: (s) {
+                line.condition = s.first;
                 onChanged();
               },
             ),
-            SizedBox(height: context.getRSize(4)),
+            SizedBox(height: context.getRSize(6)),
             Text(
-              'Empties go into the warehouse\'s empty-crate count. Full crates '
-              'above go back into stock and are never counted as empties.',
-              style: t.textTheme.bodySmall?.copyWith(color: subtext),
+              line.isGood
+                  // The credit is FIFO over the lots (spec §9.3 #10), so the
+                  // exact figure is not knowable here without re-implementing
+                  // the draw-down. Saying which price it uses is honest;
+                  // printing a number this screen would have to guess is not.
+                  ? 'Goes back into stock, and comes off what the driver owes '
+                        'at the price it was loaded at.'
+                  : 'No credit — the driver still owes for these. The '
+                        'business books the loss at what the goods cost.',
+              style: t.textTheme.bodySmall?.copyWith(
+                color: line.isGood ? subtext : semantic.warning,
+              ),
             ),
+            if (line.crateTracked) ...[
+              SizedBox(height: context.getRSize(10)),
+              AppInput(
+                key: Key('return-shells-${line.productId}'),
+                // #726 — counted SEPARATELY from the full crates above,
+                // required (0 is fine), and added to the warehouse's Empties
+                // when saved.
+                labelText: 'Empty crates coming back (required)',
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                hintText: 'Count them — 0 if none',
+                onChanged: (v) {
+                  line.shellsBack = int.tryParse(v.trim());
+                  onChanged();
+                },
+              ),
+              SizedBox(height: context.getRSize(4)),
+              Text(
+                'Empties go into the warehouse\'s empty-crate count. Full '
+                'crates above go back into stock and are never counted as '
+                'empties.',
+                style: t.textTheme.bodySmall?.copyWith(color: subtext),
+              ),
+            ],
           ],
         ],
       ),
@@ -633,7 +647,9 @@ class _Empty extends StatelessWidget {
           SizedBox(height: context.getRSize(12)),
           Text(
             title,
-            style: t.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+            style: t.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
           ),
           SizedBox(height: context.getRSize(6)),
           Text(

@@ -205,42 +205,6 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
         );
   }
 
-  /// The add box's own controller and focus, captured from the Autocomplete so
-  /// the box can be cleared after a pick and focused again after a quantity.
-  TextEditingController? _addCtrl;
-  FocusNode? _addFocus;
-
-  /// The line whose quantity box should take the keyboard (the one just added).
-  String? _focusQtyFor;
-
-  void _addProduct(ProductDataWithStock product) {
-    final existing = _lines.where(
-      (l) => l.product.product.id == product.product.id,
-    );
-    if (existing.isNotEmpty) {
-      AppNotification.showError(
-        context,
-        '${product.product.name} is already on this load — edit its quantity.',
-      );
-      return;
-    }
-    setState(() {
-      _lines.add(
-        _DraftLine(
-          product: product,
-          quantity: 1,
-          // The retail tier is the default (spec §4.3) — and it is a DEFAULT,
-          // not a lock: the field below is editable per line.
-          loadPriceKobo: product.product.retailerPriceKobo,
-        ),
-      );
-      // Straight to its quantity: type the number, press Done, and the
-      // keyboard is back in the add box for the next item.
-      _focusQtyFor = product.product.id;
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _addCtrl?.clear());
-  }
-
   /// Open the shop's product grid (#790 step 2) and take back what was
   /// counted there. Prices and crates already set on a line are kept.
   Future<void> _browse(List<ProductDataWithStock> products) async {
@@ -263,7 +227,6 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
     if (picked == null || !mounted) return;
     final byId = {for (final p in products) p.product.id: p};
     setState(() {
-      _focusQtyFor = null;
       _lines.removeWhere((l) => (picked[l.product.product.id] ?? 1) <= 0);
       for (final e in picked.entries) {
         if (e.value <= 0) continue;
@@ -328,7 +291,6 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
       );
     }
     setState(() {
-      _focusQtyFor = null;
       _lines
         ..clear()
         ..addAll(lines);
@@ -639,64 +601,26 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
           ),
           PinnedHeaderSliver(
             child: Container(
-              // Opaque, so rows scrolling under the pinned box do not show
+              // Opaque, so rows scrolling under the pinned button do not show
               // through it.
               color: t.scaffoldBackgroundColor,
               padding: EdgeInsets.symmetric(
                 horizontal: side,
                 vertical: context.getRSize(6),
               ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Autocomplete<ProductDataWithStock>(
-                      displayStringForOption: (p) => p.product.name,
-                      optionsBuilder: (TextEditingValue v) {
-                        if (v.text.isEmpty) return const Iterable.empty();
-                        final q = v.text.toLowerCase();
-                        final onLoad = {
-                          for (final l in _lines) l.product.product.id,
-                        };
-                        return products.where(
-                          (p) =>
-                              !onLoad.contains(p.product.id) &&
-                              p.product.name.toLowerCase().contains(q),
-                        );
-                      },
-                      onSelected: _addProduct,
-                      fieldViewBuilder:
-                          (ctx, controller, focusNode, onEditingComplete) {
-                            _addCtrl = controller;
-                            _addFocus = focusNode;
-                            return AppInput(
-                              key: const Key('load-van-add'),
-                              controller: controller,
-                              focusNode: focusNode,
-                              labelText: 'Add a ${lex.itemLower}',
-                              onFieldSubmitted: (_) => onEditingComplete(),
-                              prefixIcon: Icon(
-                                AppIcons.inventory,
-                                size: 14,
-                                color: _subtext,
-                              ),
-                              hintText: _sourceStore == null
-                                  ? 'Pick a store to load from first'
-                                  : 'Start typing a ${lex.itemLower} name…',
-                              enabled: _sourceStore != null,
-                            );
-                          },
-                    ),
-                  ),
-                  SizedBox(width: context.getRSize(8)),
-                  IconButton.filledTonal(
-                    key: const Key('load-van-browse'),
-                    onPressed: _sourceStore == null
-                        ? null
-                        : () => _browse(products),
-                    icon: const Icon(AppIcons.grid),
-                    tooltip: 'Browse ${lex.itemPluralLower}',
-                  ),
-                ],
+              // The ONE way to add (owner, 2026-11-11): it opens the shop's
+              // product grid, with its search, categories and scanner. Pinned,
+              // so the next item is always one tap away on a long load.
+              child: AppButton(
+                key: const Key('load-van-browse'),
+                text: _lines.isEmpty
+                    ? 'Add ${lex.itemPluralLower}'
+                    : 'Add or change ${lex.itemPluralLower}',
+                icon: AppIcons.add,
+                isFullWidth: true,
+                onPressed: _sourceStore == null
+                    ? null
+                    : () => _browse(products),
               ),
             ),
           ),
@@ -740,12 +664,8 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
                         line: line,
                         showCrates: tracksCrates,
                         isBelowCost: _belowCost.contains(id),
-                        focusQty: _focusQtyFor == id,
                         onChanged: () => setState(() {}),
-                        onQtyDone: () {
-                          _focusQtyFor = null;
-                          _addFocus?.requestFocus();
-                        },
+                        onQtyDone: () => FocusScope.of(context).unfocus(),
                         onRemove: () => setState(() {
                           _lines.remove(line);
                           _belowCost = {..._belowCost}..remove(id);
@@ -868,8 +788,6 @@ class _LineRow extends StatefulWidget {
   final bool showCrates;
   final bool isBelowCost;
 
-  /// True for the line just added: its quantity box takes the keyboard.
-  final bool focusQty;
   final VoidCallback onChanged;
   final VoidCallback onRemove;
 
@@ -881,7 +799,6 @@ class _LineRow extends StatefulWidget {
     required this.line,
     required this.showCrates,
     required this.isBelowCost,
-    required this.focusQty,
     required this.onChanged,
     required this.onRemove,
     required this.onQtyDone,
@@ -897,21 +814,6 @@ class _LineRowState extends State<_LineRow> {
   );
   final FocusNode _qtyFocus = FocusNode();
   bool _editing = false;
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.focusQty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        _qtyFocus.requestFocus();
-        _qty.selection = TextSelection(
-          baseOffset: 0,
-          extentOffset: _qty.text.length,
-        );
-      });
-    }
-  }
 
   /// The quantity can change outside this row (the product grid). Show it,
   /// unless the box is being typed in.

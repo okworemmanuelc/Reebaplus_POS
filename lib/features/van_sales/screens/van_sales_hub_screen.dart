@@ -11,6 +11,7 @@ import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/stores/widgets/add_location_flow.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/driver_payments_screen.dart';
+import 'package:reebaplus_pos/features/van_sales/widgets/record_driver_payment_sheet.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/drivers_list_screen.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/load_van_screen.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/van_reconcile_screen.dart';
@@ -139,6 +140,13 @@ class VanSalesHubScreen extends ConsumerWidget {
                             builder: (_) => LoadVanScreen(vanStoreId: van.id),
                           ),
                         ),
+                  onRecordPayment: trip == null
+                      ? null
+                      : () => RecordDriverPaymentSheet.show(
+                          context,
+                          trip: trip,
+                          driverName: nameOf(trip),
+                        ),
                   onPayments: trip == null
                       ? null
                       : () => Navigator.push(
@@ -159,10 +167,8 @@ class VanSalesHubScreen extends ConsumerWidget {
                       : () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => LoadVanScreen(
-                              vanStoreId: van.id,
-                              trip: trip,
-                            ),
+                            builder: (_) =>
+                                LoadVanScreen(vanStoreId: van.id, trip: trip),
                           ),
                         ),
                   onReturn: trip == null
@@ -290,6 +296,9 @@ class _VanCard extends StatelessWidget {
   /// home: there is no trip to remit against.
   final VoidCallback? onPayments;
 
+  /// Opens the Record Payment form for this van's open trip (#790).
+  final VoidCallback? onRecordPayment;
+
   /// Loads MORE onto the open trip (#143). Null when the van is home — a
   /// restock needs a trip to restock onto; loading a parked van opens one.
   final VoidCallback? onRestock;
@@ -309,6 +318,7 @@ class _VanCard extends StatelessWidget {
     required this.driverBalanceKobo,
     required this.onLoad,
     required this.onPayments,
+    required this.onRecordPayment,
     required this.onRestock,
     required this.onReturn,
     required this.onReconcile,
@@ -401,29 +411,35 @@ class _VanCard extends StatelessWidget {
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: onReturn,
-                    icon: Icon(
-                      AppIcons.undo,
-                      size: context.getRSize(14),
-                    ),
+                    icon: Icon(AppIcons.undo, size: context.getRSize(14)),
                     label: const Text('Returns'),
                   ),
                 ),
               ],
             ),
             SizedBox(height: context.getRSize(10)),
-            // #144: recording what the driver has handed in. The button leads
-            // to the trip's money story rather than opening the form straight
-            // away — a manager wants to see the balance before typing a figure.
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: onPayments,
-                icon: Icon(
-                  AppIcons.transfer,
-                  size: context.getRSize(14),
+            // #144 / #790: money handed in. "Record payment" opens the form
+            // straight away (it shows what the driver owes); "Payments" is the
+            // trip's money story.
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    key: Key('van-record-payment-${van.id}'),
+                    onPressed: onRecordPayment,
+                    icon: Icon(AppIcons.transfer, size: context.getRSize(14)),
+                    label: const Text('Record payment'),
+                  ),
                 ),
-                label: const Text('Driver payments'),
-              ),
+                SizedBox(width: context.getRSize(10)),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onPayments,
+                    icon: Icon(AppIcons.history, size: context.getRSize(14)),
+                    label: const Text('Payments'),
+                  ),
+                ),
+              ],
             ),
             SizedBox(height: context.getRSize(10)),
             // #145 — the end of the run. A filled button because it is the one
@@ -432,10 +448,7 @@ class _VanCard extends StatelessWidget {
               width: double.infinity,
               child: FilledButton.icon(
                 onPressed: onReconcile,
-                icon: Icon(
-                  AppIcons.goal,
-                  size: context.getRSize(14),
-                ),
+                icon: Icon(AppIcons.goal, size: context.getRSize(14)),
                 label: const Text('Reconcile & close'),
               ),
             ),
