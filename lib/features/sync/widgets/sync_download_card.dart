@@ -5,6 +5,8 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/services/first_load_marker_service.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
+import 'package:reebaplus_pos/core/theme/app_theme.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/sync/widgets/sync_parts.dart';
 
 /// What the Download card says, derived from the live [PullStatus] and whether
@@ -28,6 +30,24 @@ class DownloadCardInfo {
 
   /// True while a download is running (shows the progress bar).
   final bool busy;
+}
+
+/// Whole-number percentage for a running download, or null when the total is
+/// unknown (0 or null) so the bar stays indeterminate. Capped at 99 while the
+/// download is still running (totals can grow); 100 only when [finished].
+int? downloadPercent(int? rowsDone, int? rowsTotal, {bool finished = false}) {
+  if (finished) return 100;
+  if (rowsTotal == null || rowsTotal <= 0) return null;
+  final done = (rowsDone ?? 0).clamp(0, rowsTotal);
+  return ((done * 100) ~/ rowsTotal).clamp(0, 99);
+}
+
+/// Never goes backwards within one download: the higher of what was shown and
+/// the new value. Null new value keeps the held one.
+int? holdPercent(int? held, int? next) {
+  if (next == null) return held;
+  if (held == null) return next;
+  return next > held ? next : held;
 }
 
 /// A table name in words a shop owner can read ("order_items" -> "order items").
@@ -131,6 +151,7 @@ class SyncDownloadCard extends ConsumerStatefulWidget {
   final String? businessId;
 
   static const Key cardKey = ValueKey<String>('sync-download-card');
+  static const Key percentKey = ValueKey<String>('sync-download-percent');
 
   @override
   ConsumerState<SyncDownloadCard> createState() => _SyncDownloadCardState();
@@ -139,6 +160,7 @@ class SyncDownloadCard extends ConsumerStatefulWidget {
 class _SyncDownloadCardState extends ConsumerState<SyncDownloadCard> {
   bool _firstPullDone = false;
   PullStage? _lastStage;
+  int? _heldPercent;
 
   @override
   void initState() {
@@ -168,6 +190,15 @@ class _SyncDownloadCardState extends ConsumerState<SyncDownloadCard> {
           _lastStage = status.stage;
         }
         final info = describeDownload(status, firstPullDone: _firstPullDone);
+        if (info.busy) {
+          _heldPercent = holdPercent(
+            _heldPercent,
+            downloadPercent(status.rowsDone, status.rowsTotal),
+          );
+        } else {
+          _heldPercent = null;
+        }
+        final percent = info.busy ? _heldPercent : null;
         final icon = info.tone == SyncFactTone.bad
             ? AppIcons.warning
             : AppIcons.download;
@@ -184,9 +215,23 @@ class _SyncDownloadCardState extends ConsumerState<SyncDownloadCard> {
               ),
               if (info.busy) ...[
                 const SizedBox(height: 12),
-                LinearProgressIndicator(
-                  value: info.progress,
-                  color: t.colorScheme.primary,
+                if (percent != null)
+                  Padding(
+                    padding: EdgeInsets.only(bottom: context.getRSize(6)),
+                    child: Text(
+                      '$percent%',
+                      key: SyncDownloadCard.percentKey,
+                      style: context.mediumStyle(13),
+                    ),
+                  ),
+                Semantics(
+                  label: percent == null
+                      ? 'Download progress'
+                      : 'Download progress $percent percent',
+                  child: LinearProgressIndicator(
+                    value: percent == null ? null : percent / 100,
+                    color: t.colorScheme.primary,
+                  ),
                 ),
               ],
             ],
