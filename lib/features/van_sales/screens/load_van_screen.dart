@@ -79,8 +79,9 @@ class LoadVanScreen extends ConsumerStatefulWidget {
 }
 
 class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
-  /// The driver answering for this trip (#748). Optional: a van can load with
-  /// no driver at all.
+  /// The driver answering for this trip. Required to load (#787): debt sits
+  /// with the driver, so a load must name one. Null only on a RESTOCK of an
+  /// old trip that was loaded before a driver was required.
   VanDriverData? _driver;
   StoreData? _sourceStore;
   final List<_DraftLine> _lines = [];
@@ -130,8 +131,7 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
           return;
         }
         if (warehouses.length == 1) _sourceStore = warehouses.first;
-        // Pre-fill from the van's assigned driver; the manager may change or
-        // clear it.
+        // Pre-fill from the van's usual driver; the manager may change it.
         final van = ref.read(storeByIdProvider(widget.vanStoreId)).valueOrNull;
         _driver = _driverById(van?.vanDriverId);
       });
@@ -215,6 +215,12 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
     }
     final driver = _driver;
     final source = _sourceStore;
+    // #787: a new load needs a driver. A restock keeps its trip's driver,
+    // including "none" on a trip loaded before this rule.
+    if (!_isRestock && driver == null) {
+      AppNotification.showError(context, 'Choose who is taking the van out.');
+      return;
+    }
     if (source == null) {
       AppNotification.showError(context, 'Choose which store it loads from.');
       return;
@@ -408,21 +414,18 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
                 sourceName: _sourceStore?.name ?? 'Warehouse',
               )
             else ...[
-              // Optional (#748): '' = no driver, '+' = add a new one.
+              // Required (#787). '+' = add a new one.
               AppDropdown<String>(
-                labelText: 'Driver (optional)',
+                key: const Key('load-van-driver'),
+                labelText: 'Driver',
                 hintText: 'Who is taking it out?',
-                value: _driver?.id ?? '',
+                value: _driver?.id,
                 prefixIcon: Icon(
                   AppIcons.managerRole,
                   size: 14,
                   color: _subtext,
                 ),
                 items: [
-                  const DropdownMenuItem(
-                    value: '',
-                    child: Text('No driver assigned'),
-                  ),
                   ...drivers.map(
                     (d) => DropdownMenuItem(value: d.id, child: Text(d.name)),
                   ),
@@ -538,6 +541,7 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
             SizedBox(height: context.getRSize(20)),
 
             AppButton(
+              key: const Key('load-van-send'),
               text: _submitting
                   ? 'Sending…'
                   : _isRestock

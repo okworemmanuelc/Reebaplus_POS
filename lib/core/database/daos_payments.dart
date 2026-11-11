@@ -74,6 +74,7 @@ class PaymentTransactionsDao extends DatabaseAccessor<AppDatabase>
       deliveryId: Value(original.deliveryId),
       vanTripId: Value(original.vanTripId),
       crateDepositId: Value(original.crateDepositId),
+      vanDriverId: Value(original.vanDriverId),
       performedBy: Value(performedBy),
       voidReason: Value(reason),
       createdAt: Value(now),

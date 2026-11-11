@@ -2052,6 +2052,97 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
+  /// A payment taken from a DRIVER, with no trip and no van (#787).
+  ///
+  /// Debt sits with the driver, so a driver can pay it down whether or not
+  /// they are out: this is the only way a driver with no trip at all (an old
+  /// customer account brought in, #783) can pay. The same two legs as
+  /// [recordDriverPayment], in one transaction:
+  ///
+  ///  1. a ledger CREDIT carrying the driver and nothing else;
+  ///  2. a `van_remittance` payment row whose one parent is the DRIVER
+  ///     (`van_driver_id`), store-stamped to [storeId] (the shop that took the
+  ///     money) so "Cash from drivers" counts it there.
+  ///
+  /// Throws [ArgumentError] on a non-positive amount or unknown method and
+  /// [StateError] when the driver does not exist.
+  Future<VanRemittanceResult> recordDriverPaymentNoTrip({
+    required String vanDriverId,
+    required String storeId,
+    required int amountKobo,
+    required String method,
+    required String performedBy,
+    DateTime? paidOn,
+    String? receiptPath,
+    String? referenceNote,
+  }) async {
+    if (amountKobo <= 0) {
+      throw ArgumentError('A payment must be greater than zero.');
+    }
+    if (!kVanRemittanceMethods.contains(method)) {
+      throw ArgumentError('Unknown payment method: $method');
+    }
+    final now = paidOn ?? DateTime.now();
+
+    return transaction(() async {
+      final driver = await db.vanDriversDao.getDriver(vanDriverId);
+      if (driver == null) {
+        throw StateError('Driver $vanDriverId not found.');
+      }
+
+      final paymentId = UuidV7.generate();
+      final payment = PaymentTransactionsCompanion.insert(
+        id: Value(paymentId),
+        businessId: requireBusinessId(),
+        storeId: Value(storeId),
+        amountKobo: amountKobo,
+        method: method,
+        type: kPaymentTypeVanRemittance,
+        vanDriverId: Value(vanDriverId),
+        performedBy: Value(performedBy),
+        createdAt: Value(now),
+        lastUpdatedAt: Value(now),
+      );
+      await into(paymentTransactions).insert(payment);
+      await db.syncDao.enqueueUpsert('payment_transactions', payment);
+
+      final ledgerEntryId = await db.driverLedgerDao.postEntry(
+        vanDriverId: vanDriverId,
+        type: method == 'cash'
+            ? kDriverLedgerTypePaymentCash
+            : kDriverLedgerTypePaymentTransfer,
+        amountKobo: amountKobo,
+        isCredit: true,
+        referenceType: kDriverLedgerRefPayment,
+        referenceId: paymentId,
+        activityDate: now,
+        performedBy: performedBy,
+        paymentMethod: method,
+        receiptPath: receiptPath,
+        referenceNote: referenceNote,
+      );
+
+      await db.activityLogDao.logActivity(
+        action: 'van.payment',
+        description:
+            'Driver payment of ${formatCurrency(amountKobo / 100)} '
+            'recorded ($method)',
+        staffId: performedBy,
+        storeId: storeId,
+        entityType: 'van_driver',
+        entityId: vanDriverId,
+      );
+
+      return VanRemittanceResult(
+        ledgerEntryId: ledgerEntryId,
+        paymentTransactionId: paymentId,
+        amountKobo: amountKobo,
+        driverBalanceKoboAfter:
+            await db.driverLedgerDao.getBalanceKobo(vanDriverId),
+      );
+    });
+  }
+
   // ── Reconcile & close (#145, spec §5.5 / §6 / §9.4, ADR 0019 decision 3) ──
 
   /// The recognised road-sale LINES on [tripId] — the `sold` side of the

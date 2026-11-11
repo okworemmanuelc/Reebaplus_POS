@@ -13,6 +13,7 @@ import 'package:reebaplus_pos/core/utils/currency_input_formatter.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/core/stores/van_store.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
@@ -33,14 +34,24 @@ import 'package:reebaplus_pos/shared/widgets/auto_lock_wrapper.dart';
 /// at fire time, so a revocation mid-form blocks the write too (spec §9.5 #21 —
 /// impossible by construction, not merely unreachable).
 class RecordDriverPaymentSheet extends ConsumerStatefulWidget {
-  final VanTripData trip;
+  /// The open trip the payment is recorded against, or null when it is taken
+  /// from the driver directly ([vanDriverId], #787).
+  final VanTripData? trip;
+
+  /// The driver paying, when there is no [trip]. Debt sits with the driver, so
+  /// they can pay whether or not they are out.
+  final String? vanDriverId;
   final String driverName;
 
   const RecordDriverPaymentSheet({
     super.key,
-    required this.trip,
+    this.trip,
+    this.vanDriverId,
     required this.driverName,
-  });
+  }) : assert(
+         (trip == null) != (vanDriverId == null),
+         'Pass a trip OR a driver.',
+       );
 
   static Future<void> show(
     BuildContext context, {
@@ -53,6 +64,23 @@ class RecordDriverPaymentSheet extends ConsumerStatefulWidget {
       backgroundColor: Colors.transparent,
       builder: (_) =>
           RecordDriverPaymentSheet(trip: trip, driverName: driverName),
+    );
+  }
+
+  /// A payment from the driver's own page: no trip, no van (#787).
+  static Future<void> showForDriver(
+    BuildContext context, {
+    required String vanDriverId,
+    required String driverName,
+  }) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => RecordDriverPaymentSheet(
+        vanDriverId: vanDriverId,
+        driverName: driverName,
+      ),
     );
   }
 
@@ -122,19 +150,37 @@ class _RecordDriverPaymentSheetState
     }
 
     final note = _refCtrl.text.trim();
+    final trip = widget.trip;
+    // No trip: the money is booked to the shop this device is working in.
+    final shopId = trip == null ? _bookingStoreId() : null;
+    if (trip == null && shopId == null) {
+      AppNotification.showError(
+        context,
+        'Choose a store first, then record the payment.',
+      );
+      return;
+    }
     setState(() => _saving = true);
     try {
-      final result = await ref
-          .read(databaseProvider)
-          .vanTripsDao
-          .recordDriverPayment(
-            tripId: widget.trip.id,
-            amountKobo: amountKobo,
-            method: _method,
-            performedBy: staffId,
-            receiptPath: _receipt?.path,
-            referenceNote: note.isEmpty ? null : note,
-          );
+      final dao = ref.read(databaseProvider).vanTripsDao;
+      final result = trip != null
+          ? await dao.recordDriverPayment(
+              tripId: trip.id,
+              amountKobo: amountKobo,
+              method: _method,
+              performedBy: staffId,
+              receiptPath: _receipt?.path,
+              referenceNote: note.isEmpty ? null : note,
+            )
+          : await dao.recordDriverPaymentNoTrip(
+              vanDriverId: widget.vanDriverId!,
+              storeId: shopId!,
+              amountKobo: amountKobo,
+              method: _method,
+              performedBy: staffId,
+              receiptPath: _receipt?.path,
+              referenceNote: note.isEmpty ? null : note,
+            );
       if (!mounted) return;
       Navigator.pop(context);
       final owed = result.driverBalanceKoboAfter;
@@ -155,16 +201,32 @@ class _RecordDriverPaymentSheetState
     }
   }
 
+  /// Where a no-trip payment is booked: the shop this device is working in,
+  /// or the only shop there is. Never a van.
+  String? _bookingStoreId() {
+    final shops = withoutVans(
+      ref.read(allStoresProvider).valueOrNull ?? const <StoreData>[],
+    );
+    final active = ref.read(lockedStoreProvider).value;
+    if (active != null && shops.any((s) => s.id == active)) return active;
+    return shops.length == 1 ? shops.first.id : null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final semantic = Theme.of(context).extension<AppSemanticColors>()!;
-    final balanceKobo = ref
-        .watch(tripOwnerBalanceProvider(widget.trip.id))
-        .valueOrNull;
+    final trip = widget.trip;
+    final balanceKobo = trip != null
+        ? ref.watch(tripOwnerBalanceProvider(trip.id)).valueOrNull
+        : (ref.watch(driverBalancesProvider).valueOrNull?.byDriver[widget
+                  .vanDriverId] ??
+              0);
     final stores =
         ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[];
+    ref.watch(lockedStoreProvider);
+    final bookedTo = trip?.sourceStoreId ?? _bookingStoreId();
     final sourceName = stores
-        .where((s) => s.id == widget.trip.sourceStoreId)
+        .where((s) => s.id == bookedTo)
         .map((s) => s.name)
         .firstOrNull;
 

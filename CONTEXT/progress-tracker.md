@@ -7,6 +7,11 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #787: driver required to load; pay from the driver's page (2026-11-11, branch `feat/787-driver-required-payment-on-driver`)
+- Load Van needs a driver (picker no longer offers "No driver assigned"; restock keeps its trip's driver; old no-driver trips untouched). Driver page gets "Record payment": `VanTripsDao.recordDriverPaymentNoTrip` writes a driver-only ledger credit plus a `van_remittance` payment row booked to the active shop.
+- The issue said "no database change", but the one-parent CHECK on `payment_transactions` refuses a payment with no trip. Drift 109 → 110, cloud `0257_payment_van_driver_parent.sql`: `payment_transactions.van_driver_id` (eighth parent). Older builds cannot store such a row, so raise the minimum build when v110 ships.
+- Tests: `test/van_sales/driver_payment_no_trip_test.dart`, `test/van_sales/driver_required_and_payment_screen_test.dart`, v109→v110 in `test/database/migration_upgrade_test.dart`.
+
 ### Issue #783: bring a driver's old customer account under their van (2026-11-11, branch `feat/783-driver-old-customer-account`)
 - Drift 108 → 109, cloud `0256_van_drivers_customer_id.sql`: nullable `van_drivers.customer_id` (FK, partial unique per business). `VanDriversDao.linkOldCustomerAccount` links once; a debt moves as ONE wallet credit (`adjustment`, no payment row) + ONE driver-ledger debit (`restatement`, no trip). No new CHECK value. ADR 0036.
 - Driver page: "Bring in old customer account" (same `vanManage` gate), old sales/payments listed tagged and read-only (not in balance or totals). Linked customer hidden from the sale picker; its page says "Now a van driver". Web parity issue to be filed by the supervisor.

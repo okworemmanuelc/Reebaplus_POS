@@ -23,6 +23,7 @@ import 'package:reebaplus_pos/features/van_sales/screens/drivers_list_screen.dar
 import 'package:reebaplus_pos/features/van_sales/screens/van_reconcile_screen.dart';
 import 'package:reebaplus_pos/features/van_sales/widgets/bring_in_old_account_flow.dart';
 import 'package:reebaplus_pos/features/van_sales/widgets/driver_ledger_entry_tile.dart';
+import 'package:reebaplus_pos/features/van_sales/widgets/record_driver_payment_sheet.dart';
 import 'package:reebaplus_pos/features/van_sales/widgets/van_driver_pickers.dart';
 import 'package:reebaplus_pos/features/van_sales/widgets/van_sale_receipt_sheet.dart';
 import 'package:reebaplus_pos/shared/models/order_status.dart';
@@ -314,6 +315,15 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
               onAssignVan: driverId == null || isRemoved
                   ? null
                   : () => _assignVan(driverId),
+              // #787: a payment is taken from the driver, with or without a
+              // trip. A removed driver who still owes can pay too.
+              onRecordPayment: driver == null
+                  ? null
+                  : () => RecordDriverPaymentSheet.showForDriver(
+                      context,
+                      vanDriverId: driver.id,
+                      driverName: driver.name,
+                    ),
               onBringInOldAccount:
                   driver == null || isRemoved || driver.customerId != null
                   ? null
@@ -991,6 +1001,7 @@ class _Header extends StatelessWidget {
 
   /// #783: null once an old account is brought in (or for a removed driver).
   final VoidCallback? onBringInOldAccount;
+  final VoidCallback? onRecordPayment;
 
   /// #783: the brought-in old customer account's name, when linked.
   final String? oldAccountName;
@@ -1009,6 +1020,7 @@ class _Header extends StatelessWidget {
     required this.isRemoved,
     required this.onAssignVan,
     this.onBringInOldAccount,
+    this.onRecordPayment,
     this.oldAccountName,
     required this.trips,
     required this.vanNameById,
@@ -1114,11 +1126,18 @@ class _Header extends StatelessWidget {
                     style: t.textTheme.bodySmall?.copyWith(color: subtext),
                   ),
                 ],
+                if (onRecordPayment != null)
+                  TextButton.icon(
+                    key: const Key('driver-record-payment'),
+                    onPressed: onRecordPayment,
+                    icon: const Icon(AppIcons.transfer, size: 18),
+                    label: const Text('Record payment'),
+                  ),
                 if (onAssignVan != null)
                   TextButton.icon(
                     onPressed: onAssignVan,
                     icon: const Icon(AppIcons.vanDelivery, size: 18),
-                    label: const Text('Assign to a van'),
+                    label: const Text('Set usual van'),
                   ),
                 if (oldAccountName != null) ...[
                   SizedBox(height: context.getRSize(4)),
