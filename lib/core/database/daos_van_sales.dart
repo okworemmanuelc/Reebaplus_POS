@@ -2847,8 +2847,12 @@ class DriverLedgerDao extends DatabaseAccessor<AppDatabase>
   /// **Must** be called inside the caller's transaction when it accompanies
   /// other writes (a dispatch, a remittance) — a ledger row that survives a
   /// failed stock move is worse than no row at all.
+  ///
+  /// [vanStoreId] is the van the row happened on. It may be null ONLY for a
+  /// row that belongs to a driver and to no trip (#783: debt sits with the
+  /// driver, not a van) — e.g. a debt brought in from an old customer account.
   Future<String> postEntry({
-    required String vanStoreId,
+    String? vanStoreId,
     String? vanDriverId,
     String? tripId,
     required String type,
@@ -2869,6 +2873,11 @@ class DriverLedgerDao extends DatabaseAccessor<AppDatabase>
     );
     if (amountKobo < 0) {
       throw ArgumentError('A ledger amount is a magnitude and cannot be < 0.');
+    }
+    if (vanStoreId == null && (vanDriverId == null || tripId != null)) {
+      throw ArgumentError(
+        'A ledger row with no van must belong to a driver and to no trip.',
+      );
     }
 
     final now = DateTime.now();
@@ -2944,7 +2953,12 @@ class DriverLedgerDao extends DatabaseAccessor<AppDatabase>
           );
 
       await postEntry(
-        vanStoreId: original.vanStoreId ?? await _vanOfTrip(original.tripId),
+        // A driver-only row (no van, no trip: #783) is voided the same way.
+        vanStoreId:
+            original.vanStoreId ??
+            (original.tripId == null && original.vanDriverId != null
+                ? null
+                : await _vanOfTrip(original.tripId)),
         vanDriverId: original.vanDriverId,
         tripId: original.tripId,
         type: kDriverLedgerTypeVoid,
@@ -3083,6 +3097,214 @@ class VanDriversDao extends DatabaseAccessor<AppDatabase>
     }
   }
 
+  // ── Bring in an old customer account (#783, ADR 0036) ─────────────────────
+
+  /// What linking [customerId] would do: how many past sales and payments the
+  /// old account has and what it owes. Read-only, for the confirm sheet.
+  Future<OldAccountSummary> summariseOldAccount(String customerId) async {
+    final saleRows = await (db.select(db.orders)
+          ..where(
+            (o) =>
+                whereBusiness(o) &
+                o.customerId.equals(customerId) &
+                o.kind.equals('adjustment').not(),
+          ))
+        .get();
+    final payRows = await (db.select(db.walletTransactions)
+          ..where(
+            (t) =>
+                whereBusiness(t) &
+                t.customerId.equals(customerId) &
+                t.referenceType.isIn(kOldAccountPaymentRefs) &
+                t.voidedAt.isNull(),
+          ))
+        .get();
+    final balance = await db.walletTransactionsDao.getBalanceKobo(customerId);
+    return OldAccountSummary(
+      salesCount: saleRows.length,
+      paymentsCount: payRows.length,
+      balanceKobo: balance,
+    );
+  }
+
+  /// The driver [customerId] is linked to, or null.
+  Future<VanDriverData?> driverLinkedToCustomer(String customerId) {
+    return (select(vanDrivers)
+          ..where((d) => whereBusiness(d) & d.customerId.equals(customerId))
+          ..limit(1))
+        .getSingleOrNull();
+  }
+
+  /// Every customer id that is now a driver's old account (live): those are
+  /// not offered when picking a customer for a new sale.
+  Stream<Set<String>> watchLinkedCustomerIds() {
+    return (select(vanDrivers)
+          ..where((d) => whereBusiness(d) & d.customerId.isNotNull()))
+        .watch()
+        .map((rows) => {for (final d in rows) d.customerId!});
+  }
+
+  /// The old account's past sales (with lines), newest first — read-only
+  /// history on the driver's page. Adjustment rows are never their own entry.
+  Stream<List<OrderWithItems>> watchOldAccountSales(String customerId) {
+    final query =
+        db.select(db.orders).join([
+            leftOuterJoin(
+              db.orderItems,
+              db.orderItems.orderId.equalsExp(db.orders.id),
+            ),
+            leftOuterJoin(
+              db.products,
+              db.products.id.equalsExp(db.orderItems.productId),
+            ),
+          ])
+          ..where(
+            whereBusiness(db.orders) &
+                db.orders.customerId.equals(customerId) &
+                db.orders.kind.equals('adjustment').not(),
+          )
+          ..orderBy([OrderingTerm.desc(db.orders.createdAt)]);
+    return query.watch().map((rows) {
+      final result = <String, OrderWithItems>{};
+      for (final row in rows) {
+        final order = row.readTable(db.orders);
+        final item = row.readTableOrNull(db.orderItems);
+        final product = row.readTableOrNull(db.products);
+        result.putIfAbsent(order.id, () => OrderWithItems(order, [], null));
+        if (item != null) {
+          result[order.id]!.items.add(
+            OrderItemDataWithProductData(item, product),
+          );
+        }
+      }
+      return result.values.toList(growable: false);
+    });
+  }
+
+  /// The old account's money history, newest first: its payments (wallet
+  /// top-ups) AND its account adjustments (opening balances and corrections,
+  /// e.g. from a data import), so the page adds up with the sales. The move
+  /// itself is an adjustment too and shows as one.
+  Stream<List<WalletTransactionData>> watchOldAccountPayments(
+    String customerId,
+  ) {
+    return (db.select(db.walletTransactions)
+          ..where(
+            (t) =>
+                whereBusiness(t) &
+                t.customerId.equals(customerId) &
+                t.referenceType.isIn(kOldAccountHistoryRefs) &
+                t.voidedAt.isNull(),
+          )
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+        .watch();
+  }
+
+  /// Link [vanDriverId] to the old customer account [customerId] — ONCE, in one
+  /// transaction. Returns the kobo moved (0 when the customer owed nothing).
+  ///
+  /// * sets `van_drivers.customer_id` (one customer per driver, one driver per
+  ///   customer; a second attempt throws [OldAccountLinkException] and writes
+  ///   nothing);
+  /// * if the customer owes (wallet balance < 0): ONE `wallet_transactions`
+  ///   credit (`reference_type = 'adjustment'`, NO payment row) that brings the
+  ///   balance to exactly 0, and ONE `driver_ledger_entries` debit
+  ///   (`type = 'restatement'`, no trip, no van, same kobo) on the driver.
+  ///   Neither is a sale, a payment received, till cash or revenue: no
+  ///   `payment_transactions` row is written and no order is touched;
+  /// * in credit or at zero: link only.
+  ///
+  /// Nothing existing is edited or voided.
+  Future<int> linkOldCustomerAccount({
+    required String vanDriverId,
+    required String customerId,
+    String? performedBy,
+  }) {
+    return db.transaction(() async {
+      final driver = await getDriver(vanDriverId);
+      if (driver == null) {
+        throw const OldAccountLinkException('That driver was not found.');
+      }
+      if (driver.customerId != null) {
+        throw const OldAccountLinkException(
+          'This driver already has an old customer account brought in.',
+        );
+      }
+      final customer = await (db.select(db.customers)
+            ..where((c) => whereBusiness(c) & c.id.equals(customerId))
+            ..limit(1))
+          .getSingleOrNull();
+      if (customer == null) {
+        throw const OldAccountLinkException('That customer was not found.');
+      }
+      if (await driverLinkedToCustomer(customerId) != null) {
+        throw const OldAccountLinkException(
+          'That customer account is already brought in under a driver.',
+        );
+      }
+
+      final balance = await db.walletTransactionsDao.getBalanceKobo(customerId);
+      final owed = balance < 0 ? -balance : 0;
+
+      // Check everything BEFORE writing anything, so a refusal leaves no trace.
+      CustomerWalletData? wallet;
+      if (owed > 0) {
+        wallet = await db.customerWalletsDao.getByCustomerId(customerId);
+        if (wallet == null) {
+          throw const OldAccountLinkException(
+            'That customer has no account to move money from.',
+          );
+        }
+      }
+
+      final now = DateTime.now();
+      await (update(vanDrivers)
+            ..where((d) => whereBusiness(d) & d.id.equals(vanDriverId)))
+          .write(
+        VanDriversCompanion(
+          customerId: Value(customerId),
+          lastUpdatedAt: Value(now),
+        ),
+      );
+      await _push(vanDriverId);
+
+      if (owed > 0) {
+        // 1) The customer's side: a credit that zeroes the account.
+        final walletComp = WalletTransactionsCompanion.insert(
+          id: Value(UuidV7.generate()),
+          businessId: requireBusinessId(),
+          walletId: wallet!.id,
+          customerId: customerId,
+          type: 'credit',
+          amountKobo: owed,
+          signedAmountKobo: owed,
+          referenceType: 'adjustment',
+          performedBy: Value(performedBy),
+          createdAt: Value(now),
+          lastUpdatedAt: Value(now),
+        );
+        await db.into(db.walletTransactions).insert(walletComp);
+        await db.syncDao.enqueueUpsert('wallet_transactions', walletComp);
+
+        // 2) The driver's side: the same kobo as new debt.
+        //    It sits with the DRIVER, on no van and no trip (owner, 2026-11-11:
+        //    "anyone can use the van").
+        await db.driverLedgerDao.postEntry(
+          vanDriverId: vanDriverId,
+          type: kDriverLedgerTypeRestatement,
+          amountKobo: owed,
+          isCredit: false,
+          referenceType: kDriverLedgerRefEntry,
+          activityDate: now,
+          performedBy: performedBy,
+          referenceNote:
+              'Moved from the old customer account (${customer.name})',
+        );
+      }
+      return owed;
+    });
+  }
+
   Future<void> _push(String id) async {
     final row = await getDriver(id);
     if (row != null) {
@@ -3094,4 +3316,40 @@ class VanDriversDao extends DatabaseAccessor<AppDatabase>
     final t = phone?.trim();
     return (t == null || t.isEmpty) ? null : t;
   }
+}
+
+/// The wallet reference types that are a customer PAYING (top-ups), as the old
+/// customer account's "payments" on a driver's page (#783).
+const List<String> kOldAccountPaymentRefs = ['topup_cash', 'topup_transfer'];
+
+/// What the old account's history lists on a driver's page (#783): the
+/// payments plus account adjustments. Sales (`order_payment`) are listed as
+/// sales, and crate-deposit rows stay on the customer.
+const List<String> kOldAccountHistoryRefs = [
+  ...kOldAccountPaymentRefs,
+  'adjustment',
+];
+
+/// What an old customer account holds, for the link confirm sheet (#783).
+/// [balanceKobo] is the wallet balance: negative = the customer owes.
+class OldAccountSummary {
+  final int salesCount;
+  final int paymentsCount;
+  final int balanceKobo;
+  const OldAccountSummary({
+    required this.salesCount,
+    required this.paymentsCount,
+    required this.balanceKobo,
+  });
+
+  /// What the customer owes (kobo), 0 when nothing or in credit.
+  int get owedKobo => balanceKobo < 0 ? -balanceKobo : 0;
+}
+
+/// A refused link (#783): the message is shown to the manager as is.
+class OldAccountLinkException implements Exception {
+  final String message;
+  const OldAccountLinkException(this.message);
+  @override
+  String toString() => message;
 }

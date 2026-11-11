@@ -1961,6 +1961,29 @@ final driverVanSalesProvider =
       whenAbsent: const [],
     );
 
+/// Customer ids that are now a van driver's old account (#783). Not offered
+/// when picking a customer for a new sale.
+final linkedCustomerIdsProvider = businessScopedStream<Set<String>>(
+  (ref, db, businessId) => db.vanDriversDao.watchLinkedCustomerIds(),
+  whenAbsent: const <String>{},
+);
+
+/// A linked driver's old customer account: its past sales (read-only, #783).
+final oldAccountSalesProvider =
+    businessScopedStreamFamily<List<OrderWithItems>, String>(
+      (ref, db, businessId, customerId) =>
+          db.vanDriversDao.watchOldAccountSales(customerId),
+      whenAbsent: const [],
+    );
+
+/// A linked driver's old customer account: its payments (read-only, #783).
+final oldAccountPaymentsProvider =
+    businessScopedStreamFamily<List<WalletTransactionData>, String>(
+      (ref, db, businessId, customerId) =>
+          db.vanDriversDao.watchOldAccountPayments(customerId),
+      whenAbsent: const [],
+    );
+
 /// The Drivers list (#146, reworked by #748) — every current driver, plus every
 /// REMOVED driver the ledger still has a balance for, badged.
 ///

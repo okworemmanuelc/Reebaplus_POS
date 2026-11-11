@@ -11,6 +11,7 @@ mixin _$CatalogDaoMixin on DatabaseAccessor<AppDatabase> {
   $ManufacturersTable get manufacturers => attachedDatabase.manufacturers;
   $ProductsTable get products => attachedDatabase.products;
   $ProductPhotosTable get productPhotos => attachedDatabase.productPhotos;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
   CatalogDaoManager get managers => CatalogDaoManager(this);
@@ -36,6 +37,8 @@ class CatalogDaoManager {
       $$ProductsTableTableManager(_db.attachedDatabase, _db.products);
   $$ProductPhotosTableTableManager get productPhotos =>
       $$ProductPhotosTableTableManager(_db.attachedDatabase, _db.productPhotos);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
@@ -49,13 +52,13 @@ mixin _$InventoryDaoMixin on DatabaseAccessor<AppDatabase> {
   $SuppliersTable get suppliers => attachedDatabase.suppliers;
   $ManufacturersTable get manufacturers => attachedDatabase.manufacturers;
   $ProductsTable get products => attachedDatabase.products;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
   $InventoryTable get inventory => attachedDatabase.inventory;
   $UsersTable get users => attachedDatabase.users;
   $StockAdjustmentsTable get stockAdjustments =>
       attachedDatabase.stockAdjustments;
-  $CustomersTable get customers => attachedDatabase.customers;
   $VanTripsTable get vanTrips => attachedDatabase.vanTrips;
   $OrdersTable get orders => attachedDatabase.orders;
   $StockTransfersTable get stockTransfers => attachedDatabase.stockTransfers;
@@ -86,6 +89,8 @@ class InventoryDaoManager {
       $$ManufacturersTableTableManager(_db.attachedDatabase, _db.manufacturers);
   $$ProductsTableTableManager get products =>
       $$ProductsTableTableManager(_db.attachedDatabase, _db.products);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
@@ -99,8 +104,6 @@ class InventoryDaoManager {
         _db.attachedDatabase,
         _db.stockAdjustments,
       );
-  $$CustomersTableTableManager get customers =>
-      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanTripsTableTableManager get vanTrips =>
       $$VanTripsTableTableManager(_db.attachedDatabase, _db.vanTrips);
   $$OrdersTableTableManager get orders =>
@@ -133,9 +136,9 @@ mixin _$StockLedgerDaoMixin on DatabaseAccessor<AppDatabase> {
   $SuppliersTable get suppliers => attachedDatabase.suppliers;
   $ManufacturersTable get manufacturers => attachedDatabase.manufacturers;
   $ProductsTable get products => attachedDatabase.products;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
-  $CustomersTable get customers => attachedDatabase.customers;
   $UsersTable get users => attachedDatabase.users;
   $VanTripsTable get vanTrips => attachedDatabase.vanTrips;
   $OrdersTable get orders => attachedDatabase.orders;
@@ -167,12 +170,12 @@ class StockLedgerDaoManager {
       $$ManufacturersTableTableManager(_db.attachedDatabase, _db.manufacturers);
   $$ProductsTableTableManager get products =>
       $$ProductsTableTableManager(_db.attachedDatabase, _db.products);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
       $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
-  $$CustomersTableTableManager get customers =>
-      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$UsersTableTableManager get users =>
       $$UsersTableTableManager(_db.attachedDatabase, _db.users);
   $$VanTripsTableTableManager get vanTrips =>
@@ -202,6 +205,7 @@ class StockLedgerDaoManager {
 
 mixin _$StockTransferDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
   $CategoriesTable get categories => attachedDatabase.categories;
@@ -211,7 +215,6 @@ mixin _$StockTransferDaoMixin on DatabaseAccessor<AppDatabase> {
   $ProductsTable get products => attachedDatabase.products;
   $UsersTable get users => attachedDatabase.users;
   $StockTransfersTable get stockTransfers => attachedDatabase.stockTransfers;
-  $CustomersTable get customers => attachedDatabase.customers;
   $VanTripsTable get vanTrips => attachedDatabase.vanTrips;
   $OrdersTable get orders => attachedDatabase.orders;
   $StockAdjustmentsTable get stockAdjustments =>
@@ -227,6 +230,8 @@ class StockTransferDaoManager {
   StockTransferDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
@@ -251,8 +256,6 @@ class StockTransferDaoManager {
         _db.attachedDatabase,
         _db.stockTransfers,
       );
-  $$CustomersTableTableManager get customers =>
-      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanTripsTableTableManager get vanTrips =>
       $$VanTripsTableTableManager(_db.attachedDatabase, _db.vanTrips);
   $$OrdersTableTableManager get orders =>
@@ -278,6 +281,7 @@ mixin _$StockAdjustmentRequestsDaoMixin on DatabaseAccessor<AppDatabase> {
   $SuppliersTable get suppliers => attachedDatabase.suppliers;
   $ManufacturersTable get manufacturers => attachedDatabase.manufacturers;
   $ProductsTable get products => attachedDatabase.products;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
   $UsersTable get users => attachedDatabase.users;
@@ -305,6 +309,8 @@ class StockAdjustmentRequestsDaoManager {
       $$ManufacturersTableTableManager(_db.attachedDatabase, _db.manufacturers);
   $$ProductsTableTableManager get products =>
       $$ProductsTableTableManager(_db.attachedDatabase, _db.products);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
@@ -320,6 +326,7 @@ class StockAdjustmentRequestsDaoManager {
 
 mixin _$StockCountsDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
   $UsersTable get users => attachedDatabase.users;
@@ -332,6 +339,8 @@ class StockCountsDaoManager {
   StockCountsDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
@@ -349,10 +358,10 @@ mixin _$CostBatchesDaoMixin on DatabaseAccessor<AppDatabase> {
   $SuppliersTable get suppliers => attachedDatabase.suppliers;
   $ManufacturersTable get manufacturers => attachedDatabase.manufacturers;
   $ProductsTable get products => attachedDatabase.products;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
   $CostBatchesTable get costBatches => attachedDatabase.costBatches;
-  $CustomersTable get customers => attachedDatabase.customers;
   $UsersTable get users => attachedDatabase.users;
   $VanTripsTable get vanTrips => attachedDatabase.vanTrips;
   $OrdersTable get orders => attachedDatabase.orders;
@@ -378,14 +387,14 @@ class CostBatchesDaoManager {
       $$ManufacturersTableTableManager(_db.attachedDatabase, _db.manufacturers);
   $$ProductsTableTableManager get products =>
       $$ProductsTableTableManager(_db.attachedDatabase, _db.products);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
       $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
   $$CostBatchesTableTableManager get costBatches =>
       $$CostBatchesTableTableManager(_db.attachedDatabase, _db.costBatches);
-  $$CustomersTableTableManager get customers =>
-      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$UsersTableTableManager get users =>
       $$UsersTableTableManager(_db.attachedDatabase, _db.users);
   $$VanTripsTableTableManager get vanTrips =>
@@ -398,9 +407,9 @@ class CostBatchesDaoManager {
 
 mixin _$OrdersDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
-  $CustomersTable get customers => attachedDatabase.customers;
   $UsersTable get users => attachedDatabase.users;
   $VanTripsTable get vanTrips => attachedDatabase.vanTrips;
   $OrdersTable get orders => attachedDatabase.orders;
@@ -443,12 +452,12 @@ class OrdersDaoManager {
   OrdersDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
       $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
-  $$CustomersTableTableManager get customers =>
-      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$UsersTableTableManager get users =>
       $$UsersTableTableManager(_db.attachedDatabase, _db.users);
   $$VanTripsTableTableManager get vanTrips =>
@@ -540,9 +549,9 @@ class OrdersDaoManager {
 
 mixin _$OrderCrateLinesDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
-  $CustomersTable get customers => attachedDatabase.customers;
   $UsersTable get users => attachedDatabase.users;
   $VanTripsTable get vanTrips => attachedDatabase.vanTrips;
   $OrdersTable get orders => attachedDatabase.orders;
@@ -556,12 +565,12 @@ class OrderCrateLinesDaoManager {
   OrderCrateLinesDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
       $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
-  $$CustomersTableTableManager get customers =>
-      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$UsersTableTableManager get users =>
       $$UsersTableTableManager(_db.attachedDatabase, _db.users);
   $$VanTripsTableTableManager get vanTrips =>
@@ -579,6 +588,7 @@ class OrderCrateLinesDaoManager {
 
 mixin _$QuickSaleRequestsDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
   $UsersTable get users => attachedDatabase.users;
@@ -592,6 +602,8 @@ class QuickSaleRequestsDaoManager {
   QuickSaleRequestsDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
@@ -607,9 +619,9 @@ class QuickSaleRequestsDaoManager {
 
 mixin _$PaymentTransactionsDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
-  $CustomersTable get customers => attachedDatabase.customers;
   $UsersTable get users => attachedDatabase.users;
   $VanTripsTable get vanTrips => attachedDatabase.vanTrips;
   $OrdersTable get orders => attachedDatabase.orders;
@@ -643,12 +655,12 @@ class PaymentTransactionsDaoManager {
   PaymentTransactionsDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
       $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
-  $$CustomersTableTableManager get customers =>
-      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$UsersTableTableManager get users =>
       $$UsersTableTableManager(_db.attachedDatabase, _db.users);
   $$VanTripsTableTableManager get vanTrips =>
@@ -715,13 +727,13 @@ class PaymentTransactionsDaoManager {
 
 mixin _$CustomersDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
-  $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
-  $StoresTable get stores => attachedDatabase.stores;
   $CustomersTable get customers => attachedDatabase.customers;
   $ManufacturersTable get manufacturers => attachedDatabase.manufacturers;
   $CustomerCrateBalancesTable get customerCrateBalances =>
       attachedDatabase.customerCrateBalances;
   $CustomerWalletsTable get customerWallets => attachedDatabase.customerWallets;
+  $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
+  $StoresTable get stores => attachedDatabase.stores;
   $UsersTable get users => attachedDatabase.users;
   $VanTripsTable get vanTrips => attachedDatabase.vanTrips;
   $OrdersTable get orders => attachedDatabase.orders;
@@ -735,10 +747,6 @@ class CustomersDaoManager {
   CustomersDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
-  $$VanDriversTableTableManager get vanDrivers =>
-      $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
-  $$StoresTableTableManager get stores =>
-      $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
   $$CustomersTableTableManager get customers =>
       $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$ManufacturersTableTableManager get manufacturers =>
@@ -753,6 +761,10 @@ class CustomersDaoManager {
         _db.attachedDatabase,
         _db.customerWallets,
       );
+  $$VanDriversTableTableManager get vanDrivers =>
+      $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
+  $$StoresTableTableManager get stores =>
+      $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
   $$UsersTableTableManager get users =>
       $$UsersTableTableManager(_db.attachedDatabase, _db.users);
   $$VanTripsTableTableManager get vanTrips =>
@@ -768,8 +780,6 @@ class CustomersDaoManager {
 
 mixin _$CustomerWalletsDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
-  $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
-  $StoresTable get stores => attachedDatabase.stores;
   $CustomersTable get customers => attachedDatabase.customers;
   $CustomerWalletsTable get customerWallets => attachedDatabase.customerWallets;
   CustomerWalletsDaoManager get managers => CustomerWalletsDaoManager(this);
@@ -780,10 +790,6 @@ class CustomerWalletsDaoManager {
   CustomerWalletsDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
-  $$VanDriversTableTableManager get vanDrivers =>
-      $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
-  $$StoresTableTableManager get stores =>
-      $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
   $$CustomersTableTableManager get customers =>
       $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$CustomerWalletsTableTableManager get customerWallets =>
@@ -795,10 +801,10 @@ class CustomerWalletsDaoManager {
 
 mixin _$WalletTransactionsDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
-  $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
-  $StoresTable get stores => attachedDatabase.stores;
   $CustomersTable get customers => attachedDatabase.customers;
   $CustomerWalletsTable get customerWallets => attachedDatabase.customerWallets;
+  $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
+  $StoresTable get stores => attachedDatabase.stores;
   $UsersTable get users => attachedDatabase.users;
   $VanTripsTable get vanTrips => attachedDatabase.vanTrips;
   $OrdersTable get orders => attachedDatabase.orders;
@@ -831,10 +837,6 @@ class WalletTransactionsDaoManager {
   WalletTransactionsDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
-  $$VanDriversTableTableManager get vanDrivers =>
-      $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
-  $$StoresTableTableManager get stores =>
-      $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
   $$CustomersTableTableManager get customers =>
       $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$CustomerWalletsTableTableManager get customerWallets =>
@@ -842,6 +844,10 @@ class WalletTransactionsDaoManager {
         _db.attachedDatabase,
         _db.customerWallets,
       );
+  $$VanDriversTableTableManager get vanDrivers =>
+      $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
+  $$StoresTableTableManager get stores =>
+      $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
   $$UsersTableTableManager get users =>
       $$UsersTableTableManager(_db.attachedDatabase, _db.users);
   $$VanTripsTableTableManager get vanTrips =>
@@ -903,8 +909,6 @@ class WalletTransactionsDaoManager {
 
 mixin _$CustomerCrateBalancesDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
-  $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
-  $StoresTable get stores => attachedDatabase.stores;
   $CustomersTable get customers => attachedDatabase.customers;
   $ManufacturersTable get manufacturers => attachedDatabase.manufacturers;
   $CustomerCrateBalancesTable get customerCrateBalances =>
@@ -918,10 +922,6 @@ class CustomerCrateBalancesDaoManager {
   CustomerCrateBalancesDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
-  $$VanDriversTableTableManager get vanDrivers =>
-      $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
-  $$StoresTableTableManager get stores =>
-      $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
   $$CustomersTableTableManager get customers =>
       $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$ManufacturersTableTableManager get manufacturers =>
@@ -973,6 +973,7 @@ mixin _$SupplierLedgerDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
   $CrateSizeGroupsTable get crateSizeGroups => attachedDatabase.crateSizeGroups;
   $SuppliersTable get suppliers => attachedDatabase.suppliers;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
   $UsersTable get users => attachedDatabase.users;
@@ -993,6 +994,8 @@ class SupplierLedgerDaoManager {
       );
   $$SuppliersTableTableManager get suppliers =>
       $$SuppliersTableTableManager(_db.attachedDatabase, _db.suppliers);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
@@ -1011,6 +1014,7 @@ mixin _$SupplierCrateLedgerDaoMixin on DatabaseAccessor<AppDatabase> {
   $CrateSizeGroupsTable get crateSizeGroups => attachedDatabase.crateSizeGroups;
   $SuppliersTable get suppliers => attachedDatabase.suppliers;
   $ManufacturersTable get manufacturers => attachedDatabase.manufacturers;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
   $UsersTable get users => attachedDatabase.users;
@@ -1036,6 +1040,8 @@ class SupplierCrateLedgerDaoManager {
       $$SuppliersTableTableManager(_db.attachedDatabase, _db.suppliers);
   $$ManufacturersTableTableManager get manufacturers =>
       $$ManufacturersTableTableManager(_db.attachedDatabase, _db.manufacturers);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
@@ -1088,9 +1094,9 @@ class SupplierCrateBalancesDaoManager {
 
 mixin _$PendingCrateReturnsDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
-  $CustomersTable get customers => attachedDatabase.customers;
   $UsersTable get users => attachedDatabase.users;
   $VanTripsTable get vanTrips => attachedDatabase.vanTrips;
   $OrdersTable get orders => attachedDatabase.orders;
@@ -1106,12 +1112,12 @@ class PendingCrateReturnsDaoManager {
   PendingCrateReturnsDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
       $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
-  $$CustomersTableTableManager get customers =>
-      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$UsersTableTableManager get users =>
       $$UsersTableTableManager(_db.attachedDatabase, _db.users);
   $$VanTripsTableTableManager get vanTrips =>
@@ -1170,6 +1176,7 @@ class ManufacturerCrateBalancesDaoManager {
 
 mixin _$StoreCrateBalancesDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
   $ManufacturersTable get manufacturers => attachedDatabase.manufacturers;
@@ -1184,6 +1191,8 @@ class StoreCrateBalancesDaoManager {
   StoreCrateBalancesDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
@@ -1199,11 +1208,11 @@ class StoreCrateBalancesDaoManager {
 
 mixin _$CratePoolDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
-  $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
-  $StoresTable get stores => attachedDatabase.stores;
   $CustomersTable get customers => attachedDatabase.customers;
   $ManufacturersTable get manufacturers => attachedDatabase.manufacturers;
   $CrateSizeGroupsTable get crateSizeGroups => attachedDatabase.crateSizeGroups;
+  $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
+  $StoresTable get stores => attachedDatabase.stores;
   $UsersTable get users => attachedDatabase.users;
   $VanTripsTable get vanTrips => attachedDatabase.vanTrips;
   $OrdersTable get orders => attachedDatabase.orders;
@@ -1247,10 +1256,6 @@ class CratePoolDaoManager {
   CratePoolDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
-  $$VanDriversTableTableManager get vanDrivers =>
-      $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
-  $$StoresTableTableManager get stores =>
-      $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
   $$CustomersTableTableManager get customers =>
       $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$ManufacturersTableTableManager get manufacturers =>
@@ -1260,6 +1265,10 @@ class CratePoolDaoManager {
         _db.attachedDatabase,
         _db.crateSizeGroups,
       );
+  $$VanDriversTableTableManager get vanDrivers =>
+      $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
+  $$StoresTableTableManager get stores =>
+      $$StoresTableTableManager(_db.attachedDatabase, _db.stores);
   $$UsersTableTableManager get users =>
       $$UsersTableTableManager(_db.attachedDatabase, _db.users);
   $$VanTripsTableTableManager get vanTrips =>
@@ -1353,12 +1362,12 @@ mixin _$ExpensesDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
   $ExpenseCategoriesTable get expenseCategories =>
       attachedDatabase.expenseCategories;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
   $UsersTable get users => attachedDatabase.users;
   $ExpensesTable get expenses => attachedDatabase.expenses;
   $ActivityLogsTable get activityLogs => attachedDatabase.activityLogs;
-  $CustomersTable get customers => attachedDatabase.customers;
   $VanTripsTable get vanTrips => attachedDatabase.vanTrips;
   $OrdersTable get orders => attachedDatabase.orders;
   $CrateSizeGroupsTable get crateSizeGroups => attachedDatabase.crateSizeGroups;
@@ -1392,6 +1401,8 @@ class ExpensesDaoManager {
         _db.attachedDatabase,
         _db.expenseCategories,
       );
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
@@ -1402,8 +1413,6 @@ class ExpensesDaoManager {
       $$ExpensesTableTableManager(_db.attachedDatabase, _db.expenses);
   $$ActivityLogsTableTableManager get activityLogs =>
       $$ActivityLogsTableTableManager(_db.attachedDatabase, _db.activityLogs);
-  $$CustomersTableTableManager get customers =>
-      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanTripsTableTableManager get vanTrips =>
       $$VanTripsTableTableManager(_db.attachedDatabase, _db.vanTrips);
   $$OrdersTableTableManager get orders =>
@@ -1461,6 +1470,7 @@ class ExpensesDaoManager {
 
 mixin _$ExpenseBudgetsDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
   $ExpenseBudgetsTable get expenseBudgets => attachedDatabase.expenseBudgets;
@@ -1472,6 +1482,8 @@ class ExpenseBudgetsDaoManager {
   ExpenseBudgetsDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
@@ -1507,6 +1519,7 @@ class SyncDaoManager {
 
 mixin _$ErrorLogDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
   $UsersTable get users => attachedDatabase.users;
@@ -1519,6 +1532,8 @@ class ErrorLogDaoManager {
   ErrorLogDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
@@ -1531,6 +1546,7 @@ class ErrorLogDaoManager {
 
 mixin _$ActivityLogDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
   $UsersTable get users => attachedDatabase.users;
@@ -1543,6 +1559,8 @@ class ActivityLogDaoManager {
   ActivityLogDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
@@ -1555,6 +1573,7 @@ class ActivityLogDaoManager {
 
 mixin _$NotificationsDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
   $UsersTable get users => attachedDatabase.users;
@@ -1567,6 +1586,8 @@ class NotificationsDaoManager {
   NotificationsDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
@@ -1579,6 +1600,7 @@ class NotificationsDaoManager {
 
 mixin _$StoresDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
   $UsersTable get users => attachedDatabase.users;
@@ -1590,6 +1612,8 @@ class StoresDaoManager {
   StoresDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
@@ -1600,6 +1624,7 @@ class StoresDaoManager {
 
 mixin _$SessionsDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
   $UsersTable get users => attachedDatabase.users;
@@ -1612,6 +1637,8 @@ class SessionsDaoManager {
   SessionsDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
@@ -1624,6 +1651,7 @@ class SessionsDaoManager {
 
 mixin _$UserStoresDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
   $UsersTable get users => attachedDatabase.users;
@@ -1636,6 +1664,8 @@ class UserStoresDaoManager {
   UserStoresDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
@@ -1648,6 +1678,7 @@ class UserStoresDaoManager {
 
 mixin _$VanTripsDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
   $UsersTable get users => attachedDatabase.users;
@@ -1661,7 +1692,6 @@ mixin _$VanTripsDaoMixin on DatabaseAccessor<AppDatabase> {
   $VanReturnEventsTable get vanReturnEvents => attachedDatabase.vanReturnEvents;
   $DriverLedgerEntriesTable get driverLedgerEntries =>
       attachedDatabase.driverLedgerEntries;
-  $CustomersTable get customers => attachedDatabase.customers;
   $OrdersTable get orders => attachedDatabase.orders;
   $ShipmentsTable get shipments => attachedDatabase.shipments;
   $ExpenseCategoriesTable get expenseCategories =>
@@ -1689,6 +1719,8 @@ class VanTripsDaoManager {
   VanTripsDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
@@ -1722,8 +1754,6 @@ class VanTripsDaoManager {
         _db.attachedDatabase,
         _db.driverLedgerEntries,
       );
-  $$CustomersTableTableManager get customers =>
-      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$OrdersTableTableManager get orders =>
       $$OrdersTableTableManager(_db.attachedDatabase, _db.orders);
   $$ShipmentsTableTableManager get shipments =>
@@ -1777,6 +1807,7 @@ class VanTripsDaoManager {
 
 mixin _$DriverLedgerDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
   $UsersTable get users => attachedDatabase.users;
@@ -1791,6 +1822,8 @@ class DriverLedgerDaoManager {
   DriverLedgerDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
@@ -1808,6 +1841,7 @@ class DriverLedgerDaoManager {
 
 mixin _$VanDriversDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
   VanDriversDaoManager get managers => VanDriversDaoManager(this);
@@ -1818,6 +1852,8 @@ class VanDriversDaoManager {
   VanDriversDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
@@ -1874,6 +1910,7 @@ class RolePermissionsDaoManager {
 
 mixin _$UserPermissionOverridesDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
   $UsersTable get users => attachedDatabase.users;
@@ -1888,6 +1925,8 @@ class UserPermissionOverridesDaoManager {
   UserPermissionOverridesDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
@@ -1903,6 +1942,7 @@ class UserPermissionOverridesDaoManager {
 
 mixin _$StoreRolePermissionsDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
   $RolesTable get roles => attachedDatabase.roles;
@@ -1917,6 +1957,8 @@ class StoreRolePermissionsDaoManager {
   StoreRolePermissionsDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
@@ -1989,6 +2031,7 @@ class SystemConfigDaoManager {
 
 mixin _$UserBusinessesDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
   $UsersTable get users => attachedDatabase.users;
@@ -2002,6 +2045,8 @@ class UserBusinessesDaoManager {
   UserBusinessesDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
@@ -2020,6 +2065,7 @@ class UserBusinessesDaoManager {
 mixin _$InviteCodesDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
   $RolesTable get roles => attachedDatabase.roles;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
   $UsersTable get users => attachedDatabase.users;
@@ -2034,6 +2080,8 @@ class InviteCodesDaoManager {
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
   $$RolesTableTableManager get roles =>
       $$RolesTableTableManager(_db.attachedDatabase, _db.roles);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
@@ -2046,6 +2094,7 @@ class InviteCodesDaoManager {
 
 mixin _$DailyClosingsDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
   $UsersTable get users => attachedDatabase.users;
@@ -2058,6 +2107,8 @@ class DailyClosingsDaoManager {
   DailyClosingsDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
@@ -2070,6 +2121,7 @@ class DailyClosingsDaoManager {
 
 mixin _$OnlineOrdersDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
   $OnlineOrdersTable get onlineOrders => attachedDatabase.onlineOrders;
@@ -2080,7 +2132,6 @@ mixin _$OnlineOrdersDaoMixin on DatabaseAccessor<AppDatabase> {
   $ProductsTable get products => attachedDatabase.products;
   $OnlineOrderLinesTable get onlineOrderLines =>
       attachedDatabase.onlineOrderLines;
-  $CustomersTable get customers => attachedDatabase.customers;
   OnlineOrdersDaoManager get managers => OnlineOrdersDaoManager(this);
 }
 
@@ -2089,6 +2140,8 @@ class OnlineOrdersDaoManager {
   OnlineOrdersDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
@@ -2113,12 +2166,11 @@ class OnlineOrdersDaoManager {
         _db.attachedDatabase,
         _db.onlineOrderLines,
       );
-  $$CustomersTableTableManager get customers =>
-      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
 }
 
 mixin _$PayrollDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
   $UsersTable get users => attachedDatabase.users;
@@ -2134,6 +2186,8 @@ class PayrollDaoManager {
   PayrollDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
@@ -2159,6 +2213,7 @@ class PayrollDaoManager {
 
 mixin _$StaffPayTotalsDaoMixin on DatabaseAccessor<AppDatabase> {
   $BusinessesTable get businesses => attachedDatabase.businesses;
+  $CustomersTable get customers => attachedDatabase.customers;
   $VanDriversTable get vanDrivers => attachedDatabase.vanDrivers;
   $StoresTable get stores => attachedDatabase.stores;
   $StaffPayTotalsTable get staffPayTotals => attachedDatabase.staffPayTotals;
@@ -2170,6 +2225,8 @@ class StaffPayTotalsDaoManager {
   StaffPayTotalsDaoManager(this._db);
   $$BusinessesTableTableManager get businesses =>
       $$BusinessesTableTableManager(_db.attachedDatabase, _db.businesses);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db.attachedDatabase, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db.attachedDatabase, _db.vanDrivers);
   $$StoresTableTableManager get stores =>

@@ -17,6 +17,7 @@ import 'package:reebaplus_pos/shared/services/printer_service.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/core/utils/name_case.dart';
 import 'package:reebaplus_pos/features/pos/services/receipt_extras.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
@@ -1352,6 +1353,34 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
     final hasWholesale = !businessSellsOnePrice(
       ref.watch(currentBusinessProvider),
     );
+    // #783: this account was brought in under a van driver (history only now).
+    final driverName = ref
+        .watch(vanDriverRowsProvider)
+        .valueOrNull
+        ?.where((d) => d.customerId != null && d.customerId == _customerId)
+        .firstOrNull
+        ?.name;
+    final card = _buildProfileCard(hasWholesale);
+    if (driverName == null) return card;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        card,
+        Padding(
+          padding: EdgeInsets.only(bottom: context.getRSize(8)),
+          child: Text(
+            'Now a van driver: ${toNameCase(driverName)}',
+            key: const Key('customer-now-a-van-driver'),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProfileCard(bool hasWholesale) {
     return CustomerProfileCard(
       showTier: hasWholesale,
       initials: _initials(_name),

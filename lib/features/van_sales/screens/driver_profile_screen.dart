@@ -14,12 +14,14 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
+import 'package:reebaplus_pos/core/utils/name_case.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/van_sales/driver_vans.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/drivers_list_screen.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/van_reconcile_screen.dart';
+import 'package:reebaplus_pos/features/van_sales/widgets/bring_in_old_account_flow.dart';
 import 'package:reebaplus_pos/features/van_sales/widgets/driver_ledger_entry_tile.dart';
 import 'package:reebaplus_pos/features/van_sales/widgets/van_driver_pickers.dart';
 import 'package:reebaplus_pos/features/van_sales/widgets/van_sale_receipt_sheet.dart';
@@ -231,6 +233,24 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
         ? ref.watch(driverVanSalesProvider(driverId)).valueOrNull ??
               const <OrderWithItems>[]
         : const <OrderWithItems>[];
+    // #783: the old customer account's history, read-only. Empty unless linked.
+    final oldCustomerId = driver?.customerId;
+    final oldSales = oldCustomerId == null
+        ? const <OrderWithItems>[]
+        : ref.watch(oldAccountSalesProvider(oldCustomerId)).valueOrNull ??
+              const <OrderWithItems>[];
+    final oldPayments = oldCustomerId == null
+        ? const <WalletTransactionData>[]
+        : ref.watch(oldAccountPaymentsProvider(oldCustomerId)).valueOrNull ??
+              const <WalletTransactionData>[];
+    final oldCustomerName = oldCustomerId == null
+        ? null
+        : ref
+              .watch(customerServiceProvider)
+              .value
+              .where((c) => c.id == oldCustomerId)
+              .firstOrNull
+              ?.name;
     final ledger = driverId != null
         ? ref.watch(driverLedgerHistoryProvider(driverId)).valueOrNull ??
               const <DriverLedgerEntryData>[]
@@ -251,8 +271,13 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
         if (isDateInPeriod(t.openedAt, _timeFilter)) t,
     ];
     final periodSales = [
-      for (final s in sales)
+      for (final s in [...sales, ...oldSales])
         if (isDateInPeriod(s.order.createdAt, _timeFilter)) s,
+    ]..sort((a, b) => b.order.createdAt.compareTo(a.order.createdAt));
+    final oldSaleIds = {for (final s in oldSales) s.order.id};
+    final periodOldPayments = [
+      for (final p in oldPayments)
+        if (isDateInPeriod(p.createdAt, _timeFilter)) p,
     ];
     final periodLedger = [
       for (final e in ledger)
@@ -289,6 +314,17 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
               onAssignVan: driverId == null || isRemoved
                   ? null
                   : () => _assignVan(driverId),
+              onBringInOldAccount:
+                  driver == null || isRemoved || driver.customerId != null
+                  ? null
+                  : () => showBringInOldAccountFlow(
+                      context,
+                      ref,
+                      driver: driver,
+                    ),
+              oldAccountName: oldCustomerId == null
+                  ? null
+                  : toNameCase(oldCustomerName ?? 'Old customer account'),
               trips: trips,
               vanNameById: vanNameById,
               assignedVanStoreIds: assignedVanStoreIds,
@@ -308,12 +344,16 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
           ),
           TabSliverView(
             storageKey: 'driver-profile-sales',
-            slivers: _salesTabSlivers(sales: periodSales),
+            slivers: _salesTabSlivers(
+              sales: periodSales,
+              oldSaleIds: oldSaleIds,
+            ),
           ),
           TabSliverView(
             storageKey: 'driver-profile-ledger',
             slivers: _ledgerTabSlivers(
               entries: periodLedger,
+              oldPayments: periodOldPayments,
               vanNameByTripId: {
                 for (final t in trips) t.id: vanNameById[t.vanStoreId] ?? '',
               },
@@ -601,7 +641,10 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
     ];
   }
 
-  List<Widget> _salesTabSlivers({required List<OrderWithItems> sales}) {
+  List<Widget> _salesTabSlivers({
+    required List<OrderWithItems> sales,
+    Set<String> oldSaleIds = const {},
+  }) {
     if (sales.isEmpty) {
       return [
         const SliverFillRemaining(
@@ -615,8 +658,14 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
     }
     final t = Theme.of(context);
     final subtext = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
+    // The old customer account's sales are history, not road sales: they stay
+    // out of the "taken on the road" figure.
     final recognised = sales
-        .where((s) => orderCountsAsSale(s.order.status))
+        .where(
+          (s) =>
+              !oldSaleIds.contains(s.order.id) &&
+              orderCountsAsSale(s.order.status),
+        )
         .fold<int>(0, (sum, s) => sum + s.order.netAmountKobo);
 
     return [
@@ -643,6 +692,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
             return _SaleRow(
               key: driverSaleRowKey(sale.order.id),
               sale: sale,
+              fromOldAccount: oldSaleIds.contains(sale.order.id),
             );
           },
         ),
@@ -652,9 +702,10 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
 
   List<Widget> _ledgerTabSlivers({
     required List<DriverLedgerEntryData> entries,
+    List<WalletTransactionData> oldPayments = const [],
     required Map<String, String> vanNameByTripId,
   }) {
-    if (entries.isEmpty) {
+    if (entries.isEmpty && oldPayments.isEmpty) {
       return [
         const SliverFillRemaining(
           hasScrollBody: false,
@@ -678,11 +729,25 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
       }
     }
 
+    // #783: interleave the old account's payments by date. They are history
+    // only: the summary tiles and the balance count the driver's own rows.
+    final lines =
+        <
+          ({
+            DateTime at,
+            DriverLedgerEntryData? entry,
+            WalletTransactionData? old,
+          })
+        >[
+          for (final e in entries) (at: e.createdAt, entry: e, old: null),
+          for (final p in oldPayments) (at: p.createdAt, entry: null, old: p),
+        ]..sort((a, b) => b.at.compareTo(a.at));
+
     return [
       SliverPadding(
         padding: _tabPadding(context),
         sliver: SliverList.builder(
-          itemCount: entries.length + 1,
+          itemCount: lines.length + 1,
           itemBuilder: (_, i) {
             if (i == 0) {
               return Padding(
@@ -708,7 +773,15 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
                 ),
               );
             }
-            final entry = entries[i - 1];
+            final line = lines[i - 1];
+            final old = line.old;
+            if (old != null) {
+              return _OldPaymentTile(
+                key: Key('driver-old-payment-${old.id}'),
+                payment: old,
+              );
+            }
+            final entry = line.entry!;
             return DriverLedgerEntryTile(
               key: driverLedgerRowKey(entry.id),
               entry: entry,
@@ -915,6 +988,12 @@ class _Header extends StatelessWidget {
   final String? phone;
   final bool isRemoved;
   final VoidCallback? onAssignVan;
+
+  /// #783: null once an old account is brought in (or for a removed driver).
+  final VoidCallback? onBringInOldAccount;
+
+  /// #783: the brought-in old customer account's name, when linked.
+  final String? oldAccountName;
   final List<VanTripData> trips;
   final Map<String, String> vanNameById;
 
@@ -929,6 +1008,8 @@ class _Header extends StatelessWidget {
     required this.phone,
     required this.isRemoved,
     required this.onAssignVan,
+    this.onBringInOldAccount,
+    this.oldAccountName,
     required this.trips,
     required this.vanNameById,
     required this.assignedVanStoreIds,
@@ -1038,6 +1119,20 @@ class _Header extends StatelessWidget {
                     onPressed: onAssignVan,
                     icon: const Icon(AppIcons.vanDelivery, size: 18),
                     label: const Text('Assign to a van'),
+                  ),
+                if (oldAccountName != null) ...[
+                  SizedBox(height: context.getRSize(4)),
+                  _InfoRow(
+                    icon: AppIcons.customers,
+                    text: 'Old customer account: $oldAccountName',
+                  ),
+                ],
+                if (onBringInOldAccount != null)
+                  TextButton.icon(
+                    key: const Key('driver-bring-in-old-account'),
+                    onPressed: onBringInOldAccount,
+                    icon: const Icon(AppIcons.link, size: 18),
+                    label: const Text('Bring in old customer account'),
                   ),
               ],
             ),
@@ -1231,7 +1326,14 @@ class _TripRow extends ConsumerWidget {
 class _SaleRow extends StatelessWidget {
   final OrderWithItems sale;
 
-  const _SaleRow({super.key, required this.sale});
+  /// #783: this sale is from the driver's old customer account (history).
+  final bool fromOldAccount;
+
+  const _SaleRow({
+    super.key,
+    required this.sale,
+    this.fromOldAccount = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1287,7 +1389,8 @@ class _SaleRow extends StatelessWidget {
                     Text(
                       '${DateFormat('d MMM y, HH:mm').format(order.createdAt)}'
                       ' • ${formatQty(units)} ${units == 1 ? 'item' : 'items'}'
-                      '${counted ? '' : ' • ${order.status}'}',
+                      '${counted ? '' : ' • ${order.status}'}'
+                      '${fromOldAccount ? ' • Old customer account' : ''}',
                       style: TextStyle(
                         fontSize: context.getRFontSize(12),
                         color: subtext,
@@ -1519,6 +1622,87 @@ class _EmptyTab extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// One payment from the driver's OLD customer account (#783): read-only, and
+/// tagged so it is never mistaken for a driver ledger row.
+class _OldPaymentTile extends StatelessWidget {
+  final WalletTransactionData payment;
+  const _OldPaymentTile({super.key, required this.payment});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final semantic = t.extension<AppSemanticColors>()!;
+    final subtext = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
+    // An account adjustment (opening balance, correction, or the move to the
+    // driver) is listed too, so the history adds up; it is not a payment.
+    final isAdjustment = payment.referenceType == 'adjustment';
+    final isCredit = payment.signedAmountKobo >= 0;
+    final title = isAdjustment
+        ? 'Account adjustment'
+        : payment.referenceType == 'topup_transfer'
+        ? 'Payment received (Transfer)'
+        : 'Payment received (Cash)';
+    final tone = isAdjustment ? t.colorScheme.onSurface : semantic.success;
+    return GlassyCard(
+      margin: EdgeInsets.only(bottom: context.getRSize(12)),
+      radius: 16,
+      padding: EdgeInsets.all(context.getRSize(16)),
+      child: Row(
+        children: [
+          Container(
+            width: context.getRSize(40),
+            height: context.getRSize(40),
+            decoration: BoxDecoration(
+              color: tone.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              AppIcons.transfer,
+              color: tone,
+              size: context.getRSize(16),
+            ),
+          ),
+          SizedBox(width: context.getRSize(14)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(14),
+                    fontWeight: FontWeight.bold,
+                    color: t.colorScheme.onSurface,
+                  ),
+                ),
+                SizedBox(height: context.getRSize(4)),
+                Text(
+                  '${DateFormat('d MMM y').format(payment.createdAt)}'
+                  ' • Old customer account',
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(12),
+                    color: subtext,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(width: context.getRSize(8)),
+          Text(
+            '${isCredit ? '+' : '−'}${formatCurrency(payment.amountKobo / 100)}',
+            style: TextStyle(
+              fontSize: context.getRFontSize(15),
+              fontWeight: FontWeight.w800,
+              color: tone,
+            ),
+          ),
+        ],
       ),
     );
   }

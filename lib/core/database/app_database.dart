@@ -1283,6 +1283,13 @@ class VanDrivers extends Table {
   DateTimeColumn get lastUpdatedAt =>
       dateTime().withDefault(currentDateAndTime)();
 
+  /// #783 (v109 / cloud 0256): the OLD customer account this driver was bought
+  /// in from ("Bring in old customer account"). Nullable; set once, never
+  /// cleared. At most one driver per customer per business (partial unique
+  /// index [kVanDriversCustomerIndex]) and, by the link action, one customer
+  /// per driver. A linked customer is no longer offered for new sales.
+  TextColumn get customerId => text().nullable().references(Customers, #id)();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -3494,7 +3501,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 108;
+  int get schemaVersion => 109;
 
   /// The v90 (#473) listing columns, pinned to their defaults in every older
   /// products rebuild: TableMigration copies from the CURRENT schema, so a
@@ -7604,6 +7611,24 @@ class AppDatabase extends _$AppDatabase {
           await customStatement(stmt);
         }
       }
+      if (from < 109) {
+        // ── v109 — #783: a driver can be linked to an old customer account ─
+        //
+        // Mirrors supabase/migrations/0256_van_drivers_customer_id.sql: ONE
+        // nullable column + its partial unique index. A plain addColumn (no
+        // table rebuild), so no stale-column trap; guarded so a re-upgrade is
+        // idempotent. Existing rows stay null; nothing is enqueued.
+        final driverCols = {
+          for (final r in await customSelect(
+            "SELECT name FROM pragma_table_info('van_drivers')",
+          ).get())
+            r.read<String>('name'),
+        };
+        if (!driverCols.contains('customer_id')) {
+          await m.addColumn(vanDrivers, vanDrivers.customerId);
+        }
+        await customStatement(kVanDriversCustomerIndex);
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -8483,6 +8508,13 @@ const List<String> _crateDepositPaymentIndexStatements = [
 /// #427: one live Customer per Shopper per business (mirrors cloud 0208's
 /// `customers_business_shopper_account`). Run at create time and by the v93
 /// step; IF NOT EXISTS keeps a re-upgrade idempotent.
+/// #783: one driver per old customer account per business (mirrors cloud
+/// 0256's `uq_van_drivers_business_customer`). Create time + the v109 step.
+const String kVanDriversCustomerIndex =
+    'CREATE UNIQUE INDEX IF NOT EXISTS uq_van_drivers_business_customer '
+    'ON van_drivers (business_id, customer_id) '
+    'WHERE customer_id IS NOT NULL';
+
 const String kCustomersShopperAccountIndex =
     'CREATE UNIQUE INDEX IF NOT EXISTS uq_customers_business_shopper_account '
     'ON customers (business_id, shopper_account_id) '
@@ -8491,6 +8523,7 @@ const String kCustomersShopperAccountIndex =
 List<String> get _postCreateStatements {
   final stmts = <String>[];
   stmts.add(kCustomersShopperAccountIndex);
+  stmts.add(kVanDriversCustomerIndex);
 
   // -- Sync indexes --
   stmts.add(

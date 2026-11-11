@@ -7,6 +7,11 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #783: bring a driver's old customer account under their van (2026-11-11, branch `feat/783-driver-old-customer-account`)
+- Drift 108 → 109, cloud `0256_van_drivers_customer_id.sql`: nullable `van_drivers.customer_id` (FK, partial unique per business). `VanDriversDao.linkOldCustomerAccount` links once; a debt moves as ONE wallet credit (`adjustment`, no payment row) + ONE driver-ledger debit (`restatement`, no trip). No new CHECK value. ADR 0036.
+- Driver page: "Bring in old customer account" (same `vanManage` gate), old sales/payments listed tagged and read-only (not in balance or totals). Linked customer hidden from the sale picker; its page says "Now a van driver". Web parity issue to be filed by the supervisor.
+- Tests: `test/van_sales/driver_old_account_*_test.dart`.
+
 ### Issue #780: download percentage on Sync Issues (2026-11-11, branch `feat/780-download-percent`)
 - Download card shows a whole-number % above the bar from `rowsDone/rowsTotal` (total is the full snapshot count, fixed once known, so it rises smoothly). Capped at 99 while running, held never-backwards per download, hidden when total unknown. Pure `downloadPercent`/`holdPercent` in `sync_download_card.dart`; bar has a Semantics label with the %. UI only.
 - Test: `test/sync/download_percent_test.dart`.
