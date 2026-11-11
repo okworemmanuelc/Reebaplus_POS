@@ -204,7 +204,10 @@ class _LedgerRow extends StatelessWidget {
       case kDriverLedgerTypeDamageWriteoff:
         return 'Damage written off';
       case kDriverLedgerTypeRestatement:
-        return 'Corrected after close';
+        // #783: no trip = the debt moved in from the old customer account.
+        return e.tripId == null
+            ? 'Moved from the old customer account'
+            : 'Corrected after close';
       case kDriverLedgerTypeVoid:
         return 'Reversed';
       default:

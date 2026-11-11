@@ -3083,6 +3083,236 @@ class VanDriversDao extends DatabaseAccessor<AppDatabase>
     }
   }
 
+  // ── Bring in an old customer account (#783, ADR 0036) ─────────────────────
+
+  /// What linking [customerId] would do: how many past sales and payments the
+  /// old account has and what it owes. Read-only, for the confirm sheet.
+  Future<OldAccountSummary> summariseOldAccount(String customerId) async {
+    final saleRows = await (db.select(db.orders)
+          ..where(
+            (o) =>
+                whereBusiness(o) &
+                o.customerId.equals(customerId) &
+                o.kind.equals('adjustment').not(),
+          ))
+        .get();
+    final payRows = await (db.select(db.walletTransactions)
+          ..where(
+            (t) =>
+                whereBusiness(t) &
+                t.customerId.equals(customerId) &
+                t.referenceType.isIn(kOldAccountPaymentRefs) &
+                t.voidedAt.isNull(),
+          ))
+        .get();
+    final balance = await db.walletTransactionsDao.getBalanceKobo(customerId);
+    return OldAccountSummary(
+      salesCount: saleRows.length,
+      paymentsCount: payRows.length,
+      balanceKobo: balance,
+    );
+  }
+
+  /// The driver [customerId] is linked to, or null.
+  Future<VanDriverData?> driverLinkedToCustomer(String customerId) {
+    return (select(vanDrivers)
+          ..where((d) => whereBusiness(d) & d.customerId.equals(customerId))
+          ..limit(1))
+        .getSingleOrNull();
+  }
+
+  /// Every customer id that is now a driver's old account (live): those are
+  /// not offered when picking a customer for a new sale.
+  Stream<Set<String>> watchLinkedCustomerIds() {
+    return (select(vanDrivers)
+          ..where((d) => whereBusiness(d) & d.customerId.isNotNull()))
+        .watch()
+        .map((rows) => {for (final d in rows) d.customerId!});
+  }
+
+  /// The old account's past sales (with lines), newest first — read-only
+  /// history on the driver's page. Adjustment rows are never their own entry.
+  Stream<List<OrderWithItems>> watchOldAccountSales(String customerId) {
+    final query =
+        db.select(db.orders).join([
+            leftOuterJoin(
+              db.orderItems,
+              db.orderItems.orderId.equalsExp(db.orders.id),
+            ),
+            leftOuterJoin(
+              db.products,
+              db.products.id.equalsExp(db.orderItems.productId),
+            ),
+          ])
+          ..where(
+            whereBusiness(db.orders) &
+                db.orders.customerId.equals(customerId) &
+                db.orders.kind.equals('adjustment').not(),
+          )
+          ..orderBy([OrderingTerm.desc(db.orders.createdAt)]);
+    return query.watch().map((rows) {
+      final result = <String, OrderWithItems>{};
+      for (final row in rows) {
+        final order = row.readTable(db.orders);
+        final item = row.readTableOrNull(db.orderItems);
+        final product = row.readTableOrNull(db.products);
+        result.putIfAbsent(order.id, () => OrderWithItems(order, [], null));
+        if (item != null) {
+          result[order.id]!.items.add(
+            OrderItemDataWithProductData(item, product),
+          );
+        }
+      }
+      return result.values.toList(growable: false);
+    });
+  }
+
+  /// The old account's payments (wallet top-ups), newest first. The move
+  /// itself (an `adjustment`) is not a payment and is not listed.
+  Stream<List<WalletTransactionData>> watchOldAccountPayments(
+    String customerId,
+  ) {
+    return (db.select(db.walletTransactions)
+          ..where(
+            (t) =>
+                whereBusiness(t) &
+                t.customerId.equals(customerId) &
+                t.referenceType.isIn(kOldAccountPaymentRefs) &
+                t.voidedAt.isNull(),
+          )
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+        .watch();
+  }
+
+  /// Link [vanDriverId] to the old customer account [customerId] — ONCE, in one
+  /// transaction. Returns the kobo moved (0 when the customer owed nothing).
+  ///
+  /// * sets `van_drivers.customer_id` (one customer per driver, one driver per
+  ///   customer; a second attempt throws [OldAccountLinkException] and writes
+  ///   nothing);
+  /// * if the customer owes (wallet balance < 0): ONE `wallet_transactions`
+  ///   credit (`reference_type = 'adjustment'`, NO payment row) that brings the
+  ///   balance to exactly 0, and ONE `driver_ledger_entries` debit
+  ///   (`type = 'restatement'`, no trip, same kobo) on the driver's assigned
+  ///   van. Neither is a sale, a payment received, till cash or revenue: no
+  ///   `payment_transactions` row is written and no order is touched;
+  /// * in credit or at zero: link only.
+  ///
+  /// Nothing existing is edited or voided.
+  Future<int> linkOldCustomerAccount({
+    required String vanDriverId,
+    required String customerId,
+    String? performedBy,
+  }) {
+    return db.transaction(() async {
+      final driver = await getDriver(vanDriverId);
+      if (driver == null) {
+        throw const OldAccountLinkException('That driver was not found.');
+      }
+      if (driver.customerId != null) {
+        throw const OldAccountLinkException(
+          'This driver already has an old customer account brought in.',
+        );
+      }
+      final customer = await (db.select(db.customers)
+            ..where((c) => whereBusiness(c) & c.id.equals(customerId))
+            ..limit(1))
+          .getSingleOrNull();
+      if (customer == null) {
+        throw const OldAccountLinkException('That customer was not found.');
+      }
+      if (await driverLinkedToCustomer(customerId) != null) {
+        throw const OldAccountLinkException(
+          'That customer account is already brought in under a driver.',
+        );
+      }
+
+      final balance = await db.walletTransactionsDao.getBalanceKobo(customerId);
+      final owed = balance < 0 ? -balance : 0;
+
+      // Resolve the van BEFORE writing anything, so a refusal leaves no trace.
+      String? vanStoreId;
+      CustomerWalletData? wallet;
+      if (owed > 0) {
+        vanStoreId = await _vanForDebt(vanDriverId);
+        if (vanStoreId == null) {
+          throw const OldAccountLinkException(
+            'Assign this driver to a van first, so the debt has a van to '
+            'sit on.',
+          );
+        }
+        wallet = await db.customerWalletsDao.getByCustomerId(customerId);
+        if (wallet == null) {
+          throw const OldAccountLinkException(
+            'That customer has no account to move money from.',
+          );
+        }
+      }
+
+      final now = DateTime.now();
+      await (update(vanDrivers)
+            ..where((d) => whereBusiness(d) & d.id.equals(vanDriverId)))
+          .write(
+        VanDriversCompanion(
+          customerId: Value(customerId),
+          lastUpdatedAt: Value(now),
+        ),
+      );
+      await _push(vanDriverId);
+
+      if (owed > 0) {
+        // 1) The customer's side: a credit that zeroes the account.
+        final walletComp = WalletTransactionsCompanion.insert(
+          id: Value(UuidV7.generate()),
+          businessId: requireBusinessId(),
+          walletId: wallet!.id,
+          customerId: customerId,
+          type: 'credit',
+          amountKobo: owed,
+          signedAmountKobo: owed,
+          referenceType: 'adjustment',
+          performedBy: Value(performedBy),
+          createdAt: Value(now),
+          lastUpdatedAt: Value(now),
+        );
+        await db.into(db.walletTransactions).insert(walletComp);
+        await db.syncDao.enqueueUpsert('wallet_transactions', walletComp);
+
+        // 2) The driver's side: the same kobo as new debt.
+        await db.driverLedgerDao.postEntry(
+          vanStoreId: vanStoreId!,
+          vanDriverId: vanDriverId,
+          type: kDriverLedgerTypeRestatement,
+          amountKobo: owed,
+          isCredit: false,
+          referenceType: kDriverLedgerRefEntry,
+          activityDate: now,
+          performedBy: performedBy,
+          referenceNote:
+              'Moved from the old customer account (${customer.name})',
+        );
+      }
+      return owed;
+    });
+  }
+
+  /// The van a moved debt sits on: the driver's assigned van, else the van of
+  /// their most recent trip.
+  Future<String?> _vanForDebt(String vanDriverId) async {
+    final assigned = await (select(stores)
+          ..where((s) => whereBusiness(s) & s.vanDriverId.equals(vanDriverId))
+          ..orderBy([(s) => OrderingTerm(expression: s.name.lower())])
+          ..limit(1))
+        .getSingleOrNull();
+    if (assigned != null) return assigned.id;
+    final trip = await (db.select(db.vanTrips)
+          ..where((t) => whereBusiness(t) & t.vanDriverId.equals(vanDriverId))
+          ..orderBy([(t) => OrderingTerm.desc(t.openedAt)])
+          ..limit(1))
+        .getSingleOrNull();
+    return trip?.vanStoreId;
+  }
+
   Future<void> _push(String id) async {
     final row = await getDriver(id);
     if (row != null) {
@@ -3094,4 +3324,32 @@ class VanDriversDao extends DatabaseAccessor<AppDatabase>
     final t = phone?.trim();
     return (t == null || t.isEmpty) ? null : t;
   }
+}
+
+/// The wallet reference types that are a customer PAYING (top-ups), as the old
+/// customer account's "payments" on a driver's page (#783).
+const List<String> kOldAccountPaymentRefs = ['topup_cash', 'topup_transfer'];
+
+/// What an old customer account holds, for the link confirm sheet (#783).
+/// [balanceKobo] is the wallet balance: negative = the customer owes.
+class OldAccountSummary {
+  final int salesCount;
+  final int paymentsCount;
+  final int balanceKobo;
+  const OldAccountSummary({
+    required this.salesCount,
+    required this.paymentsCount,
+    required this.balanceKobo,
+  });
+
+  /// What the customer owes (kobo), 0 when nothing or in credit.
+  int get owedKobo => balanceKobo < 0 ? -balanceKobo : 0;
+}
+
+/// A refused link (#783): the message is shown to the manager as is.
+class OldAccountLinkException implements Exception {
+  final String message;
+  const OldAccountLinkException(this.message);
+  @override
+  String toString() => message;
 }

@@ -694,7 +694,13 @@ class _CartScreenState extends ConsumerState<CartScreen>
                     child: ValueListenableBuilder<List<Customer>>(
                       valueListenable: ref.read(customerServiceProvider),
                       builder: (_, allCustomers, __) {
+                        // #783: an old customer account brought in under a van
+                        // driver is history only, never offered for a sale.
+                        final linkedIds =
+                            ref.watch(linkedCustomerIdsProvider).valueOrNull ??
+                            const <String>{};
                         final customers = allCustomers.where((c) {
+                          if (linkedIds.contains(c.id)) return false;
                           // Store filter
                           if (pickerStoreId != null &&
                               c.storeId != pickerStoreId) {

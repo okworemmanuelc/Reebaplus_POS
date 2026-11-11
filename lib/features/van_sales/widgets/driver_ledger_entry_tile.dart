@@ -118,7 +118,12 @@ class DriverLedgerEntryTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    labelFor(entry.type),
+                    // #783: a restatement with no trip is the debt moved in
+                    // from the driver's old customer account.
+                    entry.type == kDriverLedgerTypeRestatement &&
+                            entry.tripId == null
+                        ? 'Moved from the old customer account'
+                        : labelFor(entry.type),
                     style: TextStyle(
                       fontSize: context.getRFontSize(14),
                       fontWeight: FontWeight.bold,

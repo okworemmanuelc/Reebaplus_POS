@@ -2272,6 +2272,835 @@ class ManufacturersCompanion extends UpdateCompanion<ManufacturerData> {
   }
 }
 
+class $CustomersTable extends Customers
+    with TableInfo<$CustomersTable, CustomerData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CustomersTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: () => UuidV7.generate(),
+  );
+  static const VerificationMeta _businessIdMeta = const VerificationMeta(
+    'businessId',
+  );
+  @override
+  late final GeneratedColumn<String> businessId = GeneratedColumn<String>(
+    'business_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES businesses (id)',
+    ),
+  );
+  static const VerificationMeta _storeIdMeta = const VerificationMeta(
+    'storeId',
+  );
+  @override
+  late final GeneratedColumn<String> storeId = GeneratedColumn<String>(
+    'store_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _phoneMeta = const VerificationMeta('phone');
+  @override
+  late final GeneratedColumn<String> phone = GeneratedColumn<String>(
+    'phone',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _emailMeta = const VerificationMeta('email');
+  @override
+  late final GeneratedColumn<String> email = GeneratedColumn<String>(
+    'email',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _addressMeta = const VerificationMeta(
+    'address',
+  );
+  @override
+  late final GeneratedColumn<String> address = GeneratedColumn<String>(
+    'address',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _googleMapsLocationMeta =
+      const VerificationMeta('googleMapsLocation');
+  @override
+  late final GeneratedColumn<String> googleMapsLocation =
+      GeneratedColumn<String>(
+        'google_maps_location',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _priceTierMeta = const VerificationMeta(
+    'priceTier',
+  );
+  @override
+  late final GeneratedColumn<String> priceTier = GeneratedColumn<String>(
+    'price_tier',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('retailer'),
+  );
+  static const VerificationMeta _walletLimitKoboMeta = const VerificationMeta(
+    'walletLimitKobo',
+  );
+  @override
+  late final GeneratedColumn<int> walletLimitKobo = GeneratedColumn<int>(
+    'wallet_limit_kobo',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _isDeletedMeta = const VerificationMeta(
+    'isDeleted',
+  );
+  @override
+  late final GeneratedColumn<bool> isDeleted = GeneratedColumn<bool>(
+    'is_deleted',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_deleted" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _lastUpdatedAtMeta = const VerificationMeta(
+    'lastUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastUpdatedAt =
+      GeneratedColumn<DateTime>(
+        'last_updated_at',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+        defaultValue: currentDateAndTime,
+      );
+  static const VerificationMeta _shopperAccountIdMeta = const VerificationMeta(
+    'shopperAccountId',
+  );
+  @override
+  late final GeneratedColumn<String> shopperAccountId = GeneratedColumn<String>(
+    'shopper_account_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    businessId,
+    storeId,
+    name,
+    phone,
+    email,
+    address,
+    googleMapsLocation,
+    priceTier,
+    walletLimitKobo,
+    isDeleted,
+    createdAt,
+    lastUpdatedAt,
+    shopperAccountId,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'customers';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CustomerData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('business_id')) {
+      context.handle(
+        _businessIdMeta,
+        businessId.isAcceptableOrUnknown(data['business_id']!, _businessIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_businessIdMeta);
+    }
+    if (data.containsKey('store_id')) {
+      context.handle(
+        _storeIdMeta,
+        storeId.isAcceptableOrUnknown(data['store_id']!, _storeIdMeta),
+      );
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('phone')) {
+      context.handle(
+        _phoneMeta,
+        phone.isAcceptableOrUnknown(data['phone']!, _phoneMeta),
+      );
+    }
+    if (data.containsKey('email')) {
+      context.handle(
+        _emailMeta,
+        email.isAcceptableOrUnknown(data['email']!, _emailMeta),
+      );
+    }
+    if (data.containsKey('address')) {
+      context.handle(
+        _addressMeta,
+        address.isAcceptableOrUnknown(data['address']!, _addressMeta),
+      );
+    }
+    if (data.containsKey('google_maps_location')) {
+      context.handle(
+        _googleMapsLocationMeta,
+        googleMapsLocation.isAcceptableOrUnknown(
+          data['google_maps_location']!,
+          _googleMapsLocationMeta,
+        ),
+      );
+    }
+    if (data.containsKey('price_tier')) {
+      context.handle(
+        _priceTierMeta,
+        priceTier.isAcceptableOrUnknown(data['price_tier']!, _priceTierMeta),
+      );
+    }
+    if (data.containsKey('wallet_limit_kobo')) {
+      context.handle(
+        _walletLimitKoboMeta,
+        walletLimitKobo.isAcceptableOrUnknown(
+          data['wallet_limit_kobo']!,
+          _walletLimitKoboMeta,
+        ),
+      );
+    }
+    if (data.containsKey('is_deleted')) {
+      context.handle(
+        _isDeletedMeta,
+        isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    if (data.containsKey('last_updated_at')) {
+      context.handle(
+        _lastUpdatedAtMeta,
+        lastUpdatedAt.isAcceptableOrUnknown(
+          data['last_updated_at']!,
+          _lastUpdatedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('shopper_account_id')) {
+      context.handle(
+        _shopperAccountIdMeta,
+        shopperAccountId.isAcceptableOrUnknown(
+          data['shopper_account_id']!,
+          _shopperAccountIdMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CustomerData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CustomerData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      businessId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}business_id'],
+      )!,
+      storeId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}store_id'],
+      ),
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      phone: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}phone'],
+      ),
+      email: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}email'],
+      ),
+      address: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}address'],
+      ),
+      googleMapsLocation: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}google_maps_location'],
+      ),
+      priceTier: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}price_tier'],
+      )!,
+      walletLimitKobo: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}wallet_limit_kobo'],
+      )!,
+      isDeleted: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_deleted'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      lastUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_updated_at'],
+      )!,
+      shopperAccountId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}shopper_account_id'],
+      ),
+    );
+  }
+
+  @override
+  $CustomersTable createAlias(String alias) {
+    return $CustomersTable(attachedDatabase, alias);
+  }
+}
+
+class CustomerData extends DataClass implements Insertable<CustomerData> {
+  final String id;
+  final String businessId;
+  final String? storeId;
+  final String name;
+  final String? phone;
+  final String? email;
+  final String? address;
+  final String? googleMapsLocation;
+  final String priceTier;
+  final int walletLimitKobo;
+  final bool isDeleted;
+  final DateTime createdAt;
+  final DateTime lastUpdatedAt;
+
+  /// #427 (v93 / cloud 0208): the Shopper login this Customer is linked to.
+  /// Set only by a staff choice on the first accepted Online Order (ADR 0030,
+  /// never a phone match). At most one live Customer per Shopper per business
+  /// (partial unique index `uq_customers_business_shopper_account`).
+  final String? shopperAccountId;
+  const CustomerData({
+    required this.id,
+    required this.businessId,
+    this.storeId,
+    required this.name,
+    this.phone,
+    this.email,
+    this.address,
+    this.googleMapsLocation,
+    required this.priceTier,
+    required this.walletLimitKobo,
+    required this.isDeleted,
+    required this.createdAt,
+    required this.lastUpdatedAt,
+    this.shopperAccountId,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['business_id'] = Variable<String>(businessId);
+    if (!nullToAbsent || storeId != null) {
+      map['store_id'] = Variable<String>(storeId);
+    }
+    map['name'] = Variable<String>(name);
+    if (!nullToAbsent || phone != null) {
+      map['phone'] = Variable<String>(phone);
+    }
+    if (!nullToAbsent || email != null) {
+      map['email'] = Variable<String>(email);
+    }
+    if (!nullToAbsent || address != null) {
+      map['address'] = Variable<String>(address);
+    }
+    if (!nullToAbsent || googleMapsLocation != null) {
+      map['google_maps_location'] = Variable<String>(googleMapsLocation);
+    }
+    map['price_tier'] = Variable<String>(priceTier);
+    map['wallet_limit_kobo'] = Variable<int>(walletLimitKobo);
+    map['is_deleted'] = Variable<bool>(isDeleted);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    if (!nullToAbsent || shopperAccountId != null) {
+      map['shopper_account_id'] = Variable<String>(shopperAccountId);
+    }
+    return map;
+  }
+
+  CustomersCompanion toCompanion(bool nullToAbsent) {
+    return CustomersCompanion(
+      id: Value(id),
+      businessId: Value(businessId),
+      storeId: storeId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(storeId),
+      name: Value(name),
+      phone: phone == null && nullToAbsent
+          ? const Value.absent()
+          : Value(phone),
+      email: email == null && nullToAbsent
+          ? const Value.absent()
+          : Value(email),
+      address: address == null && nullToAbsent
+          ? const Value.absent()
+          : Value(address),
+      googleMapsLocation: googleMapsLocation == null && nullToAbsent
+          ? const Value.absent()
+          : Value(googleMapsLocation),
+      priceTier: Value(priceTier),
+      walletLimitKobo: Value(walletLimitKobo),
+      isDeleted: Value(isDeleted),
+      createdAt: Value(createdAt),
+      lastUpdatedAt: Value(lastUpdatedAt),
+      shopperAccountId: shopperAccountId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(shopperAccountId),
+    );
+  }
+
+  factory CustomerData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CustomerData(
+      id: serializer.fromJson<String>(json['id']),
+      businessId: serializer.fromJson<String>(json['businessId']),
+      storeId: serializer.fromJson<String?>(json['storeId']),
+      name: serializer.fromJson<String>(json['name']),
+      phone: serializer.fromJson<String?>(json['phone']),
+      email: serializer.fromJson<String?>(json['email']),
+      address: serializer.fromJson<String?>(json['address']),
+      googleMapsLocation: serializer.fromJson<String?>(
+        json['googleMapsLocation'],
+      ),
+      priceTier: serializer.fromJson<String>(json['priceTier']),
+      walletLimitKobo: serializer.fromJson<int>(json['walletLimitKobo']),
+      isDeleted: serializer.fromJson<bool>(json['isDeleted']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+      shopperAccountId: serializer.fromJson<String?>(json['shopperAccountId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'businessId': serializer.toJson<String>(businessId),
+      'storeId': serializer.toJson<String?>(storeId),
+      'name': serializer.toJson<String>(name),
+      'phone': serializer.toJson<String?>(phone),
+      'email': serializer.toJson<String?>(email),
+      'address': serializer.toJson<String?>(address),
+      'googleMapsLocation': serializer.toJson<String?>(googleMapsLocation),
+      'priceTier': serializer.toJson<String>(priceTier),
+      'walletLimitKobo': serializer.toJson<int>(walletLimitKobo),
+      'isDeleted': serializer.toJson<bool>(isDeleted),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+      'shopperAccountId': serializer.toJson<String?>(shopperAccountId),
+    };
+  }
+
+  CustomerData copyWith({
+    String? id,
+    String? businessId,
+    Value<String?> storeId = const Value.absent(),
+    String? name,
+    Value<String?> phone = const Value.absent(),
+    Value<String?> email = const Value.absent(),
+    Value<String?> address = const Value.absent(),
+    Value<String?> googleMapsLocation = const Value.absent(),
+    String? priceTier,
+    int? walletLimitKobo,
+    bool? isDeleted,
+    DateTime? createdAt,
+    DateTime? lastUpdatedAt,
+    Value<String?> shopperAccountId = const Value.absent(),
+  }) => CustomerData(
+    id: id ?? this.id,
+    businessId: businessId ?? this.businessId,
+    storeId: storeId.present ? storeId.value : this.storeId,
+    name: name ?? this.name,
+    phone: phone.present ? phone.value : this.phone,
+    email: email.present ? email.value : this.email,
+    address: address.present ? address.value : this.address,
+    googleMapsLocation: googleMapsLocation.present
+        ? googleMapsLocation.value
+        : this.googleMapsLocation,
+    priceTier: priceTier ?? this.priceTier,
+    walletLimitKobo: walletLimitKobo ?? this.walletLimitKobo,
+    isDeleted: isDeleted ?? this.isDeleted,
+    createdAt: createdAt ?? this.createdAt,
+    lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+    shopperAccountId: shopperAccountId.present
+        ? shopperAccountId.value
+        : this.shopperAccountId,
+  );
+  CustomerData copyWithCompanion(CustomersCompanion data) {
+    return CustomerData(
+      id: data.id.present ? data.id.value : this.id,
+      businessId: data.businessId.present
+          ? data.businessId.value
+          : this.businessId,
+      storeId: data.storeId.present ? data.storeId.value : this.storeId,
+      name: data.name.present ? data.name.value : this.name,
+      phone: data.phone.present ? data.phone.value : this.phone,
+      email: data.email.present ? data.email.value : this.email,
+      address: data.address.present ? data.address.value : this.address,
+      googleMapsLocation: data.googleMapsLocation.present
+          ? data.googleMapsLocation.value
+          : this.googleMapsLocation,
+      priceTier: data.priceTier.present ? data.priceTier.value : this.priceTier,
+      walletLimitKobo: data.walletLimitKobo.present
+          ? data.walletLimitKobo.value
+          : this.walletLimitKobo,
+      isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      lastUpdatedAt: data.lastUpdatedAt.present
+          ? data.lastUpdatedAt.value
+          : this.lastUpdatedAt,
+      shopperAccountId: data.shopperAccountId.present
+          ? data.shopperAccountId.value
+          : this.shopperAccountId,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CustomerData(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('storeId: $storeId, ')
+          ..write('name: $name, ')
+          ..write('phone: $phone, ')
+          ..write('email: $email, ')
+          ..write('address: $address, ')
+          ..write('googleMapsLocation: $googleMapsLocation, ')
+          ..write('priceTier: $priceTier, ')
+          ..write('walletLimitKobo: $walletLimitKobo, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('shopperAccountId: $shopperAccountId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    businessId,
+    storeId,
+    name,
+    phone,
+    email,
+    address,
+    googleMapsLocation,
+    priceTier,
+    walletLimitKobo,
+    isDeleted,
+    createdAt,
+    lastUpdatedAt,
+    shopperAccountId,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CustomerData &&
+          other.id == this.id &&
+          other.businessId == this.businessId &&
+          other.storeId == this.storeId &&
+          other.name == this.name &&
+          other.phone == this.phone &&
+          other.email == this.email &&
+          other.address == this.address &&
+          other.googleMapsLocation == this.googleMapsLocation &&
+          other.priceTier == this.priceTier &&
+          other.walletLimitKobo == this.walletLimitKobo &&
+          other.isDeleted == this.isDeleted &&
+          other.createdAt == this.createdAt &&
+          other.lastUpdatedAt == this.lastUpdatedAt &&
+          other.shopperAccountId == this.shopperAccountId);
+}
+
+class CustomersCompanion extends UpdateCompanion<CustomerData> {
+  final Value<String> id;
+  final Value<String> businessId;
+  final Value<String?> storeId;
+  final Value<String> name;
+  final Value<String?> phone;
+  final Value<String?> email;
+  final Value<String?> address;
+  final Value<String?> googleMapsLocation;
+  final Value<String> priceTier;
+  final Value<int> walletLimitKobo;
+  final Value<bool> isDeleted;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> lastUpdatedAt;
+  final Value<String?> shopperAccountId;
+  final Value<int> rowid;
+  const CustomersCompanion({
+    this.id = const Value.absent(),
+    this.businessId = const Value.absent(),
+    this.storeId = const Value.absent(),
+    this.name = const Value.absent(),
+    this.phone = const Value.absent(),
+    this.email = const Value.absent(),
+    this.address = const Value.absent(),
+    this.googleMapsLocation = const Value.absent(),
+    this.priceTier = const Value.absent(),
+    this.walletLimitKobo = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.shopperAccountId = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CustomersCompanion.insert({
+    this.id = const Value.absent(),
+    required String businessId,
+    this.storeId = const Value.absent(),
+    required String name,
+    this.phone = const Value.absent(),
+    this.email = const Value.absent(),
+    this.address = const Value.absent(),
+    this.googleMapsLocation = const Value.absent(),
+    this.priceTier = const Value.absent(),
+    this.walletLimitKobo = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.lastUpdatedAt = const Value.absent(),
+    this.shopperAccountId = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : businessId = Value(businessId),
+       name = Value(name);
+  static Insertable<CustomerData> custom({
+    Expression<String>? id,
+    Expression<String>? businessId,
+    Expression<String>? storeId,
+    Expression<String>? name,
+    Expression<String>? phone,
+    Expression<String>? email,
+    Expression<String>? address,
+    Expression<String>? googleMapsLocation,
+    Expression<String>? priceTier,
+    Expression<int>? walletLimitKobo,
+    Expression<bool>? isDeleted,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? lastUpdatedAt,
+    Expression<String>? shopperAccountId,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (businessId != null) 'business_id': businessId,
+      if (storeId != null) 'store_id': storeId,
+      if (name != null) 'name': name,
+      if (phone != null) 'phone': phone,
+      if (email != null) 'email': email,
+      if (address != null) 'address': address,
+      if (googleMapsLocation != null)
+        'google_maps_location': googleMapsLocation,
+      if (priceTier != null) 'price_tier': priceTier,
+      if (walletLimitKobo != null) 'wallet_limit_kobo': walletLimitKobo,
+      if (isDeleted != null) 'is_deleted': isDeleted,
+      if (createdAt != null) 'created_at': createdAt,
+      if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (shopperAccountId != null) 'shopper_account_id': shopperAccountId,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CustomersCompanion copyWith({
+    Value<String>? id,
+    Value<String>? businessId,
+    Value<String?>? storeId,
+    Value<String>? name,
+    Value<String?>? phone,
+    Value<String?>? email,
+    Value<String?>? address,
+    Value<String?>? googleMapsLocation,
+    Value<String>? priceTier,
+    Value<int>? walletLimitKobo,
+    Value<bool>? isDeleted,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? lastUpdatedAt,
+    Value<String?>? shopperAccountId,
+    Value<int>? rowid,
+  }) {
+    return CustomersCompanion(
+      id: id ?? this.id,
+      businessId: businessId ?? this.businessId,
+      storeId: storeId ?? this.storeId,
+      name: name ?? this.name,
+      phone: phone ?? this.phone,
+      email: email ?? this.email,
+      address: address ?? this.address,
+      googleMapsLocation: googleMapsLocation ?? this.googleMapsLocation,
+      priceTier: priceTier ?? this.priceTier,
+      walletLimitKobo: walletLimitKobo ?? this.walletLimitKobo,
+      isDeleted: isDeleted ?? this.isDeleted,
+      createdAt: createdAt ?? this.createdAt,
+      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      shopperAccountId: shopperAccountId ?? this.shopperAccountId,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (businessId.present) {
+      map['business_id'] = Variable<String>(businessId.value);
+    }
+    if (storeId.present) {
+      map['store_id'] = Variable<String>(storeId.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (phone.present) {
+      map['phone'] = Variable<String>(phone.value);
+    }
+    if (email.present) {
+      map['email'] = Variable<String>(email.value);
+    }
+    if (address.present) {
+      map['address'] = Variable<String>(address.value);
+    }
+    if (googleMapsLocation.present) {
+      map['google_maps_location'] = Variable<String>(googleMapsLocation.value);
+    }
+    if (priceTier.present) {
+      map['price_tier'] = Variable<String>(priceTier.value);
+    }
+    if (walletLimitKobo.present) {
+      map['wallet_limit_kobo'] = Variable<int>(walletLimitKobo.value);
+    }
+    if (isDeleted.present) {
+      map['is_deleted'] = Variable<bool>(isDeleted.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (lastUpdatedAt.present) {
+      map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
+    }
+    if (shopperAccountId.present) {
+      map['shopper_account_id'] = Variable<String>(shopperAccountId.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CustomersCompanion(')
+          ..write('id: $id, ')
+          ..write('businessId: $businessId, ')
+          ..write('storeId: $storeId, ')
+          ..write('name: $name, ')
+          ..write('phone: $phone, ')
+          ..write('email: $email, ')
+          ..write('address: $address, ')
+          ..write('googleMapsLocation: $googleMapsLocation, ')
+          ..write('priceTier: $priceTier, ')
+          ..write('walletLimitKobo: $walletLimitKobo, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('shopperAccountId: $shopperAccountId, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $VanDriversTable extends VanDrivers
     with TableInfo<$VanDriversTable, VanDriverData> {
   @override
@@ -2360,6 +3189,20 @@ class $VanDriversTable extends VanDrivers
         requiredDuringInsert: false,
         defaultValue: currentDateAndTime,
       );
+  static const VerificationMeta _customerIdMeta = const VerificationMeta(
+    'customerId',
+  );
+  @override
+  late final GeneratedColumn<String> customerId = GeneratedColumn<String>(
+    'customer_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES customers (id)',
+    ),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -2369,6 +3212,7 @@ class $VanDriversTable extends VanDrivers
     isDeleted,
     createdAt,
     lastUpdatedAt,
+    customerId,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2428,6 +3272,12 @@ class $VanDriversTable extends VanDrivers
         ),
       );
     }
+    if (data.containsKey('customer_id')) {
+      context.handle(
+        _customerIdMeta,
+        customerId.isAcceptableOrUnknown(data['customer_id']!, _customerIdMeta),
+      );
+    }
     return context;
   }
 
@@ -2465,6 +3315,10 @@ class $VanDriversTable extends VanDrivers
         DriftSqlType.dateTime,
         data['${effectivePrefix}last_updated_at'],
       )!,
+      customerId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}customer_id'],
+      ),
     );
   }
 
@@ -2482,6 +3336,13 @@ class VanDriverData extends DataClass implements Insertable<VanDriverData> {
   final bool isDeleted;
   final DateTime createdAt;
   final DateTime lastUpdatedAt;
+
+  /// #783 (v109 / cloud 0256): the OLD customer account this driver was bought
+  /// in from ("Bring in old customer account"). Nullable; set once, never
+  /// cleared. At most one driver per customer per business (partial unique
+  /// index [kVanDriversCustomerIndex]) and, by the link action, one customer
+  /// per driver. A linked customer is no longer offered for new sales.
+  final String? customerId;
   const VanDriverData({
     required this.id,
     required this.businessId,
@@ -2490,6 +3351,7 @@ class VanDriverData extends DataClass implements Insertable<VanDriverData> {
     required this.isDeleted,
     required this.createdAt,
     required this.lastUpdatedAt,
+    this.customerId,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2503,6 +3365,9 @@ class VanDriverData extends DataClass implements Insertable<VanDriverData> {
     map['is_deleted'] = Variable<bool>(isDeleted);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
+    if (!nullToAbsent || customerId != null) {
+      map['customer_id'] = Variable<String>(customerId);
+    }
     return map;
   }
 
@@ -2517,6 +3382,9 @@ class VanDriverData extends DataClass implements Insertable<VanDriverData> {
       isDeleted: Value(isDeleted),
       createdAt: Value(createdAt),
       lastUpdatedAt: Value(lastUpdatedAt),
+      customerId: customerId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(customerId),
     );
   }
 
@@ -2533,6 +3401,7 @@ class VanDriverData extends DataClass implements Insertable<VanDriverData> {
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
+      customerId: serializer.fromJson<String?>(json['customerId']),
     );
   }
   @override
@@ -2546,6 +3415,7 @@ class VanDriverData extends DataClass implements Insertable<VanDriverData> {
       'isDeleted': serializer.toJson<bool>(isDeleted),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
+      'customerId': serializer.toJson<String?>(customerId),
     };
   }
 
@@ -2557,6 +3427,7 @@ class VanDriverData extends DataClass implements Insertable<VanDriverData> {
     bool? isDeleted,
     DateTime? createdAt,
     DateTime? lastUpdatedAt,
+    Value<String?> customerId = const Value.absent(),
   }) => VanDriverData(
     id: id ?? this.id,
     businessId: businessId ?? this.businessId,
@@ -2565,6 +3436,7 @@ class VanDriverData extends DataClass implements Insertable<VanDriverData> {
     isDeleted: isDeleted ?? this.isDeleted,
     createdAt: createdAt ?? this.createdAt,
     lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+    customerId: customerId.present ? customerId.value : this.customerId,
   );
   VanDriverData copyWithCompanion(VanDriversCompanion data) {
     return VanDriverData(
@@ -2579,6 +3451,9 @@ class VanDriverData extends DataClass implements Insertable<VanDriverData> {
       lastUpdatedAt: data.lastUpdatedAt.present
           ? data.lastUpdatedAt.value
           : this.lastUpdatedAt,
+      customerId: data.customerId.present
+          ? data.customerId.value
+          : this.customerId,
     );
   }
 
@@ -2591,7 +3466,8 @@ class VanDriverData extends DataClass implements Insertable<VanDriverData> {
           ..write('phone: $phone, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('createdAt: $createdAt, ')
-          ..write('lastUpdatedAt: $lastUpdatedAt')
+          ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('customerId: $customerId')
           ..write(')'))
         .toString();
   }
@@ -2605,6 +3481,7 @@ class VanDriverData extends DataClass implements Insertable<VanDriverData> {
     isDeleted,
     createdAt,
     lastUpdatedAt,
+    customerId,
   );
   @override
   bool operator ==(Object other) =>
@@ -2616,7 +3493,8 @@ class VanDriverData extends DataClass implements Insertable<VanDriverData> {
           other.phone == this.phone &&
           other.isDeleted == this.isDeleted &&
           other.createdAt == this.createdAt &&
-          other.lastUpdatedAt == this.lastUpdatedAt);
+          other.lastUpdatedAt == this.lastUpdatedAt &&
+          other.customerId == this.customerId);
 }
 
 class VanDriversCompanion extends UpdateCompanion<VanDriverData> {
@@ -2627,6 +3505,7 @@ class VanDriversCompanion extends UpdateCompanion<VanDriverData> {
   final Value<bool> isDeleted;
   final Value<DateTime> createdAt;
   final Value<DateTime> lastUpdatedAt;
+  final Value<String?> customerId;
   final Value<int> rowid;
   const VanDriversCompanion({
     this.id = const Value.absent(),
@@ -2636,6 +3515,7 @@ class VanDriversCompanion extends UpdateCompanion<VanDriverData> {
     this.isDeleted = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
+    this.customerId = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   VanDriversCompanion.insert({
@@ -2646,6 +3526,7 @@ class VanDriversCompanion extends UpdateCompanion<VanDriverData> {
     this.isDeleted = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.lastUpdatedAt = const Value.absent(),
+    this.customerId = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : businessId = Value(businessId),
        name = Value(name);
@@ -2657,6 +3538,7 @@ class VanDriversCompanion extends UpdateCompanion<VanDriverData> {
     Expression<bool>? isDeleted,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? lastUpdatedAt,
+    Expression<String>? customerId,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2667,6 +3549,7 @@ class VanDriversCompanion extends UpdateCompanion<VanDriverData> {
       if (isDeleted != null) 'is_deleted': isDeleted,
       if (createdAt != null) 'created_at': createdAt,
       if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
+      if (customerId != null) 'customer_id': customerId,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2679,6 +3562,7 @@ class VanDriversCompanion extends UpdateCompanion<VanDriverData> {
     Value<bool>? isDeleted,
     Value<DateTime>? createdAt,
     Value<DateTime>? lastUpdatedAt,
+    Value<String?>? customerId,
     Value<int>? rowid,
   }) {
     return VanDriversCompanion(
@@ -2689,6 +3573,7 @@ class VanDriversCompanion extends UpdateCompanion<VanDriverData> {
       isDeleted: isDeleted ?? this.isDeleted,
       createdAt: createdAt ?? this.createdAt,
       lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
+      customerId: customerId ?? this.customerId,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2717,6 +3602,9 @@ class VanDriversCompanion extends UpdateCompanion<VanDriverData> {
     if (lastUpdatedAt.present) {
       map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
     }
+    if (customerId.present) {
+      map['customer_id'] = Variable<String>(customerId.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2733,6 +3621,7 @@ class VanDriversCompanion extends UpdateCompanion<VanDriverData> {
           ..write('isDeleted: $isDeleted, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
+          ..write('customerId: $customerId, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -15204,838 +16093,6 @@ class PriceListsCompanion extends UpdateCompanion<PriceListData> {
           ..write('isDeleted: $isDeleted, ')
           ..write('createdAt: $createdAt, ')
           ..write('lastUpdatedAt: $lastUpdatedAt, ')
-          ..write('rowid: $rowid')
-          ..write(')'))
-        .toString();
-  }
-}
-
-class $CustomersTable extends Customers
-    with TableInfo<$CustomersTable, CustomerData> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  $CustomersTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _idMeta = const VerificationMeta('id');
-  @override
-  late final GeneratedColumn<String> id = GeneratedColumn<String>(
-    'id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    clientDefault: () => UuidV7.generate(),
-  );
-  static const VerificationMeta _businessIdMeta = const VerificationMeta(
-    'businessId',
-  );
-  @override
-  late final GeneratedColumn<String> businessId = GeneratedColumn<String>(
-    'business_id',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES businesses (id)',
-    ),
-  );
-  static const VerificationMeta _storeIdMeta = const VerificationMeta(
-    'storeId',
-  );
-  @override
-  late final GeneratedColumn<String> storeId = GeneratedColumn<String>(
-    'store_id',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES stores (id)',
-    ),
-  );
-  static const VerificationMeta _nameMeta = const VerificationMeta('name');
-  @override
-  late final GeneratedColumn<String> name = GeneratedColumn<String>(
-    'name',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _phoneMeta = const VerificationMeta('phone');
-  @override
-  late final GeneratedColumn<String> phone = GeneratedColumn<String>(
-    'phone',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _emailMeta = const VerificationMeta('email');
-  @override
-  late final GeneratedColumn<String> email = GeneratedColumn<String>(
-    'email',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _addressMeta = const VerificationMeta(
-    'address',
-  );
-  @override
-  late final GeneratedColumn<String> address = GeneratedColumn<String>(
-    'address',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _googleMapsLocationMeta =
-      const VerificationMeta('googleMapsLocation');
-  @override
-  late final GeneratedColumn<String> googleMapsLocation =
-      GeneratedColumn<String>(
-        'google_maps_location',
-        aliasedName,
-        true,
-        type: DriftSqlType.string,
-        requiredDuringInsert: false,
-      );
-  static const VerificationMeta _priceTierMeta = const VerificationMeta(
-    'priceTier',
-  );
-  @override
-  late final GeneratedColumn<String> priceTier = GeneratedColumn<String>(
-    'price_tier',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-    defaultValue: const Constant('retailer'),
-  );
-  static const VerificationMeta _walletLimitKoboMeta = const VerificationMeta(
-    'walletLimitKobo',
-  );
-  @override
-  late final GeneratedColumn<int> walletLimitKobo = GeneratedColumn<int>(
-    'wallet_limit_kobo',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: false,
-    defaultValue: const Constant(0),
-  );
-  static const VerificationMeta _isDeletedMeta = const VerificationMeta(
-    'isDeleted',
-  );
-  @override
-  late final GeneratedColumn<bool> isDeleted = GeneratedColumn<bool>(
-    'is_deleted',
-    aliasedName,
-    false,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("is_deleted" IN (0, 1))',
-    ),
-    defaultValue: const Constant(false),
-  );
-  static const VerificationMeta _createdAtMeta = const VerificationMeta(
-    'createdAt',
-  );
-  @override
-  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
-    'created_at',
-    aliasedName,
-    false,
-    type: DriftSqlType.dateTime,
-    requiredDuringInsert: false,
-    defaultValue: currentDateAndTime,
-  );
-  static const VerificationMeta _lastUpdatedAtMeta = const VerificationMeta(
-    'lastUpdatedAt',
-  );
-  @override
-  late final GeneratedColumn<DateTime> lastUpdatedAt =
-      GeneratedColumn<DateTime>(
-        'last_updated_at',
-        aliasedName,
-        false,
-        type: DriftSqlType.dateTime,
-        requiredDuringInsert: false,
-        defaultValue: currentDateAndTime,
-      );
-  static const VerificationMeta _shopperAccountIdMeta = const VerificationMeta(
-    'shopperAccountId',
-  );
-  @override
-  late final GeneratedColumn<String> shopperAccountId = GeneratedColumn<String>(
-    'shopper_account_id',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  @override
-  List<GeneratedColumn> get $columns => [
-    id,
-    businessId,
-    storeId,
-    name,
-    phone,
-    email,
-    address,
-    googleMapsLocation,
-    priceTier,
-    walletLimitKobo,
-    isDeleted,
-    createdAt,
-    lastUpdatedAt,
-    shopperAccountId,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'customers';
-  @override
-  VerificationContext validateIntegrity(
-    Insertable<CustomerData> instance, {
-    bool isInserting = false,
-  }) {
-    final context = VerificationContext();
-    final data = instance.toColumns(true);
-    if (data.containsKey('id')) {
-      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
-    }
-    if (data.containsKey('business_id')) {
-      context.handle(
-        _businessIdMeta,
-        businessId.isAcceptableOrUnknown(data['business_id']!, _businessIdMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_businessIdMeta);
-    }
-    if (data.containsKey('store_id')) {
-      context.handle(
-        _storeIdMeta,
-        storeId.isAcceptableOrUnknown(data['store_id']!, _storeIdMeta),
-      );
-    }
-    if (data.containsKey('name')) {
-      context.handle(
-        _nameMeta,
-        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
-      );
-    } else if (isInserting) {
-      context.missing(_nameMeta);
-    }
-    if (data.containsKey('phone')) {
-      context.handle(
-        _phoneMeta,
-        phone.isAcceptableOrUnknown(data['phone']!, _phoneMeta),
-      );
-    }
-    if (data.containsKey('email')) {
-      context.handle(
-        _emailMeta,
-        email.isAcceptableOrUnknown(data['email']!, _emailMeta),
-      );
-    }
-    if (data.containsKey('address')) {
-      context.handle(
-        _addressMeta,
-        address.isAcceptableOrUnknown(data['address']!, _addressMeta),
-      );
-    }
-    if (data.containsKey('google_maps_location')) {
-      context.handle(
-        _googleMapsLocationMeta,
-        googleMapsLocation.isAcceptableOrUnknown(
-          data['google_maps_location']!,
-          _googleMapsLocationMeta,
-        ),
-      );
-    }
-    if (data.containsKey('price_tier')) {
-      context.handle(
-        _priceTierMeta,
-        priceTier.isAcceptableOrUnknown(data['price_tier']!, _priceTierMeta),
-      );
-    }
-    if (data.containsKey('wallet_limit_kobo')) {
-      context.handle(
-        _walletLimitKoboMeta,
-        walletLimitKobo.isAcceptableOrUnknown(
-          data['wallet_limit_kobo']!,
-          _walletLimitKoboMeta,
-        ),
-      );
-    }
-    if (data.containsKey('is_deleted')) {
-      context.handle(
-        _isDeletedMeta,
-        isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta),
-      );
-    }
-    if (data.containsKey('created_at')) {
-      context.handle(
-        _createdAtMeta,
-        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
-      );
-    }
-    if (data.containsKey('last_updated_at')) {
-      context.handle(
-        _lastUpdatedAtMeta,
-        lastUpdatedAt.isAcceptableOrUnknown(
-          data['last_updated_at']!,
-          _lastUpdatedAtMeta,
-        ),
-      );
-    }
-    if (data.containsKey('shopper_account_id')) {
-      context.handle(
-        _shopperAccountIdMeta,
-        shopperAccountId.isAcceptableOrUnknown(
-          data['shopper_account_id']!,
-          _shopperAccountIdMeta,
-        ),
-      );
-    }
-    return context;
-  }
-
-  @override
-  Set<GeneratedColumn> get $primaryKey => {id};
-  @override
-  CustomerData map(Map<String, dynamic> data, {String? tablePrefix}) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return CustomerData(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}id'],
-      )!,
-      businessId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}business_id'],
-      )!,
-      storeId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}store_id'],
-      ),
-      name: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}name'],
-      )!,
-      phone: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}phone'],
-      ),
-      email: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}email'],
-      ),
-      address: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}address'],
-      ),
-      googleMapsLocation: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}google_maps_location'],
-      ),
-      priceTier: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}price_tier'],
-      )!,
-      walletLimitKobo: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}wallet_limit_kobo'],
-      )!,
-      isDeleted: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}is_deleted'],
-      )!,
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}created_at'],
-      )!,
-      lastUpdatedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}last_updated_at'],
-      )!,
-      shopperAccountId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}shopper_account_id'],
-      ),
-    );
-  }
-
-  @override
-  $CustomersTable createAlias(String alias) {
-    return $CustomersTable(attachedDatabase, alias);
-  }
-}
-
-class CustomerData extends DataClass implements Insertable<CustomerData> {
-  final String id;
-  final String businessId;
-  final String? storeId;
-  final String name;
-  final String? phone;
-  final String? email;
-  final String? address;
-  final String? googleMapsLocation;
-  final String priceTier;
-  final int walletLimitKobo;
-  final bool isDeleted;
-  final DateTime createdAt;
-  final DateTime lastUpdatedAt;
-
-  /// #427 (v93 / cloud 0208): the Shopper login this Customer is linked to.
-  /// Set only by a staff choice on the first accepted Online Order (ADR 0030,
-  /// never a phone match). At most one live Customer per Shopper per business
-  /// (partial unique index `uq_customers_business_shopper_account`).
-  final String? shopperAccountId;
-  const CustomerData({
-    required this.id,
-    required this.businessId,
-    this.storeId,
-    required this.name,
-    this.phone,
-    this.email,
-    this.address,
-    this.googleMapsLocation,
-    required this.priceTier,
-    required this.walletLimitKobo,
-    required this.isDeleted,
-    required this.createdAt,
-    required this.lastUpdatedAt,
-    this.shopperAccountId,
-  });
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    map['id'] = Variable<String>(id);
-    map['business_id'] = Variable<String>(businessId);
-    if (!nullToAbsent || storeId != null) {
-      map['store_id'] = Variable<String>(storeId);
-    }
-    map['name'] = Variable<String>(name);
-    if (!nullToAbsent || phone != null) {
-      map['phone'] = Variable<String>(phone);
-    }
-    if (!nullToAbsent || email != null) {
-      map['email'] = Variable<String>(email);
-    }
-    if (!nullToAbsent || address != null) {
-      map['address'] = Variable<String>(address);
-    }
-    if (!nullToAbsent || googleMapsLocation != null) {
-      map['google_maps_location'] = Variable<String>(googleMapsLocation);
-    }
-    map['price_tier'] = Variable<String>(priceTier);
-    map['wallet_limit_kobo'] = Variable<int>(walletLimitKobo);
-    map['is_deleted'] = Variable<bool>(isDeleted);
-    map['created_at'] = Variable<DateTime>(createdAt);
-    map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt);
-    if (!nullToAbsent || shopperAccountId != null) {
-      map['shopper_account_id'] = Variable<String>(shopperAccountId);
-    }
-    return map;
-  }
-
-  CustomersCompanion toCompanion(bool nullToAbsent) {
-    return CustomersCompanion(
-      id: Value(id),
-      businessId: Value(businessId),
-      storeId: storeId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(storeId),
-      name: Value(name),
-      phone: phone == null && nullToAbsent
-          ? const Value.absent()
-          : Value(phone),
-      email: email == null && nullToAbsent
-          ? const Value.absent()
-          : Value(email),
-      address: address == null && nullToAbsent
-          ? const Value.absent()
-          : Value(address),
-      googleMapsLocation: googleMapsLocation == null && nullToAbsent
-          ? const Value.absent()
-          : Value(googleMapsLocation),
-      priceTier: Value(priceTier),
-      walletLimitKobo: Value(walletLimitKobo),
-      isDeleted: Value(isDeleted),
-      createdAt: Value(createdAt),
-      lastUpdatedAt: Value(lastUpdatedAt),
-      shopperAccountId: shopperAccountId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(shopperAccountId),
-    );
-  }
-
-  factory CustomerData.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return CustomerData(
-      id: serializer.fromJson<String>(json['id']),
-      businessId: serializer.fromJson<String>(json['businessId']),
-      storeId: serializer.fromJson<String?>(json['storeId']),
-      name: serializer.fromJson<String>(json['name']),
-      phone: serializer.fromJson<String?>(json['phone']),
-      email: serializer.fromJson<String?>(json['email']),
-      address: serializer.fromJson<String?>(json['address']),
-      googleMapsLocation: serializer.fromJson<String?>(
-        json['googleMapsLocation'],
-      ),
-      priceTier: serializer.fromJson<String>(json['priceTier']),
-      walletLimitKobo: serializer.fromJson<int>(json['walletLimitKobo']),
-      isDeleted: serializer.fromJson<bool>(json['isDeleted']),
-      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
-      lastUpdatedAt: serializer.fromJson<DateTime>(json['lastUpdatedAt']),
-      shopperAccountId: serializer.fromJson<String?>(json['shopperAccountId']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'id': serializer.toJson<String>(id),
-      'businessId': serializer.toJson<String>(businessId),
-      'storeId': serializer.toJson<String?>(storeId),
-      'name': serializer.toJson<String>(name),
-      'phone': serializer.toJson<String?>(phone),
-      'email': serializer.toJson<String?>(email),
-      'address': serializer.toJson<String?>(address),
-      'googleMapsLocation': serializer.toJson<String?>(googleMapsLocation),
-      'priceTier': serializer.toJson<String>(priceTier),
-      'walletLimitKobo': serializer.toJson<int>(walletLimitKobo),
-      'isDeleted': serializer.toJson<bool>(isDeleted),
-      'createdAt': serializer.toJson<DateTime>(createdAt),
-      'lastUpdatedAt': serializer.toJson<DateTime>(lastUpdatedAt),
-      'shopperAccountId': serializer.toJson<String?>(shopperAccountId),
-    };
-  }
-
-  CustomerData copyWith({
-    String? id,
-    String? businessId,
-    Value<String?> storeId = const Value.absent(),
-    String? name,
-    Value<String?> phone = const Value.absent(),
-    Value<String?> email = const Value.absent(),
-    Value<String?> address = const Value.absent(),
-    Value<String?> googleMapsLocation = const Value.absent(),
-    String? priceTier,
-    int? walletLimitKobo,
-    bool? isDeleted,
-    DateTime? createdAt,
-    DateTime? lastUpdatedAt,
-    Value<String?> shopperAccountId = const Value.absent(),
-  }) => CustomerData(
-    id: id ?? this.id,
-    businessId: businessId ?? this.businessId,
-    storeId: storeId.present ? storeId.value : this.storeId,
-    name: name ?? this.name,
-    phone: phone.present ? phone.value : this.phone,
-    email: email.present ? email.value : this.email,
-    address: address.present ? address.value : this.address,
-    googleMapsLocation: googleMapsLocation.present
-        ? googleMapsLocation.value
-        : this.googleMapsLocation,
-    priceTier: priceTier ?? this.priceTier,
-    walletLimitKobo: walletLimitKobo ?? this.walletLimitKobo,
-    isDeleted: isDeleted ?? this.isDeleted,
-    createdAt: createdAt ?? this.createdAt,
-    lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
-    shopperAccountId: shopperAccountId.present
-        ? shopperAccountId.value
-        : this.shopperAccountId,
-  );
-  CustomerData copyWithCompanion(CustomersCompanion data) {
-    return CustomerData(
-      id: data.id.present ? data.id.value : this.id,
-      businessId: data.businessId.present
-          ? data.businessId.value
-          : this.businessId,
-      storeId: data.storeId.present ? data.storeId.value : this.storeId,
-      name: data.name.present ? data.name.value : this.name,
-      phone: data.phone.present ? data.phone.value : this.phone,
-      email: data.email.present ? data.email.value : this.email,
-      address: data.address.present ? data.address.value : this.address,
-      googleMapsLocation: data.googleMapsLocation.present
-          ? data.googleMapsLocation.value
-          : this.googleMapsLocation,
-      priceTier: data.priceTier.present ? data.priceTier.value : this.priceTier,
-      walletLimitKobo: data.walletLimitKobo.present
-          ? data.walletLimitKobo.value
-          : this.walletLimitKobo,
-      isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
-      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
-      lastUpdatedAt: data.lastUpdatedAt.present
-          ? data.lastUpdatedAt.value
-          : this.lastUpdatedAt,
-      shopperAccountId: data.shopperAccountId.present
-          ? data.shopperAccountId.value
-          : this.shopperAccountId,
-    );
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('CustomerData(')
-          ..write('id: $id, ')
-          ..write('businessId: $businessId, ')
-          ..write('storeId: $storeId, ')
-          ..write('name: $name, ')
-          ..write('phone: $phone, ')
-          ..write('email: $email, ')
-          ..write('address: $address, ')
-          ..write('googleMapsLocation: $googleMapsLocation, ')
-          ..write('priceTier: $priceTier, ')
-          ..write('walletLimitKobo: $walletLimitKobo, ')
-          ..write('isDeleted: $isDeleted, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('lastUpdatedAt: $lastUpdatedAt, ')
-          ..write('shopperAccountId: $shopperAccountId')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode => Object.hash(
-    id,
-    businessId,
-    storeId,
-    name,
-    phone,
-    email,
-    address,
-    googleMapsLocation,
-    priceTier,
-    walletLimitKobo,
-    isDeleted,
-    createdAt,
-    lastUpdatedAt,
-    shopperAccountId,
-  );
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is CustomerData &&
-          other.id == this.id &&
-          other.businessId == this.businessId &&
-          other.storeId == this.storeId &&
-          other.name == this.name &&
-          other.phone == this.phone &&
-          other.email == this.email &&
-          other.address == this.address &&
-          other.googleMapsLocation == this.googleMapsLocation &&
-          other.priceTier == this.priceTier &&
-          other.walletLimitKobo == this.walletLimitKobo &&
-          other.isDeleted == this.isDeleted &&
-          other.createdAt == this.createdAt &&
-          other.lastUpdatedAt == this.lastUpdatedAt &&
-          other.shopperAccountId == this.shopperAccountId);
-}
-
-class CustomersCompanion extends UpdateCompanion<CustomerData> {
-  final Value<String> id;
-  final Value<String> businessId;
-  final Value<String?> storeId;
-  final Value<String> name;
-  final Value<String?> phone;
-  final Value<String?> email;
-  final Value<String?> address;
-  final Value<String?> googleMapsLocation;
-  final Value<String> priceTier;
-  final Value<int> walletLimitKobo;
-  final Value<bool> isDeleted;
-  final Value<DateTime> createdAt;
-  final Value<DateTime> lastUpdatedAt;
-  final Value<String?> shopperAccountId;
-  final Value<int> rowid;
-  const CustomersCompanion({
-    this.id = const Value.absent(),
-    this.businessId = const Value.absent(),
-    this.storeId = const Value.absent(),
-    this.name = const Value.absent(),
-    this.phone = const Value.absent(),
-    this.email = const Value.absent(),
-    this.address = const Value.absent(),
-    this.googleMapsLocation = const Value.absent(),
-    this.priceTier = const Value.absent(),
-    this.walletLimitKobo = const Value.absent(),
-    this.isDeleted = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.lastUpdatedAt = const Value.absent(),
-    this.shopperAccountId = const Value.absent(),
-    this.rowid = const Value.absent(),
-  });
-  CustomersCompanion.insert({
-    this.id = const Value.absent(),
-    required String businessId,
-    this.storeId = const Value.absent(),
-    required String name,
-    this.phone = const Value.absent(),
-    this.email = const Value.absent(),
-    this.address = const Value.absent(),
-    this.googleMapsLocation = const Value.absent(),
-    this.priceTier = const Value.absent(),
-    this.walletLimitKobo = const Value.absent(),
-    this.isDeleted = const Value.absent(),
-    this.createdAt = const Value.absent(),
-    this.lastUpdatedAt = const Value.absent(),
-    this.shopperAccountId = const Value.absent(),
-    this.rowid = const Value.absent(),
-  }) : businessId = Value(businessId),
-       name = Value(name);
-  static Insertable<CustomerData> custom({
-    Expression<String>? id,
-    Expression<String>? businessId,
-    Expression<String>? storeId,
-    Expression<String>? name,
-    Expression<String>? phone,
-    Expression<String>? email,
-    Expression<String>? address,
-    Expression<String>? googleMapsLocation,
-    Expression<String>? priceTier,
-    Expression<int>? walletLimitKobo,
-    Expression<bool>? isDeleted,
-    Expression<DateTime>? createdAt,
-    Expression<DateTime>? lastUpdatedAt,
-    Expression<String>? shopperAccountId,
-    Expression<int>? rowid,
-  }) {
-    return RawValuesInsertable({
-      if (id != null) 'id': id,
-      if (businessId != null) 'business_id': businessId,
-      if (storeId != null) 'store_id': storeId,
-      if (name != null) 'name': name,
-      if (phone != null) 'phone': phone,
-      if (email != null) 'email': email,
-      if (address != null) 'address': address,
-      if (googleMapsLocation != null)
-        'google_maps_location': googleMapsLocation,
-      if (priceTier != null) 'price_tier': priceTier,
-      if (walletLimitKobo != null) 'wallet_limit_kobo': walletLimitKobo,
-      if (isDeleted != null) 'is_deleted': isDeleted,
-      if (createdAt != null) 'created_at': createdAt,
-      if (lastUpdatedAt != null) 'last_updated_at': lastUpdatedAt,
-      if (shopperAccountId != null) 'shopper_account_id': shopperAccountId,
-      if (rowid != null) 'rowid': rowid,
-    });
-  }
-
-  CustomersCompanion copyWith({
-    Value<String>? id,
-    Value<String>? businessId,
-    Value<String?>? storeId,
-    Value<String>? name,
-    Value<String?>? phone,
-    Value<String?>? email,
-    Value<String?>? address,
-    Value<String?>? googleMapsLocation,
-    Value<String>? priceTier,
-    Value<int>? walletLimitKobo,
-    Value<bool>? isDeleted,
-    Value<DateTime>? createdAt,
-    Value<DateTime>? lastUpdatedAt,
-    Value<String?>? shopperAccountId,
-    Value<int>? rowid,
-  }) {
-    return CustomersCompanion(
-      id: id ?? this.id,
-      businessId: businessId ?? this.businessId,
-      storeId: storeId ?? this.storeId,
-      name: name ?? this.name,
-      phone: phone ?? this.phone,
-      email: email ?? this.email,
-      address: address ?? this.address,
-      googleMapsLocation: googleMapsLocation ?? this.googleMapsLocation,
-      priceTier: priceTier ?? this.priceTier,
-      walletLimitKobo: walletLimitKobo ?? this.walletLimitKobo,
-      isDeleted: isDeleted ?? this.isDeleted,
-      createdAt: createdAt ?? this.createdAt,
-      lastUpdatedAt: lastUpdatedAt ?? this.lastUpdatedAt,
-      shopperAccountId: shopperAccountId ?? this.shopperAccountId,
-      rowid: rowid ?? this.rowid,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (id.present) {
-      map['id'] = Variable<String>(id.value);
-    }
-    if (businessId.present) {
-      map['business_id'] = Variable<String>(businessId.value);
-    }
-    if (storeId.present) {
-      map['store_id'] = Variable<String>(storeId.value);
-    }
-    if (name.present) {
-      map['name'] = Variable<String>(name.value);
-    }
-    if (phone.present) {
-      map['phone'] = Variable<String>(phone.value);
-    }
-    if (email.present) {
-      map['email'] = Variable<String>(email.value);
-    }
-    if (address.present) {
-      map['address'] = Variable<String>(address.value);
-    }
-    if (googleMapsLocation.present) {
-      map['google_maps_location'] = Variable<String>(googleMapsLocation.value);
-    }
-    if (priceTier.present) {
-      map['price_tier'] = Variable<String>(priceTier.value);
-    }
-    if (walletLimitKobo.present) {
-      map['wallet_limit_kobo'] = Variable<int>(walletLimitKobo.value);
-    }
-    if (isDeleted.present) {
-      map['is_deleted'] = Variable<bool>(isDeleted.value);
-    }
-    if (createdAt.present) {
-      map['created_at'] = Variable<DateTime>(createdAt.value);
-    }
-    if (lastUpdatedAt.present) {
-      map['last_updated_at'] = Variable<DateTime>(lastUpdatedAt.value);
-    }
-    if (shopperAccountId.present) {
-      map['shopper_account_id'] = Variable<String>(shopperAccountId.value);
-    }
-    if (rowid.present) {
-      map['rowid'] = Variable<int>(rowid.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('CustomersCompanion(')
-          ..write('id: $id, ')
-          ..write('businessId: $businessId, ')
-          ..write('storeId: $storeId, ')
-          ..write('name: $name, ')
-          ..write('phone: $phone, ')
-          ..write('email: $email, ')
-          ..write('address: $address, ')
-          ..write('googleMapsLocation: $googleMapsLocation, ')
-          ..write('priceTier: $priceTier, ')
-          ..write('walletLimitKobo: $walletLimitKobo, ')
-          ..write('isDeleted: $isDeleted, ')
-          ..write('createdAt: $createdAt, ')
-          ..write('lastUpdatedAt: $lastUpdatedAt, ')
-          ..write('shopperAccountId: $shopperAccountId, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -57315,6 +57372,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     this,
   );
   late final $ManufacturersTable manufacturers = $ManufacturersTable(this);
+  late final $CustomersTable customers = $CustomersTable(this);
   late final $VanDriversTable vanDrivers = $VanDriversTable(this);
   late final $StoresTable stores = $StoresTable(this);
   late final $StoreDeliveryAreasTable storeDeliveryAreas =
@@ -57337,7 +57395,6 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $ProductsTable products = $ProductsTable(this);
   late final $ProductPhotosTable productPhotos = $ProductPhotosTable(this);
   late final $PriceListsTable priceLists = $PriceListsTable(this);
-  late final $CustomersTable customers = $CustomersTable(this);
   late final $CustomerWalletsTable customerWallets = $CustomerWalletsTable(
     this,
   );
@@ -57540,6 +57597,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     businesses,
     crateSizeGroups,
     manufacturers,
+    customers,
     vanDrivers,
     stores,
     storeDeliveryAreas,
@@ -57555,7 +57613,6 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     products,
     productPhotos,
     priceLists,
-    customers,
     customerWallets,
     vanTrips,
     orders,
@@ -57705,6 +57762,24 @@ final class $$BusinessesTableReferences
     ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_manufacturersRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$CustomersTable, List<CustomerData>>
+  _customersRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.customers,
+    aliasName: $_aliasNameGenerator(db.businesses.id, db.customers.businessId),
+  );
+
+  $$CustomersTableProcessedTableManager get customersRefs {
+    final manager = $$CustomersTableTableManager(
+      $_db,
+      $_db.customers,
+    ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_customersRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -58048,24 +58123,6 @@ final class $$BusinessesTableReferences
     ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_priceListsRefsTable($_db));
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: cache),
-    );
-  }
-
-  static MultiTypedResultKey<$CustomersTable, List<CustomerData>>
-  _customersRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
-    db.customers,
-    aliasName: $_aliasNameGenerator(db.businesses.id, db.customers.businessId),
-  );
-
-  $$CustomersTableProcessedTableManager get customersRefs {
-    final manager = $$CustomersTableTableManager(
-      $_db,
-      $_db.customers,
-    ).filter((f) => f.businessId.id.sqlEquals($_itemColumn<String>('id')!));
-
-    final cache = $_typedResult.readTableOrNull(_customersRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -59379,6 +59436,31 @@ class $$BusinessesTableFilterComposer
     return f(composer);
   }
 
+  Expression<bool> customersRefs(
+    Expression<bool> Function($$CustomersTableFilterComposer f) f,
+  ) {
+    final $$CustomersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.customers,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CustomersTableFilterComposer(
+            $db: $db,
+            $table: $db.customers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<bool> vanDriversRefs(
     Expression<bool> Function($$VanDriversTableFilterComposer f) f,
   ) {
@@ -59753,31 +59835,6 @@ class $$BusinessesTableFilterComposer
           }) => $$PriceListsTableFilterComposer(
             $db: $db,
             $table: $db.priceLists,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
-  Expression<bool> customersRefs(
-    Expression<bool> Function($$CustomersTableFilterComposer f) f,
-  ) {
-    final $$CustomersTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.customers,
-      getReferencedColumn: (t) => t.businessId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$CustomersTableFilterComposer(
-            $db: $db,
-            $table: $db.customers,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -61334,6 +61391,31 @@ class $$BusinessesTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> customersRefs<T extends Object>(
+    Expression<T> Function($$CustomersTableAnnotationComposer a) f,
+  ) {
+    final $$CustomersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.customers,
+      getReferencedColumn: (t) => t.businessId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CustomersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.customers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> vanDriversRefs<T extends Object>(
     Expression<T> Function($$VanDriversTableAnnotationComposer a) f,
   ) {
@@ -61711,31 +61793,6 @@ class $$BusinessesTableAnnotationComposer
           }) => $$PriceListsTableAnnotationComposer(
             $db: $db,
             $table: $db.priceLists,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
-  Expression<T> customersRefs<T extends Object>(
-    Expression<T> Function($$CustomersTableAnnotationComposer a) f,
-  ) {
-    final $$CustomersTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.customers,
-      getReferencedColumn: (t) => t.businessId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$CustomersTableAnnotationComposer(
-            $db: $db,
-            $table: $db.customers,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -63079,6 +63136,7 @@ class $$BusinessesTableTableManager
           PrefetchHooks Function({
             bool crateSizeGroupsRefs,
             bool manufacturersRefs,
+            bool customersRefs,
             bool vanDriversRefs,
             bool storesRefs,
             bool storeDeliveryAreasRefs,
@@ -63094,7 +63152,6 @@ class $$BusinessesTableTableManager
             bool productsRefs,
             bool productPhotosRefs,
             bool priceListsRefs,
-            bool customersRefs,
             bool customerWalletsRefs,
             bool vanTripsRefs,
             bool ordersRefs,
@@ -63260,6 +63317,7 @@ class $$BusinessesTableTableManager
               ({
                 crateSizeGroupsRefs = false,
                 manufacturersRefs = false,
+                customersRefs = false,
                 vanDriversRefs = false,
                 storesRefs = false,
                 storeDeliveryAreasRefs = false,
@@ -63275,7 +63333,6 @@ class $$BusinessesTableTableManager
                 productsRefs = false,
                 productPhotosRefs = false,
                 priceListsRefs = false,
-                customersRefs = false,
                 customerWalletsRefs = false,
                 vanTripsRefs = false,
                 ordersRefs = false,
@@ -63334,6 +63391,7 @@ class $$BusinessesTableTableManager
                   explicitlyWatchedTables: [
                     if (crateSizeGroupsRefs) db.crateSizeGroups,
                     if (manufacturersRefs) db.manufacturers,
+                    if (customersRefs) db.customers,
                     if (vanDriversRefs) db.vanDrivers,
                     if (storesRefs) db.stores,
                     if (storeDeliveryAreasRefs) db.storeDeliveryAreas,
@@ -63350,7 +63408,6 @@ class $$BusinessesTableTableManager
                     if (productsRefs) db.products,
                     if (productPhotosRefs) db.productPhotos,
                     if (priceListsRefs) db.priceLists,
-                    if (customersRefs) db.customers,
                     if (customerWalletsRefs) db.customerWallets,
                     if (vanTripsRefs) db.vanTrips,
                     if (ordersRefs) db.orders,
@@ -63444,6 +63501,27 @@ class $$BusinessesTableTableManager
                                 table,
                                 p0,
                               ).manufacturersRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.businessId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (customersRefs)
+                        await $_getPrefetchedData<
+                          BusinessData,
+                          $BusinessesTable,
+                          CustomerData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$BusinessesTableReferences
+                              ._customersRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$BusinessesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).customersRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.businessId == item.id,
@@ -63759,27 +63837,6 @@ class $$BusinessesTableTableManager
                                 table,
                                 p0,
                               ).priceListsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.businessId == item.id,
-                              ),
-                          typedResults: items,
-                        ),
-                      if (customersRefs)
-                        await $_getPrefetchedData<
-                          BusinessData,
-                          $BusinessesTable,
-                          CustomerData
-                        >(
-                          currentTable: table,
-                          referencedTable: $$BusinessesTableReferences
-                              ._customersRefsTable(db),
-                          managerFromTypedResult: (p0) =>
-                              $$BusinessesTableReferences(
-                                db,
-                                table,
-                                p0,
-                              ).customersRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.businessId == item.id,
@@ -64901,6 +64958,7 @@ typedef $$BusinessesTableProcessedTableManager =
       PrefetchHooks Function({
         bool crateSizeGroupsRefs,
         bool manufacturersRefs,
+        bool customersRefs,
         bool vanDriversRefs,
         bool storesRefs,
         bool storeDeliveryAreasRefs,
@@ -64916,7 +64974,6 @@ typedef $$BusinessesTableProcessedTableManager =
         bool productsRefs,
         bool productPhotosRefs,
         bool priceListsRefs,
-        bool customersRefs,
         bool customerWalletsRefs,
         bool vanTripsRefs,
         bool ordersRefs,
@@ -67341,6 +67398,1295 @@ typedef $$ManufacturersTableProcessedTableManager =
         bool orderCrateLinesRefs,
       })
     >;
+typedef $$CustomersTableCreateCompanionBuilder =
+    CustomersCompanion Function({
+      Value<String> id,
+      required String businessId,
+      Value<String?> storeId,
+      required String name,
+      Value<String?> phone,
+      Value<String?> email,
+      Value<String?> address,
+      Value<String?> googleMapsLocation,
+      Value<String> priceTier,
+      Value<int> walletLimitKobo,
+      Value<bool> isDeleted,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<String?> shopperAccountId,
+      Value<int> rowid,
+    });
+typedef $$CustomersTableUpdateCompanionBuilder =
+    CustomersCompanion Function({
+      Value<String> id,
+      Value<String> businessId,
+      Value<String?> storeId,
+      Value<String> name,
+      Value<String?> phone,
+      Value<String?> email,
+      Value<String?> address,
+      Value<String?> googleMapsLocation,
+      Value<String> priceTier,
+      Value<int> walletLimitKobo,
+      Value<bool> isDeleted,
+      Value<DateTime> createdAt,
+      Value<DateTime> lastUpdatedAt,
+      Value<String?> shopperAccountId,
+      Value<int> rowid,
+    });
+
+final class $$CustomersTableReferences
+    extends BaseReferences<_$AppDatabase, $CustomersTable, CustomerData> {
+  $$CustomersTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $BusinessesTable _businessIdTable(_$AppDatabase db) =>
+      db.businesses.createAlias(
+        $_aliasNameGenerator(db.customers.businessId, db.businesses.id),
+      );
+
+  $$BusinessesTableProcessedTableManager get businessId {
+    final $_column = $_itemColumn<String>('business_id')!;
+
+    final manager = $$BusinessesTableTableManager(
+      $_db,
+      $_db.businesses,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$VanDriversTable, List<VanDriverData>>
+  _vanDriversRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.vanDrivers,
+    aliasName: $_aliasNameGenerator(db.customers.id, db.vanDrivers.customerId),
+  );
+
+  $$VanDriversTableProcessedTableManager get vanDriversRefs {
+    final manager = $$VanDriversTableTableManager(
+      $_db,
+      $_db.vanDrivers,
+    ).filter((f) => f.customerId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_vanDriversRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$CustomerWalletsTable, List<CustomerWalletData>>
+  _customerWalletsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.customerWallets,
+    aliasName: $_aliasNameGenerator(
+      db.customers.id,
+      db.customerWallets.customerId,
+    ),
+  );
+
+  $$CustomerWalletsTableProcessedTableManager get customerWalletsRefs {
+    final manager = $$CustomerWalletsTableTableManager(
+      $_db,
+      $_db.customerWallets,
+    ).filter((f) => f.customerId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _customerWalletsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$OrdersTable, List<OrderData>> _ordersRefsTable(
+    _$AppDatabase db,
+  ) => MultiTypedResultKey.fromTable(
+    db.orders,
+    aliasName: $_aliasNameGenerator(db.customers.id, db.orders.customerId),
+  );
+
+  $$OrdersTableProcessedTableManager get ordersRefs {
+    final manager = $$OrdersTableTableManager(
+      $_db,
+      $_db.orders,
+    ).filter((f) => f.customerId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_ordersRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $WalletTransactionsTable,
+    List<WalletTransactionData>
+  >
+  _walletTransactionsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.walletTransactions,
+        aliasName: $_aliasNameGenerator(
+          db.customers.id,
+          db.walletTransactions.customerId,
+        ),
+      );
+
+  $$WalletTransactionsTableProcessedTableManager get walletTransactionsRefs {
+    final manager = $$WalletTransactionsTableTableManager(
+      $_db,
+      $_db.walletTransactions,
+    ).filter((f) => f.customerId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _walletTransactionsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $CustomerCrateBalancesTable,
+    List<CustomerCrateBalance>
+  >
+  _customerCrateBalancesRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.customerCrateBalances,
+        aliasName: $_aliasNameGenerator(
+          db.customers.id,
+          db.customerCrateBalances.customerId,
+        ),
+      );
+
+  $$CustomerCrateBalancesTableProcessedTableManager
+  get customerCrateBalancesRefs {
+    final manager = $$CustomerCrateBalancesTableTableManager(
+      $_db,
+      $_db.customerCrateBalances,
+    ).filter((f) => f.customerId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _customerCrateBalancesRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
+    $PendingCrateReturnsTable,
+    List<PendingCrateReturnData>
+  >
+  _pendingCrateReturnsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.pendingCrateReturns,
+        aliasName: $_aliasNameGenerator(
+          db.customers.id,
+          db.pendingCrateReturns.customerId,
+        ),
+      );
+
+  $$PendingCrateReturnsTableProcessedTableManager get pendingCrateReturnsRefs {
+    final manager = $$PendingCrateReturnsTableTableManager(
+      $_db,
+      $_db.pendingCrateReturns,
+    ).filter((f) => f.customerId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _pendingCrateReturnsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$CrateLedgerTable, List<CrateLedgerData>>
+  _crateLedgerRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.crateLedger,
+    aliasName: $_aliasNameGenerator(db.customers.id, db.crateLedger.customerId),
+  );
+
+  $$CrateLedgerTableProcessedTableManager get crateLedgerRefs {
+    final manager = $$CrateLedgerTableTableManager(
+      $_db,
+      $_db.crateLedger,
+    ).filter((f) => f.customerId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_crateLedgerRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$SavedCartsTable, List<SavedCartData>>
+  _savedCartsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.savedCarts,
+    aliasName: $_aliasNameGenerator(db.customers.id, db.savedCarts.customerId),
+  );
+
+  $$SavedCartsTableProcessedTableManager get savedCartsRefs {
+    final manager = $$SavedCartsTableTableManager(
+      $_db,
+      $_db.savedCarts,
+    ).filter((f) => f.customerId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_savedCartsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$CustomersTableFilterComposer
+    extends Composer<_$AppDatabase, $CustomersTable> {
+  $$CustomersTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get storeId => $composableBuilder(
+    column: $table.storeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get phone => $composableBuilder(
+    column: $table.phone,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get email => $composableBuilder(
+    column: $table.email,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get address => $composableBuilder(
+    column: $table.address,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get googleMapsLocation => $composableBuilder(
+    column: $table.googleMapsLocation,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get priceTier => $composableBuilder(
+    column: $table.priceTier,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get walletLimitKobo => $composableBuilder(
+    column: $table.walletLimitKobo,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isDeleted => $composableBuilder(
+    column: $table.isDeleted,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get shopperAccountId => $composableBuilder(
+    column: $table.shopperAccountId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$BusinessesTableFilterComposer get businessId {
+    final $$BusinessesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableFilterComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> vanDriversRefs(
+    Expression<bool> Function($$VanDriversTableFilterComposer f) f,
+  ) {
+    final $$VanDriversTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vanDrivers,
+      getReferencedColumn: (t) => t.customerId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanDriversTableFilterComposer(
+            $db: $db,
+            $table: $db.vanDrivers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> customerWalletsRefs(
+    Expression<bool> Function($$CustomerWalletsTableFilterComposer f) f,
+  ) {
+    final $$CustomerWalletsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.customerWallets,
+      getReferencedColumn: (t) => t.customerId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CustomerWalletsTableFilterComposer(
+            $db: $db,
+            $table: $db.customerWallets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> ordersRefs(
+    Expression<bool> Function($$OrdersTableFilterComposer f) f,
+  ) {
+    final $$OrdersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.orders,
+      getReferencedColumn: (t) => t.customerId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$OrdersTableFilterComposer(
+            $db: $db,
+            $table: $db.orders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> walletTransactionsRefs(
+    Expression<bool> Function($$WalletTransactionsTableFilterComposer f) f,
+  ) {
+    final $$WalletTransactionsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.walletTransactions,
+      getReferencedColumn: (t) => t.customerId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WalletTransactionsTableFilterComposer(
+            $db: $db,
+            $table: $db.walletTransactions,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> customerCrateBalancesRefs(
+    Expression<bool> Function($$CustomerCrateBalancesTableFilterComposer f) f,
+  ) {
+    final $$CustomerCrateBalancesTableFilterComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.customerCrateBalances,
+          getReferencedColumn: (t) => t.customerId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$CustomerCrateBalancesTableFilterComposer(
+                $db: $db,
+                $table: $db.customerCrateBalances,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<bool> pendingCrateReturnsRefs(
+    Expression<bool> Function($$PendingCrateReturnsTableFilterComposer f) f,
+  ) {
+    final $$PendingCrateReturnsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.pendingCrateReturns,
+      getReferencedColumn: (t) => t.customerId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PendingCrateReturnsTableFilterComposer(
+            $db: $db,
+            $table: $db.pendingCrateReturns,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> crateLedgerRefs(
+    Expression<bool> Function($$CrateLedgerTableFilterComposer f) f,
+  ) {
+    final $$CrateLedgerTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.crateLedger,
+      getReferencedColumn: (t) => t.customerId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CrateLedgerTableFilterComposer(
+            $db: $db,
+            $table: $db.crateLedger,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> savedCartsRefs(
+    Expression<bool> Function($$SavedCartsTableFilterComposer f) f,
+  ) {
+    final $$SavedCartsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.savedCarts,
+      getReferencedColumn: (t) => t.customerId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SavedCartsTableFilterComposer(
+            $db: $db,
+            $table: $db.savedCarts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$CustomersTableOrderingComposer
+    extends Composer<_$AppDatabase, $CustomersTable> {
+  $$CustomersTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get storeId => $composableBuilder(
+    column: $table.storeId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get phone => $composableBuilder(
+    column: $table.phone,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get email => $composableBuilder(
+    column: $table.email,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get address => $composableBuilder(
+    column: $table.address,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get googleMapsLocation => $composableBuilder(
+    column: $table.googleMapsLocation,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get priceTier => $composableBuilder(
+    column: $table.priceTier,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get walletLimitKobo => $composableBuilder(
+    column: $table.walletLimitKobo,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isDeleted => $composableBuilder(
+    column: $table.isDeleted,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get shopperAccountId => $composableBuilder(
+    column: $table.shopperAccountId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$BusinessesTableOrderingComposer get businessId {
+    final $$BusinessesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableOrderingComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$CustomersTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CustomersTable> {
+  $$CustomersTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get storeId =>
+      $composableBuilder(column: $table.storeId, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get phone =>
+      $composableBuilder(column: $table.phone, builder: (column) => column);
+
+  GeneratedColumn<String> get email =>
+      $composableBuilder(column: $table.email, builder: (column) => column);
+
+  GeneratedColumn<String> get address =>
+      $composableBuilder(column: $table.address, builder: (column) => column);
+
+  GeneratedColumn<String> get googleMapsLocation => $composableBuilder(
+    column: $table.googleMapsLocation,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get priceTier =>
+      $composableBuilder(column: $table.priceTier, builder: (column) => column);
+
+  GeneratedColumn<int> get walletLimitKobo => $composableBuilder(
+    column: $table.walletLimitKobo,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get isDeleted =>
+      $composableBuilder(column: $table.isDeleted, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
+    column: $table.lastUpdatedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get shopperAccountId => $composableBuilder(
+    column: $table.shopperAccountId,
+    builder: (column) => column,
+  );
+
+  $$BusinessesTableAnnotationComposer get businessId {
+    final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.businessId,
+      referencedTable: $db.businesses,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$BusinessesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> vanDriversRefs<T extends Object>(
+    Expression<T> Function($$VanDriversTableAnnotationComposer a) f,
+  ) {
+    final $$VanDriversTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.vanDrivers,
+      getReferencedColumn: (t) => t.customerId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanDriversTableAnnotationComposer(
+            $db: $db,
+            $table: $db.vanDrivers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> customerWalletsRefs<T extends Object>(
+    Expression<T> Function($$CustomerWalletsTableAnnotationComposer a) f,
+  ) {
+    final $$CustomerWalletsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.customerWallets,
+      getReferencedColumn: (t) => t.customerId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CustomerWalletsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.customerWallets,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> ordersRefs<T extends Object>(
+    Expression<T> Function($$OrdersTableAnnotationComposer a) f,
+  ) {
+    final $$OrdersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.orders,
+      getReferencedColumn: (t) => t.customerId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$OrdersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.orders,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> walletTransactionsRefs<T extends Object>(
+    Expression<T> Function($$WalletTransactionsTableAnnotationComposer a) f,
+  ) {
+    final $$WalletTransactionsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.walletTransactions,
+          getReferencedColumn: (t) => t.customerId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$WalletTransactionsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.walletTransactions,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> customerCrateBalancesRefs<T extends Object>(
+    Expression<T> Function($$CustomerCrateBalancesTableAnnotationComposer a) f,
+  ) {
+    final $$CustomerCrateBalancesTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.customerCrateBalances,
+          getReferencedColumn: (t) => t.customerId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$CustomerCrateBalancesTableAnnotationComposer(
+                $db: $db,
+                $table: $db.customerCrateBalances,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> pendingCrateReturnsRefs<T extends Object>(
+    Expression<T> Function($$PendingCrateReturnsTableAnnotationComposer a) f,
+  ) {
+    final $$PendingCrateReturnsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.pendingCrateReturns,
+          getReferencedColumn: (t) => t.customerId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$PendingCrateReturnsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.pendingCrateReturns,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
+  Expression<T> crateLedgerRefs<T extends Object>(
+    Expression<T> Function($$CrateLedgerTableAnnotationComposer a) f,
+  ) {
+    final $$CrateLedgerTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.crateLedger,
+      getReferencedColumn: (t) => t.customerId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CrateLedgerTableAnnotationComposer(
+            $db: $db,
+            $table: $db.crateLedger,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> savedCartsRefs<T extends Object>(
+    Expression<T> Function($$SavedCartsTableAnnotationComposer a) f,
+  ) {
+    final $$SavedCartsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.savedCarts,
+      getReferencedColumn: (t) => t.customerId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$SavedCartsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.savedCarts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$CustomersTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CustomersTable,
+          CustomerData,
+          $$CustomersTableFilterComposer,
+          $$CustomersTableOrderingComposer,
+          $$CustomersTableAnnotationComposer,
+          $$CustomersTableCreateCompanionBuilder,
+          $$CustomersTableUpdateCompanionBuilder,
+          (CustomerData, $$CustomersTableReferences),
+          CustomerData,
+          PrefetchHooks Function({
+            bool businessId,
+            bool vanDriversRefs,
+            bool customerWalletsRefs,
+            bool ordersRefs,
+            bool walletTransactionsRefs,
+            bool customerCrateBalancesRefs,
+            bool pendingCrateReturnsRefs,
+            bool crateLedgerRefs,
+            bool savedCartsRefs,
+          })
+        > {
+  $$CustomersTableTableManager(_$AppDatabase db, $CustomersTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CustomersTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CustomersTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CustomersTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> businessId = const Value.absent(),
+                Value<String?> storeId = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String?> phone = const Value.absent(),
+                Value<String?> email = const Value.absent(),
+                Value<String?> address = const Value.absent(),
+                Value<String?> googleMapsLocation = const Value.absent(),
+                Value<String> priceTier = const Value.absent(),
+                Value<int> walletLimitKobo = const Value.absent(),
+                Value<bool> isDeleted = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<String?> shopperAccountId = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CustomersCompanion(
+                id: id,
+                businessId: businessId,
+                storeId: storeId,
+                name: name,
+                phone: phone,
+                email: email,
+                address: address,
+                googleMapsLocation: googleMapsLocation,
+                priceTier: priceTier,
+                walletLimitKobo: walletLimitKobo,
+                isDeleted: isDeleted,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                shopperAccountId: shopperAccountId,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                required String businessId,
+                Value<String?> storeId = const Value.absent(),
+                required String name,
+                Value<String?> phone = const Value.absent(),
+                Value<String?> email = const Value.absent(),
+                Value<String?> address = const Value.absent(),
+                Value<String?> googleMapsLocation = const Value.absent(),
+                Value<String> priceTier = const Value.absent(),
+                Value<int> walletLimitKobo = const Value.absent(),
+                Value<bool> isDeleted = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<String?> shopperAccountId = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CustomersCompanion.insert(
+                id: id,
+                businessId: businessId,
+                storeId: storeId,
+                name: name,
+                phone: phone,
+                email: email,
+                address: address,
+                googleMapsLocation: googleMapsLocation,
+                priceTier: priceTier,
+                walletLimitKobo: walletLimitKobo,
+                isDeleted: isDeleted,
+                createdAt: createdAt,
+                lastUpdatedAt: lastUpdatedAt,
+                shopperAccountId: shopperAccountId,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$CustomersTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                businessId = false,
+                vanDriversRefs = false,
+                customerWalletsRefs = false,
+                ordersRefs = false,
+                walletTransactionsRefs = false,
+                customerCrateBalancesRefs = false,
+                pendingCrateReturnsRefs = false,
+                crateLedgerRefs = false,
+                savedCartsRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (vanDriversRefs) db.vanDrivers,
+                    if (customerWalletsRefs) db.customerWallets,
+                    if (ordersRefs) db.orders,
+                    if (walletTransactionsRefs) db.walletTransactions,
+                    if (customerCrateBalancesRefs) db.customerCrateBalances,
+                    if (pendingCrateReturnsRefs) db.pendingCrateReturns,
+                    if (crateLedgerRefs) db.crateLedger,
+                    if (savedCartsRefs) db.savedCarts,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (businessId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.businessId,
+                                    referencedTable: $$CustomersTableReferences
+                                        ._businessIdTable(db),
+                                    referencedColumn: $$CustomersTableReferences
+                                        ._businessIdTable(db)
+                                        .id,
+                                  )
+                                  as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (vanDriversRefs)
+                        await $_getPrefetchedData<
+                          CustomerData,
+                          $CustomersTable,
+                          VanDriverData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$CustomersTableReferences
+                              ._vanDriversRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$CustomersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).vanDriversRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.customerId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (customerWalletsRefs)
+                        await $_getPrefetchedData<
+                          CustomerData,
+                          $CustomersTable,
+                          CustomerWalletData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$CustomersTableReferences
+                              ._customerWalletsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$CustomersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).customerWalletsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.customerId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (ordersRefs)
+                        await $_getPrefetchedData<
+                          CustomerData,
+                          $CustomersTable,
+                          OrderData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$CustomersTableReferences
+                              ._ordersRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$CustomersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).ordersRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.customerId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (walletTransactionsRefs)
+                        await $_getPrefetchedData<
+                          CustomerData,
+                          $CustomersTable,
+                          WalletTransactionData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$CustomersTableReferences
+                              ._walletTransactionsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$CustomersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).walletTransactionsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.customerId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (customerCrateBalancesRefs)
+                        await $_getPrefetchedData<
+                          CustomerData,
+                          $CustomersTable,
+                          CustomerCrateBalance
+                        >(
+                          currentTable: table,
+                          referencedTable: $$CustomersTableReferences
+                              ._customerCrateBalancesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$CustomersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).customerCrateBalancesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.customerId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (pendingCrateReturnsRefs)
+                        await $_getPrefetchedData<
+                          CustomerData,
+                          $CustomersTable,
+                          PendingCrateReturnData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$CustomersTableReferences
+                              ._pendingCrateReturnsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$CustomersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).pendingCrateReturnsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.customerId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (crateLedgerRefs)
+                        await $_getPrefetchedData<
+                          CustomerData,
+                          $CustomersTable,
+                          CrateLedgerData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$CustomersTableReferences
+                              ._crateLedgerRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$CustomersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).crateLedgerRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.customerId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (savedCartsRefs)
+                        await $_getPrefetchedData<
+                          CustomerData,
+                          $CustomersTable,
+                          SavedCartData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$CustomersTableReferences
+                              ._savedCartsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$CustomersTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).savedCartsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.customerId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$CustomersTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CustomersTable,
+      CustomerData,
+      $$CustomersTableFilterComposer,
+      $$CustomersTableOrderingComposer,
+      $$CustomersTableAnnotationComposer,
+      $$CustomersTableCreateCompanionBuilder,
+      $$CustomersTableUpdateCompanionBuilder,
+      (CustomerData, $$CustomersTableReferences),
+      CustomerData,
+      PrefetchHooks Function({
+        bool businessId,
+        bool vanDriversRefs,
+        bool customerWalletsRefs,
+        bool ordersRefs,
+        bool walletTransactionsRefs,
+        bool customerCrateBalancesRefs,
+        bool pendingCrateReturnsRefs,
+        bool crateLedgerRefs,
+        bool savedCartsRefs,
+      })
+    >;
 typedef $$VanDriversTableCreateCompanionBuilder =
     VanDriversCompanion Function({
       Value<String> id,
@@ -67350,6 +68696,7 @@ typedef $$VanDriversTableCreateCompanionBuilder =
       Value<bool> isDeleted,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
+      Value<String?> customerId,
       Value<int> rowid,
     });
 typedef $$VanDriversTableUpdateCompanionBuilder =
@@ -67361,6 +68708,7 @@ typedef $$VanDriversTableUpdateCompanionBuilder =
       Value<bool> isDeleted,
       Value<DateTime> createdAt,
       Value<DateTime> lastUpdatedAt,
+      Value<String?> customerId,
       Value<int> rowid,
     });
 
@@ -67381,6 +68729,25 @@ final class $$VanDriversTableReferences
       $_db.businesses,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $CustomersTable _customerIdTable(_$AppDatabase db) =>
+      db.customers.createAlias(
+        $_aliasNameGenerator(db.vanDrivers.customerId, db.customers.id),
+      );
+
+  $$CustomersTableProcessedTableManager? get customerId {
+    final $_column = $_itemColumn<String>('customer_id');
+    if ($_column == null) return null;
+    final manager = $$CustomersTableTableManager(
+      $_db,
+      $_db.customers,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_customerIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -67505,6 +68872,29 @@ class $$VanDriversTableFilterComposer
           }) => $$BusinessesTableFilterComposer(
             $db: $db,
             $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$CustomersTableFilterComposer get customerId {
+    final $$CustomersTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.customerId,
+      referencedTable: $db.customers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CustomersTableFilterComposer(
+            $db: $db,
+            $table: $db.customers,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -67651,6 +69041,29 @@ class $$VanDriversTableOrderingComposer
     );
     return composer;
   }
+
+  $$CustomersTableOrderingComposer get customerId {
+    final $$CustomersTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.customerId,
+      referencedTable: $db.customers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CustomersTableOrderingComposer(
+            $db: $db,
+            $table: $db.customers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$VanDriversTableAnnotationComposer
@@ -67696,6 +69109,29 @@ class $$VanDriversTableAnnotationComposer
           }) => $$BusinessesTableAnnotationComposer(
             $db: $db,
             $table: $db.businesses,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$CustomersTableAnnotationComposer get customerId {
+    final $$CustomersTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.customerId,
+      referencedTable: $db.customers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CustomersTableAnnotationComposer(
+            $db: $db,
+            $table: $db.customers,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -67797,6 +69233,7 @@ class $$VanDriversTableTableManager
           VanDriverData,
           PrefetchHooks Function({
             bool businessId,
+            bool customerId,
             bool storesRefs,
             bool vanTripsRefs,
             bool driverLedgerEntriesRefs,
@@ -67822,6 +69259,7 @@ class $$VanDriversTableTableManager
                 Value<bool> isDeleted = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<String?> customerId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => VanDriversCompanion(
                 id: id,
@@ -67831,6 +69269,7 @@ class $$VanDriversTableTableManager
                 isDeleted: isDeleted,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
+                customerId: customerId,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -67842,6 +69281,7 @@ class $$VanDriversTableTableManager
                 Value<bool> isDeleted = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> lastUpdatedAt = const Value.absent(),
+                Value<String?> customerId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => VanDriversCompanion.insert(
                 id: id,
@@ -67851,6 +69291,7 @@ class $$VanDriversTableTableManager
                 isDeleted: isDeleted,
                 createdAt: createdAt,
                 lastUpdatedAt: lastUpdatedAt,
+                customerId: customerId,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -67864,6 +69305,7 @@ class $$VanDriversTableTableManager
           prefetchHooksCallback:
               ({
                 businessId = false,
+                customerId = false,
                 storesRefs = false,
                 vanTripsRefs = false,
                 driverLedgerEntriesRefs = false,
@@ -67901,6 +69343,20 @@ class $$VanDriversTableTableManager
                                     referencedColumn:
                                         $$VanDriversTableReferences
                                             ._businessIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
+                        if (customerId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.customerId,
+                                    referencedTable: $$VanDriversTableReferences
+                                        ._customerIdTable(db),
+                                    referencedColumn:
+                                        $$VanDriversTableReferences
+                                            ._customerIdTable(db)
                                             .id,
                                   )
                                   as T;
@@ -67995,6 +69451,7 @@ typedef $$VanDriversTableProcessedTableManager =
       VanDriverData,
       PrefetchHooks Function({
         bool businessId,
+        bool customerId,
         bool storesRefs,
         bool vanTripsRefs,
         bool driverLedgerEntriesRefs,
@@ -68261,24 +69718,6 @@ final class $$StoresTableReferences
     final cache = $_typedResult.readTableOrNull(
       _crateShortfallWriteoffsRefsTable($_db),
     );
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: cache),
-    );
-  }
-
-  static MultiTypedResultKey<$CustomersTable, List<CustomerData>>
-  _customersRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
-    db.customers,
-    aliasName: $_aliasNameGenerator(db.stores.id, db.customers.storeId),
-  );
-
-  $$CustomersTableProcessedTableManager get customersRefs {
-    final manager = $$CustomersTableTableManager(
-      $_db,
-      $_db.customers,
-    ).filter((f) => f.storeId.id.sqlEquals($_itemColumn<String>('id')!));
-
-    final cache = $_typedResult.readTableOrNull(_customersRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -69132,31 +70571,6 @@ class $$StoresTableFilterComposer
                     $removeJoinBuilderFromRootComposer,
               ),
         );
-    return f(composer);
-  }
-
-  Expression<bool> customersRefs(
-    Expression<bool> Function($$CustomersTableFilterComposer f) f,
-  ) {
-    final $$CustomersTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.customers,
-      getReferencedColumn: (t) => t.storeId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$CustomersTableFilterComposer(
-            $db: $db,
-            $table: $db.customers,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
     return f(composer);
   }
 
@@ -70218,31 +71632,6 @@ class $$StoresTableAnnotationComposer
     return f(composer);
   }
 
-  Expression<T> customersRefs<T extends Object>(
-    Expression<T> Function($$CustomersTableAnnotationComposer a) f,
-  ) {
-    final $$CustomersTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.customers,
-      getReferencedColumn: (t) => t.storeId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$CustomersTableAnnotationComposer(
-            $db: $db,
-            $table: $db.customers,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
   Expression<T> ordersRefs<T extends Object>(
     Expression<T> Function($$OrdersTableAnnotationComposer a) f,
   ) {
@@ -70926,7 +72315,6 @@ class $$StoresTableTableManager
             bool supplierCrateDepositRequestsRefs,
             bool supplierCrateDepositsRefs,
             bool crateShortfallWriteoffsRefs,
-            bool customersRefs,
             bool ordersRefs,
             bool storeCrateBalancesRefs,
             bool crateLedgerRefs,
@@ -71055,7 +72443,6 @@ class $$StoresTableTableManager
                 supplierCrateDepositRequestsRefs = false,
                 supplierCrateDepositsRefs = false,
                 crateShortfallWriteoffsRefs = false,
-                customersRefs = false,
                 ordersRefs = false,
                 storeCrateBalancesRefs = false,
                 crateLedgerRefs = false,
@@ -71094,7 +72481,6 @@ class $$StoresTableTableManager
                       db.supplierCrateDepositRequests,
                     if (supplierCrateDepositsRefs) db.supplierCrateDeposits,
                     if (crateShortfallWriteoffsRefs) db.crateShortfallWriteoffs,
-                    if (customersRefs) db.customers,
                     if (ordersRefs) db.orders,
                     if (storeCrateBalancesRefs) db.storeCrateBalances,
                     if (crateLedgerRefs) db.crateLedger,
@@ -71306,27 +72692,6 @@ class $$StoresTableTableManager
                                 table,
                                 p0,
                               ).crateShortfallWriteoffsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.storeId == item.id,
-                              ),
-                          typedResults: items,
-                        ),
-                      if (customersRefs)
-                        await $_getPrefetchedData<
-                          StoreData,
-                          $StoresTable,
-                          CustomerData
-                        >(
-                          currentTable: table,
-                          referencedTable: $$StoresTableReferences
-                              ._customersRefsTable(db),
-                          managerFromTypedResult: (p0) =>
-                              $$StoresTableReferences(
-                                db,
-                                table,
-                                p0,
-                              ).customersRefs,
                           referencedItemsForCurrentItem:
                               (item, referencedItems) => referencedItems.where(
                                 (e) => e.storeId == item.id,
@@ -71905,7 +73270,6 @@ typedef $$StoresTableProcessedTableManager =
         bool supplierCrateDepositRequestsRefs,
         bool supplierCrateDepositsRefs,
         bool crateShortfallWriteoffsRefs,
-        bool customersRefs,
         bool ordersRefs,
         bool storeCrateBalancesRefs,
         bool crateLedgerRefs,
@@ -86013,1292 +87377,6 @@ typedef $$PriceListsTableProcessedTableManager =
       (PriceListData, $$PriceListsTableReferences),
       PriceListData,
       PrefetchHooks Function({bool businessId, bool productId})
-    >;
-typedef $$CustomersTableCreateCompanionBuilder =
-    CustomersCompanion Function({
-      Value<String> id,
-      required String businessId,
-      Value<String?> storeId,
-      required String name,
-      Value<String?> phone,
-      Value<String?> email,
-      Value<String?> address,
-      Value<String?> googleMapsLocation,
-      Value<String> priceTier,
-      Value<int> walletLimitKobo,
-      Value<bool> isDeleted,
-      Value<DateTime> createdAt,
-      Value<DateTime> lastUpdatedAt,
-      Value<String?> shopperAccountId,
-      Value<int> rowid,
-    });
-typedef $$CustomersTableUpdateCompanionBuilder =
-    CustomersCompanion Function({
-      Value<String> id,
-      Value<String> businessId,
-      Value<String?> storeId,
-      Value<String> name,
-      Value<String?> phone,
-      Value<String?> email,
-      Value<String?> address,
-      Value<String?> googleMapsLocation,
-      Value<String> priceTier,
-      Value<int> walletLimitKobo,
-      Value<bool> isDeleted,
-      Value<DateTime> createdAt,
-      Value<DateTime> lastUpdatedAt,
-      Value<String?> shopperAccountId,
-      Value<int> rowid,
-    });
-
-final class $$CustomersTableReferences
-    extends BaseReferences<_$AppDatabase, $CustomersTable, CustomerData> {
-  $$CustomersTableReferences(super.$_db, super.$_table, super.$_typedResult);
-
-  static $BusinessesTable _businessIdTable(_$AppDatabase db) =>
-      db.businesses.createAlias(
-        $_aliasNameGenerator(db.customers.businessId, db.businesses.id),
-      );
-
-  $$BusinessesTableProcessedTableManager get businessId {
-    final $_column = $_itemColumn<String>('business_id')!;
-
-    final manager = $$BusinessesTableTableManager(
-      $_db,
-      $_db.businesses,
-    ).filter((f) => f.id.sqlEquals($_column));
-    final item = $_typedResult.readTableOrNull(_businessIdTable($_db));
-    if (item == null) return manager;
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: [item]),
-    );
-  }
-
-  static $StoresTable _storeIdTable(_$AppDatabase db) => db.stores.createAlias(
-    $_aliasNameGenerator(db.customers.storeId, db.stores.id),
-  );
-
-  $$StoresTableProcessedTableManager? get storeId {
-    final $_column = $_itemColumn<String>('store_id');
-    if ($_column == null) return null;
-    final manager = $$StoresTableTableManager(
-      $_db,
-      $_db.stores,
-    ).filter((f) => f.id.sqlEquals($_column));
-    final item = $_typedResult.readTableOrNull(_storeIdTable($_db));
-    if (item == null) return manager;
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: [item]),
-    );
-  }
-
-  static MultiTypedResultKey<$CustomerWalletsTable, List<CustomerWalletData>>
-  _customerWalletsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
-    db.customerWallets,
-    aliasName: $_aliasNameGenerator(
-      db.customers.id,
-      db.customerWallets.customerId,
-    ),
-  );
-
-  $$CustomerWalletsTableProcessedTableManager get customerWalletsRefs {
-    final manager = $$CustomerWalletsTableTableManager(
-      $_db,
-      $_db.customerWallets,
-    ).filter((f) => f.customerId.id.sqlEquals($_itemColumn<String>('id')!));
-
-    final cache = $_typedResult.readTableOrNull(
-      _customerWalletsRefsTable($_db),
-    );
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: cache),
-    );
-  }
-
-  static MultiTypedResultKey<$OrdersTable, List<OrderData>> _ordersRefsTable(
-    _$AppDatabase db,
-  ) => MultiTypedResultKey.fromTable(
-    db.orders,
-    aliasName: $_aliasNameGenerator(db.customers.id, db.orders.customerId),
-  );
-
-  $$OrdersTableProcessedTableManager get ordersRefs {
-    final manager = $$OrdersTableTableManager(
-      $_db,
-      $_db.orders,
-    ).filter((f) => f.customerId.id.sqlEquals($_itemColumn<String>('id')!));
-
-    final cache = $_typedResult.readTableOrNull(_ordersRefsTable($_db));
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: cache),
-    );
-  }
-
-  static MultiTypedResultKey<
-    $WalletTransactionsTable,
-    List<WalletTransactionData>
-  >
-  _walletTransactionsRefsTable(_$AppDatabase db) =>
-      MultiTypedResultKey.fromTable(
-        db.walletTransactions,
-        aliasName: $_aliasNameGenerator(
-          db.customers.id,
-          db.walletTransactions.customerId,
-        ),
-      );
-
-  $$WalletTransactionsTableProcessedTableManager get walletTransactionsRefs {
-    final manager = $$WalletTransactionsTableTableManager(
-      $_db,
-      $_db.walletTransactions,
-    ).filter((f) => f.customerId.id.sqlEquals($_itemColumn<String>('id')!));
-
-    final cache = $_typedResult.readTableOrNull(
-      _walletTransactionsRefsTable($_db),
-    );
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: cache),
-    );
-  }
-
-  static MultiTypedResultKey<
-    $CustomerCrateBalancesTable,
-    List<CustomerCrateBalance>
-  >
-  _customerCrateBalancesRefsTable(_$AppDatabase db) =>
-      MultiTypedResultKey.fromTable(
-        db.customerCrateBalances,
-        aliasName: $_aliasNameGenerator(
-          db.customers.id,
-          db.customerCrateBalances.customerId,
-        ),
-      );
-
-  $$CustomerCrateBalancesTableProcessedTableManager
-  get customerCrateBalancesRefs {
-    final manager = $$CustomerCrateBalancesTableTableManager(
-      $_db,
-      $_db.customerCrateBalances,
-    ).filter((f) => f.customerId.id.sqlEquals($_itemColumn<String>('id')!));
-
-    final cache = $_typedResult.readTableOrNull(
-      _customerCrateBalancesRefsTable($_db),
-    );
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: cache),
-    );
-  }
-
-  static MultiTypedResultKey<
-    $PendingCrateReturnsTable,
-    List<PendingCrateReturnData>
-  >
-  _pendingCrateReturnsRefsTable(_$AppDatabase db) =>
-      MultiTypedResultKey.fromTable(
-        db.pendingCrateReturns,
-        aliasName: $_aliasNameGenerator(
-          db.customers.id,
-          db.pendingCrateReturns.customerId,
-        ),
-      );
-
-  $$PendingCrateReturnsTableProcessedTableManager get pendingCrateReturnsRefs {
-    final manager = $$PendingCrateReturnsTableTableManager(
-      $_db,
-      $_db.pendingCrateReturns,
-    ).filter((f) => f.customerId.id.sqlEquals($_itemColumn<String>('id')!));
-
-    final cache = $_typedResult.readTableOrNull(
-      _pendingCrateReturnsRefsTable($_db),
-    );
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: cache),
-    );
-  }
-
-  static MultiTypedResultKey<$CrateLedgerTable, List<CrateLedgerData>>
-  _crateLedgerRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
-    db.crateLedger,
-    aliasName: $_aliasNameGenerator(db.customers.id, db.crateLedger.customerId),
-  );
-
-  $$CrateLedgerTableProcessedTableManager get crateLedgerRefs {
-    final manager = $$CrateLedgerTableTableManager(
-      $_db,
-      $_db.crateLedger,
-    ).filter((f) => f.customerId.id.sqlEquals($_itemColumn<String>('id')!));
-
-    final cache = $_typedResult.readTableOrNull(_crateLedgerRefsTable($_db));
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: cache),
-    );
-  }
-
-  static MultiTypedResultKey<$SavedCartsTable, List<SavedCartData>>
-  _savedCartsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
-    db.savedCarts,
-    aliasName: $_aliasNameGenerator(db.customers.id, db.savedCarts.customerId),
-  );
-
-  $$SavedCartsTableProcessedTableManager get savedCartsRefs {
-    final manager = $$SavedCartsTableTableManager(
-      $_db,
-      $_db.savedCarts,
-    ).filter((f) => f.customerId.id.sqlEquals($_itemColumn<String>('id')!));
-
-    final cache = $_typedResult.readTableOrNull(_savedCartsRefsTable($_db));
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: cache),
-    );
-  }
-}
-
-class $$CustomersTableFilterComposer
-    extends Composer<_$AppDatabase, $CustomersTable> {
-  $$CustomersTableFilterComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnFilters<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get name => $composableBuilder(
-    column: $table.name,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get phone => $composableBuilder(
-    column: $table.phone,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get email => $composableBuilder(
-    column: $table.email,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get address => $composableBuilder(
-    column: $table.address,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get googleMapsLocation => $composableBuilder(
-    column: $table.googleMapsLocation,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get priceTier => $composableBuilder(
-    column: $table.priceTier,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get walletLimitKobo => $composableBuilder(
-    column: $table.walletLimitKobo,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<bool> get isDeleted => $composableBuilder(
-    column: $table.isDeleted,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<DateTime> get createdAt => $composableBuilder(
-    column: $table.createdAt,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<DateTime> get lastUpdatedAt => $composableBuilder(
-    column: $table.lastUpdatedAt,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get shopperAccountId => $composableBuilder(
-    column: $table.shopperAccountId,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  $$BusinessesTableFilterComposer get businessId {
-    final $$BusinessesTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.businessId,
-      referencedTable: $db.businesses,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$BusinessesTableFilterComposer(
-            $db: $db,
-            $table: $db.businesses,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-
-  $$StoresTableFilterComposer get storeId {
-    final $$StoresTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.storeId,
-      referencedTable: $db.stores,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$StoresTableFilterComposer(
-            $db: $db,
-            $table: $db.stores,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-
-  Expression<bool> customerWalletsRefs(
-    Expression<bool> Function($$CustomerWalletsTableFilterComposer f) f,
-  ) {
-    final $$CustomerWalletsTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.customerWallets,
-      getReferencedColumn: (t) => t.customerId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$CustomerWalletsTableFilterComposer(
-            $db: $db,
-            $table: $db.customerWallets,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
-  Expression<bool> ordersRefs(
-    Expression<bool> Function($$OrdersTableFilterComposer f) f,
-  ) {
-    final $$OrdersTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.orders,
-      getReferencedColumn: (t) => t.customerId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$OrdersTableFilterComposer(
-            $db: $db,
-            $table: $db.orders,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
-  Expression<bool> walletTransactionsRefs(
-    Expression<bool> Function($$WalletTransactionsTableFilterComposer f) f,
-  ) {
-    final $$WalletTransactionsTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.walletTransactions,
-      getReferencedColumn: (t) => t.customerId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$WalletTransactionsTableFilterComposer(
-            $db: $db,
-            $table: $db.walletTransactions,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
-  Expression<bool> customerCrateBalancesRefs(
-    Expression<bool> Function($$CustomerCrateBalancesTableFilterComposer f) f,
-  ) {
-    final $$CustomerCrateBalancesTableFilterComposer composer =
-        $composerBuilder(
-          composer: this,
-          getCurrentColumn: (t) => t.id,
-          referencedTable: $db.customerCrateBalances,
-          getReferencedColumn: (t) => t.customerId,
-          builder:
-              (
-                joinBuilder, {
-                $addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer,
-              }) => $$CustomerCrateBalancesTableFilterComposer(
-                $db: $db,
-                $table: $db.customerCrateBalances,
-                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-                joinBuilder: joinBuilder,
-                $removeJoinBuilderFromRootComposer:
-                    $removeJoinBuilderFromRootComposer,
-              ),
-        );
-    return f(composer);
-  }
-
-  Expression<bool> pendingCrateReturnsRefs(
-    Expression<bool> Function($$PendingCrateReturnsTableFilterComposer f) f,
-  ) {
-    final $$PendingCrateReturnsTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.pendingCrateReturns,
-      getReferencedColumn: (t) => t.customerId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$PendingCrateReturnsTableFilterComposer(
-            $db: $db,
-            $table: $db.pendingCrateReturns,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
-  Expression<bool> crateLedgerRefs(
-    Expression<bool> Function($$CrateLedgerTableFilterComposer f) f,
-  ) {
-    final $$CrateLedgerTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.crateLedger,
-      getReferencedColumn: (t) => t.customerId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$CrateLedgerTableFilterComposer(
-            $db: $db,
-            $table: $db.crateLedger,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
-  Expression<bool> savedCartsRefs(
-    Expression<bool> Function($$SavedCartsTableFilterComposer f) f,
-  ) {
-    final $$SavedCartsTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.savedCarts,
-      getReferencedColumn: (t) => t.customerId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$SavedCartsTableFilterComposer(
-            $db: $db,
-            $table: $db.savedCarts,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-}
-
-class $$CustomersTableOrderingComposer
-    extends Composer<_$AppDatabase, $CustomersTable> {
-  $$CustomersTableOrderingComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnOrderings<String> get id => $composableBuilder(
-    column: $table.id,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get name => $composableBuilder(
-    column: $table.name,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get phone => $composableBuilder(
-    column: $table.phone,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get email => $composableBuilder(
-    column: $table.email,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get address => $composableBuilder(
-    column: $table.address,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get googleMapsLocation => $composableBuilder(
-    column: $table.googleMapsLocation,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get priceTier => $composableBuilder(
-    column: $table.priceTier,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get walletLimitKobo => $composableBuilder(
-    column: $table.walletLimitKobo,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<bool> get isDeleted => $composableBuilder(
-    column: $table.isDeleted,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
-    column: $table.createdAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<DateTime> get lastUpdatedAt => $composableBuilder(
-    column: $table.lastUpdatedAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get shopperAccountId => $composableBuilder(
-    column: $table.shopperAccountId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  $$BusinessesTableOrderingComposer get businessId {
-    final $$BusinessesTableOrderingComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.businessId,
-      referencedTable: $db.businesses,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$BusinessesTableOrderingComposer(
-            $db: $db,
-            $table: $db.businesses,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-
-  $$StoresTableOrderingComposer get storeId {
-    final $$StoresTableOrderingComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.storeId,
-      referencedTable: $db.stores,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$StoresTableOrderingComposer(
-            $db: $db,
-            $table: $db.stores,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-}
-
-class $$CustomersTableAnnotationComposer
-    extends Composer<_$AppDatabase, $CustomersTable> {
-  $$CustomersTableAnnotationComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  GeneratedColumn<String> get id =>
-      $composableBuilder(column: $table.id, builder: (column) => column);
-
-  GeneratedColumn<String> get name =>
-      $composableBuilder(column: $table.name, builder: (column) => column);
-
-  GeneratedColumn<String> get phone =>
-      $composableBuilder(column: $table.phone, builder: (column) => column);
-
-  GeneratedColumn<String> get email =>
-      $composableBuilder(column: $table.email, builder: (column) => column);
-
-  GeneratedColumn<String> get address =>
-      $composableBuilder(column: $table.address, builder: (column) => column);
-
-  GeneratedColumn<String> get googleMapsLocation => $composableBuilder(
-    column: $table.googleMapsLocation,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get priceTier =>
-      $composableBuilder(column: $table.priceTier, builder: (column) => column);
-
-  GeneratedColumn<int> get walletLimitKobo => $composableBuilder(
-    column: $table.walletLimitKobo,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<bool> get isDeleted =>
-      $composableBuilder(column: $table.isDeleted, builder: (column) => column);
-
-  GeneratedColumn<DateTime> get createdAt =>
-      $composableBuilder(column: $table.createdAt, builder: (column) => column);
-
-  GeneratedColumn<DateTime> get lastUpdatedAt => $composableBuilder(
-    column: $table.lastUpdatedAt,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get shopperAccountId => $composableBuilder(
-    column: $table.shopperAccountId,
-    builder: (column) => column,
-  );
-
-  $$BusinessesTableAnnotationComposer get businessId {
-    final $$BusinessesTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.businessId,
-      referencedTable: $db.businesses,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$BusinessesTableAnnotationComposer(
-            $db: $db,
-            $table: $db.businesses,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-
-  $$StoresTableAnnotationComposer get storeId {
-    final $$StoresTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.storeId,
-      referencedTable: $db.stores,
-      getReferencedColumn: (t) => t.id,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$StoresTableAnnotationComposer(
-            $db: $db,
-            $table: $db.stores,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return composer;
-  }
-
-  Expression<T> customerWalletsRefs<T extends Object>(
-    Expression<T> Function($$CustomerWalletsTableAnnotationComposer a) f,
-  ) {
-    final $$CustomerWalletsTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.customerWallets,
-      getReferencedColumn: (t) => t.customerId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$CustomerWalletsTableAnnotationComposer(
-            $db: $db,
-            $table: $db.customerWallets,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
-  Expression<T> ordersRefs<T extends Object>(
-    Expression<T> Function($$OrdersTableAnnotationComposer a) f,
-  ) {
-    final $$OrdersTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.orders,
-      getReferencedColumn: (t) => t.customerId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$OrdersTableAnnotationComposer(
-            $db: $db,
-            $table: $db.orders,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
-  Expression<T> walletTransactionsRefs<T extends Object>(
-    Expression<T> Function($$WalletTransactionsTableAnnotationComposer a) f,
-  ) {
-    final $$WalletTransactionsTableAnnotationComposer composer =
-        $composerBuilder(
-          composer: this,
-          getCurrentColumn: (t) => t.id,
-          referencedTable: $db.walletTransactions,
-          getReferencedColumn: (t) => t.customerId,
-          builder:
-              (
-                joinBuilder, {
-                $addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer,
-              }) => $$WalletTransactionsTableAnnotationComposer(
-                $db: $db,
-                $table: $db.walletTransactions,
-                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-                joinBuilder: joinBuilder,
-                $removeJoinBuilderFromRootComposer:
-                    $removeJoinBuilderFromRootComposer,
-              ),
-        );
-    return f(composer);
-  }
-
-  Expression<T> customerCrateBalancesRefs<T extends Object>(
-    Expression<T> Function($$CustomerCrateBalancesTableAnnotationComposer a) f,
-  ) {
-    final $$CustomerCrateBalancesTableAnnotationComposer composer =
-        $composerBuilder(
-          composer: this,
-          getCurrentColumn: (t) => t.id,
-          referencedTable: $db.customerCrateBalances,
-          getReferencedColumn: (t) => t.customerId,
-          builder:
-              (
-                joinBuilder, {
-                $addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer,
-              }) => $$CustomerCrateBalancesTableAnnotationComposer(
-                $db: $db,
-                $table: $db.customerCrateBalances,
-                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-                joinBuilder: joinBuilder,
-                $removeJoinBuilderFromRootComposer:
-                    $removeJoinBuilderFromRootComposer,
-              ),
-        );
-    return f(composer);
-  }
-
-  Expression<T> pendingCrateReturnsRefs<T extends Object>(
-    Expression<T> Function($$PendingCrateReturnsTableAnnotationComposer a) f,
-  ) {
-    final $$PendingCrateReturnsTableAnnotationComposer composer =
-        $composerBuilder(
-          composer: this,
-          getCurrentColumn: (t) => t.id,
-          referencedTable: $db.pendingCrateReturns,
-          getReferencedColumn: (t) => t.customerId,
-          builder:
-              (
-                joinBuilder, {
-                $addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer,
-              }) => $$PendingCrateReturnsTableAnnotationComposer(
-                $db: $db,
-                $table: $db.pendingCrateReturns,
-                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-                joinBuilder: joinBuilder,
-                $removeJoinBuilderFromRootComposer:
-                    $removeJoinBuilderFromRootComposer,
-              ),
-        );
-    return f(composer);
-  }
-
-  Expression<T> crateLedgerRefs<T extends Object>(
-    Expression<T> Function($$CrateLedgerTableAnnotationComposer a) f,
-  ) {
-    final $$CrateLedgerTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.crateLedger,
-      getReferencedColumn: (t) => t.customerId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$CrateLedgerTableAnnotationComposer(
-            $db: $db,
-            $table: $db.crateLedger,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-
-  Expression<T> savedCartsRefs<T extends Object>(
-    Expression<T> Function($$SavedCartsTableAnnotationComposer a) f,
-  ) {
-    final $$SavedCartsTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.savedCarts,
-      getReferencedColumn: (t) => t.customerId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$SavedCartsTableAnnotationComposer(
-            $db: $db,
-            $table: $db.savedCarts,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
-}
-
-class $$CustomersTableTableManager
-    extends
-        RootTableManager<
-          _$AppDatabase,
-          $CustomersTable,
-          CustomerData,
-          $$CustomersTableFilterComposer,
-          $$CustomersTableOrderingComposer,
-          $$CustomersTableAnnotationComposer,
-          $$CustomersTableCreateCompanionBuilder,
-          $$CustomersTableUpdateCompanionBuilder,
-          (CustomerData, $$CustomersTableReferences),
-          CustomerData,
-          PrefetchHooks Function({
-            bool businessId,
-            bool storeId,
-            bool customerWalletsRefs,
-            bool ordersRefs,
-            bool walletTransactionsRefs,
-            bool customerCrateBalancesRefs,
-            bool pendingCrateReturnsRefs,
-            bool crateLedgerRefs,
-            bool savedCartsRefs,
-          })
-        > {
-  $$CustomersTableTableManager(_$AppDatabase db, $CustomersTable table)
-    : super(
-        TableManagerState(
-          db: db,
-          table: table,
-          createFilteringComposer: () =>
-              $$CustomersTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$CustomersTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$CustomersTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback:
-              ({
-                Value<String> id = const Value.absent(),
-                Value<String> businessId = const Value.absent(),
-                Value<String?> storeId = const Value.absent(),
-                Value<String> name = const Value.absent(),
-                Value<String?> phone = const Value.absent(),
-                Value<String?> email = const Value.absent(),
-                Value<String?> address = const Value.absent(),
-                Value<String?> googleMapsLocation = const Value.absent(),
-                Value<String> priceTier = const Value.absent(),
-                Value<int> walletLimitKobo = const Value.absent(),
-                Value<bool> isDeleted = const Value.absent(),
-                Value<DateTime> createdAt = const Value.absent(),
-                Value<DateTime> lastUpdatedAt = const Value.absent(),
-                Value<String?> shopperAccountId = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => CustomersCompanion(
-                id: id,
-                businessId: businessId,
-                storeId: storeId,
-                name: name,
-                phone: phone,
-                email: email,
-                address: address,
-                googleMapsLocation: googleMapsLocation,
-                priceTier: priceTier,
-                walletLimitKobo: walletLimitKobo,
-                isDeleted: isDeleted,
-                createdAt: createdAt,
-                lastUpdatedAt: lastUpdatedAt,
-                shopperAccountId: shopperAccountId,
-                rowid: rowid,
-              ),
-          createCompanionCallback:
-              ({
-                Value<String> id = const Value.absent(),
-                required String businessId,
-                Value<String?> storeId = const Value.absent(),
-                required String name,
-                Value<String?> phone = const Value.absent(),
-                Value<String?> email = const Value.absent(),
-                Value<String?> address = const Value.absent(),
-                Value<String?> googleMapsLocation = const Value.absent(),
-                Value<String> priceTier = const Value.absent(),
-                Value<int> walletLimitKobo = const Value.absent(),
-                Value<bool> isDeleted = const Value.absent(),
-                Value<DateTime> createdAt = const Value.absent(),
-                Value<DateTime> lastUpdatedAt = const Value.absent(),
-                Value<String?> shopperAccountId = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => CustomersCompanion.insert(
-                id: id,
-                businessId: businessId,
-                storeId: storeId,
-                name: name,
-                phone: phone,
-                email: email,
-                address: address,
-                googleMapsLocation: googleMapsLocation,
-                priceTier: priceTier,
-                walletLimitKobo: walletLimitKobo,
-                isDeleted: isDeleted,
-                createdAt: createdAt,
-                lastUpdatedAt: lastUpdatedAt,
-                shopperAccountId: shopperAccountId,
-                rowid: rowid,
-              ),
-          withReferenceMapper: (p0) => p0
-              .map(
-                (e) => (
-                  e.readTable(table),
-                  $$CustomersTableReferences(db, table, e),
-                ),
-              )
-              .toList(),
-          prefetchHooksCallback:
-              ({
-                businessId = false,
-                storeId = false,
-                customerWalletsRefs = false,
-                ordersRefs = false,
-                walletTransactionsRefs = false,
-                customerCrateBalancesRefs = false,
-                pendingCrateReturnsRefs = false,
-                crateLedgerRefs = false,
-                savedCartsRefs = false,
-              }) {
-                return PrefetchHooks(
-                  db: db,
-                  explicitlyWatchedTables: [
-                    if (customerWalletsRefs) db.customerWallets,
-                    if (ordersRefs) db.orders,
-                    if (walletTransactionsRefs) db.walletTransactions,
-                    if (customerCrateBalancesRefs) db.customerCrateBalances,
-                    if (pendingCrateReturnsRefs) db.pendingCrateReturns,
-                    if (crateLedgerRefs) db.crateLedger,
-                    if (savedCartsRefs) db.savedCarts,
-                  ],
-                  addJoins:
-                      <
-                        T extends TableManagerState<
-                          dynamic,
-                          dynamic,
-                          dynamic,
-                          dynamic,
-                          dynamic,
-                          dynamic,
-                          dynamic,
-                          dynamic,
-                          dynamic,
-                          dynamic,
-                          dynamic
-                        >
-                      >(state) {
-                        if (businessId) {
-                          state =
-                              state.withJoin(
-                                    currentTable: table,
-                                    currentColumn: table.businessId,
-                                    referencedTable: $$CustomersTableReferences
-                                        ._businessIdTable(db),
-                                    referencedColumn: $$CustomersTableReferences
-                                        ._businessIdTable(db)
-                                        .id,
-                                  )
-                                  as T;
-                        }
-                        if (storeId) {
-                          state =
-                              state.withJoin(
-                                    currentTable: table,
-                                    currentColumn: table.storeId,
-                                    referencedTable: $$CustomersTableReferences
-                                        ._storeIdTable(db),
-                                    referencedColumn: $$CustomersTableReferences
-                                        ._storeIdTable(db)
-                                        .id,
-                                  )
-                                  as T;
-                        }
-
-                        return state;
-                      },
-                  getPrefetchedDataCallback: (items) async {
-                    return [
-                      if (customerWalletsRefs)
-                        await $_getPrefetchedData<
-                          CustomerData,
-                          $CustomersTable,
-                          CustomerWalletData
-                        >(
-                          currentTable: table,
-                          referencedTable: $$CustomersTableReferences
-                              ._customerWalletsRefsTable(db),
-                          managerFromTypedResult: (p0) =>
-                              $$CustomersTableReferences(
-                                db,
-                                table,
-                                p0,
-                              ).customerWalletsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.customerId == item.id,
-                              ),
-                          typedResults: items,
-                        ),
-                      if (ordersRefs)
-                        await $_getPrefetchedData<
-                          CustomerData,
-                          $CustomersTable,
-                          OrderData
-                        >(
-                          currentTable: table,
-                          referencedTable: $$CustomersTableReferences
-                              ._ordersRefsTable(db),
-                          managerFromTypedResult: (p0) =>
-                              $$CustomersTableReferences(
-                                db,
-                                table,
-                                p0,
-                              ).ordersRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.customerId == item.id,
-                              ),
-                          typedResults: items,
-                        ),
-                      if (walletTransactionsRefs)
-                        await $_getPrefetchedData<
-                          CustomerData,
-                          $CustomersTable,
-                          WalletTransactionData
-                        >(
-                          currentTable: table,
-                          referencedTable: $$CustomersTableReferences
-                              ._walletTransactionsRefsTable(db),
-                          managerFromTypedResult: (p0) =>
-                              $$CustomersTableReferences(
-                                db,
-                                table,
-                                p0,
-                              ).walletTransactionsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.customerId == item.id,
-                              ),
-                          typedResults: items,
-                        ),
-                      if (customerCrateBalancesRefs)
-                        await $_getPrefetchedData<
-                          CustomerData,
-                          $CustomersTable,
-                          CustomerCrateBalance
-                        >(
-                          currentTable: table,
-                          referencedTable: $$CustomersTableReferences
-                              ._customerCrateBalancesRefsTable(db),
-                          managerFromTypedResult: (p0) =>
-                              $$CustomersTableReferences(
-                                db,
-                                table,
-                                p0,
-                              ).customerCrateBalancesRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.customerId == item.id,
-                              ),
-                          typedResults: items,
-                        ),
-                      if (pendingCrateReturnsRefs)
-                        await $_getPrefetchedData<
-                          CustomerData,
-                          $CustomersTable,
-                          PendingCrateReturnData
-                        >(
-                          currentTable: table,
-                          referencedTable: $$CustomersTableReferences
-                              ._pendingCrateReturnsRefsTable(db),
-                          managerFromTypedResult: (p0) =>
-                              $$CustomersTableReferences(
-                                db,
-                                table,
-                                p0,
-                              ).pendingCrateReturnsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.customerId == item.id,
-                              ),
-                          typedResults: items,
-                        ),
-                      if (crateLedgerRefs)
-                        await $_getPrefetchedData<
-                          CustomerData,
-                          $CustomersTable,
-                          CrateLedgerData
-                        >(
-                          currentTable: table,
-                          referencedTable: $$CustomersTableReferences
-                              ._crateLedgerRefsTable(db),
-                          managerFromTypedResult: (p0) =>
-                              $$CustomersTableReferences(
-                                db,
-                                table,
-                                p0,
-                              ).crateLedgerRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.customerId == item.id,
-                              ),
-                          typedResults: items,
-                        ),
-                      if (savedCartsRefs)
-                        await $_getPrefetchedData<
-                          CustomerData,
-                          $CustomersTable,
-                          SavedCartData
-                        >(
-                          currentTable: table,
-                          referencedTable: $$CustomersTableReferences
-                              ._savedCartsRefsTable(db),
-                          managerFromTypedResult: (p0) =>
-                              $$CustomersTableReferences(
-                                db,
-                                table,
-                                p0,
-                              ).savedCartsRefs,
-                          referencedItemsForCurrentItem:
-                              (item, referencedItems) => referencedItems.where(
-                                (e) => e.customerId == item.id,
-                              ),
-                          typedResults: items,
-                        ),
-                    ];
-                  },
-                );
-              },
-        ),
-      );
-}
-
-typedef $$CustomersTableProcessedTableManager =
-    ProcessedTableManager<
-      _$AppDatabase,
-      $CustomersTable,
-      CustomerData,
-      $$CustomersTableFilterComposer,
-      $$CustomersTableOrderingComposer,
-      $$CustomersTableAnnotationComposer,
-      $$CustomersTableCreateCompanionBuilder,
-      $$CustomersTableUpdateCompanionBuilder,
-      (CustomerData, $$CustomersTableReferences),
-      CustomerData,
-      PrefetchHooks Function({
-        bool businessId,
-        bool storeId,
-        bool customerWalletsRefs,
-        bool ordersRefs,
-        bool walletTransactionsRefs,
-        bool customerCrateBalancesRefs,
-        bool pendingCrateReturnsRefs,
-        bool crateLedgerRefs,
-        bool savedCartsRefs,
-      })
     >;
 typedef $$CustomerWalletsTableCreateCompanionBuilder =
     CustomerWalletsCompanion Function({
@@ -129471,6 +129549,8 @@ class $AppDatabaseManager {
       $$CrateSizeGroupsTableTableManager(_db, _db.crateSizeGroups);
   $$ManufacturersTableTableManager get manufacturers =>
       $$ManufacturersTableTableManager(_db, _db.manufacturers);
+  $$CustomersTableTableManager get customers =>
+      $$CustomersTableTableManager(_db, _db.customers);
   $$VanDriversTableTableManager get vanDrivers =>
       $$VanDriversTableTableManager(_db, _db.vanDrivers);
   $$StoresTableTableManager get stores =>
@@ -129508,8 +129588,6 @@ class $AppDatabaseManager {
       $$ProductPhotosTableTableManager(_db, _db.productPhotos);
   $$PriceListsTableTableManager get priceLists =>
       $$PriceListsTableTableManager(_db, _db.priceLists);
-  $$CustomersTableTableManager get customers =>
-      $$CustomersTableTableManager(_db, _db.customers);
   $$CustomerWalletsTableTableManager get customerWallets =>
       $$CustomerWalletsTableTableManager(_db, _db.customerWallets);
   $$VanTripsTableTableManager get vanTrips =>

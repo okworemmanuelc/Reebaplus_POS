@@ -5001,4 +5001,71 @@ void _upgradeTests(LocalDatabaseHome home) {
       }
     });
   });
+
+  // ── v108 → v109 (#783): van_drivers.customer_id + partial unique index ─────
+  test('v108 to v109 adds van_drivers.customer_id + its unique index (#783), '
+      'keeps rows, idempotently', () async {
+    var db = await openAndInit();
+    final biz = UuidV7.generate();
+    final driver = UuidV7.generate();
+    await db.into(db.businesses).insert(
+        BusinessesCompanion.insert(id: Value(biz), name: 'Shop'));
+    await db.into(db.vanDrivers).insert(VanDriversCompanion.insert(
+        id: Value(driver), businessId: biz, name: 'Johnson Kim',
+        phone: const Value('0801')));
+    // Rebuild van_drivers in its v108 shape (no customer_id): SQLite cannot
+    // drop a column that carries a REFERENCES clause.
+    await db.customStatement('PRAGMA foreign_keys = OFF');
+    await db.customStatement('DROP INDEX IF EXISTS uq_van_drivers_business_customer');
+    await db.customStatement('ALTER TABLE van_drivers RENAME TO van_drivers_v109');
+    await db.customStatement(
+        'CREATE TABLE van_drivers (id TEXT NOT NULL, '
+        'business_id TEXT NOT NULL REFERENCES businesses (id), '
+        'name TEXT NOT NULL, phone TEXT NULL, '
+        'is_deleted INTEGER NOT NULL DEFAULT 0 CHECK (is_deleted IN (0, 1)), '
+        "created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')), "
+        "last_updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')), "
+        'PRIMARY KEY (id))');
+    await db.customStatement(
+        'INSERT INTO van_drivers (id, business_id, name, phone, is_deleted, '
+        'created_at, last_updated_at) SELECT id, business_id, name, phone, '
+        'is_deleted, created_at, last_updated_at FROM van_drivers_v109');
+    await db.customStatement('DROP TABLE van_drivers_v109');
+    await db.customStatement('PRAGMA foreign_keys = ON');
+    expect(await columnsOf(db, 'van_drivers'), isNot(contains('customer_id')));
+    await db.customStatement('PRAGMA user_version = 108');
+    await db.close();
+
+    db = await openAndInit();
+    try {
+      expect(await columnsOf(db, 'van_drivers'), contains('customer_id'));
+      final row = await db.select(db.vanDrivers).getSingle();
+      expect(row.name, 'Johnson Kim');
+      expect(row.phone, '0801');
+      expect(row.customerId, isNull);
+      final idx = await db.customSelect("SELECT sql FROM sqlite_master "
+          "WHERE name = 'uq_van_drivers_business_customer'").getSingle();
+      expect(idx.read<String>('sql'), contains('WHERE customer_id IS NOT NULL'));
+
+      // The index bites: two drivers cannot share one customer.
+      final cust = UuidV7.generate();
+      final d2 = UuidV7.generate();
+      await db.into(db.customers).insert(CustomersCompanion.insert(
+          id: Value(cust), businessId: biz, name: 'Old Acct'));
+      await db.into(db.vanDrivers).insert(VanDriversCompanion.insert(
+          id: Value(d2), businessId: biz, name: 'Boniface'));
+      await db.customStatement(
+          "UPDATE van_drivers SET customer_id = '$cust' WHERE id = '$driver'");
+      await expectLater(
+        db.customStatement(
+            "UPDATE van_drivers SET customer_id = '$cust' WHERE id = '$d2'"),
+        throwsA(anything),
+      );
+
+      await db.customStatement('PRAGMA user_version = 108');
+      await db.close();
+      db = await openAndInit(); // idempotent re-upgrade
+      expect(await columnsOf(db, 'van_drivers'), contains('customer_id'));
+    } finally { await db.close(); }
+  });
 }
