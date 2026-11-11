@@ -7,6 +7,10 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #761: first download saves a chunk per worker trip (2026-11-11, branch `perf/761-first-download-trips`)
+- `SyncRestoreExecutor.restoreChunked` saves 500 rows per `batch` inside a savepoint; a chunk that throws is rolled back and replayed row by row through `insertResilient` (same skip/FK-orphan/UNIQUE handling). Used by `Restore.plain`, `naturalKey` and the ledger restore; `monotonicStatus` and `dedup` (read/delete before write) stay per-row. LWW, Invariant #12 and business guards are unchanged (they run before dispatch). No schema change.
+- Benchmark `sync-save` (6 months, 14,204 rows): worker 2058 ms -> 882 ms; screen thread 1147 ms -> 719 ms. Tests: `test/database/chunked_restore_test.dart`.
+
 ### Issue #558: tier-2 checkout_order_test cleanup (2026-11-11, branch `fix/558-tier2-cleanup-append-only`)
 - Teardown no longer errors on append-only ledgers (`stock_transactions`, `wallet_transactions`, `payment_transactions`): deletes go through a `del` helper that swallows `P0001`/`23503` and leaves fixtures under the test business (same pattern as the golden tests). Test-only; not run (env points at a non-dev project).
 

@@ -235,20 +235,23 @@ abstract final class Restore {
     Set<String> jsonbColumns = const {},
   }) => (ex, table, rows, fkSkipped) async {
     final t = tableOf(ex.db);
+    final parsed = <D>[];
     for (final r in rows) {
       for (final c in jsonbColumns) {
         r[c] = SyncRestoreExecutor.stringifyJsonb(r[c]);
       }
       defaults.forEach((k, v) => r.putIfAbsent(k, () => v));
-      final data = fromJson(r);
-      Future<void> doInsert() =>
-          ex.db.into(t).insertOnConflictUpdate(data);
-      if (resilient) {
-        await ex.insertResilient(table, r, fkSkipped, doInsert);
-      } else {
-        await doInsert();
-      }
+      parsed.add(fromJson(r));
     }
+    await ex.restoreChunked(
+      table,
+      rows,
+      fkSkipped,
+      resilient: resilient,
+      addToBatch: (b, i) =>
+          b.insert(t, parsed[i], onConflict: DoUpdate((_) => parsed[i])),
+      insertOne: (i) => ex.db.into(t).insertOnConflictUpdate(parsed[i]),
+    );
   };
 
   /// Like [plain], but for an approval-request table whose `status` is
@@ -309,26 +312,36 @@ abstract final class Restore {
     Set<String> jsonbColumns = const {},
   }) => (ex, table, rows, fkSkipped) async {
     final t = tableOf(ex.db);
+    final parsedRows = <D>[];
     for (final r in rows) {
       for (final c in jsonbColumns) {
         r[c] = SyncRestoreExecutor.stringifyJsonb(r[c]);
       }
-      final parsed = fromJson(r);
-      Future<void> doInsert() => ex.db
+      parsedRows.add(fromJson(r));
+    }
+    await ex.restoreChunked(
+      table,
+      rows,
+      fkSkipped,
+      resilient: resilient,
+      addToBatch: (b, i) => b.insert(
+        t,
+        parsedRows[i],
+        onConflict: DoUpdate(
+          (_) => buildUpdate(parsedRows[i]),
+          target: target(ex.db),
+        ),
+      ),
+      insertOne: (i) => ex.db
           .into(t)
           .insert(
-            parsed,
+            parsedRows[i],
             onConflict: DoUpdate(
-              (_) => buildUpdate(parsed),
+              (_) => buildUpdate(parsedRows[i]),
               target: target(ex.db),
             ),
-          );
-      if (resilient) {
-        await ex.insertResilient(table, r, fkSkipped, doInsert);
-      } else {
-        await doInsert();
-      }
-    }
+          ),
+    );
   };
 
   /// Dedup on a LOGICAL key (grant / override tables): the surrogate `id` is a
@@ -478,6 +491,51 @@ class SyncRestoreExecutor {
     }
   }
 
+  /// Rows saved per worker trip by [restoreChunked].
+  static const int restoreChunkSize = 500;
+
+  /// #761: saves [rows] a chunk at a time. Each chunk goes to the database in
+  /// ONE `batch` (one trip to the background worker) inside a nested
+  /// transaction (a savepoint). If the chunk throws, the savepoint rolls it
+  /// back and the chunk is replayed row by row through [insertResilient], so a
+  /// bad row is skipped (and reported) on its own exactly as before while the
+  /// others still save. [addToBatch] / [insertOne] must carry the same
+  /// statement(s) for row index `i`; any read-before-write check lives in the
+  /// caller, outside this helper, so nothing is dropped.
+  Future<void> restoreChunked(
+    String table,
+    List<Map<String, dynamic>> rows,
+    Set<String>? fkSkipped, {
+    required void Function(Batch b, int i) addToBatch,
+    required Future<void> Function(int i) insertOne,
+    bool resilient = true,
+  }) async {
+    for (var start = 0; start < rows.length; start += restoreChunkSize) {
+      final end = start + restoreChunkSize < rows.length
+          ? start + restoreChunkSize
+          : rows.length;
+      try {
+        await db.transaction(
+          () => db.batch((b) {
+            for (var i = start; i < end; i++) {
+              addToBatch(b, i);
+            }
+          }),
+        );
+        continue;
+      } catch (_) {
+        // Fall through to the per-row path for this chunk only.
+      }
+      for (var i = start; i < end; i++) {
+        if (resilient) {
+          await insertResilient(table, rows[i], fkSkipped, () => insertOne(i));
+        } else {
+          await insertOne(i);
+        }
+      }
+    }
+  }
+
   /// Restore rows into an append-only ledger table. Pull is catch-up only: a
   /// full upsert would trip the BEFORE UPDATE trigger (domain RPCs stamp
   /// `created_at` server-side, so the cloud row disagrees on an immutable
@@ -495,16 +553,31 @@ class SyncRestoreExecutor {
     required UpdateCompanion<RowT> Function(RowT data) buildVoidCompanion,
     Set<String>? fkSkipped,
   }) async {
-    for (final map in rows) {
-      final data = fromJson(map);
-      await insertResilient(tableName, map, fkSkipped, () async {
+    final parsed = [for (final map in rows) fromJson(map)];
+    await restoreChunked(
+      tableName,
+      rows,
+      fkSkipped,
+      addToBatch: (b, i) {
+        final data = parsed[i];
+        b.insert(table, data, mode: InsertMode.insertOrIgnore);
+        if (voidedAtOf(data) != null) {
+          b.update(
+            table,
+            buildVoidCompanion(data),
+            where: (t) => whereNotYetVoided(t, data),
+          );
+        }
+      },
+      insertOne: (i) async {
+        final data = parsed[i];
         await db.into(table).insert(data, mode: InsertMode.insertOrIgnore);
         if (voidedAtOf(data) != null) {
           await (db.update(table)..where((t) => whereNotYetVoided(t, data)))
               .write(buildVoidCompanion(data));
         }
-      });
-    }
+      },
+    );
   }
 
   /// True if [e] is a SQLite FOREIGN KEY constraint violation (787). Matched by
