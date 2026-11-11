@@ -158,6 +158,67 @@ void main() {
     await disposeScreen(tester);
   });
 
+  testWidgets('the flow: pick the customer, read the figures, confirm, and the '
+      'debt moves to the driver', (tester) async {
+    await pumpScreen(
+      tester,
+      env: env,
+      size: pixel7Portrait,
+      screen: DriverProfileScreen(vanDriverId: driverId, initialTab: 'sales'),
+      grantedKeys: grants,
+      settle: false,
+    );
+    await settleFrames(tester);
+
+    // The harness signs in 'test-user-id'; the move records who did it, so
+    // that user must exist as a row.
+    await tester.runAsync(
+      () => env.db.into(env.db.users).insert(
+        UsersCompanion.insert(
+          id: const Value('test-user-id'),
+          businessId: env.businessId,
+          name: 'Test Admin',
+          pin: '1234',
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const Key('driver-bring-in-old-account')));
+    await settleFrames(tester);
+    expect(find.byKey(const Key('bring-in-pick-dialog')), findsOneWidget);
+    // Both customers are offered until one is linked.
+    expect(find.byKey(Key('bring-in-customer-$freeCustomerId')), findsOneWidget);
+    await tester.tap(find.byKey(Key('bring-in-customer-$linkedCustomerId')));
+    await settleFrames(tester);
+
+    // Owes 600 - 100 paid = 500 (whatever the currency symbol is).
+    final balance = tester.widget<Text>(
+      find.byKey(const Key('bring-in-balance')),
+    );
+    expect(balance.data, contains('Balance owed'));
+    expect(balance.data, contains('500'));
+    expect(find.byKey(const Key('bring-in-cannot-undo')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('bring-in-confirm')));
+    await settleFrames(tester);
+
+    final db = env.db;
+    final (driver, custBal, driverBal) = (await tester.runAsync(() async {
+      return (
+        await db.vanDriversDao.getDriver(driverId),
+        await db.walletTransactionsDao.getBalanceKobo(linkedCustomerId),
+        await db.driverLedgerDao.getBalanceKobo(driverId),
+      );
+    }))!;
+    expect(driver!.customerId, linkedCustomerId);
+    expect(custBal, 0);
+    expect(driverBal, -50000);
+    // The action is gone once linked.
+    expect(find.byKey(const Key('driver-bring-in-old-account')), findsNothing);
+    // Let the success banner's timer run out before the tree goes.
+    await tester.pump(const Duration(seconds: 10));
+    await disposeScreen(tester);
+  });
+
   testWidgets('linked driver: Sales tab lists the old sale, tagged; no action',
       (tester) async {
     await tester.runAsync(
@@ -194,13 +255,16 @@ void main() {
     await pumpScreen(
       tester,
       env: env,
-      size: pixel7Portrait,
+      // Tall, so every row of the short ledger is built.
+      size: const Size(412, 2000),
       screen: DriverProfileScreen(vanDriverId: driverId, initialTab: 'ledger'),
       grantedKeys: grants,
       settle: false,
     );
     await settleFrames(tester);
     expect(find.text('Payment received (Cash)'), findsOneWidget);
+    // The move also shows on the old account's side, as an adjustment.
+    expect(find.text('Account adjustment'), findsOneWidget);
     expect(find.textContaining('Old customer account'), findsWidgets);
     expect(find.text('Moved from the old customer account'), findsOneWidget);
     // The balance is the driver ledger alone: 50,000 once, not 100,000.

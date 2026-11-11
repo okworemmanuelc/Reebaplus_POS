@@ -24,8 +24,9 @@ driver's debt.
      amount = what the customer owed (brings the balance to exactly zero). No
      `payment_transactions` row, so it is not cash received.
    - `driver_ledger_entries`: `type = restatement`, `reference_type =
-     driver_ledger_entry`, no trip, a debit of the same kobo, on the driver's
-     assigned van (else the van of their latest trip; refused if neither).
+     driver_ledger_entry`, no trip and NO VAN, a debit of the same kobo. The
+     debt sits with the driver, not a van (owner, 2026-11-11: "anyone can use
+     the van"), so a driver needs no van to bring an account in.
    A customer at zero or in credit is linked with no money entry.
 5. **No new CHECK values.** Widening `driver_ledger_entries.type` would be a
    rebuild of an append-only table, and an older app pulling an unknown value

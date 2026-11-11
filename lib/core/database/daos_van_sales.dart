@@ -2847,8 +2847,12 @@ class DriverLedgerDao extends DatabaseAccessor<AppDatabase>
   /// **Must** be called inside the caller's transaction when it accompanies
   /// other writes (a dispatch, a remittance) — a ledger row that survives a
   /// failed stock move is worse than no row at all.
+  ///
+  /// [vanStoreId] is the van the row happened on. It may be null ONLY for a
+  /// row that belongs to a driver and to no trip (#783: debt sits with the
+  /// driver, not a van) — e.g. a debt brought in from an old customer account.
   Future<String> postEntry({
-    required String vanStoreId,
+    String? vanStoreId,
     String? vanDriverId,
     String? tripId,
     required String type,
@@ -2869,6 +2873,11 @@ class DriverLedgerDao extends DatabaseAccessor<AppDatabase>
     );
     if (amountKobo < 0) {
       throw ArgumentError('A ledger amount is a magnitude and cannot be < 0.');
+    }
+    if (vanStoreId == null && (vanDriverId == null || tripId != null)) {
+      throw ArgumentError(
+        'A ledger row with no van must belong to a driver and to no trip.',
+      );
     }
 
     final now = DateTime.now();
@@ -2944,7 +2953,12 @@ class DriverLedgerDao extends DatabaseAccessor<AppDatabase>
           );
 
       await postEntry(
-        vanStoreId: original.vanStoreId ?? await _vanOfTrip(original.tripId),
+        // A driver-only row (no van, no trip: #783) is voided the same way.
+        vanStoreId:
+            original.vanStoreId ??
+            (original.tripId == null && original.vanDriverId != null
+                ? null
+                : await _vanOfTrip(original.tripId)),
         vanDriverId: original.vanDriverId,
         tripId: original.tripId,
         type: kDriverLedgerTypeVoid,
@@ -3167,8 +3181,10 @@ class VanDriversDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
-  /// The old account's payments (wallet top-ups), newest first. The move
-  /// itself (an `adjustment`) is not a payment and is not listed.
+  /// The old account's money history, newest first: its payments (wallet
+  /// top-ups) AND its account adjustments (opening balances and corrections,
+  /// e.g. from a data import), so the page adds up with the sales. The move
+  /// itself is an adjustment too and shows as one.
   Stream<List<WalletTransactionData>> watchOldAccountPayments(
     String customerId,
   ) {
@@ -3177,7 +3193,7 @@ class VanDriversDao extends DatabaseAccessor<AppDatabase>
             (t) =>
                 whereBusiness(t) &
                 t.customerId.equals(customerId) &
-                t.referenceType.isIn(kOldAccountPaymentRefs) &
+                t.referenceType.isIn(kOldAccountHistoryRefs) &
                 t.voidedAt.isNull(),
           )
           ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
@@ -3193,8 +3209,8 @@ class VanDriversDao extends DatabaseAccessor<AppDatabase>
   /// * if the customer owes (wallet balance < 0): ONE `wallet_transactions`
   ///   credit (`reference_type = 'adjustment'`, NO payment row) that brings the
   ///   balance to exactly 0, and ONE `driver_ledger_entries` debit
-  ///   (`type = 'restatement'`, no trip, same kobo) on the driver's assigned
-  ///   van. Neither is a sale, a payment received, till cash or revenue: no
+  ///   (`type = 'restatement'`, no trip, no van, same kobo) on the driver.
+  ///   Neither is a sale, a payment received, till cash or revenue: no
   ///   `payment_transactions` row is written and no order is touched;
   /// * in credit or at zero: link only.
   ///
@@ -3230,17 +3246,9 @@ class VanDriversDao extends DatabaseAccessor<AppDatabase>
       final balance = await db.walletTransactionsDao.getBalanceKobo(customerId);
       final owed = balance < 0 ? -balance : 0;
 
-      // Resolve the van BEFORE writing anything, so a refusal leaves no trace.
-      String? vanStoreId;
+      // Check everything BEFORE writing anything, so a refusal leaves no trace.
       CustomerWalletData? wallet;
       if (owed > 0) {
-        vanStoreId = await _vanForDebt(vanDriverId);
-        if (vanStoreId == null) {
-          throw const OldAccountLinkException(
-            'Assign this driver to a van first, so the debt has a van to '
-            'sit on.',
-          );
-        }
         wallet = await db.customerWalletsDao.getByCustomerId(customerId);
         if (wallet == null) {
           throw const OldAccountLinkException(
@@ -3279,8 +3287,9 @@ class VanDriversDao extends DatabaseAccessor<AppDatabase>
         await db.syncDao.enqueueUpsert('wallet_transactions', walletComp);
 
         // 2) The driver's side: the same kobo as new debt.
+        //    It sits with the DRIVER, on no van and no trip (owner, 2026-11-11:
+        //    "anyone can use the van").
         await db.driverLedgerDao.postEntry(
-          vanStoreId: vanStoreId!,
           vanDriverId: vanDriverId,
           type: kDriverLedgerTypeRestatement,
           amountKobo: owed,
@@ -3294,23 +3303,6 @@ class VanDriversDao extends DatabaseAccessor<AppDatabase>
       }
       return owed;
     });
-  }
-
-  /// The van a moved debt sits on: the driver's assigned van, else the van of
-  /// their most recent trip.
-  Future<String?> _vanForDebt(String vanDriverId) async {
-    final assigned = await (select(stores)
-          ..where((s) => whereBusiness(s) & s.vanDriverId.equals(vanDriverId))
-          ..orderBy([(s) => OrderingTerm(expression: s.name.lower())])
-          ..limit(1))
-        .getSingleOrNull();
-    if (assigned != null) return assigned.id;
-    final trip = await (db.select(db.vanTrips)
-          ..where((t) => whereBusiness(t) & t.vanDriverId.equals(vanDriverId))
-          ..orderBy([(t) => OrderingTerm.desc(t.openedAt)])
-          ..limit(1))
-        .getSingleOrNull();
-    return trip?.vanStoreId;
   }
 
   Future<void> _push(String id) async {
@@ -3329,6 +3321,14 @@ class VanDriversDao extends DatabaseAccessor<AppDatabase>
 /// The wallet reference types that are a customer PAYING (top-ups), as the old
 /// customer account's "payments" on a driver's page (#783).
 const List<String> kOldAccountPaymentRefs = ['topup_cash', 'topup_transfer'];
+
+/// What the old account's history lists on a driver's page (#783): the
+/// payments plus account adjustments. Sales (`order_payment`) are listed as
+/// sales, and crate-deposit rows stay on the customer.
+const List<String> kOldAccountHistoryRefs = [
+  ...kOldAccountPaymentRefs,
+  'adjustment',
+];
 
 /// What an old customer account holds, for the link confirm sheet (#783).
 /// [balanceKobo] is the wallet balance: negative = the customer owes.

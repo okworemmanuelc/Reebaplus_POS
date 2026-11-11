@@ -213,7 +213,7 @@ void main() {
       expect(ledger.single.signedAmountKobo, -50000);
       expect(ledger.single.amountKobo, 50000);
       expect(ledger.single.tripId, isNull);
-      expect(ledger.single.vanStoreId, van);
+      expect(ledger.single.vanStoreId, isNull);
       expect(ledger.single.vanDriverId, driver);
       expect(ledger.single.referenceNote, contains('old customer account'));
     });
@@ -256,17 +256,21 @@ void main() {
       expect(await driverBalance(driver), -60000);
     });
 
-    test('a driver with no van is refused and nothing is written', () async {
+    test('a driver with no van and no trip still takes the debt: it sits '
+        'with the driver, on no van', () async {
       final cid = await seedCustomer(name: 'Boniface (Drinks Van Driver)');
       // driver2 has no assigned van and no trip.
-      await expectLater(
-        db.vanDriversDao
-            .linkOldCustomerAccount(vanDriverId: driver2, customerId: cid),
-        throwsA(isA<OldAccountLinkException>()),
-      );
-      expect((await db.vanDriversDao.getDriver(driver2))!.customerId, isNull);
-      expect(await custBalance(cid), -60000);
-      expect(await count('driver_ledger_entries'), 0);
+      final moved = await db.vanDriversDao
+          .linkOldCustomerAccount(vanDriverId: driver2, customerId: cid);
+      expect(moved, 60000);
+      expect((await db.vanDriversDao.getDriver(driver2))!.customerId, cid);
+      expect(await custBalance(cid), 0);
+      expect(await driverBalance(driver2), -60000);
+      final row = await (db.select(db.driverLedgerEntries)
+            ..where((e) => e.vanDriverId.equals(driver2)))
+          .getSingle();
+      expect(row.vanStoreId, isNull);
+      expect(row.tripId, isNull);
     });
 
     test('the move is queued for sync: driver row, wallet row, ledger row',
@@ -349,7 +353,8 @@ void main() {
       expect(s.owedKobo, 50000);
     });
 
-    test('old sales and payments are listed; the move is not a payment',
+    test('old sales, payments and adjustments are listed; the move shows as '
+        'an adjustment, not a payment',
         () async {
       final cid = await seedCustomer(name: 'Johnson Kim', topUp: 10000);
       await db.vanDriversDao
@@ -357,9 +362,15 @@ void main() {
       final sales = await db.vanDriversDao.watchOldAccountSales(cid).first;
       expect(sales, hasLength(1));
       final pays = await db.vanDriversDao.watchOldAccountPayments(cid).first;
-      expect(pays, hasLength(1));
-      expect(pays.single.amountKobo, 10000);
-      expect(pays.single.referenceType, 'topup_cash');
+      // The payment, plus the move itself as an account adjustment (so the
+      // history adds up). The summary still counts payments only.
+      expect(pays, hasLength(2));
+      final topUp = pays.singleWhere((p) => p.referenceType == 'topup_cash');
+      expect(topUp.amountKobo, 10000);
+      expect(
+        pays.where((p) => p.referenceType == 'adjustment'),
+        hasLength(1),
+      );
     });
 
     test('a linked customer shows in the linked set (hidden from the picker)',

@@ -1638,9 +1638,16 @@ class _OldPaymentTile extends StatelessWidget {
     final t = Theme.of(context);
     final semantic = t.extension<AppSemanticColors>()!;
     final subtext = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
-    final method = payment.referenceType == 'topup_transfer'
-        ? 'Transfer'
-        : 'Cash';
+    // An account adjustment (opening balance, correction, or the move to the
+    // driver) is listed too, so the history adds up; it is not a payment.
+    final isAdjustment = payment.referenceType == 'adjustment';
+    final isCredit = payment.signedAmountKobo >= 0;
+    final title = isAdjustment
+        ? 'Account adjustment'
+        : payment.referenceType == 'topup_transfer'
+        ? 'Payment received (Transfer)'
+        : 'Payment received (Cash)';
+    final tone = isAdjustment ? t.colorScheme.onSurface : semantic.success;
     return GlassyCard(
       margin: EdgeInsets.only(bottom: context.getRSize(12)),
       radius: 16,
@@ -1651,12 +1658,12 @@ class _OldPaymentTile extends StatelessWidget {
             width: context.getRSize(40),
             height: context.getRSize(40),
             decoration: BoxDecoration(
-              color: semantic.success.withValues(alpha: 0.12),
+              color: tone.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(
               AppIcons.transfer,
-              color: semantic.success,
+              color: tone,
               size: context.getRSize(16),
             ),
           ),
@@ -1666,7 +1673,7 @@ class _OldPaymentTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Payment received ($method)',
+                  title,
                   style: TextStyle(
                     fontSize: context.getRFontSize(14),
                     fontWeight: FontWeight.bold,
@@ -1688,11 +1695,11 @@ class _OldPaymentTile extends StatelessWidget {
           ),
           SizedBox(width: context.getRSize(8)),
           Text(
-            '+${formatCurrency(payment.amountKobo / 100)}',
+            '${isCredit ? '+' : '−'}${formatCurrency(payment.amountKobo / 100)}',
             style: TextStyle(
               fontSize: context.getRFontSize(15),
               fontWeight: FontWeight.w800,
-              color: semantic.success,
+              color: tone,
             ),
           ),
         ],

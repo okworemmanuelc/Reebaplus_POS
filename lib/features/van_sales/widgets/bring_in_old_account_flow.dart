@@ -2,13 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
-import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/utils/name_case.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
-import 'package:reebaplus_pos/features/customers/data/models/customer.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 
 /// #783 — "Bring in old customer account": pick a customer, read what moving it
@@ -21,13 +19,16 @@ Future<void> showBringInOldAccountFlow(
 }) async {
   final db = ref.read(databaseProvider);
   final userId = ref.read(authProvider).currentUser?.id;
-  final linked = ref.read(linkedCustomerIdsProvider).valueOrNull ?? const {};
+  // Read straight from the database, not from a cached list: this page can be
+  // the first place the customer list is needed in a session.
+  final linked = await db.vanDriversDao.watchLinkedCustomerIds().first;
   final customers = [
-    for (final c in ref.read(customerServiceProvider).value)
-      if (!c.isWalkIn && !linked.contains(c.id)) c,
+    for (final c in await db.customersDao.watchAllCustomers().first)
+      if (!linked.contains(c.id)) c,
   ];
+  if (!context.mounted) return;
 
-  final picked = await showDialog<Customer>(
+  final picked = await showDialog<CustomerData>(
     context: context,
     builder: (_) => _PickCustomerDialog(customers: customers),
   );
@@ -59,7 +60,7 @@ Future<void> showBringInOldAccountFlow(
 }
 
 class _PickCustomerDialog extends StatefulWidget {
-  final List<Customer> customers;
+  final List<CustomerData> customers;
   const _PickCustomerDialog({required this.customers});
 
   @override
@@ -208,6 +209,16 @@ class _ConfirmLinkDialog extends StatelessWidget {
             } on OldAccountLinkException catch (e) {
               if (context.mounted) {
                 AppNotification.showError(context, e.message);
+                Navigator.pop(context);
+              }
+            } catch (_) {
+              // Anything else (e.g. a database refusal): the transaction has
+              // rolled back, so nothing moved. Say so and close.
+              if (context.mounted) {
+                AppNotification.showError(
+                  context,
+                  'Could not bring in this account. Nothing was changed.',
+                );
                 Navigator.pop(context);
               }
             }
