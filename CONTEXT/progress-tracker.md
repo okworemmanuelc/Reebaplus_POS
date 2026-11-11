@@ -7,6 +7,10 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #779: add a van from the Van Sales screen (2026-11-11, branch `feat/779-add-van-from-van-sales`)
+- Van Sales hub gets "Add a van" (empty-state button + app-bar action), shown only with `Gates.vanManage`. Settings → Stores' add flow was extracted unchanged into `addLocationFlow` (`lib/features/stores/widgets/add_location_flow.dart`: gate, plan-limit check, sheet, `createStore`, activity log), used by both screens, so a van is identical either way. Empty-state wording no longer points to Settings. No schema/permission change.
+- Test: `test/van_sales/van_hub_add_van_test.dart`.
+
 ### Issue #558: tier-2 checkout_order_test cleanup (2026-11-11, branch `fix/558-tier2-cleanup-append-only`)
 - Teardown no longer errors on append-only ledgers (`stock_transactions`, `wallet_transactions`, `payment_transactions`): deletes go through a `del` helper that swallows `P0001`/`23503` and leaves fixtures under the test business (same pattern as the golden tests). Test-only; not run (env points at a non-dev project).
 
