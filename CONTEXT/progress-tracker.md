@@ -7,6 +7,11 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #790 steps 2 and 3: product grid and "Same as last load" for van loading (2026-11-11, branch `feat/790-load-picker`)
+- `LoadProductPickerScreen` (Browse button beside the add box on Load / Restock Van): the checkout's `ProductTile` grid maths, search, category chips and scan-to-add. Tap adds one, long press sets the number, held at whole units in stock. It only counts; it returns `productId -> quantity` (Back and Done both return it) and writes nothing.
+- "Same as last load" on an empty new load: `VanTripsDao.lastLoadFor` returns the first dispatch of the driver's latest trip (restocks left out; falls back to the van's latest trip). Quantities are held at stock on hand; prices are today's shop prices, not last time's.
+- No change to what a load writes. Tests: `test/van_sales/load_van_fast_entry_test.dart`. Step 4 of #790 (one "Driver is back" screen) still open.
+
 ### Issue #790 step 1: fast van loading (2026-11-11, branch `feat/790-fast-van-load`)
 - Load / Restock Van: compact rows (minus / quantity / plus, price and crates behind Edit), add box pinned (`PinnedHeaderSliver`) and cleared after each pick, the new row's quantity takes the keyboard and Done returns to the add box, items already on the load are not offered again. "Priced below cost" is asked once at Dispatch instead of on every keystroke.
 - Fixed: driver and store pre-fill now waits for their lists (was tried once on the first frame and silently skipped).

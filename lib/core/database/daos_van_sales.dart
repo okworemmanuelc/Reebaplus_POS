@@ -690,6 +690,38 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
     )..where((t) => whereBusiness(t) & t.id.equals(tripId))).watchSingleOrNull();
   }
 
+  /// The goods on a driver's most recent LOAD (#790): the lots of the first
+  /// dispatch of their latest trip, restocks left out. Falls back to the van's
+  /// latest trip when this driver has never been out. Empty when there is no
+  /// earlier load. Read-only: "Same as last load" pre-fills a draft from it.
+  Future<List<VanTripLotData>> lastLoadFor({
+    required String vanDriverId,
+    required String vanStoreId,
+  }) async {
+    Future<VanTripData?> latest(Expression<bool> Function($VanTripsTable) by) {
+      return (select(vanTrips)
+            ..where((t) => whereBusiness(t) & by(t))
+            ..orderBy([
+              (t) =>
+                  OrderingTerm(expression: t.openedAt, mode: OrderingMode.desc),
+            ])
+            ..limit(1))
+          .getSingleOrNull();
+    }
+
+    final trip =
+        await latest((t) => t.vanDriverId.equals(vanDriverId)) ??
+        await latest((t) => t.vanStoreId.equals(vanStoreId));
+    if (trip == null) return const [];
+    final lots = await lotsForTrip(trip.id);
+    if (lots.isEmpty) return const [];
+    final first = lots.first.dispatchEventId;
+    return [
+      for (final l in lots)
+        if (l.dispatchEventId == first) l,
+    ];
+  }
+
   /// A trip's load lots in FIFO order (oldest dispatch first, id as the stable
   /// tiebreak) — the order a good return credits against (#143) and the order
   /// #145 consumes for COGS.
