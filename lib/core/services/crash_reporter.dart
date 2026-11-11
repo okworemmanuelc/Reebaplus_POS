@@ -9,7 +9,7 @@ import 'package:reebaplus_pos/core/diagnostics/overflow_route_reporter.dart';
 /// bump both together. `test/core/services/app_version_matches_pubspec_test.dart`
 /// enforces the match. (There is no package_info dependency; keeping this a
 /// constant avoids adding one just for diagnostics.)
-const String kAppVersion = '2.0.5+15';
+const String kAppVersion = '2.0.6+16';
 
 /// App-wide crash safety net (master plan §33 — Reliability and Crash
 /// Handling). Installs the global error handlers and records caught/uncaught
