@@ -15,6 +15,8 @@ The human updates it when resolving open questions or making architectural decis
 - Cause: #748 made a driver a `van_drivers` row, but test fixtures still created the driver only as a `users` row, so `van_trips.van_driver_id` FK failed. Production passes a real `VanDriverData.id` (load_van_screen), so no app bug there.
 - Test fixes: fixtures now insert a `van_drivers` row (van_* tests, history shop generator); dispatch push assertion checks `van_driver_id`; old-cloud pull fixture carries the NOT NULL DEFAULT trip columns.
 - App fix (ban tests): van driver screens/pickers use `AppIcons.*` and `ctx.getRHeight(0.7)`; no visual change.
+
+
 ### Issue #774: Same-name products in the cart (Coke 35cl PET vs Bottle) (2026-11-10, branch `fix/774-cart-same-name-lines`)
 - Cause: `CartService.addItem` matched lines by product id + name, but `updateQty`, `setLineDiscount`, `setCustomPrice` and `removeItem` matched by name only. With two same-name products, edits landed on the first line (the edit sheet's Save copied one line's qty/price/discount onto the other) and Remove deleted both (Undo restored one).
 - Fix: all four now take `(productId, productName)` and go through one `_isLine` check (id + name; Quick Sale lines have a null id). Callers in the cart screen, Edit Item sheet and Product Details pass the line's id.
