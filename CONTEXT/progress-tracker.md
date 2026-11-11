@@ -7,6 +7,9 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #558: tier-2 checkout_order_test cleanup (2026-11-11, branch `fix/558-tier2-cleanup-append-only`)
+- Teardown no longer errors on append-only ledgers (`stock_transactions`, `wallet_transactions`, `payment_transactions`): deletes go through a `del` helper that swallows `P0001`/`23503` and leaves fixtures under the test business (same pattern as the golden tests). Test-only; not run (env points at a non-dev project).
+
 ### Issue #739: Home, Profile and Reports badge load only what they show (2026-11-11, branch `perf/739-narrow-home-profile-badge`)
 - Home reads only the period's orders (`periodOrdersProvider`, #549 cancel-day rule kept) and expenses (`watchAll(from, to)`), pending count from `pendingOrdersProvider`; `[perf] home figures` timing added. Profile folds its 3 figures page by page (`readStaffOrdersInPages`, re-run on a cheap stamp). Reports badge uses a LIMIT 1 `watchLatestCountCreatedAt`. Deleted unused `stockTransferHistoryProvider` (`allPendingTransfersProvider` is still used by two viewer-scoped providers, kept).
 - Comparison test: `test/dashboard/home_profile_badge_narrow_test.dart`. It needs the history-shop fixture, which is broken on main (#759, van dispatch FK failure).
