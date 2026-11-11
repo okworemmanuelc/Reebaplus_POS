@@ -1531,7 +1531,11 @@ class VanReturnEvents extends Table {
 
   @override
   List<String> get customConstraints => [
-    'CHECK (quantity > 0)',
+    // #790 (owner, 2026-11-11): empty crates can come back ALONE, so a row may
+    // carry no goods as long as it carries empties. A row with neither is
+    // still refused. Existing installs rebuild under this CHECK in v111;
+    // mirrors 0258_van_return_empties_only.sql.
+    'CHECK (quantity > 0 OR (quantity = 0 AND shells_back > 0))',
     "CHECK (condition IN ('good','damaged'))",
     'CHECK (credit_kobo >= 0)',
     'CHECK (cost_kobo >= 0)',
@@ -3512,7 +3516,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 110;
+  int get schemaVersion => 111;
 
   /// The v90 (#473) listing columns, pinned to their defaults in every older
   /// products rebuild: TableMigration copies from the CURRENT schema, so a
@@ -7745,6 +7749,45 @@ class AppDatabase extends _$AppDatabase {
         )) {
           await customStatement(stmt);
         }
+      }
+      if (from < 111) {
+        // ── v111 — #790: empty crates can come back alone ─────────────────
+        //
+        // `van_return_events.quantity > 0` becomes "goods, or empties with no
+        // goods". A CHECK edit only (no column), and SQLite cannot alter a
+        // CHECK in place, so the table is rebuilt 1:1. A WIDENING: every
+        // existing row passes. alterTable does not carry indexes or triggers
+        // over, so they are re-emitted (the table is not an append-only
+        // ledger: only the last_updated_at bump trigger exists).
+        await m.alterTable(TableMigration(vanReturnEvents));
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_van_return_events_business_lua',
+        );
+        await customStatement(
+          'CREATE INDEX idx_van_return_events_business_lua '
+          'ON van_return_events (business_id, last_updated_at)',
+        );
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_van_return_events_trip_recorded',
+        );
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_van_return_events_business_trip_condition',
+        );
+        for (final stmt in _vanReturnIndexStatements) {
+          await customStatement(stmt);
+        }
+        await customStatement(
+          'DROP TRIGGER IF EXISTS bump_van_return_events_last_updated_at',
+        );
+        await customStatement(
+          'CREATE TRIGGER bump_van_return_events_last_updated_at '
+          'AFTER UPDATE ON van_return_events '
+          'FOR EACH ROW '
+          'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+          'BEGIN '
+          "UPDATE van_return_events SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+          'END',
+        );
       }
     },
     beforeOpen: (details) async {

@@ -5186,4 +5186,100 @@ void _upgradeTests(LocalDatabaseHome home) {
       );
     } finally { await db.close(); }
   });
+
+  // ── v110 → v111 (#790): empties can come back alone ───────────────────────
+  test('v110 to v111 lets a return row carry empties with no goods, keeps '
+      'rows, indexes and the bump trigger', () async {
+    var db = await openAndInit();
+    final biz = UuidV7.generate();
+    final store = UuidV7.generate();
+    final van = UuidV7.generate();
+    final product = UuidV7.generate();
+    final trip = UuidV7.generate();
+    final ev = UuidV7.generate();
+    await db.customStatement(
+        "INSERT INTO businesses (id, name, type) VALUES (?, 'Biz', 'Bar')",
+        [biz]);
+    await db.into(db.stores).insert(
+        StoresCompanion.insert(id: Value(store), businessId: biz, name: 'Shop'));
+    await db.into(db.stores).insert(StoresCompanion.insert(
+        id: Value(van), businessId: biz, name: 'Van', kind: const Value('van')));
+    await db.into(db.products).insert(ProductsCompanion.insert(
+        id: Value(product), businessId: biz, name: 'Star'));
+    await db.into(db.vanTrips).insert(VanTripsCompanion.insert(
+        id: Value(trip), businessId: biz, vanStoreId: van,
+        sourceStoreId: store));
+    await db.customStatement(
+        'INSERT INTO van_return_events (id, business_id, trip_id, product_id, '
+        "quantity, condition, shells_back) VALUES (?, ?, ?, ?, 4, 'good', 2)",
+        [ev, biz, trip, product]);
+
+    // Rebuild the table under the OLD CHECK (quantity > 0).
+    final createSql = (await db.customSelect("SELECT sql FROM sqlite_master "
+            "WHERE type = 'table' AND name = 'van_return_events'")
+        .getSingle()).read<String>('sql');
+    final old = createSql
+        .replaceFirst('quantity > 0 OR (quantity = 0 AND shells_back > 0)',
+            'quantity > 0')
+        .replaceFirst('"van_return_events"', '"vre_v110"');
+    expect(old, isNot(contains('quantity = 0')),
+        reason: 'teeth: the v110 shape must carry the old rule');
+    final cols = (await columnsOf(db, 'van_return_events')).join(', ');
+    await db.customStatement('PRAGMA foreign_keys = OFF');
+    await db.customStatement(old);
+    await db.customStatement(
+        'INSERT INTO vre_v110 ($cols) SELECT $cols FROM van_return_events');
+    await db.customStatement('DROP TABLE van_return_events');
+    await db.customStatement('ALTER TABLE vre_v110 RENAME TO van_return_events');
+    await db.customStatement('PRAGMA foreign_keys = ON');
+    await expectLater(
+      db.customStatement(
+          'INSERT INTO van_return_events (id, business_id, trip_id, '
+          "product_id, quantity, condition, shells_back) "
+          "VALUES (?, ?, ?, ?, 0, 'good', 5)",
+          [UuidV7.generate(), biz, trip, product]),
+      throwsA(anything),
+      reason: 'teeth: the old rule refuses empties alone',
+    );
+    await db.customStatement('PRAGMA user_version = 110');
+    await db.close();
+
+    db = await openAndInit();
+    try {
+      final row = await db.select(db.vanReturnEvents).getSingle();
+      expect(row.id, ev);
+      expect(row.quantity, 4);
+      expect(row.shellsBack, 2);
+
+      await db.customStatement(
+          'INSERT INTO van_return_events (id, business_id, trip_id, '
+          "product_id, quantity, condition, shells_back) "
+          "VALUES (?, ?, ?, ?, 0, 'good', 5)",
+          [UuidV7.generate(), biz, trip, product]);
+      await expectLater(
+        db.customStatement(
+            'INSERT INTO van_return_events (id, business_id, trip_id, '
+            "product_id, quantity, condition, shells_back) "
+            "VALUES (?, ?, ?, ?, 0, 'good', 0)",
+            [UuidV7.generate(), biz, trip, product]),
+        throwsA(anything),
+      );
+      final names = (await db.customSelect("SELECT name FROM sqlite_master "
+              "WHERE tbl_name = 'van_return_events' "
+              "AND type IN ('index','trigger')").get())
+          .map((r) => r.read<String>('name'))
+          .toSet();
+      expect(names, containsAll([
+        'idx_van_return_events_business_lua',
+        'idx_van_return_events_trip_recorded',
+        'idx_van_return_events_business_trip_condition',
+        'bump_van_return_events_last_updated_at',
+      ]));
+
+      await db.customStatement('PRAGMA user_version = 110');
+      await db.close();
+      db = await openAndInit(); // idempotent re-upgrade
+      expect((await db.select(db.vanReturnEvents).get()), hasLength(2));
+    } finally { await db.close(); }
+  });
 }

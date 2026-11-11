@@ -16,7 +16,6 @@ import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
-import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
 
 /// One line the manager is counting, before it becomes a [VanReturnLine].
@@ -165,14 +164,9 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
       return;
     }
     for (final line in counted) {
-      if (line.quantity <= 0) {
-        AppNotification.showError(
-          context,
-          'Type how many came back — check ${line.productName}.',
-        );
-        return;
-      }
-      if (line.crateTracked && line.shellsBack == null) {
+      // Goods came back on a crate product: the empties must be counted too
+      // (0 is a valid answer). Empties ALONE need no goods count (#790).
+      if (line.quantity > 0 && line.crateTracked && line.shellsBack == null) {
         AppNotification.showError(
           context,
           'Count the empty crates for ${line.productName} — type 0 if none '
@@ -198,7 +192,10 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
                   (l) => VanReturnLine(
                     productId: l.productId,
                     quantity: l.quantity,
-                    condition: l.condition,
+                    // Empties alone are not goods, so never 'damaged'.
+                    condition: l.quantity > 0
+                        ? l.condition
+                        : kVanReturnConditionGood,
                     shellsBack: l.shellsBack ?? 0,
                     eventId: l.eventId,
                   ),
@@ -211,6 +208,8 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
         context,
         result.alreadyApplied
             ? 'This return was already recorded.'
+            : counted.every((l) => l.quantity == 0)
+            ? 'Empty crates recorded.'
             : result.totalCreditKobo > 0
             ? 'Return recorded — '
                   '${formatCurrency(result.totalCreditKobo / 100)} came off '
@@ -419,6 +418,7 @@ class _ReturnLineCard extends StatelessWidget {
     final semantic = t.extension<AppSemanticColors>()!;
     final subtext = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
     final counted = line.quantity > 0;
+    final emptiesOnly = !counted && (line.shellsBack ?? 0) > 0;
 
     return Container(
       margin: EdgeInsets.only(bottom: context.getRSize(8)),
@@ -430,7 +430,9 @@ class _ReturnLineCard extends StatelessWidget {
         color: t.colorScheme.surface.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(AppSpacing.borderRadiusM),
         border: Border.all(
-          color: !counted
+          color: emptiesOnly
+              ? t.colorScheme.primary
+              : !counted
               ? t.dividerColor
               : line.isGood
               ? t.colorScheme.primary
@@ -482,11 +484,45 @@ class _ReturnLineCard extends StatelessWidget {
               ),
             ],
           ),
-          if (line.crateTracked && !counted)
-            Text(
-              'Unsold full crates',
-              style: t.textTheme.bodySmall?.copyWith(color: subtext),
+          if (line.crateTracked) ...[
+            SizedBox(height: context.getRSize(6)),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    // #726 / #790 — counted SEPARATELY from the full crates
+                    // above, and may be recorded on their own.
+                    counted
+                        ? 'Empty crates back (0 if none)'
+                        : 'Empty crates back',
+                    style: t.textTheme.bodySmall?.copyWith(color: subtext),
+                  ),
+                ),
+                SizedBox(width: context.getRSize(8)),
+                SizedBox(
+                  width: context.getRSize(96),
+                  child: TextField(
+                    key: Key('return-shells-${line.productId}'),
+                    textAlign: TextAlign.center,
+                    keyboardType: TextInputType.number,
+                    textInputAction: TextInputAction.next,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: InputDecoration(
+                      isDense: true,
+                      hintText: 'Count',
+                      contentPadding: EdgeInsets.symmetric(
+                        vertical: context.getRSize(8),
+                      ),
+                    ),
+                    onChanged: (v) {
+                      line.shellsBack = int.tryParse(v.trim());
+                      onChanged();
+                    },
+                  ),
+                ),
+              ],
             ),
+          ],
           if (counted) ...[
             SizedBox(height: context.getRSize(8)),
             SegmentedButton<String>(
@@ -522,30 +558,6 @@ class _ReturnLineCard extends StatelessWidget {
                 color: line.isGood ? subtext : semantic.warning,
               ),
             ),
-            if (line.crateTracked) ...[
-              SizedBox(height: context.getRSize(10)),
-              AppInput(
-                key: Key('return-shells-${line.productId}'),
-                // #726 — counted SEPARATELY from the full crates above,
-                // required (0 is fine), and added to the warehouse's Empties
-                // when saved.
-                labelText: 'Empty crates coming back (required)',
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                hintText: 'Count them — 0 if none',
-                onChanged: (v) {
-                  line.shellsBack = int.tryParse(v.trim());
-                  onChanged();
-                },
-              ),
-              SizedBox(height: context.getRSize(4)),
-              Text(
-                'Empties go into the warehouse\'s empty-crate count. Full '
-                'crates above go back into stock and are never counted as '
-                'empties.',
-                style: t.textTheme.bodySmall?.copyWith(color: subtext),
-              ),
-            ],
           ],
         ],
       ),
@@ -592,7 +604,9 @@ class _RecordedReturnRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${event.quantity} × $productName',
+                  event.quantity == 0
+                      ? 'Empty crates only — $productName'
+                      : '${event.quantity} × $productName',
                   style: t.textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
