@@ -65,6 +65,13 @@ void main() {
             pin: '0000',
           ));
     }
+    await db.into(db.vanDrivers).insert(
+      VanDriversCompanion.insert(
+        id: Value(driverId),
+        businessId: businessId,
+        name: 'Driver Dan',
+      ),
+    );
     await db.into(db.manufacturers).insert(ManufacturersCompanion.insert(
           id: const Value(starBrand),
           businessId: businessId,

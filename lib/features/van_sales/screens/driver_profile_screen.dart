@@ -357,7 +357,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
               ListTile(
                 title: Text(v.name),
                 trailing: v.vanDriverId == driverId
-                    ? const Icon(Icons.check)
+                    ? const Icon(AppIcons.check)
                     : null,
                 onTap: () => Navigator.pop(ctx, v),
               ),
@@ -1036,7 +1036,7 @@ class _Header extends StatelessWidget {
                 if (onAssignVan != null)
                   TextButton.icon(
                     onPressed: onAssignVan,
-                    icon: const Icon(Icons.local_shipping_outlined, size: 18),
+                    icon: const Icon(AppIcons.vanDelivery, size: 18),
                     label: const Text('Assign to a van'),
                   ),
               ],

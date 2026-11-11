@@ -1051,7 +1051,7 @@ void main() {
       // must never mint a different id for a row this device already holds.
       expect(payload['business_id'], businessId);
       expect(payload['van_store_id'], vanId);
-      expect(payload['driver_user_id'], driverId);
+      expect(payload['van_driver_id'], driverId);
       expect(payload['source_store_id'], warehouseId);
     });
 

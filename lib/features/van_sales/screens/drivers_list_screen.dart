@@ -69,7 +69,7 @@ class _DriversListBody extends ConsumerWidget {
       actions: [
         IconButton(
           tooltip: 'Add a driver',
-          icon: const Icon(Icons.person_add_alt_1),
+          icon: const Icon(AppIcons.userAdd),
           onPressed: () => showAddVanDriverDialog(context, ref),
         ),
       ],

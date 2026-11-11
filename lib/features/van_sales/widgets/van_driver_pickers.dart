@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
+import 'package:reebaplus_pos/core/utils/responsive.dart';
 
 /// "Add a driver" (#748): a name and an optional phone. No invite, no sign-in,
 /// not a customer. Returns the new driver, or null when cancelled.
@@ -125,7 +127,7 @@ Future<_Pick?> _pickDriver(
         return SafeArea(
           child: ConstrainedBox(
             constraints: BoxConstraints(
-              maxHeight: MediaQuery.of(ctx).size.height * 0.7,
+              maxHeight: ctx.getRHeight(0.7),
             ),
             child: ListView(
               shrinkWrap: true,
@@ -143,7 +145,7 @@ Future<_Pick?> _pickDriver(
                   ListTile(
                     title: const Text('No driver assigned'),
                     trailing: currentId == null
-                        ? const Icon(Icons.check)
+                        ? const Icon(AppIcons.check)
                         : null,
                     onTap: () => Navigator.pop(ctx, const _Pick(null)),
                   ),
@@ -152,12 +154,12 @@ Future<_Pick?> _pickDriver(
                     title: Text(d.name),
                     subtitle: (d.phone ?? '').isEmpty ? null : Text(d.phone!),
                     trailing: d.id == currentId
-                        ? const Icon(Icons.check)
+                        ? const Icon(AppIcons.check)
                         : null,
                     onTap: () => Navigator.pop(ctx, _Pick(d.id)),
                   ),
                 ListTile(
-                  leading: const Icon(Icons.add),
+                  leading: const Icon(AppIcons.add),
                   title: const Text('Add a new driver'),
                   onTap: () async {
                     final created = await showAddVanDriverDialog(ctx, ref);
