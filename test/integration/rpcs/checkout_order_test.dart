@@ -3,6 +3,7 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../helpers/supabase_test_clients.dart';
 import '../../helpers/supabase_test_env.dart';
@@ -54,30 +55,44 @@ void main() {
     });
   });
 
+  // Best-effort cleanup. `wallet_transactions`, `stock_transactions` and
+  // `payment_transactions` are append-only: the `forbid_delete` trigger blocks
+  // DELETE (P0001, void-don't-delete), and the parents those rows pin (orders,
+  // customers, wallets, inventory, the store) then fail with 23503. Both are
+  // expected, so swallow them and leave the fixtures under TEST_BUSINESS_ID
+  // (fresh uuids per run, so they cannot collide with the next run).
+  Future<void> del(String table, String column, String id) async {
+    try {
+      await clients.adminClient.from(table).delete().eq(column, id);
+    } on PostgrestException catch (e) {
+      if (e.code != 'P0001' && e.code != '23503') rethrow;
+    }
+  }
+
   tearDown(() async {
     if (_skipReason != null) return;
     for (final id in customerIds) {
-      await clients.adminClient.from('wallet_transactions').delete().eq('customer_id', id);
+      await del('wallet_transactions', 'customer_id', id);
     }
     for (final id in orderIds) {
-      await clients.adminClient.from('stock_transactions').delete().eq('order_id', id);
-      await clients.adminClient.from('payment_transactions').delete().eq('order_id', id);
-      await clients.adminClient.from('orders').delete().eq('id', id);
+      await del('stock_transactions', 'order_id', id);
+      await del('payment_transactions', 'order_id', id);
+      await del('orders', 'id', id);
     }
     for (final id in walletIds) {
-      await clients.adminClient.from('customer_wallets').delete().eq('id', id);
+      await del('customer_wallets', 'id', id);
     }
     for (final id in customerIds) {
-      await clients.adminClient.from('customers').delete().eq('id', id);
+      await del('customers', 'id', id);
     }
     for (final id in batchIds) {
-      await clients.adminClient.from('cost_batches').delete().eq('id', id);
+      await del('cost_batches', 'id', id);
     }
     for (final id in inventoryIds) {
-      await clients.adminClient.from('inventory').delete().eq('id', id);
+      await del('inventory', 'id', id);
     }
     for (final id in productIds) {
-      await clients.adminClient.from('products').delete().eq('id', id);
+      await del('products', 'id', id);
     }
     orderIds.clear();
     batchIds.clear();
@@ -89,7 +104,7 @@ void main() {
 
   tearDownAll(() async {
     if (_skipReason != null) return;
-    await clients.adminClient.from('stores').delete().eq('id', storeId);
+    await del('stores', 'id', storeId);
     await clients.dispose();
   });
 
