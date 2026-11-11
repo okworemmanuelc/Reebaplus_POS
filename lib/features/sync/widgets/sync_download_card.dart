@@ -161,6 +161,8 @@ class _SyncDownloadCardState extends ConsumerState<SyncDownloadCard> {
   bool _firstPullDone = false;
   PullStage? _lastStage;
   int? _heldPercent;
+  PullStage? _heldStage;
+  int _lastRowsDone = 0;
 
   @override
   void initState() {
@@ -191,12 +193,21 @@ class _SyncDownloadCardState extends ConsumerState<SyncDownloadCard> {
         }
         final info = describeDownload(status, firstPullDone: _firstPullDone);
         if (info.busy) {
+          // The held value belongs to ONE pull: a new stage, or rows saved
+          // dropping, means a new pull started.
+          if (status.stage != _heldStage || status.rowsDone < _lastRowsDone) {
+            _heldPercent = null;
+          }
+          _heldStage = status.stage;
+          _lastRowsDone = status.rowsDone;
           _heldPercent = holdPercent(
             _heldPercent,
             downloadPercent(status.rowsDone, status.rowsTotal),
           );
         } else {
           _heldPercent = null;
+          _heldStage = null;
+          _lastRowsDone = 0;
         }
         final percent = info.busy ? _heldPercent : null;
         final icon = info.tone == SyncFactTone.bad

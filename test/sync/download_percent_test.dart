@@ -85,7 +85,37 @@ void main() {
       expect(find.byKey(SyncDownloadCard.percentKey), findsNothing);
     });
 
-    testWidgets('no percentage when total unknown', (tester) async {
+    testWidgets('a new pull starts from its own percentage, not the old 99', (
+      tester,
+    ) async {
+      final n = await pump(
+        tester,
+        const PullStatus(
+          stage: PullStage.minimum,
+          rowsTotal: 100,
+          rowsDone: 100,
+        ),
+      );
+      expect(find.text('99%'), findsOneWidget);
+      n.value = const PullStatus(
+        stage: PullStage.background,
+        rowsTotal: 1000,
+        rowsDone: 100,
+      );
+      await tester.pump();
+      expect(find.text('99%'), findsNothing);
+      expect(find.text('10%'), findsOneWidget);
+      // Same stage, rows saved drop: also a new pull.
+      n.value = const PullStatus(
+        stage: PullStage.background,
+        rowsTotal: 500,
+        rowsDone: 50,
+      );
+      await tester.pump();
+      expect(find.text('10%'), findsOneWidget);
+    });
+
+    testWidgets('no percentage when total unknown',(tester) async {
       await pump(tester, const PullStatus(stage: PullStage.background));
       expect(find.byKey(SyncDownloadCard.percentKey), findsNothing);
     });
