@@ -9,11 +9,13 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/stores/widgets/add_location_flow.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/driver_payments_screen.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/drivers_list_screen.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/load_van_screen.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/van_reconcile_screen.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/van_return_screen.dart';
+import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
 
 /// The Van Sales hub (#141, PRD #139 / ADR 0019) — the manager's way in to the
@@ -74,13 +76,15 @@ class VanSalesHubScreen extends ConsumerWidget {
           ? null
           : '${vans.length} ${vans.length == 1 ? 'van' : 'vans'} • '
                 '${openTrips.length} out',
+      // #779: a van is created right here (same flow as Settings → Stores).
+      actions: const [_AddVanButton(iconOnly: true)],
       body: vans.isEmpty
           ? const _EmptyState(
               icon: AppIcons.supplier,
               title: 'No vans yet',
               message:
-                  'Add a van in Settings → Stores, then load it for a driver '
-                  'from here.',
+                  'Add your first van, then load it for a driver from here.',
+              action: _AddVanButton(),
             )
           : ListView.separated(
               padding: EdgeInsets.fromLTRB(
@@ -538,15 +542,62 @@ class _DetailRow extends StatelessWidget {
   }
 }
 
+/// "Add a van" — runs the shared [addLocationFlow] with the kind fixed to van.
+/// The new van reaches the list through [vansProvider]'s stream. The busy flag
+/// stops a double tap opening two sheets.
+class _AddVanButton extends ConsumerStatefulWidget {
+  final bool iconOnly;
+
+  const _AddVanButton({this.iconOnly = false});
+
+  @override
+  ConsumerState<_AddVanButton> createState() => _AddVanButtonState();
+}
+
+class _AddVanButtonState extends ConsumerState<_AddVanButton> {
+  bool _busy = false;
+
+  Future<void> _add() async {
+    if (_busy) return;
+    _busy = true;
+    try {
+      await addLocationFlow(context, ref, isVan: true);
+    } finally {
+      _busy = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!Gates.vanManage.allows(ref)) return const SizedBox.shrink();
+    if (widget.iconOnly) {
+      return IconButton(
+        tooltip: 'Add a van',
+        icon: const Icon(AppIcons.add),
+        onPressed: _add,
+      );
+    }
+    return AppButton(
+      text: 'Add a van',
+      icon: AppIcons.add,
+      variant: AppButtonVariant.outline,
+      height: kMinInteractiveDimension,
+      onAsyncPressed: _add,
+    );
+  }
+}
+
 class _EmptyState extends StatelessWidget {
   final IconData? icon;
   final String title;
   final String message;
+  final Widget? action;
 
   const _EmptyState({
     required this.icon,
     required this.title,
     required this.message,
+    this.action,
   });
 
   @override
@@ -573,6 +624,10 @@ class _EmptyState extends StatelessWidget {
               textAlign: TextAlign.center,
               style: t.textTheme.bodySmall?.copyWith(color: subtext),
             ),
+            if (action != null) ...[
+              SizedBox(height: context.getRSize(20)),
+              action!,
+            ],
           ],
         ),
       ),

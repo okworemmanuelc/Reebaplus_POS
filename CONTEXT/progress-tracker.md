@@ -7,6 +7,10 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #779: add a van from the Van Sales screen (2026-11-11, branch `feat/779-add-van-from-van-sales`)
+- Van Sales hub gets "Add a van" (empty-state button + app-bar action), shown only with `Gates.vanManage`. Settings → Stores' add flow was extracted unchanged into `addLocationFlow` (`lib/features/stores/widgets/add_location_flow.dart`: gate, plan-limit check, sheet, `createStore`, activity log), used by both screens, so a van is identical either way. Empty-state wording no longer points to Settings. No schema/permission change.
+- Test: `test/van_sales/van_hub_add_van_test.dart`.
+
 ### Issue #761: first download saves a chunk per worker trip (2026-11-11, branch `perf/761-first-download-trips`)
 - `SyncRestoreExecutor.restoreChunked` saves 500 rows per `batch` inside a savepoint; a chunk that throws is rolled back and replayed row by row through `insertResilient` (same skip/FK-orphan/UNIQUE handling). Used by `Restore.plain`, `naturalKey` and the ledger restore; `monotonicStatus` and `dedup` (read/delete before write) stay per-row. LWW, Invariant #12 and business guards are unchanged (they run before dispatch). No schema change.
 - Benchmark `sync-save` (6 months, 14,204 rows): worker 2058 ms -> 882 ms; screen thread 1147 ms -> 719 ms. Tests: `test/database/chunked_restore_test.dart`.
