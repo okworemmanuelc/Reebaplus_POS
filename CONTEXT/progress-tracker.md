@@ -12,6 +12,10 @@ The human updates it when resolving open questions or making architectural decis
 - Driver page: "Bring in old customer account" (same `vanManage` gate), old sales/payments listed tagged and read-only (not in balance or totals). Linked customer hidden from the sale picker; its page says "Now a van driver". Web parity issue to be filed by the supervisor.
 - Tests: `test/van_sales/driver_old_account_*_test.dart`.
 
+### Issue #780: download percentage on Sync Issues (2026-11-11, branch `feat/780-download-percent`)
+- Download card shows a whole-number % above the bar from `rowsDone/rowsTotal` (total is the full snapshot count, fixed once known, so it rises smoothly). Capped at 99 while running, held never-backwards per download, hidden when total unknown. Pure `downloadPercent`/`holdPercent` in `sync_download_card.dart`; bar has a Semantics label with the %. UI only.
+- Test: `test/sync/download_percent_test.dart`.
+
 ### Issue #779: add a van from the Van Sales screen (2026-11-11, branch `feat/779-add-van-from-van-sales`)
 - Van Sales hub gets "Add a van" (empty-state button + app-bar action), shown only with `Gates.vanManage`. Settings → Stores' add flow was extracted unchanged into `addLocationFlow` (`lib/features/stores/widgets/add_location_flow.dart`: gate, plan-limit check, sheet, `createStore`, activity log), used by both screens, so a van is identical either way. Empty-state wording no longer points to Settings. No schema/permission change.
 - Test: `test/van_sales/van_hub_add_van_test.dart`.
