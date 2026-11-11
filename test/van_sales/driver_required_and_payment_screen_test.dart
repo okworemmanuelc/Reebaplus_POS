@@ -16,7 +16,6 @@ import 'package:reebaplus_pos/features/van_sales/screens/driver_profile_screen.d
 import 'package:reebaplus_pos/features/van_sales/screens/load_van_screen.dart';
 
 import '../helpers/screen_harness.dart';
-import '../helpers/viewports.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
