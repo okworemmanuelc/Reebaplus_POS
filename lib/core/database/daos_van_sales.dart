@@ -690,6 +690,38 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
     )..where((t) => whereBusiness(t) & t.id.equals(tripId))).watchSingleOrNull();
   }
 
+  /// The goods on a driver's most recent LOAD (#790): the lots of the first
+  /// dispatch of their latest trip, restocks left out. Falls back to the van's
+  /// latest trip when this driver has never been out. Empty when there is no
+  /// earlier load. Read-only: "Same as last load" pre-fills a draft from it.
+  Future<List<VanTripLotData>> lastLoadFor({
+    required String vanDriverId,
+    required String vanStoreId,
+  }) async {
+    Future<VanTripData?> latest(Expression<bool> Function($VanTripsTable) by) {
+      return (select(vanTrips)
+            ..where((t) => whereBusiness(t) & by(t))
+            ..orderBy([
+              (t) =>
+                  OrderingTerm(expression: t.openedAt, mode: OrderingMode.desc),
+            ])
+            ..limit(1))
+          .getSingleOrNull();
+    }
+
+    final trip =
+        await latest((t) => t.vanDriverId.equals(vanDriverId)) ??
+        await latest((t) => t.vanStoreId.equals(vanStoreId));
+    if (trip == null) return const [];
+    final lots = await lotsForTrip(trip.id);
+    if (lots.isEmpty) return const [];
+    final first = lots.first.dispatchEventId;
+    return [
+      for (final l in lots)
+        if (l.dispatchEventId == first) l,
+    ];
+  }
+
   /// A trip's load lots in FIFO order (oldest dispatch first, id as the stable
   /// tiebreak) — the order a good return credits against (#143) and the order
   /// #145 consumes for COGS.
@@ -1492,7 +1524,9 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
   }) async {
     final merged = _collapseReturnLines(lines);
     if (merged.isEmpty) {
-      throw ArgumentError('A return needs at least one line with a quantity.');
+      throw ArgumentError(
+        'A return needs at least one line with goods or empty crates.',
+      );
     }
 
     final replay = await _existingReturn(tripId, merged);
@@ -1527,12 +1561,18 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
         //    basis is a lot snapshot exactly like a good one's. Leaving the
         //    cursor untouched for damage would let the same units be returned
         //    again as "good" and credited a second time.
-        final segments = await _drawLotsForReturn(
-          tripId: tripId,
-          productId: line.productId,
-          quantity: line.quantity,
-          now: now,
-        );
+        // #790: an empties-only line has no goods, so there is nothing to
+        // draw, credit, move or cost. Only its event row and the empties leg
+        // (2b) are written.
+        final hasGoods = line.quantity > 0;
+        final segments = hasGoods
+            ? await _drawLotsForReturn(
+                tripId: tripId,
+                productId: line.productId,
+                quantity: line.quantity,
+                now: now,
+              )
+            : const <VanLotConsumption>[];
         consumedAll.addAll(segments);
 
         final creditKobo = line.isGood
@@ -1580,7 +1620,9 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
           }
         }
 
-        if (line.isGood) {
+        if (!hasGoods) {
+          // Empties only: no stock, no cost batch, no ledger row.
+        } else if (line.isGood) {
           // 3. Off the van, into SELLABLE warehouse stock — immediately. Both
           //    legs `trackCost: false`: the van has no queue to draw, and the
           //    warehouse's inflow is re-batched per segment below, at the costs
@@ -1739,7 +1781,10 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
       if (!kVanReturnConditions.contains(line.condition)) {
         throw ArgumentError('Unknown return condition: ${line.condition}');
       }
-      if (line.quantity <= 0) continue;
+      // #790: empties may come back alone, so a line with no goods is kept
+      // when it carries empties. A line with neither is dropped.
+      if (line.quantity < 0) continue;
+      if (line.quantity == 0 && line.shellsBack <= 0) continue;
       final key = '${line.productId} ${line.condition}';
       final existing = byKey[key];
       byKey[key] = existing == null

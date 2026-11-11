@@ -7,6 +7,16 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #790 steps 2 and 3: product grid and "Same as last load" for van loading (2026-11-11, branch `feat/790-load-picker`)
+- `LoadProductPickerScreen` (Browse button beside the add box on Load / Restock Van): the checkout's `ProductTile` grid maths, search, category chips and scan-to-add. Tap adds one, long press sets the number, held at whole units in stock. It only counts; it returns `productId -> quantity` (Back and Done both return it) and writes nothing.
+- "Same as last load" on an empty new load: `VanTripsDao.lastLoadFor` returns the first dispatch of the driver's latest trip (restocks left out; falls back to the van's latest trip). Quantities are held at stock on hand; prices are today's shop prices, not last time's.
+- Owner (2026-11-11): the add control IS the product grid. The type-a-name box is gone; one pinned "Add products" button opens the grid.
+- Returns: every product on the trip is listed straight away with an EMPTY count box (no name typing; the count rule of spec §7.3 is unchanged). Good / Damaged and the empties box open once a count is typed; only counted rows are saved.
+- Van card: "Record payment" opens the form directly, beside "Payments".
+- Fixed: `tripOwnerBalanceProvider` is now a `switchMap` (it never followed a trip to a new driver, and did not shut down cleanly).
+- Owner (2026-11-11): empty crates can come back ALONE. Drift 110 → 111, cloud `0258_van_return_empties_only.sql`: `van_return_events` CHECK is now `quantity > 0 OR (quantity = 0 AND shells_back > 0)`. An empties-only row moves no stock, credit, cost or driver debt; only the warehouse empties pool and the trip's crates-back count. Older builds cannot store such a row, so raise the minimum build when v111 ships. Tests: `van_return_empties_test.dart`, `van_return_empties_only_screen_test.dart`, v110→v111 in `migration_upgrade_test.dart`.
+- Otherwise no change to what a load, restock, return or payment writes. Tests: `test/van_sales/load_van_fast_entry_test.dart`, `test/van_sales/van_return_fast_entry_test.dart`. This replaces step 4 of #790 (the combined "Driver is back" screen was dropped: the van card already holds all four actions).
+
 ### Issue #790 step 1: fast van loading (2026-11-11, branch `feat/790-fast-van-load`)
 - Load / Restock Van: compact rows (minus / quantity / plus, price and crates behind Edit), add box pinned (`PinnedHeaderSliver`) and cleared after each pick, the new row's quantity takes the keyboard and Done returns to the add box, items already on the load are not offered again. "Priced below cost" is asked once at Dispatch instead of on every keystroke.
 - Fixed: driver and store pre-fill now waits for their lists (was tried once on the first frame and silently skipped).

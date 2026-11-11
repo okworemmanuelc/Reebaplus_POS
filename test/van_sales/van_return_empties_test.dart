@@ -288,4 +288,85 @@ void main() {
     expect(await pool(), isEmpty);
     expect((await db.vanTripsDao.positionForTrip(tripId)).shellsLostUnits, 0);
   });
+
+  // #790 (owner, 2026-11-11): empty crates can come back ALONE.
+  test('empties alone are recorded: the pool rises, and no stock, money or '
+      'driver debt moves', () async {
+    final tripId = await load();
+    final trip = (await db.vanTripsDao.getTrip(tripId))!;
+    final owedBefore = await db.driverLedgerDao.getBalanceKobo(driverId);
+    final ledgerBefore = (await db.select(db.driverLedgerEntries).get()).length;
+    Future<double> stock(String store) async =>
+        (await (db.select(db.inventory)..where(
+              (i) => i.productId.equals(starProduct) & i.storeId.equals(store),
+            ))
+            .getSingleOrNull())
+            ?.quantity ??
+        0;
+    final vanBefore = await stock(vanId);
+    final shopBefore = await stock(warehouseId);
+
+    final r = await db.vanTripsDao.recordReturn(
+      tripId: tripId,
+      performedBy: managerId,
+      lines: [
+        VanReturnLine(
+          productId: starProduct,
+          quantity: 0,
+          condition: kVanReturnConditionGood,
+          shellsBack: 30,
+        ),
+      ],
+    );
+
+    expect((await pool())[starBrand], 30);
+    expect(r.events, hasLength(1));
+    expect(r.events.single.quantity, 0);
+    expect(r.events.single.shellsBack, 30);
+    expect(r.events.single.creditKobo, 0);
+    expect(r.events.single.costKobo, 0);
+    expect(r.totalCreditKobo, 0);
+    // Nothing else moved.
+    expect(await db.driverLedgerDao.getBalanceKobo(driverId), owedBefore);
+    expect(
+      (await db.select(db.driverLedgerEntries).get()).length,
+      ledgerBefore,
+    );
+    expect(await stock(vanId), vanBefore);
+    expect(await stock(warehouseId), shopBefore);
+    // The trip's crates-back count includes them.
+    expect(
+      (await db.vanTripsDao.getTrip(tripId))!.shellsBack,
+      trip.shellsBack + 30,
+    );
+  });
+
+  test('a line with neither goods nor empties is still refused', () async {
+    final tripId = await load();
+    await expectLater(
+      db.vanTripsDao.recordReturn(
+        tripId: tripId,
+        performedBy: managerId,
+        lines: [
+          VanReturnLine(
+            productId: starProduct,
+            quantity: 0,
+            condition: kVanReturnConditionGood,
+            shellsBack: 0,
+          ),
+        ],
+      ),
+      throwsArgumentError,
+    );
+    expect(await db.select(db.vanReturnEvents).get(), isEmpty);
+    // And the database itself refuses such a row.
+    await expectLater(
+      db.customStatement(
+        'INSERT INTO van_return_events (id, business_id, trip_id, product_id, '
+        "quantity, condition, shells_back) VALUES (?, ?, ?, ?, 0, 'good', 0)",
+        [UuidV7.generate(), businessId, tripId, starProduct],
+      ),
+      throwsA(anything),
+    );
+  });
 }
