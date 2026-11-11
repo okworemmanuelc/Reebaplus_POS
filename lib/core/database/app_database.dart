@@ -2823,6 +2823,16 @@ class PaymentTransactions extends Table {
   /// Set on [kPaymentTypeCrateDepositOut] rows only; null on every other type.
   TextColumn get crateDepositId =>
       text().nullable().references(SupplierCrateDeposits, #id)();
+
+  /// The EIGHTH parent (#787): the driver a payment was taken from when it is
+  /// recorded on the driver's own page, with no trip. Debt sits with the
+  /// driver, never a van, so a driver who owes with no trip at all (an old
+  /// customer account brought in, #783) must still be able to pay, and that
+  /// cash must still reach "Cash from drivers".
+  ///
+  /// Set on `van_remittance` rows that have no trip; null on every other row
+  /// (a payment recorded against a trip keeps `van_trip_id` as its one parent).
+  TextColumn get vanDriverId => text().nullable().references(VanDrivers, #id)();
   TextColumn get performedBy => text().nullable().references(Users, #id)();
   DateTimeColumn get voidedAt => dateTime().nullable()();
   TextColumn get voidedBy => text().nullable().references(Users, #id)();
@@ -2881,7 +2891,8 @@ class PaymentTransactions extends Table {
           (CASE WHEN wallet_txn_id IS NOT NULL THEN 1 ELSE 0 END) +
           (CASE WHEN delivery_id IS NOT NULL THEN 1 ELSE 0 END) +
           (CASE WHEN van_trip_id IS NOT NULL THEN 1 ELSE 0 END) +
-          (CASE WHEN crate_deposit_id IS NOT NULL THEN 1 ELSE 0 END) = 1
+          (CASE WHEN crate_deposit_id IS NOT NULL THEN 1 ELSE 0 END) +
+          (CASE WHEN van_driver_id IS NOT NULL THEN 1 ELSE 0 END) = 1
         )''',
   ];
 }
@@ -3501,7 +3512,7 @@ class AppDatabase extends _$AppDatabase {
   String? get currentAuthUserId => authUserIdResolver();
 
   @override
-  int get schemaVersion => 109;
+  int get schemaVersion => 110;
 
   /// The v90 (#473) listing columns, pinned to their defaults in every older
   /// products rebuild: TableMigration copies from the CURRENT schema, so a
@@ -5831,6 +5842,9 @@ class AppDatabase extends _$AppDatabase {
               // v79 (#212) added the seventh parent. Same reasoning: at v64 it
               // did not exist, so every row being copied has no value for it.
               paymentTransactions.crateDepositId: const Constant<String>(null),
+              // v110 (#787) added the eighth parent; it does not exist on the
+              // table this step copies, so it is pinned to NULL too.
+              paymentTransactions.vanDriverId: const Constant<String>(null),
             },
           ),
         );
@@ -6147,6 +6161,9 @@ class AppDatabase extends _$AppDatabase {
               // which flips the exactly-one-parent sum to 2 and aborts the whole
               // upgrade. That is precisely how `van_trip_id` broke v64.
               paymentTransactions.crateDepositId: const Constant<String>(null),
+              // v110 (#787) added the eighth parent; it does not exist on the
+              // table this step copies, so it is pinned to NULL too.
+              paymentTransactions.vanDriverId: const Constant<String>(null),
             },
           ),
         );
@@ -6442,6 +6459,8 @@ class AppDatabase extends _$AppDatabase {
                 paymentTransactions.crateDepositId: const Constant<String>(
                   null,
                 ),
+                // v110 (#787): the eighth parent, pinned for the same reason.
+                paymentTransactions.vanDriverId: const Constant<String>(null),
               },
             ),
           );
@@ -6695,7 +6714,16 @@ class AppDatabase extends _$AppDatabase {
           "SELECT 1 FROM payment_transactions WHERE type = 'purchase' LIMIT 1",
         ).get();
         if (hasPurchasePaymentsAtV79.isEmpty) {
-          await m.alterTable(TableMigration(paymentTransactions));
+          await m.alterTable(
+            TableMigration(
+              paymentTransactions,
+              columnTransformer: {
+                // v110 (#787) added `van_driver_id`, which does not exist on
+                // the table this step copies. Pinned to NULL, as in v64/v72/v77.
+                paymentTransactions.vanDriverId: const Constant<String>(null),
+              },
+            ),
+          );
         } else {
           debugPrint(
             '[AppDatabase] v79: payment_transactions still holds row(s) of the '
@@ -7629,6 +7657,95 @@ class AppDatabase extends _$AppDatabase {
         }
         await customStatement(kVanDriversCustomerIndex);
       }
+      if (from < 110) {
+        // ── v110 — #787: a driver payment with no trip ───────────────────
+        //
+        // Mirrors supabase/migrations/0257_payment_van_driver_parent.sql:
+        // `payment_transactions.van_driver_id`, the EIGHTH parent, and the
+        // exactly-one-parent CHECK widened to count it.
+        //
+        // The v64/v72/v77/v79 recipe, step for step: add the column FIRST (or
+        // TableMigration fills it with the literal column name), rebuild for
+        // the widened CHECK, then re-emit the indexes and the three triggers,
+        // which alterTable does not carry over. Every EARLIER rebuild of this
+        // table now pins `van_driver_id` to NULL.
+        final hasPaymentDriver = await customSelect(
+          "SELECT 1 FROM pragma_table_info('payment_transactions') "
+          "WHERE name = 'van_driver_id'",
+        ).get();
+        if (hasPaymentDriver.isEmpty) {
+          await m.addColumn(paymentTransactions, paymentTransactions.vanDriverId);
+        }
+        // The v77 guard, inherited again: a device still holding a retired
+        // `purchase` row keeps its old CHECK rather than failing the upgrade.
+        // On such a device a no-trip driver payment is refused at insert.
+        final hasPurchasePaymentsAtV110 = await customSelect(
+          "SELECT 1 FROM payment_transactions WHERE type = 'purchase' LIMIT 1",
+        ).get();
+        if (hasPurchasePaymentsAtV110.isEmpty) {
+          await m.alterTable(TableMigration(paymentTransactions));
+        } else {
+          debugPrint(
+            '[AppDatabase] v110: payment_transactions still holds row(s) of '
+            'the retired `purchase` type; leaving the parent CHECK as it was. '
+            'A driver payment with no trip (#787) cannot be recorded on this '
+            'device until the stray row is dealt with.',
+          );
+        }
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_payment_transactions_business_lua',
+        );
+        await customStatement(
+          'CREATE INDEX idx_payment_transactions_business_lua '
+          'ON payment_transactions (business_id, last_updated_at)',
+        );
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_payment_txn_business_type',
+        );
+        await customStatement(
+          'CREATE INDEX idx_payment_txn_business_type '
+          'ON payment_transactions (business_id, type, created_at)',
+        );
+        await customStatement('DROP INDEX IF EXISTS idx_payment_txn_van_trip');
+        for (final stmt in _vanRemittanceIndexStatements) {
+          await customStatement(stmt);
+        }
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_payment_txn_crate_deposit',
+        );
+        for (final stmt in _crateDepositPaymentIndexStatements) {
+          await customStatement(stmt);
+        }
+        await customStatement(
+          'DROP INDEX IF EXISTS idx_payment_txn_van_driver',
+        );
+        for (final stmt in _paymentVanDriverIndexStatements) {
+          await customStatement(stmt);
+        }
+        await customStatement(
+          'DROP TRIGGER IF EXISTS bump_payment_transactions_last_updated_at',
+        );
+        await customStatement(
+          'CREATE TRIGGER bump_payment_transactions_last_updated_at '
+          'AFTER UPDATE ON payment_transactions '
+          'FOR EACH ROW '
+          'WHEN OLD.last_updated_at IS NEW.last_updated_at '
+          'BEGIN '
+          "UPDATE payment_transactions SET last_updated_at = CAST(strftime('%s', 'now') AS INTEGER) WHERE id = OLD.id; "
+          'END',
+        );
+        await customStatement(
+          'DROP TRIGGER IF EXISTS payment_transactions_immutable',
+        );
+        await customStatement(
+          'DROP TRIGGER IF EXISTS payment_transactions_no_delete',
+        );
+        for (final stmt in _ledgerTriggerStatements(
+          _ledgerTables.firstWhere((l) => l.table == 'payment_transactions'),
+        )) {
+          await customStatement(stmt);
+        }
+      }
     },
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
@@ -8505,6 +8622,15 @@ const List<String> _crateDepositPaymentIndexStatements = [
       'ON payment_transactions (business_id, crate_deposit_id)',
 ];
 
+/// The driver-payment index (#787). Its own list for the same reason as
+/// [_crateDepositPaymentIndexStatements]: it can only run once
+/// `payment_transactions.van_driver_id` exists (v110).
+const List<String> _paymentVanDriverIndexStatements = [
+  // A driver's no-trip payments.
+  'CREATE INDEX idx_payment_txn_van_driver '
+      'ON payment_transactions (business_id, van_driver_id)',
+];
+
 /// #427: one live Customer per Shopper per business (mirrors cloud 0208's
 /// `customers_business_shopper_account`). Run at create time and by the v93
 /// step; IF NOT EXISTS keeps a re-upgrade idempotent.
@@ -8587,6 +8713,8 @@ List<String> get _postCreateStatements {
     // plus the cash leg's back-reference.
     ..._crateDepositIndexStatements,
     ..._crateDepositPaymentIndexStatements,
+    // v110 (#787) — a driver's no-trip payments.
+    ..._paymentVanDriverIndexStatements,
     // v80 (#216 PRD #203) — the Crate Shortfall write-off ledger.
     ..._crateShortfallIndexStatements,
     // v91 (#474) — one live gallery photo per (product, position).

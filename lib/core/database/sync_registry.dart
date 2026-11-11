@@ -1776,6 +1776,8 @@ final List<SyncedTable> kSyncRegistry = [
       'delivery_id',
       'van_trip_id',
       'crate_deposit_id',
+      // v110 (#787): the eighth parent, on the same terms.
+      'van_driver_id',
       'performed_by',
       'created_at',
     ],

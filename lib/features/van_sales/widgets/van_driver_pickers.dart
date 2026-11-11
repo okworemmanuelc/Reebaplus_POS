@@ -94,7 +94,7 @@ Future<void> showAssignVanDriverSheet(
   final picked = await _pickDriver(
     context,
     ref,
-    title: 'Who usually drives this van?',
+    title: 'Usual driver for this van',
     currentId: current?.vanDriverId,
     allowNone: true,
   );

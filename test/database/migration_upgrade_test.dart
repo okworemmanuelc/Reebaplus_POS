@@ -5068,4 +5068,122 @@ void _upgradeTests(LocalDatabaseHome home) {
       expect(await columnsOf(db, 'van_drivers'), contains('customer_id'));
     } finally { await db.close(); }
   });
+
+  // ── v109 → v110 (#787): payment_transactions.van_driver_id, eighth parent ──
+  test('v109 to v110 adds payment_transactions.van_driver_id, widens the '
+      'one-parent CHECK, keeps money rows and stays append-only', () async {
+    var db = await openAndInit();
+    final biz = UuidV7.generate();
+    final order = UuidV7.generate();
+    final pay = UuidV7.generate();
+    final driver = UuidV7.generate();
+    await db.customStatement(
+        "INSERT INTO businesses (id, name, type) VALUES (?, 'Biz', 'Bar')",
+        [biz]);
+    await db.customStatement(
+        'INSERT INTO orders (id, business_id, order_number, total_amount_kobo, '
+        'net_amount_kobo, payment_type, status) '
+        "VALUES (?, ?, 'ORD-1', 500000, 500000, 'cash', 'completed')",
+        [order, biz]);
+    await db.customStatement(
+        'INSERT INTO payment_transactions '
+        '(id, business_id, amount_kobo, method, type, order_id) '
+        "VALUES (?, ?, 500000, 'cash', 'sale', ?)",
+        [pay, biz, order]);
+    await db.into(db.vanDrivers).insert(VanDriversCompanion.insert(
+        id: Value(driver), businessId: biz, name: 'Johnson Kim'));
+
+    // Rebuild payment_transactions in its v109 shape: the same CREATE with the
+    // new column and its CHECK term taken out.
+    final createSql = (await db.customSelect("SELECT sql FROM sqlite_master "
+            "WHERE type = 'table' AND name = 'payment_transactions'")
+        .getSingle()).read<String>('sql');
+    var old = createSql
+        .replaceFirst(
+            RegExp(r'"van_driver_id" TEXT NULL REFERENCES van_drivers \(id\),\s*'),
+            '')
+        .replaceFirst(
+            RegExp(r'\s*\+\s*\(CASE WHEN van_driver_id IS NOT NULL THEN 1 ELSE 0 END\)'),
+            '')
+        .replaceFirst('"payment_transactions"', '"pt_v109"');
+    expect(old, isNot(contains('van_driver_id')),
+        reason: 'teeth: the v109 shape must genuinely lack the column');
+    final cols = (await columnsOf(db, 'payment_transactions'))
+        .where((c) => c != 'van_driver_id')
+        .join(', ');
+    await db.customStatement('PRAGMA foreign_keys = OFF');
+    await db.customStatement(old);
+    await db.customStatement(
+        'INSERT INTO pt_v109 ($cols) SELECT $cols FROM payment_transactions');
+    await db.customStatement('DROP TABLE payment_transactions');
+    await db.customStatement('ALTER TABLE pt_v109 RENAME TO payment_transactions');
+    await db.customStatement('PRAGMA foreign_keys = ON');
+    expect(await columnsOf(db, 'payment_transactions'),
+        isNot(contains('van_driver_id')));
+    await db.customStatement('PRAGMA user_version = 109');
+    await db.close();
+
+    db = await openAndInit();
+    try {
+      expect(await columnsOf(db, 'payment_transactions'),
+          contains('van_driver_id'));
+      // The money row survived, with NULL (not the string 'van_driver_id').
+      final row = await db.customSelect(
+          'SELECT id, amount_kobo, order_id, van_driver_id '
+          'FROM payment_transactions').getSingle();
+      expect(row.read<String>('id'), pay);
+      expect(row.read<int>('amount_kobo'), 500000);
+      expect(row.read<String?>('van_driver_id'), isNull);
+
+      // The widened CHECK admits a driver-only parent...
+      final p2 = UuidV7.generate();
+      await db.customStatement(
+          'INSERT INTO payment_transactions '
+          '(id, business_id, amount_kobo, method, type, van_driver_id) '
+          "VALUES (?, ?, 1000, 'cash', 'van_remittance', ?)",
+          [p2, biz, driver]);
+      // ...and still refuses none, or two.
+      await expectLater(
+        db.customStatement(
+            'INSERT INTO payment_transactions '
+            '(id, business_id, amount_kobo, method, type) '
+            "VALUES (?, ?, 1000, 'cash', 'van_remittance')",
+            [UuidV7.generate(), biz]),
+        throwsA(anything),
+      );
+      await expectLater(
+        db.customStatement(
+            'INSERT INTO payment_transactions '
+            '(id, business_id, amount_kobo, method, type, order_id, '
+            "van_driver_id) VALUES (?, ?, 1000, 'cash', 'sale', ?, ?)",
+            [UuidV7.generate(), biz, order, driver]),
+        throwsA(anything),
+      );
+      // Still append-only after the rebuild.
+      await expectLater(
+        db.customStatement(
+            "UPDATE payment_transactions SET amount_kobo = 1 WHERE id = '$p2'"),
+        throwsA(anything),
+      );
+      await expectLater(
+        db.customStatement("DELETE FROM payment_transactions WHERE id = '$p2'"),
+        throwsA(anything),
+      );
+      final idx = await db.customSelect("SELECT name FROM sqlite_master "
+          "WHERE name = 'idx_payment_txn_van_driver'").get();
+      expect(idx, hasLength(1));
+
+      await db.customStatement('PRAGMA user_version = 109');
+      await db.close();
+      db = await openAndInit(); // idempotent re-upgrade
+      expect(await columnsOf(db, 'payment_transactions'),
+          contains('van_driver_id'));
+      expect(
+        (await db.customSelect('SELECT COUNT(*) AS c FROM payment_transactions')
+                .getSingle())
+            .read<int>('c'),
+        2,
+      );
+    } finally { await db.close(); }
+  });
 }

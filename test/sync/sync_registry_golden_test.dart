@@ -561,6 +561,7 @@ void main() {
         'delivery_id',
         'van_trip_id',
         'crate_deposit_id',
+        'van_driver_id',
         'performed_by',
         'created_at',
       ],

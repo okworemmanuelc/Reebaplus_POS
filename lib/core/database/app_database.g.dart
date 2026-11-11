@@ -41330,6 +41330,20 @@ class $PaymentTransactionsTable extends PaymentTransactions
       'REFERENCES supplier_crate_deposits (id)',
     ),
   );
+  static const VerificationMeta _vanDriverIdMeta = const VerificationMeta(
+    'vanDriverId',
+  );
+  @override
+  late final GeneratedColumn<String> vanDriverId = GeneratedColumn<String>(
+    'van_driver_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES van_drivers (id)',
+    ),
+  );
   static const VerificationMeta _performedByMeta = const VerificationMeta(
     'performedBy',
   );
@@ -41420,6 +41434,7 @@ class $PaymentTransactionsTable extends PaymentTransactions
     deliveryId,
     vanTripId,
     crateDepositId,
+    vanDriverId,
     performedBy,
     voidedAt,
     voidedBy,
@@ -41528,6 +41543,15 @@ class $PaymentTransactionsTable extends PaymentTransactions
         ),
       );
     }
+    if (data.containsKey('van_driver_id')) {
+      context.handle(
+        _vanDriverIdMeta,
+        vanDriverId.isAcceptableOrUnknown(
+          data['van_driver_id']!,
+          _vanDriverIdMeta,
+        ),
+      );
+    }
     if (data.containsKey('performed_by')) {
       context.handle(
         _performedByMeta,
@@ -41631,6 +41655,10 @@ class $PaymentTransactionsTable extends PaymentTransactions
         DriftSqlType.string,
         data['${effectivePrefix}crate_deposit_id'],
       ),
+      vanDriverId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}van_driver_id'],
+      ),
       performedBy: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}performed_by'],
@@ -41704,6 +41732,16 @@ class PaymentTransactionData extends DataClass
   ///
   /// Set on [kPaymentTypeCrateDepositOut] rows only; null on every other type.
   final String? crateDepositId;
+
+  /// The EIGHTH parent (#787): the driver a payment was taken from when it is
+  /// recorded on the driver's own page, with no trip. Debt sits with the
+  /// driver, never a van, so a driver who owes with no trip at all (an old
+  /// customer account brought in, #783) must still be able to pay, and that
+  /// cash must still reach "Cash from drivers".
+  ///
+  /// Set on `van_remittance` rows that have no trip; null on every other row
+  /// (a payment recorded against a trip keeps `van_trip_id` as its one parent).
+  final String? vanDriverId;
   final String? performedBy;
   final DateTime? voidedAt;
   final String? voidedBy;
@@ -41724,6 +41762,7 @@ class PaymentTransactionData extends DataClass
     this.deliveryId,
     this.vanTripId,
     this.crateDepositId,
+    this.vanDriverId,
     this.performedBy,
     this.voidedAt,
     this.voidedBy,
@@ -41762,6 +41801,9 @@ class PaymentTransactionData extends DataClass
     }
     if (!nullToAbsent || crateDepositId != null) {
       map['crate_deposit_id'] = Variable<String>(crateDepositId);
+    }
+    if (!nullToAbsent || vanDriverId != null) {
+      map['van_driver_id'] = Variable<String>(vanDriverId);
     }
     if (!nullToAbsent || performedBy != null) {
       map['performed_by'] = Variable<String>(performedBy);
@@ -41811,6 +41853,9 @@ class PaymentTransactionData extends DataClass
       crateDepositId: crateDepositId == null && nullToAbsent
           ? const Value.absent()
           : Value(crateDepositId),
+      vanDriverId: vanDriverId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(vanDriverId),
       performedBy: performedBy == null && nullToAbsent
           ? const Value.absent()
           : Value(performedBy),
@@ -41847,6 +41892,7 @@ class PaymentTransactionData extends DataClass
       deliveryId: serializer.fromJson<String?>(json['deliveryId']),
       vanTripId: serializer.fromJson<String?>(json['vanTripId']),
       crateDepositId: serializer.fromJson<String?>(json['crateDepositId']),
+      vanDriverId: serializer.fromJson<String?>(json['vanDriverId']),
       performedBy: serializer.fromJson<String?>(json['performedBy']),
       voidedAt: serializer.fromJson<DateTime?>(json['voidedAt']),
       voidedBy: serializer.fromJson<String?>(json['voidedBy']),
@@ -41872,6 +41918,7 @@ class PaymentTransactionData extends DataClass
       'deliveryId': serializer.toJson<String?>(deliveryId),
       'vanTripId': serializer.toJson<String?>(vanTripId),
       'crateDepositId': serializer.toJson<String?>(crateDepositId),
+      'vanDriverId': serializer.toJson<String?>(vanDriverId),
       'performedBy': serializer.toJson<String?>(performedBy),
       'voidedAt': serializer.toJson<DateTime?>(voidedAt),
       'voidedBy': serializer.toJson<String?>(voidedBy),
@@ -41895,6 +41942,7 @@ class PaymentTransactionData extends DataClass
     Value<String?> deliveryId = const Value.absent(),
     Value<String?> vanTripId = const Value.absent(),
     Value<String?> crateDepositId = const Value.absent(),
+    Value<String?> vanDriverId = const Value.absent(),
     Value<String?> performedBy = const Value.absent(),
     Value<DateTime?> voidedAt = const Value.absent(),
     Value<String?> voidedBy = const Value.absent(),
@@ -41917,6 +41965,7 @@ class PaymentTransactionData extends DataClass
     crateDepositId: crateDepositId.present
         ? crateDepositId.value
         : this.crateDepositId,
+    vanDriverId: vanDriverId.present ? vanDriverId.value : this.vanDriverId,
     performedBy: performedBy.present ? performedBy.value : this.performedBy,
     voidedAt: voidedAt.present ? voidedAt.value : this.voidedAt,
     voidedBy: voidedBy.present ? voidedBy.value : this.voidedBy,
@@ -41951,6 +42000,9 @@ class PaymentTransactionData extends DataClass
       crateDepositId: data.crateDepositId.present
           ? data.crateDepositId.value
           : this.crateDepositId,
+      vanDriverId: data.vanDriverId.present
+          ? data.vanDriverId.value
+          : this.vanDriverId,
       performedBy: data.performedBy.present
           ? data.performedBy.value
           : this.performedBy,
@@ -41982,6 +42034,7 @@ class PaymentTransactionData extends DataClass
           ..write('deliveryId: $deliveryId, ')
           ..write('vanTripId: $vanTripId, ')
           ..write('crateDepositId: $crateDepositId, ')
+          ..write('vanDriverId: $vanDriverId, ')
           ..write('performedBy: $performedBy, ')
           ..write('voidedAt: $voidedAt, ')
           ..write('voidedBy: $voidedBy, ')
@@ -42007,6 +42060,7 @@ class PaymentTransactionData extends DataClass
     deliveryId,
     vanTripId,
     crateDepositId,
+    vanDriverId,
     performedBy,
     voidedAt,
     voidedBy,
@@ -42031,6 +42085,7 @@ class PaymentTransactionData extends DataClass
           other.deliveryId == this.deliveryId &&
           other.vanTripId == this.vanTripId &&
           other.crateDepositId == this.crateDepositId &&
+          other.vanDriverId == this.vanDriverId &&
           other.performedBy == this.performedBy &&
           other.voidedAt == this.voidedAt &&
           other.voidedBy == this.voidedBy &&
@@ -42054,6 +42109,7 @@ class PaymentTransactionsCompanion
   final Value<String?> deliveryId;
   final Value<String?> vanTripId;
   final Value<String?> crateDepositId;
+  final Value<String?> vanDriverId;
   final Value<String?> performedBy;
   final Value<DateTime?> voidedAt;
   final Value<String?> voidedBy;
@@ -42075,6 +42131,7 @@ class PaymentTransactionsCompanion
     this.deliveryId = const Value.absent(),
     this.vanTripId = const Value.absent(),
     this.crateDepositId = const Value.absent(),
+    this.vanDriverId = const Value.absent(),
     this.performedBy = const Value.absent(),
     this.voidedAt = const Value.absent(),
     this.voidedBy = const Value.absent(),
@@ -42097,6 +42154,7 @@ class PaymentTransactionsCompanion
     this.deliveryId = const Value.absent(),
     this.vanTripId = const Value.absent(),
     this.crateDepositId = const Value.absent(),
+    this.vanDriverId = const Value.absent(),
     this.performedBy = const Value.absent(),
     this.voidedAt = const Value.absent(),
     this.voidedBy = const Value.absent(),
@@ -42122,6 +42180,7 @@ class PaymentTransactionsCompanion
     Expression<String>? deliveryId,
     Expression<String>? vanTripId,
     Expression<String>? crateDepositId,
+    Expression<String>? vanDriverId,
     Expression<String>? performedBy,
     Expression<DateTime>? voidedAt,
     Expression<String>? voidedBy,
@@ -42144,6 +42203,7 @@ class PaymentTransactionsCompanion
       if (deliveryId != null) 'delivery_id': deliveryId,
       if (vanTripId != null) 'van_trip_id': vanTripId,
       if (crateDepositId != null) 'crate_deposit_id': crateDepositId,
+      if (vanDriverId != null) 'van_driver_id': vanDriverId,
       if (performedBy != null) 'performed_by': performedBy,
       if (voidedAt != null) 'voided_at': voidedAt,
       if (voidedBy != null) 'voided_by': voidedBy,
@@ -42168,6 +42228,7 @@ class PaymentTransactionsCompanion
     Value<String?>? deliveryId,
     Value<String?>? vanTripId,
     Value<String?>? crateDepositId,
+    Value<String?>? vanDriverId,
     Value<String?>? performedBy,
     Value<DateTime?>? voidedAt,
     Value<String?>? voidedBy,
@@ -42190,6 +42251,7 @@ class PaymentTransactionsCompanion
       deliveryId: deliveryId ?? this.deliveryId,
       vanTripId: vanTripId ?? this.vanTripId,
       crateDepositId: crateDepositId ?? this.crateDepositId,
+      vanDriverId: vanDriverId ?? this.vanDriverId,
       performedBy: performedBy ?? this.performedBy,
       voidedAt: voidedAt ?? this.voidedAt,
       voidedBy: voidedBy ?? this.voidedBy,
@@ -42242,6 +42304,9 @@ class PaymentTransactionsCompanion
     if (crateDepositId.present) {
       map['crate_deposit_id'] = Variable<String>(crateDepositId.value);
     }
+    if (vanDriverId.present) {
+      map['van_driver_id'] = Variable<String>(vanDriverId.value);
+    }
     if (performedBy.present) {
       map['performed_by'] = Variable<String>(performedBy.value);
     }
@@ -42282,6 +42347,7 @@ class PaymentTransactionsCompanion
           ..write('deliveryId: $deliveryId, ')
           ..write('vanTripId: $vanTripId, ')
           ..write('crateDepositId: $crateDepositId, ')
+          ..write('vanDriverId: $vanDriverId, ')
           ..write('performedBy: $performedBy, ')
           ..write('voidedAt: $voidedAt, ')
           ..write('voidedBy: $voidedBy, ')
@@ -68792,6 +68858,33 @@ final class $$VanDriversTableReferences
   }
 
   static MultiTypedResultKey<
+    $PaymentTransactionsTable,
+    List<PaymentTransactionData>
+  >
+  _paymentTransactionsRefsTable(_$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.paymentTransactions,
+        aliasName: $_aliasNameGenerator(
+          db.vanDrivers.id,
+          db.paymentTransactions.vanDriverId,
+        ),
+      );
+
+  $$PaymentTransactionsTableProcessedTableManager get paymentTransactionsRefs {
+    final manager = $$PaymentTransactionsTableTableManager(
+      $_db,
+      $_db.paymentTransactions,
+    ).filter((f) => f.vanDriverId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _paymentTransactionsRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<
     $DriverLedgerEntriesTable,
     List<DriverLedgerEntryData>
   >
@@ -68945,6 +69038,31 @@ class $$VanDriversTableFilterComposer
           }) => $$VanTripsTableFilterComposer(
             $db: $db,
             $table: $db.vanTrips,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> paymentTransactionsRefs(
+    Expression<bool> Function($$PaymentTransactionsTableFilterComposer f) f,
+  ) {
+    final $$PaymentTransactionsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.paymentTransactions,
+      getReferencedColumn: (t) => t.vanDriverId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PaymentTransactionsTableFilterComposer(
+            $db: $db,
+            $table: $db.paymentTransactions,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -69191,6 +69309,32 @@ class $$VanDriversTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> paymentTransactionsRefs<T extends Object>(
+    Expression<T> Function($$PaymentTransactionsTableAnnotationComposer a) f,
+  ) {
+    final $$PaymentTransactionsTableAnnotationComposer composer =
+        $composerBuilder(
+          composer: this,
+          getCurrentColumn: (t) => t.id,
+          referencedTable: $db.paymentTransactions,
+          getReferencedColumn: (t) => t.vanDriverId,
+          builder:
+              (
+                joinBuilder, {
+                $addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer,
+              }) => $$PaymentTransactionsTableAnnotationComposer(
+                $db: $db,
+                $table: $db.paymentTransactions,
+                $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                joinBuilder: joinBuilder,
+                $removeJoinBuilderFromRootComposer:
+                    $removeJoinBuilderFromRootComposer,
+              ),
+        );
+    return f(composer);
+  }
+
   Expression<T> driverLedgerEntriesRefs<T extends Object>(
     Expression<T> Function($$DriverLedgerEntriesTableAnnotationComposer a) f,
   ) {
@@ -69236,6 +69380,7 @@ class $$VanDriversTableTableManager
             bool customerId,
             bool storesRefs,
             bool vanTripsRefs,
+            bool paymentTransactionsRefs,
             bool driverLedgerEntriesRefs,
           })
         > {
@@ -69308,6 +69453,7 @@ class $$VanDriversTableTableManager
                 customerId = false,
                 storesRefs = false,
                 vanTripsRefs = false,
+                paymentTransactionsRefs = false,
                 driverLedgerEntriesRefs = false,
               }) {
                 return PrefetchHooks(
@@ -69315,6 +69461,7 @@ class $$VanDriversTableTableManager
                   explicitlyWatchedTables: [
                     if (storesRefs) db.stores,
                     if (vanTripsRefs) db.vanTrips,
+                    if (paymentTransactionsRefs) db.paymentTransactions,
                     if (driverLedgerEntriesRefs) db.driverLedgerEntries,
                   ],
                   addJoins:
@@ -69408,6 +69555,27 @@ class $$VanDriversTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (paymentTransactionsRefs)
+                        await $_getPrefetchedData<
+                          VanDriverData,
+                          $VanDriversTable,
+                          PaymentTransactionData
+                        >(
+                          currentTable: table,
+                          referencedTable: $$VanDriversTableReferences
+                              ._paymentTransactionsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$VanDriversTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).paymentTransactionsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.vanDriverId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (driverLedgerEntriesRefs)
                         await $_getPrefetchedData<
                           VanDriverData,
@@ -69454,6 +69622,7 @@ typedef $$VanDriversTableProcessedTableManager =
         bool customerId,
         bool storesRefs,
         bool vanTripsRefs,
+        bool paymentTransactionsRefs,
         bool driverLedgerEntriesRefs,
       })
     >;
@@ -114805,6 +114974,7 @@ typedef $$PaymentTransactionsTableCreateCompanionBuilder =
       Value<String?> deliveryId,
       Value<String?> vanTripId,
       Value<String?> crateDepositId,
+      Value<String?> vanDriverId,
       Value<String?> performedBy,
       Value<DateTime?> voidedAt,
       Value<String?> voidedBy,
@@ -114828,6 +114998,7 @@ typedef $$PaymentTransactionsTableUpdateCompanionBuilder =
       Value<String?> deliveryId,
       Value<String?> vanTripId,
       Value<String?> crateDepositId,
+      Value<String?> vanDriverId,
       Value<String?> performedBy,
       Value<DateTime?> voidedAt,
       Value<String?> voidedBy,
@@ -115028,6 +115199,28 @@ final class $$PaymentTransactionsTableReferences
       $_db.supplierCrateDeposits,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_crateDepositIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $VanDriversTable _vanDriverIdTable(_$AppDatabase db) =>
+      db.vanDrivers.createAlias(
+        $_aliasNameGenerator(
+          db.paymentTransactions.vanDriverId,
+          db.vanDrivers.id,
+        ),
+      );
+
+  $$VanDriversTableProcessedTableManager? get vanDriverId {
+    final $_column = $_itemColumn<String>('van_driver_id');
+    if ($_column == null) return null;
+    final manager = $$VanDriversTableTableManager(
+      $_db,
+      $_db.vanDrivers,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_vanDriverIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -115326,6 +115519,29 @@ class $$PaymentTransactionsTableFilterComposer
                     $removeJoinBuilderFromRootComposer,
               ),
         );
+    return composer;
+  }
+
+  $$VanDriversTableFilterComposer get vanDriverId {
+    final $$VanDriversTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.vanDriverId,
+      referencedTable: $db.vanDrivers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanDriversTableFilterComposer(
+            $db: $db,
+            $table: $db.vanDrivers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
     return composer;
   }
 
@@ -115633,6 +115849,29 @@ class $$PaymentTransactionsTableOrderingComposer
     return composer;
   }
 
+  $$VanDriversTableOrderingComposer get vanDriverId {
+    final $$VanDriversTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.vanDriverId,
+      referencedTable: $db.vanDrivers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanDriversTableOrderingComposer(
+            $db: $db,
+            $table: $db.vanDrivers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   $$UsersTableOrderingComposer get performedBy {
     final $$UsersTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -115928,6 +116167,29 @@ class $$PaymentTransactionsTableAnnotationComposer
     return composer;
   }
 
+  $$VanDriversTableAnnotationComposer get vanDriverId {
+    final $$VanDriversTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.vanDriverId,
+      referencedTable: $db.vanDrivers,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$VanDriversTableAnnotationComposer(
+            $db: $db,
+            $table: $db.vanDrivers,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   $$UsersTableAnnotationComposer get performedBy {
     final $$UsersTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -115998,6 +116260,7 @@ class $$PaymentTransactionsTableTableManager
             bool deliveryId,
             bool vanTripId,
             bool crateDepositId,
+            bool vanDriverId,
             bool performedBy,
             bool voidedBy,
           })
@@ -116036,6 +116299,7 @@ class $$PaymentTransactionsTableTableManager
                 Value<String?> deliveryId = const Value.absent(),
                 Value<String?> vanTripId = const Value.absent(),
                 Value<String?> crateDepositId = const Value.absent(),
+                Value<String?> vanDriverId = const Value.absent(),
                 Value<String?> performedBy = const Value.absent(),
                 Value<DateTime?> voidedAt = const Value.absent(),
                 Value<String?> voidedBy = const Value.absent(),
@@ -116057,6 +116321,7 @@ class $$PaymentTransactionsTableTableManager
                 deliveryId: deliveryId,
                 vanTripId: vanTripId,
                 crateDepositId: crateDepositId,
+                vanDriverId: vanDriverId,
                 performedBy: performedBy,
                 voidedAt: voidedAt,
                 voidedBy: voidedBy,
@@ -116080,6 +116345,7 @@ class $$PaymentTransactionsTableTableManager
                 Value<String?> deliveryId = const Value.absent(),
                 Value<String?> vanTripId = const Value.absent(),
                 Value<String?> crateDepositId = const Value.absent(),
+                Value<String?> vanDriverId = const Value.absent(),
                 Value<String?> performedBy = const Value.absent(),
                 Value<DateTime?> voidedAt = const Value.absent(),
                 Value<String?> voidedBy = const Value.absent(),
@@ -116101,6 +116367,7 @@ class $$PaymentTransactionsTableTableManager
                 deliveryId: deliveryId,
                 vanTripId: vanTripId,
                 crateDepositId: crateDepositId,
+                vanDriverId: vanDriverId,
                 performedBy: performedBy,
                 voidedAt: voidedAt,
                 voidedBy: voidedBy,
@@ -116128,6 +116395,7 @@ class $$PaymentTransactionsTableTableManager
                 deliveryId = false,
                 vanTripId = false,
                 crateDepositId = false,
+                vanDriverId = false,
                 performedBy = false,
                 voidedBy = false,
               }) {
@@ -116285,6 +116553,21 @@ class $$PaymentTransactionsTableTableManager
                                   )
                                   as T;
                         }
+                        if (vanDriverId) {
+                          state =
+                              state.withJoin(
+                                    currentTable: table,
+                                    currentColumn: table.vanDriverId,
+                                    referencedTable:
+                                        $$PaymentTransactionsTableReferences
+                                            ._vanDriverIdTable(db),
+                                    referencedColumn:
+                                        $$PaymentTransactionsTableReferences
+                                            ._vanDriverIdTable(db)
+                                            .id,
+                                  )
+                                  as T;
+                        }
                         if (performedBy) {
                           state =
                               state.withJoin(
@@ -116349,6 +116632,7 @@ typedef $$PaymentTransactionsTableProcessedTableManager =
         bool deliveryId,
         bool vanTripId,
         bool crateDepositId,
+        bool vanDriverId,
         bool performedBy,
         bool voidedBy,
       })
