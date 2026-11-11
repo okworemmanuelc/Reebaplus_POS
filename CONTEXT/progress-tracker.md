@@ -7,6 +7,11 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #790 step 1: fast van loading (2026-11-11, branch `feat/790-fast-van-load`)
+- Load / Restock Van: compact rows (minus / quantity / plus, price and crates behind Edit), add box pinned (`PinnedHeaderSliver`) and cleared after each pick, the new row's quantity takes the keyboard and Done returns to the add box, items already on the load are not offered again. "Priced below cost" is asked once at Dispatch instead of on every keystroke.
+- Fixed: driver and store pre-fill now waits for their lists (was tried once on the first frame and silently skipped).
+- No change to what a load writes. Test: `test/van_sales/load_van_fast_entry_test.dart`. Steps 2 to 4 of #790 still open.
+
 ### Issue #787: driver required to load; pay from the driver's page (2026-11-11, branch `feat/787-driver-required-payment-on-driver`)
 - Load Van needs a driver (picker no longer offers "No driver assigned"; restock keeps its trip's driver; old no-driver trips untouched). Driver page gets "Record payment": `VanTripsDao.recordDriverPaymentNoTrip` writes a driver-only ledger credit plus a `van_remittance` payment row booked to the active shop.
 - The issue said "no database change", but the one-parent CHECK on `payment_transactions` refuses a payment with no trip. Drift 109 → 110, cloud `0257_payment_van_driver_parent.sql`: `payment_transactions.van_driver_id` (eighth parent). Older builds cannot store such a row, so raise the minimum build when v110 ships.

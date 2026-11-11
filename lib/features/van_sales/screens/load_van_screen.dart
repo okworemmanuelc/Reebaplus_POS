@@ -107,33 +107,62 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
       Theme.of(context).textTheme.bodySmall?.color ??
       Theme.of(context).iconTheme.color!;
 
-  @override
-  void initState() {
-    super.initState();
+  /// Pre-fill the driver and the store ONCE each, as soon as their data is
+  /// there. Done from build (not initState) because the lists may still be
+  /// loading on the first frame, and a pre-fill that only tries once then
+  /// leaves both pickers empty: two more taps on every load.
+  bool _sourcePrefilled = false;
+  bool _driverPrefilled = false;
+
+  void _prefill() {
+    final stores = ref.read(allStoresProvider).valueOrNull;
+    final trip = widget.trip;
+    StoreData? source;
+    VanDriverData? driver;
+    var sourceReady = false;
+    var driverReady = false;
+
+    if (!_sourcePrefilled && stores != null) {
+      sourceReady = true;
+      if (trip != null) {
+        // Restock: decided by the trip already on the road. Reading it from
+        // the trip (not a picker) is what stops a restock silently loading
+        // from a second warehouse, which v1 does not model.
+        for (final s in stores) {
+          if (s.id == trip.sourceStoreId) source = s;
+        }
+      } else {
+        // A van loads from a WAREHOUSE, never another van (spec §4.2).
+        // Auto-pick when there is only one candidate.
+        final warehouses = withoutVans(stores);
+        if (warehouses.length == 1) source = warehouses.first;
+      }
+    }
+    if (!_driverPrefilled) {
+      // Restock keeps its trip's driver; a new load starts from the van's
+      // usual driver, which the manager may change.
+      final van = ref.read(storeByIdProvider(widget.vanStoreId));
+      final wantedId = trip != null
+          ? trip.vanDriverId
+          : van.valueOrNull?.vanDriverId;
+      if (trip != null || van.hasValue) {
+        driver = _driverById(wantedId);
+        // Wait for the drivers list when there is a driver to find.
+        driverReady = wantedId == null || driver != null;
+      }
+    }
+    if (!sourceReady && !driverReady) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      // A van loads from a WAREHOUSE, never another van (spec §4.2: one source
-      // warehouse per trip). Auto-pick when there is only one candidate.
-      final warehouses = withoutVans(
-        ref.read(allStoresProvider).valueOrNull ?? const <StoreData>[],
-      );
-      final trip = widget.trip;
       setState(() {
-        if (trip != null) {
-          // Restock: both axes are decided by the trip already on the road.
-          // Reading them from the trip (not a picker) is what stops a restock
-          // silently loading from a second warehouse, which v1 does not model.
-          _driver = _driverById(trip.vanDriverId);
-          for (final s in ref.read(allStoresProvider).valueOrNull ??
-              const <StoreData>[]) {
-            if (s.id == trip.sourceStoreId) _sourceStore = s;
-          }
-          return;
+        if (sourceReady && !_sourcePrefilled) {
+          _sourcePrefilled = true;
+          _sourceStore ??= source;
         }
-        if (warehouses.length == 1) _sourceStore = warehouses.first;
-        // Pre-fill from the van's usual driver; the manager may change it.
-        final van = ref.read(storeByIdProvider(widget.vanStoreId)).valueOrNull;
-        _driver = _driverById(van?.vanDriverId);
+        if (driverReady && !_driverPrefilled) {
+          _driverPrefilled = true;
+          _driver ??= driver;
+        }
       });
     });
   }
@@ -153,29 +182,35 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
     setState(() => _driver = created);
   }
 
-  /// Re-ask which lines are underwater. Cheap and side-effect-free — the DAO
-  /// peeks the FIFO queue without drawing it down.
-  Future<void> _refreshBelowCost() async {
-    final source = _sourceStore;
-    if (source == null || _lines.isEmpty) {
-      if (mounted) setState(() => _belowCost = const {});
-      return;
-    }
-    final below = await ref.read(databaseProvider).vanTripsDao
+  /// Which lines are priced under what the goods cost. Asked ONCE, at
+  /// Dispatch (#790): asking on every keystroke made typing lag on a long
+  /// load. Cheap and side-effect-free: the DAO peeks the FIFO queue without
+  /// drawing it down.
+  Future<Set<String>> _computeBelowCost(String sourceStoreId) {
+    return ref
+        .read(databaseProvider)
+        .vanTripsDao
         .productsPricedBelowCost(
-      sourceStoreId: source.id,
-      lines: _lines
-          .map(
-            (l) => VanLoadLine(
-              productId: l.product.product.id,
-              quantity: l.quantity,
-              loadPriceKobo: l.loadPriceKobo,
-            ),
-          )
-          .toList(growable: false),
-    );
-    if (mounted) setState(() => _belowCost = below);
+          sourceStoreId: sourceStoreId,
+          lines: _lines
+              .map(
+                (l) => VanLoadLine(
+                  productId: l.product.product.id,
+                  quantity: l.quantity,
+                  loadPriceKobo: l.loadPriceKobo,
+                ),
+              )
+              .toList(growable: false),
+        );
   }
+
+  /// The add box's own controller and focus, captured from the Autocomplete so
+  /// the box can be cleared after a pick and focused again after a quantity.
+  TextEditingController? _addCtrl;
+  FocusNode? _addFocus;
+
+  /// The line whose quantity box should take the keyboard (the one just added).
+  String? _focusQtyFor;
 
   void _addProduct(ProductDataWithStock product) {
     final existing = _lines.where(
@@ -198,12 +233,14 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
           loadPriceKobo: product.product.retailerPriceKobo,
         ),
       );
+      // Straight to its quantity: type the number, press Done, and the
+      // keyboard is back in the add box for the next item.
+      _focusQtyFor = product.product.id;
     });
-    _refreshBelowCost();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _addCtrl?.clear());
   }
 
-  int get _totalValueKobo =>
-      _lines.fold<int>(0, (sum, l) => sum + l.valueKobo);
+  int get _totalValueKobo => _lines.fold<int>(0, (sum, l) => sum + l.valueKobo);
 
   int get _totalUnits => _lines.fold<int>(0, (sum, l) => sum + l.quantity);
 
@@ -254,9 +291,12 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
     // §9.1 #1 — the below-cost confirmation. It names the products and NEVER
     // the cost figure, so a manager without the cost-price permission still
     // gets the warning without being shown what they may not see.
-    if (_belowCost.isNotEmpty) {
+    final below = await _computeBelowCost(source.id);
+    if (!mounted) return;
+    setState(() => _belowCost = below);
+    if (below.isNotEmpty) {
       final names = _lines
-          .where((l) => _belowCost.contains(l.product.product.id))
+          .where((l) => below.contains(l.product.product.id))
           .map((l) => l.product.product.name)
           .join(', ');
       final proceed = await showDialog<bool>(
@@ -279,7 +319,7 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
           ],
         ),
       );
-      if (proceed != true) return;
+      if (proceed != true || !mounted) return;
     }
 
     final currentUser = ref.read(authProvider).currentUser;
@@ -374,13 +414,14 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
     final lex = ref.watch(industryLexiconProvider);
     // Empties are a Bar/Beverage concept. Every other trade must not be asked
     // to count crates it does not deal in.
-    final tracksCrates = businessTracksCrates(ref.watch(currentBusinessProvider));
-    final vanName = ref
-            .watch(storeByIdProvider(widget.vanStoreId))
-            .valueOrNull
-            ?.name ??
+    final tracksCrates = businessTracksCrates(
+      ref.watch(currentBusinessProvider),
+    );
+    final vanName =
+        ref.watch(storeByIdProvider(widget.vanStoreId)).valueOrNull?.name ??
         'Van';
     final drivers = ref.watch(vanDriversProvider);
+    if (!_sourcePrefilled || !_driverPrefilled) _prefill();
     final warehouses = withoutVans(
       ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[],
     );
@@ -388,171 +429,221 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
     final products = sourceId == null
         ? const <ProductDataWithStock>[]
         : (ref.watch(productsByStoreProvider(sourceId)).valueOrNull ??
-                const <ProductDataWithStock>[])
-            .where((p) => p.totalStock > 0)
-            .toList();
+                  const <ProductDataWithStock>[])
+              .where((p) => p.totalStock > 0)
+              .toList();
 
+    final side = context.getRSize(20);
     return GlassyScaffold(
       title: _isRestock ? 'Restock Van' : 'Load Van',
       subtitle: vanName,
-      body: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(
-          context.getRSize(20),
-          context.getRSize(20),
-          context.getRSize(20),
-          context.getRSize(20) + context.deviceBottomPadding,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (_isRestock)
-              // Both axes are FIXED by the open trip, so they are stated, not
-              // offered: a restock goes to the driver who is out, from the
-              // warehouse the trip loads from (one per trip in v1, spec §4.2).
-              _FixedTripCard(
-                driverName: _driver?.name ?? 'No driver assigned',
-                sourceName: _sourceStore?.name ?? 'Warehouse',
-              )
-            else ...[
-              // Required (#787). '+' = add a new one.
-              AppDropdown<String>(
-                key: const Key('load-van-driver'),
-                labelText: 'Driver',
-                hintText: 'Who is taking it out?',
-                value: _driver?.id,
-                prefixIcon: Icon(
-                  AppIcons.managerRole,
-                  size: 14,
-                  color: _subtext,
-                ),
-                items: [
-                  ...drivers.map(
-                    (d) => DropdownMenuItem(value: d.id, child: Text(d.name)),
+      // #790: one scroll view, with the add box PINNED so the next item can be
+      // added without scrolling back up a long load.
+      body: CustomScrollView(
+        slivers: [
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(side, side, side, 0),
+            sliver: SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (_isRestock)
+                    // Both axes are FIXED by the open trip, so they are stated, not
+                    // offered: a restock goes to the driver who is out, from the
+                    // warehouse the trip loads from (one per trip in v1, spec §4.2).
+                    _FixedTripCard(
+                      driverName: _driver?.name ?? 'No driver assigned',
+                      sourceName: _sourceStore?.name ?? 'Warehouse',
+                    )
+                  else ...[
+                    // Required (#787). '+' = add a new one.
+                    AppDropdown<String>(
+                      key: const Key('load-van-driver'),
+                      labelText: 'Driver',
+                      hintText: 'Who is taking it out?',
+                      value: _driver?.id,
+                      prefixIcon: Icon(
+                        AppIcons.managerRole,
+                        size: 14,
+                        color: _subtext,
+                      ),
+                      items: [
+                        ...drivers.map(
+                          (d) => DropdownMenuItem(
+                            value: d.id,
+                            child: Text(d.name),
+                          ),
+                        ),
+                        const DropdownMenuItem(
+                          value: '+',
+                          child: Text('Add a new driver...'),
+                        ),
+                      ],
+                      onChanged: (v) {
+                        if (v == '+') {
+                          _addDriver();
+                        } else {
+                          setState(() => _driver = _driverById(v));
+                        }
+                      },
+                    ),
+                    SizedBox(height: context.getRSize(16)),
+
+                    AppDropdown<StoreData>(
+                      labelText: 'Load from',
+                      hintText:
+                          'Which store are the ${lex.itemPluralLower} coming '
+                          'out of?',
+                      value: _sourceStore,
+                      prefixIcon: Icon(
+                        AppIcons.warehouse,
+                        size: 14,
+                        color: _subtext,
+                      ),
+                      items: warehouses
+                          .map(
+                            (s) =>
+                                DropdownMenuItem(value: s, child: Text(s.name)),
+                          )
+                          .toList(),
+                      onChanged: (v) => setState(() {
+                        _sourceStore = v;
+                        // The lines were priced and stocked against the old store.
+                        _lines.clear();
+                        _belowCost = const {};
+                      }),
+                    ),
+                  ],
+                  SizedBox(height: context.getRSize(20)),
+                  Text(
+                    _isRestock
+                        ? 'What is going on board now'
+                        : 'What is going on board',
+                    style: t.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                  const DropdownMenuItem(
-                    value: '+',
-                    child: Text('Add a new driver...'),
+                  SizedBox(height: context.getRSize(4)),
+                ],
+              ),
+            ),
+          ),
+          PinnedHeaderSliver(
+            child: Container(
+              // Opaque, so rows scrolling under the pinned box do not show
+              // through it.
+              color: t.scaffoldBackgroundColor,
+              padding: EdgeInsets.symmetric(
+                horizontal: side,
+                vertical: context.getRSize(6),
+              ),
+              child: Autocomplete<ProductDataWithStock>(
+                displayStringForOption: (p) => p.product.name,
+                optionsBuilder: (TextEditingValue v) {
+                  if (v.text.isEmpty) return const Iterable.empty();
+                  final q = v.text.toLowerCase();
+                  final onLoad = {for (final l in _lines) l.product.product.id};
+                  return products.where(
+                    (p) =>
+                        !onLoad.contains(p.product.id) &&
+                        p.product.name.toLowerCase().contains(q),
+                  );
+                },
+                onSelected: _addProduct,
+                fieldViewBuilder:
+                    (ctx, controller, focusNode, onEditingComplete) {
+                      _addCtrl = controller;
+                      _addFocus = focusNode;
+                      return AppInput(
+                        key: const Key('load-van-add'),
+                        controller: controller,
+                        focusNode: focusNode,
+                        labelText: 'Add a ${lex.itemLower}',
+                        onFieldSubmitted: (_) => onEditingComplete(),
+                        prefixIcon: Icon(
+                          AppIcons.inventory,
+                          size: 14,
+                          color: _subtext,
+                        ),
+                        hintText: _sourceStore == null
+                            ? 'Pick a store to load from first'
+                            : 'Start typing a ${lex.itemLower} name…',
+                        enabled: _sourceStore != null,
+                      );
+                    },
+              ),
+            ),
+          ),
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(side, context.getRSize(6), side, 0),
+            sliver: _lines.isEmpty
+                ? SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        vertical: context.getRSize(16),
+                      ),
+                      child: Text(
+                        'Nothing on the load yet.',
+                        style: t.textTheme.bodySmall?.copyWith(color: _subtext),
+                      ),
+                    ),
+                  )
+                : SliverList.builder(
+                    itemCount: _lines.length,
+                    itemBuilder: (_, i) {
+                      final line = _lines[i];
+                      final id = line.product.product.id;
+                      return _LineRow(
+                        key: ValueKey('load-line-$id'),
+                        line: line,
+                        showCrates: tracksCrates,
+                        isBelowCost: _belowCost.contains(id),
+                        focusQty: _focusQtyFor == id,
+                        onChanged: () => setState(() {}),
+                        onQtyDone: () {
+                          _focusQtyFor = null;
+                          _addFocus?.requestFocus();
+                        },
+                        onRemove: () => setState(() {
+                          _lines.remove(line);
+                          _belowCost = {..._belowCost}..remove(id);
+                        }),
+                      );
+                    },
+                  ),
+          ),
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(
+              side,
+              context.getRSize(16),
+              side,
+              side + context.deviceBottomPadding,
+            ),
+            sliver: SliverToBoxAdapter(
+              child: Column(
+                children: [
+                  _TotalCard(
+                    units: _totalUnits,
+                    valueKobo: _totalValueKobo,
+                    driverName: _driver?.name,
+                  ),
+                  SizedBox(height: context.getRSize(20)),
+                  AppButton(
+                    key: const Key('load-van-send'),
+                    text: _submitting
+                        ? 'Sending…'
+                        : _isRestock
+                        ? 'Send Restock'
+                        : 'Dispatch Load',
+                    icon: AppIcons.vanDelivery,
+                    onPressed: _submitting ? null : _dispatch,
+                    isFullWidth: true,
                   ),
                 ],
-                onChanged: (v) {
-                  if (v == '+') {
-                    _addDriver();
-                  } else {
-                    setState(() => _driver = _driverById(v));
-                  }
-                },
-              ),
-              SizedBox(height: context.getRSize(16)),
-
-              AppDropdown<StoreData>(
-                labelText: 'Load from',
-                hintText: 'Which store are the ${lex.itemPluralLower} coming '
-                    'out of?',
-                value: _sourceStore,
-                prefixIcon: Icon(
-                  AppIcons.warehouse,
-                  size: 14,
-                  color: _subtext,
-                ),
-                items: warehouses
-                    .map((s) => DropdownMenuItem(value: s, child: Text(s.name)))
-                    .toList(),
-                onChanged: (v) => setState(() {
-                  _sourceStore = v;
-                  // The lines were priced and stocked against the old store.
-                  _lines.clear();
-                  _belowCost = const {};
-                }),
-              ),
-            ],
-            SizedBox(height: context.getRSize(20)),
-
-            Text(
-              _isRestock
-                  ? 'What is going on board now'
-                  : 'What is going on board',
-              style: t.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w700,
               ),
             ),
-            SizedBox(height: context.getRSize(10)),
-
-            Autocomplete<ProductDataWithStock>(
-              displayStringForOption: (p) => p.product.name,
-              optionsBuilder: (TextEditingValue v) {
-                if (v.text.isEmpty) return const Iterable.empty();
-                final q = v.text.toLowerCase();
-                return products.where(
-                  (p) => p.product.name.toLowerCase().contains(q),
-                );
-              },
-              onSelected: _addProduct,
-              fieldViewBuilder: (ctx, controller, focusNode, onEditingComplete) {
-                return AppInput(
-                  controller: controller,
-                  focusNode: focusNode,
-                  labelText: 'Add a ${lex.itemLower}',
-                  onFieldSubmitted: (_) => onEditingComplete(),
-                  prefixIcon: Icon(
-                    AppIcons.inventory,
-                    size: 14,
-                    color: _subtext,
-                  ),
-                  hintText: _sourceStore == null
-                      ? 'Pick a store to load from first'
-                      : 'Start typing a ${lex.itemLower} name…',
-                  enabled: _sourceStore != null,
-                );
-              },
-            ),
-            SizedBox(height: context.getRSize(12)),
-
-            if (_lines.isEmpty)
-              Padding(
-                padding: EdgeInsets.symmetric(vertical: context.getRSize(16)),
-                child: Text(
-                  'Nothing on the load yet.',
-                  style: t.textTheme.bodySmall?.copyWith(color: _subtext),
-                ),
-              )
-            else
-              ..._lines.map(
-                (line) => _LineCard(
-                  line: line,
-                  showCrates: tracksCrates,
-                  isBelowCost: _belowCost.contains(line.product.product.id),
-                  onChanged: () {
-                    setState(() {});
-                    _refreshBelowCost();
-                  },
-                  onRemove: () {
-                    setState(() => _lines.remove(line));
-                    _refreshBelowCost();
-                  },
-                ),
-              ),
-
-            SizedBox(height: context.getRSize(16)),
-            _TotalCard(
-              units: _totalUnits,
-              valueKobo: _totalValueKobo,
-              driverName: _driver?.name,
-            ),
-            SizedBox(height: context.getRSize(20)),
-
-            AppButton(
-              key: const Key('load-van-send'),
-              text: _submitting
-                  ? 'Sending…'
-                  : _isRestock
-                  ? 'Send Restock'
-                  : 'Dispatch Load',
-              icon: AppIcons.vanDelivery,
-              onPressed: _submitting ? null : _dispatch,
-              isFullWidth: true,
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -622,40 +713,105 @@ class _FixedTripCard extends StatelessWidget {
   }
 }
 
-/// One line on the load: quantity, the editable load price, and — for a crate
-/// business only — the shell memo count.
-class _LineCard extends StatelessWidget {
+/// One line on the load, compact (#790): the name, a minus / quantity / plus
+/// stepper, and the line total. The load price and the crate count are behind
+/// "Edit", because the price defaults to the shop price and is rarely changed.
+/// A real load is 16 to 30 lines; the old three-box card made that a long
+/// scroll and a keyboard trip per line.
+class _LineRow extends StatefulWidget {
   final _DraftLine line;
 
-  /// Whether to offer the empty-crate memo field. Passed down rather than read
-  /// here so the whole screen decides the crate question once.
+  /// Whether to offer the empty-crate count. Passed down so the whole screen
+  /// decides the crate question once.
   final bool showCrates;
   final bool isBelowCost;
+
+  /// True for the line just added: its quantity box takes the keyboard.
+  final bool focusQty;
   final VoidCallback onChanged;
   final VoidCallback onRemove;
 
-  const _LineCard({
+  /// The keyboard's Done on the quantity box.
+  final VoidCallback onQtyDone;
+
+  const _LineRow({
+    super.key,
     required this.line,
     required this.showCrates,
     required this.isBelowCost,
+    required this.focusQty,
     required this.onChanged,
     required this.onRemove,
+    required this.onQtyDone,
   });
+
+  @override
+  State<_LineRow> createState() => _LineRowState();
+}
+
+class _LineRowState extends State<_LineRow> {
+  late final TextEditingController _qty = TextEditingController(
+    text: widget.line.quantity.toString(),
+  );
+  final FocusNode _qtyFocus = FocusNode();
+  bool _editing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.focusQty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _qtyFocus.requestFocus();
+        _qty.selection = TextSelection(
+          baseOffset: 0,
+          extentOffset: _qty.text.length,
+        );
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _qty.dispose();
+    _qtyFocus.dispose();
+    super.dispose();
+  }
+
+  void _bump(int by) {
+    final line = widget.line;
+    final next = line.quantity + by;
+    if (next < 1 || next > line.product.totalStock) return;
+    line.quantity = next;
+    _qty.text = next.toString();
+    widget.onChanged();
+  }
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     final semantic = t.extension<AppSemanticColors>()!;
     final subtext = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
+    final line = widget.line;
+    final id = line.product.product.id;
+    final step = BoxConstraints.tightFor(
+      width: context.getRSize(40),
+      height: context.getRSize(40),
+    );
 
     return Container(
-      margin: EdgeInsets.only(bottom: context.getRSize(10)),
-      padding: EdgeInsets.all(context.getRSize(14)),
+      margin: EdgeInsets.only(bottom: context.getRSize(8)),
+      padding: EdgeInsets.fromLTRB(
+        context.getRSize(12),
+        context.getRSize(6),
+        context.getRSize(4),
+        context.getRSize(8),
+      ),
       decoration: BoxDecoration(
         color: t.colorScheme.surface.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: isBelowCost ? semantic.warning : t.dividerColor,
+          color: widget.isBelowCost ? semantic.warning : t.dividerColor,
         ),
       ),
       child: Column(
@@ -666,84 +822,146 @@ class _LineCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   line.product.product.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: t.textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
               IconButton(
-                onPressed: onRemove,
+                key: Key('load-edit-$id'),
+                constraints: step,
+                padding: EdgeInsets.zero,
+                onPressed: () => setState(() => _editing = !_editing),
                 icon: Icon(
-                  AppIcons.close,
-                  size: context.getRSize(14),
+                  AppIcons.edit,
+                  size: context.getRSize(16),
+                  color: _editing ? t.colorScheme.primary : subtext,
                 ),
+                tooltip: 'Edit price',
+              ),
+              IconButton(
+                key: Key('load-remove-$id'),
+                constraints: step,
+                padding: EdgeInsets.zero,
+                onPressed: widget.onRemove,
+                icon: Icon(AppIcons.close, size: context.getRSize(16)),
                 tooltip: 'Remove',
               ),
             ],
           ),
-          Text(
-            'In stock: ${formatQty(line.product.totalStock)}',
-            style: t.textTheme.bodySmall?.copyWith(color: subtext),
-          ),
-          SizedBox(height: context.getRSize(10)),
           Row(
             children: [
               Expanded(
-                child: AppInput(
-                  labelText: 'Quantity',
-                  initialValue: line.quantity.toString(),
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  onChanged: (v) {
-                    line.quantity = int.tryParse(v.trim()) ?? 0;
-                    onChanged();
-                  },
+                child: Text(
+                  'In stock ${formatQty(line.product.totalStock)}  ·  '
+                  '${formatCurrency(line.loadPriceKobo / 100)} each\n'
+                  'Line total ${formatCurrency(line.valueKobo / 100)}',
+                  key: Key('load-line-info-$id'),
+                  style: t.textTheme.bodySmall?.copyWith(color: subtext),
                 ),
               ),
-              SizedBox(width: context.getRSize(10)),
-              Expanded(
-                child: AppInput(
-                  // The default is the retail tier; this field is why it is a
-                  // default and not a rule (spec §4.3).
-                  labelText: 'Load price',
-                  initialValue: (line.loadPriceKobo / 100).toStringAsFixed(0),
+              IconButton(
+                key: Key('load-minus-$id'),
+                constraints: step,
+                padding: EdgeInsets.zero,
+                onPressed: () => _bump(-1),
+                icon: Icon(AppIcons.minus, size: context.getRSize(18)),
+                tooltip: 'One less',
+              ),
+              SizedBox(
+                width: context.getRSize(60),
+                child: TextField(
+                  key: Key('load-qty-$id'),
+                  controller: _qty,
+                  focusNode: _qtyFocus,
+                  textAlign: TextAlign.center,
                   keyboardType: TextInputType.number,
+                  textInputAction: TextInputAction.done,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  prefixText: activeCurrencySymbol,
+                  style: t.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(
+                      vertical: context.getRSize(8),
+                    ),
+                  ),
+                  onTap: () => _qty.selection = TextSelection(
+                    baseOffset: 0,
+                    extentOffset: _qty.text.length,
+                  ),
                   onChanged: (v) {
-                    line.loadPriceKobo = (int.tryParse(v.trim()) ?? 0) * 100;
-                    onChanged();
+                    line.quantity = int.tryParse(v.trim()) ?? 0;
+                    widget.onChanged();
                   },
+                  onSubmitted: (_) => widget.onQtyDone(),
                 ),
+              ),
+              IconButton(
+                key: Key('load-plus-$id'),
+                constraints: step,
+                padding: EdgeInsets.zero,
+                onPressed: () => _bump(1),
+                icon: Icon(AppIcons.add, size: context.getRSize(18)),
+                tooltip: 'One more',
               ),
             ],
           ),
-          if (showCrates) ...[
+          if (_editing) ...[
             SizedBox(height: context.getRSize(10)),
-            AppInput(
-              // §11 / #726 — the crates that must come home with this load:
-              // the full crates' own shells plus any extra empties handed over
-              // for swaps. Counted back at the return (empties + unsold full
-              // crates); what is missing shows as lost crates. No money moves.
-              labelText: 'Crates to bring back (optional)',
-              initialValue: line.shellsOut == 0 ? '' : line.shellsOut.toString(),
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              hintText: '0',
-              onChanged: (v) {
-                line.shellsOut = int.tryParse(v.trim()) ?? 0;
-                onChanged();
-              },
-            ),
-            SizedBox(height: context.getRSize(4)),
-            Text(
-              'Crates leaving with this load, including any extra empties for '
-              'swaps. Used to spot lost crates at close.',
-              style: Theme.of(context).textTheme.bodySmall,
+            Padding(
+              padding: EdgeInsets.only(right: context.getRSize(8)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  AppInput(
+                    key: Key('load-price-$id'),
+                    // The default is the shop price; this field is why it is
+                    // a default and not a rule (spec §4.3).
+                    labelText: 'Load price',
+                    initialValue: (line.loadPriceKobo / 100).toStringAsFixed(0),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    prefixText: activeCurrencySymbol,
+                    onChanged: (v) {
+                      line.loadPriceKobo = (int.tryParse(v.trim()) ?? 0) * 100;
+                      widget.onChanged();
+                    },
+                  ),
+                  if (widget.showCrates) ...[
+                    SizedBox(height: context.getRSize(10)),
+                    AppInput(
+                      // §11 / #726: the crates that must come home with this
+                      // load. Counted back at the return; what is missing
+                      // shows as lost crates. No money moves.
+                      labelText: 'Crates to bring back (optional)',
+                      initialValue: line.shellsOut == 0
+                          ? ''
+                          : line.shellsOut.toString(),
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      hintText: '0',
+                      onChanged: (v) {
+                        line.shellsOut = int.tryParse(v.trim()) ?? 0;
+                        widget.onChanged();
+                      },
+                    ),
+                    SizedBox(height: context.getRSize(4)),
+                    Text(
+                      'Crates leaving with this load, including any extra '
+                      'empties for swaps. Used to spot lost crates at close.',
+                      style: t.textTheme.bodySmall,
+                    ),
+                  ],
+                ],
+              ),
             ),
           ],
-          if (isBelowCost) ...[
-            SizedBox(height: context.getRSize(10)),
+          if (widget.isBelowCost) ...[
+            SizedBox(height: context.getRSize(6)),
             Row(
               children: [
                 Icon(
@@ -754,7 +972,7 @@ class _LineCard extends StatelessWidget {
                 SizedBox(width: context.getRSize(8)),
                 Expanded(
                   child: Text(
-                    // NEVER the figure — spec §9.1 #1. The screen is not given
+                    // NEVER the figure (spec §9.1 #1). The screen is not given
                     // the cost, so it cannot print it.
                     'This price is below what these goods cost you.',
                     style: t.textTheme.bodySmall?.copyWith(
@@ -765,11 +983,6 @@ class _LineCard extends StatelessWidget {
               ],
             ),
           ],
-          SizedBox(height: context.getRSize(8)),
-          Text(
-            'Line total ${formatCurrency(line.valueKobo / 100)}',
-            style: t.textTheme.bodySmall?.copyWith(color: subtext),
-          ),
         ],
       ),
     );
@@ -819,7 +1032,7 @@ class _TotalCard extends StatelessWidget {
             driverName == null
                 ? 'The driver signs for this value.'
                 : '$driverName signs for this value until it is sold, '
-                    'returned or paid in.',
+                      'returned or paid in.',
             style: t.textTheme.bodySmall?.copyWith(color: subtext),
           ),
         ],
