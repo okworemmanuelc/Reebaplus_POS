@@ -7,7 +7,15 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
     with _$ExpensesDaoMixin, BusinessScopedDao<AppDatabase> {
   ExpensesDao(super.db);
 
-  Stream<List<ExpenseWithCategory>> watchAll({String? storeId}) {
+  /// [from] / [to] (#739, PRD #680) optionally bound the read to expenses whose
+  /// `expense_date` is in `[from, to]` (either may be null = open), so a screen
+  /// that shows one period does not hold the whole history. The screen's own
+  /// period test still decides what counts.
+  Stream<List<ExpenseWithCategory>> watchAll({
+    String? storeId,
+    DateTime? from,
+    DateTime? to,
+  }) {
     final query = select(expenses).join([
       leftOuterJoin(
         expenseCategories,
@@ -18,6 +26,12 @@ class ExpensesDao extends DatabaseAccessor<AppDatabase>
     query.where(whereBusiness(expenses) & expenses.isDeleted.not());
     if (storeId != null) {
       query.where(expenses.storeId.equals(storeId));
+    }
+    if (from != null) {
+      query.where(expenses.expenseDate.isBiggerOrEqualValue(from));
+    }
+    if (to != null) {
+      query.where(expenses.expenseDate.isSmallerOrEqualValue(to));
     }
     query.orderBy([OrderingTerm.desc(expenses.createdAt)]);
 

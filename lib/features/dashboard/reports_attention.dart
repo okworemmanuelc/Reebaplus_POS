@@ -21,7 +21,6 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 
 /// Pure derivation of whether the Home Reports button shows its attention dot.
@@ -103,15 +102,10 @@ final reportsAttentionDotProvider = Provider<bool>((ref) {
       ref.watch(viewerScopedPendingStockRequestsProvider).length +
       ref.watch(viewerScopedPendingQuickSaleRequestsProvider).length;
 
-  final counts =
-      ref.watch(allStockCountsProvider).valueOrNull ??
-      const <StockCountData>[];
-  // Compare wall-clock createdAt (when the count was saved), not the ordered
-  // list head — watchAllForBusiness orders by businessDate first, so a
-  // back-dated count saved today would not be counts.first.
-  final latestStockCountAt = counts.isEmpty
-      ? null
-      : counts.map((c) => c.createdAt).reduce((a, b) => a.isAfter(b) ? a : b);
+  // #739 - the newest save time straight from a LIMIT 1 query, not the max
+  // over every session. Wall-clock createdAt (when the count was saved), so a
+  // back-dated count saved today still counts.
+  final latestStockCountAt = ref.watch(latestStockCountAtProvider).valueOrNull;
 
   final lastReviewedAt = ref.watch(reconReviewMarkerProvider);
 

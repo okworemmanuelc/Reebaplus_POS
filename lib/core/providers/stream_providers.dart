@@ -1156,14 +1156,6 @@ final viewerScopedOutgoingTransfersProvider = Provider<List<StockTransferData>>(
   },
 );
 
-/// Completed stock transfers (received + cancelled), business-wide, newest
-/// first. Used by the history tab on the Incoming Transfers screen.
-final stockTransferHistoryProvider =
-    businessScopedStream<List<StockTransferData>>(
-  (ref, db, businessId) => db.stockTransferDao.watchHistory(),
-  whenAbsent: const [],
-);
-
 /// Completed stock transfers (received + cancelled) involving a specific store in either direction, newest
 /// first. Used by the Transfer History section in the store details hub.
 final storeTransferHistoryProvider =
@@ -2355,6 +2347,13 @@ final manufacturerProductsProvider =
 final allStockCountsProvider = businessScopedStream<List<StockCountData>>(
   (ref, db, businessId) => db.stockCountsDao.watchAllForBusiness(),
   whenAbsent: const [],
+);
+
+/// #739 - just the save time of the newest count session (or null), for the
+/// Reports attention dot; see `StockCountsDao.watchLatestCountCreatedAt`.
+final latestStockCountAtProvider = businessScopedStream<DateTime?>(
+  (ref, db, businessId) => db.stockCountsDao.watchLatestCountCreatedAt(),
+  whenAbsent: null,
 );
 
 /// The persisted day-close snapshot for a calendar day (`YYYY-MM-DD`), or null

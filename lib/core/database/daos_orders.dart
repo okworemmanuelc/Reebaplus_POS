@@ -307,6 +307,72 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
     return query.watch().map(_foldOrdersWithItems);
   }
 
+  /// #739 (PRD #680) - a cheap change signal for one staff member's orders:
+  /// their count plus the newest `last_updated_at`. It re-emits whenever any of
+  /// their orders is added or edited, WITHOUT loading the orders, so a screen
+  /// can re-run [readStaffOrdersInPages] only when something changed.
+  Stream<String> watchStaffOrdersStamp(String staffId) {
+    final count = orders.id.count();
+    final newest = orders.lastUpdatedAt.max();
+    final query = selectOnly(orders)
+      ..addColumns([count, newest])
+      ..where(whereBusiness(orders) & orders.staffId.equals(staffId));
+    return query.watchSingle().map(
+      (r) => '${r.read(count)}|${r.read(newest)?.millisecondsSinceEpoch}',
+    );
+  }
+
+  /// #739 (PRD #680) - one staff member's whole order history, handed to
+  /// [onPage] [pageSize] orders at a time (same [OrderWithItems] shape and
+  /// newest-first order as [watchAllOrdersWithItems]) so the caller folds a
+  /// running total instead of holding every order and item line at once.
+  /// Business-scoped. Keyset-paged on (created_at, id).
+  Future<void> readStaffOrdersInPages(
+    String staffId,
+    void Function(List<OrderWithItems> page) onPage, {
+    int pageSize = 200,
+  }) async {
+    DateTime? lastAt;
+    String? lastId;
+    while (true) {
+      final cursorAt = lastAt;
+      final cursorId = lastId;
+      final idQuery = select(orders)
+        ..where((o) {
+          var p = whereBusiness(o) & o.staffId.equals(staffId);
+          if (cursorAt != null && cursorId != null) {
+            p =
+                p &
+                (o.createdAt.isSmallerThanValue(cursorAt) |
+                    (o.createdAt.equals(cursorAt) &
+                        o.id.isSmallerThanValue(cursorId)));
+          }
+          return p;
+        })
+        ..orderBy([
+          (o) => OrderingTerm.desc(o.createdAt),
+          (o) => OrderingTerm.desc(o.id),
+        ])
+        ..limit(pageSize);
+      final heads = await idQuery.get();
+      if (heads.isEmpty) return;
+      final query = select(orders).join([
+        leftOuterJoin(orderItems, orderItems.orderId.equalsExp(orders.id)),
+        leftOuterJoin(customers, customers.id.equalsExp(orders.customerId)),
+        leftOuterJoin(products, products.id.equalsExp(orderItems.productId)),
+      ]);
+      query.where(orders.id.isIn([for (final h in heads) h.id]));
+      query.orderBy([
+        OrderingTerm.desc(orders.createdAt),
+        OrderingTerm.desc(orders.id),
+      ]);
+      onPage(_foldOrdersWithItems(await query.get()));
+      if (heads.length < pageSize) return;
+      lastAt = heads.last.createdAt;
+      lastId = heads.last.id;
+    }
+  }
+
   /// Folds flat order ⨝ item ⨝ customer ⨝ product join rows into one
   /// [OrderWithItems] per order, keeping the query's order.
   List<OrderWithItems> _foldOrdersWithItems(List<TypedResult> rows) {

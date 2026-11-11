@@ -78,6 +78,10 @@ class _StubMarker extends ReconReviewMarkerNotifier {
   DateTime? build() => _value;
 }
 
+DateTime? _newest(List<StockCountData> counts) => counts.isEmpty
+    ? null
+    : counts.map((c) => c.createdAt).reduce((a, b) => a.isAfter(b) ? a : b);
+
 /// Drives [reportsAttentionDotProvider] through its input providers only.
 Future<bool> _evaluateDot({
   List<StockAdjustmentRequestData> stockRequests = const [],
@@ -91,13 +95,17 @@ Future<bool> _evaluateDot({
           .overrideWith((ref) => stockRequests),
       viewerScopedPendingQuickSaleRequestsProvider
           .overrideWith((ref) => quickSaleRequests),
-      allStockCountsProvider.overrideWith((ref) => Stream.value(counts)),
+      // #739: the badge reads only the newest save time (a LIMIT 1 query; the
+      // DB side is proven in home_profile_badge_narrow_test.dart).
+      latestStockCountAtProvider.overrideWith(
+        (ref) => Stream.value(_newest(counts)),
+      ),
       reconReviewMarkerProvider.overrideWith(() => _StubMarker(lastReviewedAt)),
     ],
   );
   addTearDown(container.dispose);
   // Let the overridden stream emit before reading the derived provider.
-  await container.read(allStockCountsProvider.future);
+  await container.read(latestStockCountAtProvider.future);
   return container.read(reportsAttentionDotProvider);
 }
 
@@ -256,12 +264,12 @@ void main() {
           viewerScopedPendingStockRequestsProvider.overrideWith((ref) => const []),
           viewerScopedPendingQuickSaleRequestsProvider
               .overrideWith((ref) => const []),
-          allStockCountsProvider
-              .overrideWith((ref) => Stream.value([_count(DateTime(2026, 1, 1))])),
+          latestStockCountAtProvider
+              .overrideWith((ref) => Stream.value(DateTime(2026, 1, 1))),
         ],
       );
       addTearDown(container.dispose);
-      await container.read(allStockCountsProvider.future);
+      await container.read(latestStockCountAtProvider.future);
 
       // A count exists and was never reviewed → dot on.
       expect(container.read(reportsAttentionDotProvider), isTrue);

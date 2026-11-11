@@ -7,6 +7,10 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #739: Home, Profile and Reports badge load only what they show (2026-11-11, branch `perf/739-narrow-home-profile-badge`)
+- Home reads only the period's orders (`periodOrdersProvider`, #549 cancel-day rule kept) and expenses (`watchAll(from, to)`), pending count from `pendingOrdersProvider`; `[perf] home figures` timing added. Profile folds its 3 figures page by page (`readStaffOrdersInPages`, re-run on a cheap stamp). Reports badge uses a LIMIT 1 `watchLatestCountCreatedAt`. Deleted unused `stockTransferHistoryProvider` (`allPendingTransfersProvider` is still used by two viewer-scoped providers, kept).
+- Comparison test: `test/dashboard/home_profile_badge_narrow_test.dart`. It needs the history-shop fixture, which is broken on main (#759, van dispatch FK failure).
+
 ### Issue #774: Same-name products in the cart (Coke 35cl PET vs Bottle) (2026-11-10, branch `fix/774-cart-same-name-lines`)
 - Cause: `CartService.addItem` matched lines by product id + name, but `updateQty`, `setLineDiscount`, `setCustomPrice` and `removeItem` matched by name only. With two same-name products, edits landed on the first line (the edit sheet's Save copied one line's qty/price/discount onto the other) and Remove deleted both (Undo restored one).
 - Fix: all four now take `(productId, productName)` and go through one `_isLine` check (id + name; Quick Sale lines have a null id). Callers in the cart screen, Edit Item sheet and Product Details pass the line's id.

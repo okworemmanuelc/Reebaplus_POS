@@ -2902,6 +2902,21 @@ class StockCountsDao extends DatabaseAccessor<AppDatabase>
         .watch();
   }
 
+  /// #739 (PRD #680) - when the newest count session was SAVED (wall-clock
+  /// `created_at`, not the business date), or null when there is none. One
+  /// `ORDER BY created_at DESC LIMIT 1` row of one column, for the Home Reports
+  /// attention dot, which used to watch every session just to find this.
+  Stream<DateTime?> watchLatestCountCreatedAt() {
+    final query = selectOnly(stockCounts)
+      ..addColumns([stockCounts.createdAt])
+      ..where(whereBusiness(stockCounts))
+      ..orderBy([OrderingTerm.desc(stockCounts.createdAt)])
+      ..limit(1);
+    return query.watch().map(
+      (rows) => rows.isEmpty ? null : rows.first.read(stockCounts.createdAt),
+    );
+  }
+
   /// #683 — the count sessions one reconciliation period needs, and the
   /// window of shortage rows they can own.
   ///
