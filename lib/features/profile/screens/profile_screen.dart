@@ -38,9 +38,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   /// The signed-in user's own orders WITH their item lines (#195) — the lines
   /// are what "Sales Volume" is summed from, so the figure is the same
   /// deposit-exclusive Total Sales every other surface reports.
-  List<OrderWithItems> _staffOrders = [];
+  // #739 (PRD #680) - the three headline figures, folded page by page from the
+  // staff member's history instead of holding every order and item line.
+  int _totalOrders = 0;
+  int _completedOrders = 0;
+  int _salesKobo = 0;
   List<StoreData> _stores = [];
-  StreamSubscription<List<OrderWithItems>>? _ordersSub;
+  StreamSubscription<void>? _ordersSub;
   bool _contentReady = false;
 
   @override
@@ -64,13 +68,38 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       // (architecture.md invariant #5). The joined read also carries the item
       // lines "Sales Volume" is summed from (#195).
       _ordersSub = db.ordersDao
-          .watchAllOrdersWithItems(staffId: user.id)
-          .listen((data) {
-            if (mounted) setState(() => _staffOrders = data);
+          .watchStaffOrdersStamp(user.id)
+          .asyncMap((_) => _foldStaffOrders(db, user.id))
+          .listen((f) {
+            if (!mounted) return;
+            setState(() {
+              _totalOrders = f.total;
+              _completedOrders = f.completed;
+              _salesKobo = f.salesKobo;
+            });
           });
 
       setState(() => _contentReady = true);
     });
+  }
+
+  /// Same sums the screen always showed (#712 adjustments are not orders; Sales
+  /// Volume is [computeTotalSalesKobo]), added up per page. Both are per-order
+  /// so the page totals add to the whole-history figure exactly.
+  Future<({int total, int completed, int salesKobo})> _foldStaffOrders(
+    AppDatabase db,
+    String staffId,
+  ) async {
+    var total = 0;
+    var completed = 0;
+    var sales = 0;
+    await db.ordersDao.readStaffOrdersInPages(staffId, (page) {
+      final orders = page.where((o) => o.order.kind != 'adjustment');
+      total += orders.length;
+      completed += orders.where((o) => o.order.status == 'completed').length;
+      sales += computeTotalSalesKobo(page);
+    });
+    return (total: total, completed: completed, salesKobo: sales);
   }
 
   @override
@@ -238,12 +267,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   List<ProfileStat> _buildStats() {
-    final allOrders = _staffOrders;
-    // #712 — a part return nets the sales money below but is not an order.
-    final orders = allOrders.where((o) => o.order.kind != 'adjustment').toList();
-    final completed = orders
-        .where((o) => o.order.status == 'completed')
-        .toList();
     // Sales volume is recognized at checkout ('pending'), not at the ceremonial
     // Confirm ('completed') — `computeTotalSalesKobo` applies that rule, and the
     // "Completed" stat below stays a true lifecycle count.
@@ -252,17 +275,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     // deposit-exclusive). It used to sum the order header's `netAmountKobo`,
     // which bundles the refundable crate deposit (contra US 5), so this stat
     // disagreed with every other "sales" figure in the app.
-    final totalSales = computeTotalSalesKobo(allOrders) / 100.0;
+    final totalSales = _salesKobo / 100.0;
     return [
       ProfileStat(
         label: 'Total Orders',
-        value: orders.length.toString(),
+        value: _totalOrders.toString(),
         icon: AppIcons.receipt,
         color: Theme.of(context).colorScheme.primary,
       ),
       ProfileStat(
         label: 'Completed',
-        value: completed.length.toString(),
+        value: _completedOrders.toString(),
         icon: AppIcons.checkDouble,
         color: _fixed.green,
       ),

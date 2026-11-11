@@ -9,6 +9,7 @@ import 'package:reebaplus_pos/core/theme/expense_colors.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/date_period.dart';
+import 'package:reebaplus_pos/core/utils/perf_log.dart';
 import 'package:reebaplus_pos/shared/widgets/shared_scaffold.dart';
 import 'package:reebaplus_pos/shared/widgets/menu_button.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
@@ -89,19 +90,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   // DB-backed data
-  List<OrderWithItems> _allOrdersWithItems = [];
   List<ExpenseWithCategory> _allExpenses = [];
   List<Customer> _customers = [];
   double _totalStockValue = 0;
   List<ProductDataWithStock> _inventoryItems = [];
   List<UserData> _staffList = [];
 
+  // Set in build() from the period-orders provider (no setState needed).
   bool _ordersLoading = true;
   bool _expensesLoading = true;
   bool _customersLoading = true;
   bool _inventoryLoading = true;
 
-  StreamSubscription? _ordersSub;
   StreamSubscription? _expensesSub;
   StreamSubscription? _customersSub;
   StreamSubscription? _inventorySub;
@@ -115,18 +115,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Future<void> _initializeData() async {
     final db = ref.read(databaseProvider);
-
-    _ordersSub = ref
-        .read(orderServiceProvider)
-        .watchAllOrdersWithItems()
-        .listen((orders) async {
-          if (mounted) {
-            setState(() {
-              _allOrdersWithItems = orders;
-              _ordersLoading = false;
-            });
-          }
-        });
 
     _subscribeExpenses(_selectedStoreId);
 
@@ -185,19 +173,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _expensesSub?.cancel();
     if (mounted) setState(() => _expensesLoading = true);
     final db = ref.read(databaseProvider);
-    _expensesSub = db.expensesDao.watchAll(storeId: storeId).listen((expenses) {
-      if (mounted) {
-        setState(() {
-          _allExpenses = expenses;
-          _expensesLoading = false;
+    // #739 - only the period shown, not the whole history.
+    final (from, to) = dateRangeForLabel(_selectedPeriod);
+    _expensesSub = db.expensesDao
+        .watchAll(storeId: storeId, from: from, to: to)
+        .listen((expenses) {
+          if (mounted) {
+            setState(() {
+              _allExpenses = expenses;
+              _expensesLoading = false;
+            });
+          }
         });
-      }
-    });
   }
 
   @override
   void dispose() {
-    _ordersSub?.cancel();
     _expensesSub?.cancel();
     _customersSub?.cancel();
     _inventorySub?.cancel();
@@ -268,7 +259,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // scope — so the drill-down shows only orders this view can see; the money
     // is then summed per line.
     final inScope = reconStoreFilter(ref);
-    final filteredOrdersWithItems = _allOrdersWithItems
+    // #739 (PRD #680) - only the orders that can put an entry on a day in the
+    // period (created in it, or cancelled in it: #549), via the same bounded
+    // read the Profit report uses; the pure sums below are unchanged. Pending
+    // orders (a status-wide count, any date) have their own small read.
+    final (windowFrom, windowTo) = dateRangeForLabel(_selectedPeriod);
+    final periodOrdersAsync = ref.watch(
+      periodOrdersProvider((from: windowFrom, to: windowTo)),
+    );
+    final periodOrders =
+        periodOrdersAsync.valueOrNull ?? const <OrderWithItems>[];
+    final pendingOrders =
+        ref.watch(pendingOrdersProvider(_selectedStoreId)).valueOrNull ??
+        const <OrderWithItems>[];
+    final perfClock = PerfClock();
+    final filteredOrdersWithItems = periodOrders
         .where(
           (o) =>
               _isDateInPeriod(o.order.createdAt, _selectedPeriod) &&
@@ -320,8 +325,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // the helper. `salesOrders` / `filteredOrdersWithItems` stay on the old
     // creation-day, non-cancelled basis for the order list and counts.
     final cashierOrders = isCashier
-        ? _allOrdersWithItems.where((o) => o.order.staffId == userId)
-        : _allOrdersWithItems;
+        ? periodOrders.where((o) => o.order.staffId == userId)
+        : periodOrders;
     final salesSplit = computeSalesSplitKobo(
       cashierOrders,
       inSpan: (d) => _isDateInPeriod(d, _selectedPeriod),
@@ -358,7 +363,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // #549 — revenue / COGS / discounts are summed over the sale-day ENTRIES of
     // the period (a cancelled sale: + on its creation day, − on its cancel day),
     // so a return nets the profit once here and no refund is deducted again.
-    final profitEntries = saleDayEntries(_allOrdersWithItems)
+    final profitEntries = saleDayEntries(periodOrders)
         .where(
           (e) =>
               _isDateInPeriod(e.day, _selectedPeriod) &&
@@ -424,13 +429,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           pricedRevenue - discounts - cogs - totalExpenses - staffPayCost;
     }
 
-    final pendingOrdersCount = _allOrdersWithItems
-        .where(
-          (o) =>
-              o.order.status == 'pending' &&
-              (_selectedStoreId == null || o.order.storeId == _selectedStoreId),
-        )
-        .length;
+    final pendingOrdersCount = pendingOrders.length;
+    perfClock.log(
+      'home figures $_selectedPeriod',
+      extra: '${periodOrders.length} orders ${_allExpenses.length} expenses',
+    );
 
     final balances =
         ref.watch(creditBalancesKoboProvider).valueOrNull ?? const <int, int>{};
@@ -482,6 +485,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   const <SupplierData>[])
               .length,
     );
+    _ordersLoading = periodOrdersAsync.isLoading && !periodOrdersAsync.hasValue;
     final firstLoad =
         _ordersLoading ||
         _expensesLoading ||
@@ -670,12 +674,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               _selectedPeriod =
                   'Custom:${range.start.toIso8601String()}:${range.end.toIso8601String()}';
             });
+            _subscribeExpenses(_selectedStoreId);
           }
         } else {
           setState(() {
             _selectedPeriod = v;
             _customRange = null;
           });
+          _subscribeExpenses(_selectedStoreId);
         }
       },
     );
