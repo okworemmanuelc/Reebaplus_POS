@@ -98,6 +98,13 @@ void main() {
             pin: '1111',
           ),
         );
+    await db.into(db.vanDrivers).insert(
+      VanDriversCompanion.insert(
+        id: Value(driverId),
+        businessId: businessId,
+        name: 'Driver Dan',
+      ),
+    );
     await db
         .into(db.products)
         .insert(
@@ -420,6 +427,13 @@ void main() {
 
     test('another driver\'s trips never appear', () async {
       final otherDriver = UuidV7.generate();
+      await db.into(db.vanDrivers).insert(
+        VanDriversCompanion.insert(
+          id: Value(otherDriver),
+          businessId: businessId,
+          name: 'Other Olu',
+        ),
+      );
       await db
           .into(db.users)
           .insert(

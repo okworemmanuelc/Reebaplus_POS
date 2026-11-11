@@ -205,6 +205,15 @@ Future<HistoryShop> buildHistoryShop(
           pin: '654321',
         ),
       );
+  await db
+      .into(db.vanDrivers)
+      .insert(
+        VanDriversCompanion.insert(
+          id: Value(driverId),
+          businessId: businessId,
+          name: 'Driver Dan',
+        ),
+      );
 
   final manufacturerIds = <String>[];
   for (final (name, deposit) in const [
