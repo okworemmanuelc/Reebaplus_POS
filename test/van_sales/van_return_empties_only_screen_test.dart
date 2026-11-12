@@ -134,8 +134,8 @@ void main() {
     await settleFrames(tester);
 
     // The empties box is there without a goods count.
-    expect(find.byKey(Key('return-shells-$starId')), findsOneWidget);
-    await tester.enterText(find.byKey(Key('return-shells-$starId')), '6');
+    expect(find.byKey(Key('return-empties-$brandId')), findsOneWidget);
+    await tester.enterText(find.byKey(Key('return-empties-$brandId')), '6');
     await tester.pump();
     // No goods, so no Good / Damaged choice.
     expect(find.text('Damaged'), findsNothing);
