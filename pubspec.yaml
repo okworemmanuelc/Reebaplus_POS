@@ -73,6 +73,9 @@ dependencies:
   drift: ^2.11.0
   sqlite3_flutter_libs: ^0.5.15
   path: ^1.8.3
+  # #796: wraps the Supabase HTTP client to record why a login renewal was
+  # refused. Already in the build through supabase_flutter.
+  http: ^1.6.0
 
   # Authentication & Local Auth
   supabase_flutter: ^2.10.0
@@ -104,7 +107,6 @@ dependencies:
   in_app_purchase: ^3.3.1
   in_app_purchase_android: ^0.5.5
 dev_dependencies:
-  http: ^1.6.0
   flutter_test:
     sdk: flutter
 

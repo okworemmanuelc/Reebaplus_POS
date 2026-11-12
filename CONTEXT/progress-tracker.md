@@ -7,6 +7,13 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #796: 12 hours away locks with PIN, never signs out; refused login renewals are recorded (2026-11-12, branch `fix/796-twelve-hour-lock-refresh-reason`)
+- The 12-hour rule in `AutoLockWrapper` used to call `fullLogout()` (email + code, no un-uploaded-sales check, no message). It now calls `lockApp()`: the phone asks for the PIN and nothing else changes. Decision is the pure `shouldLockOnResume`; the limit is `kLongAbsenceLock`.
+- New `AuthRefreshObserverClient` (`lib/core/services/auth_refresh_observer.dart`) wraps the Supabase HTTP client and keeps the status, error code and message of a refused token refresh (never a token). The `auth.session_lost` and `auth.session_expired_gate` records now end with `refusal: ...`, so a "session expired" report can be traced to its cause from `error_logs`.
+- `http` moved from dev_dependencies to dependencies, same version.
+- Tests: `test/core/services/auth_refresh_observer_test.dart`, `test/shared/widgets/auto_lock_wrapper_test.dart` (9 pass). Full suite not run yet. Not checked on a phone.
+- Follow-ups not done: keep selling while "session expired" shows; remove the unused remote-kick path and its "signed in on another device" message; `architecture.md` still describes the kick as live.
+
 ### Issue #790 steps 2 and 3: product grid and "Same as last load" for van loading (2026-11-11, branch `feat/790-load-picker`)
 - `LoadProductPickerScreen` (Browse button beside the add box on Load / Restock Van): the checkout's `ProductTile` grid maths, search, category chips and scan-to-add. Tap adds one, long press sets the number, held at whole units in stock. It only counts; it returns `productId -> quantity` (Back and Done both return it) and writes nothing.
 - "Same as last load" on an empty new load: `VanTripsDao.lastLoadFor` returns the first dispatch of the driver's latest trip (restocks left out; falls back to the van's latest trip). Quantities are held at stock on hand; prices are today's shop prices, not last time's.

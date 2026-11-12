@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +14,7 @@ import 'package:reebaplus_pos/core/theme/theme_notifier.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/db_wipe.dart';
+import 'package:reebaplus_pos/core/services/auth_refresh_observer.dart';
 import 'package:reebaplus_pos/core/services/backup_exclusion_service.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/core/services/db_worker_switch_watcher.dart';
@@ -110,6 +112,9 @@ Future<void> _bootstrap() async {
     url: 'https://ewwyofbvfjyqqirrcaou.supabase.co',
     anonKey:
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV3d3lvZmJ2Zmp5cXFpcnJjYW91Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1NzM0MTgsImV4cCI6MjA4OTE0OTQxOH0.McPYfcKMT_h7j9cEE7GiutREcluXo0x2SxdLP0YsP5Q',
+    // #796: remembers why the server refused a login renewal, so a
+    // "session expired" report can be traced to its cause.
+    httpClient: AuthRefreshObserverClient(http.Client()),
   ).then((_) {}).catchError((_) {});
 
   try {
@@ -276,7 +281,8 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
             final lostUser = _auth.currentUser;
             CrashReporter.record(
               'auth session lost (event=${state.event.name}, '
-              'hadLocalUser=${lostUser != null})',
+              'hadLocalUser=${lostUser != null}, '
+              'refusal: ${AuthRefreshObserverClient.reasonAt(DateTime.now())})',
               StackTrace.current,
               context: 'auth.session_lost',
               businessId: lostUser?.businessId,
@@ -624,10 +630,15 @@ class _SessionExpiredScreenState extends ConsumerState<_SessionExpiredScreen> {
     // dropped local-only by the (cleared) business resolver. See [logError].
     final bid = widget.user.businessId;
     final uid = widget.user.id;
+    // #796: the server's own reason, captured before the async lookup below.
+    // On a cold start the refusal lands on the PIN screen (no local user yet),
+    // so this is the record that carries it to the cloud.
+    final refusal = AuthRefreshObserverClient.reasonAt(DateTime.now());
     unawaited(
       auth.getAuthMethod().then((method) {
         CrashReporter.record(
-          'session-expired gate rendered (authMethod=${method ?? 'unknown'})',
+          'session-expired gate rendered (authMethod=${method ?? 'unknown'}, '
+          'refusal: $refusal)',
           StackTrace.current,
           context: 'auth.session_expired_gate',
           businessId: bid,

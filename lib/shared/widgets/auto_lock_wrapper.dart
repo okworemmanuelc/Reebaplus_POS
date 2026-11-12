@@ -7,6 +7,26 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 
+/// A phone left in the background this long asks for the PIN when it comes
+/// back, whatever the auto-lock setting says (#796).
+///
+/// This used to be a full sign-out (email + code). It must never be one: a
+/// known phone always reaches the PIN screen, offline too (invariant #11),
+/// and a full sign-out here skipped the un-uploaded-sales check that every
+/// real logout runs through `DeviceTeardown`.
+const Duration kLongAbsenceLock = Duration(hours: 12);
+
+/// Whether a resume after [away] in the background drops to the PIN screen.
+/// [autoLockSeconds] is the Settings > Security interval; 0 means off.
+@visibleForTesting
+bool shouldLockOnResume({
+  required Duration away,
+  required int autoLockSeconds,
+}) {
+  if (away >= kLongAbsenceLock) return true;
+  return autoLockSeconds > 0 && away.inSeconds >= autoLockSeconds;
+}
+
 class AutoLockWrapper extends ConsumerStatefulWidget {
   final Widget child;
 
@@ -23,7 +43,6 @@ class AutoLockWrapper extends ConsumerStatefulWidget {
 class _AutoLockWrapperState extends ConsumerState<AutoLockWrapper>
     with WidgetsBindingObserver {
   static const String _pausedTimeKey = 'app_paused_time';
-  static const int _shiftExpirationHours = 12;
 
   // Captured at initState — the lifecycle handler runs across `await`s and
   // must NOT touch `ref` after them (riverpod invalidates `ref` the moment
@@ -113,26 +132,23 @@ class _AutoLockWrapperState extends ConsumerState<AutoLockWrapper>
         final pausedTime = DateTime.fromMillisecondsSinceEpoch(pausedMs);
         final difference = DateTime.now().difference(pausedTime);
 
-        if (difference.inHours >= _shiftExpirationHours) {
-          if (_auth.currentUser != null) {
-            _auth.fullLogout();
-          }
-        } else {
-          final intervalStr = await _db.settingsDao.get(
-            'auto_lock_interval_seconds',
-          );
-          // Off (0) when unset: auto-lock only runs once someone picks an
-          // interval in Settings > Security (owner decision 2026-11-01).
-          final autoLockSeconds = int.tryParse(intervalStr ?? '') ?? 0;
+        final intervalStr = await _db.settingsDao.get(
+          'auto_lock_interval_seconds',
+        );
+        // Off (0) when unset: the short auto-lock only runs once someone
+        // picks an interval in Settings > Security (owner decision
+        // 2026-11-01). The long-absence lock below always applies.
+        final autoLockSeconds = int.tryParse(intervalStr ?? '') ?? 0;
 
-          if (autoLockSeconds > 0 && difference.inSeconds >= autoLockSeconds) {
-            if (_auth.currentUser != null) {
-              // lockApp (not logout) so the sessions row isn't revoked —
-              // otherwise verifyLocalSessionStillActive on the next resume
-              // would falsely trip the remote-kick path. See AuthService.
-              _auth.lockApp();
-            }
-          }
+        if (shouldLockOnResume(
+              away: difference,
+              autoLockSeconds: autoLockSeconds,
+            ) &&
+            _auth.currentUser != null) {
+          // lockApp (not logout) so the sessions row isn't revoked —
+          // otherwise verifyLocalSessionStillActive on the next resume
+          // would falsely trip the remote-kick path. See AuthService.
+          _auth.lockApp();
         }
         await prefs.remove(_pausedTimeKey);
       }
