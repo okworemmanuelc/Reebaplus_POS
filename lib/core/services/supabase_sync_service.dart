@@ -2735,6 +2735,15 @@ class SupabaseSyncService {
     }
   }
 
+  /// #806: how far behind "now" the pull cursor is set, to cover the gap
+  /// between this device's clock and the cloud's.
+  static const pullCursorSafetyMargin = Duration(minutes: 2);
+
+  /// The cursor a pull that STARTED at [pullStartedAt] may leave behind.
+  @visibleForTesting
+  static DateTime pullCursorFor(DateTime pullStartedAt) =>
+      pullStartedAt.toUtc().subtract(pullCursorSafetyMargin);
+
   Future<void> _pullChangesGuarded(String businessId) async {
     _currentBusinessId = businessId;
     _fetchedPerTable.clear();
@@ -2765,6 +2774,13 @@ class SupabaseSyncService {
         ? const <String>{}
         : backfillStr.split(',').toSet();
 
+    // #806: the cursor this pull will leave behind is taken BEFORE the fetch,
+    // less a margin for clock difference between this device and the cloud.
+    // Stamping it after the restore (the old behaviour) lost every row changed
+    // in the cloud while the pull was running: it sat below the cursor for
+    // good. Re-fetching a few rows is harmless (the LWW guard drops stale ones).
+    final nextCursor = pullCursorFor(DateTime.now()).toIso8601String();
+
     try {
       var skipped = await pullInitialData(
         businessId,
@@ -2776,7 +2792,7 @@ class SupabaseSyncService {
       if (skipped.isEmpty) {
         // Clean pull — advance the cursor and clear any prior deferred/backfill
         // record so the SyncIssues UI stops surfacing stale "catching up" state.
-        await prefs.setString(key, DateTime.now().toUtc().toIso8601String());
+        await prefs.setString(key, nextCursor);
         await prefs.remove(deferredKey);
         await prefs.remove(backfillKey);
         // First-load overlay marker: a clean full pull means this business has
@@ -2836,7 +2852,7 @@ class SupabaseSyncService {
           // longer in `skipped`, so it drops out automatically.
           await prefs.setString(
             key,
-            DateTime.now().toUtc().toIso8601String(),
+            nextCursor,
           );
           await prefs.setString(backfillKey, skipped.join(','));
           debugPrint(
