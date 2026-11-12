@@ -4,8 +4,7 @@
 //   · the driver's Sales tab lists the old account's sale, tagged;
 //   · the Ledger tab lists the old account's payment (tagged) and the moved
 //     debt (labelled), and the balance card shows the driver ledger ONLY;
-//   · an unlinked driver offers "Bring in old customer account"; a linked one
-//     does not;
+//   · the page has no "Bring in old customer account" button (#804);
 //   · the customer's own page says "Now a van driver: <name>";
 //   · a linked customer is absent from the sale customer list feed.
 
@@ -54,86 +53,100 @@ void main() {
     linkedCustomerId = UuidV7.generate();
     freeCustomerId = UuidV7.generate();
 
-    await db.into(db.vanDrivers).insert(
-      VanDriversCompanion.insert(
-        id: Value(driverId),
-        businessId: b,
-        name: 'Johnson Kim',
-      ),
-    );
+    await db
+        .into(db.vanDrivers)
+        .insert(
+          VanDriversCompanion.insert(
+            id: Value(driverId),
+            businessId: b,
+            name: 'Johnson Kim',
+          ),
+        );
     final vanStoreId = UuidV7.generate();
-    await db.into(db.stores).insert(
-      StoresCompanion.insert(
-        id: Value(vanStoreId),
-        businessId: b,
-        name: 'Beer Vsm',
-        kind: const Value('van'),
-        vanDriverId: Value(driverId),
-      ),
-    );
+    await db
+        .into(db.stores)
+        .insert(
+          StoresCompanion.insert(
+            id: Value(vanStoreId),
+            businessId: b,
+            name: 'Beer Vsm',
+            kind: const Value('van'),
+            vanDriverId: Value(driverId),
+          ),
+        );
 
     for (final (id, name) in [
       (linkedCustomerId, 'Johnson Kim (Beer Van Driver)'),
       (freeCustomerId, 'Walk Up Customer'),
     ]) {
-      await db.into(db.customers).insert(
-        CustomersCompanion.insert(id: Value(id), businessId: b, name: name),
-      );
+      await db
+          .into(db.customers)
+          .insert(
+            CustomersCompanion.insert(id: Value(id), businessId: b, name: name),
+          );
     }
     final walletId = UuidV7.generate();
-    await db.into(db.customerWallets).insert(
-      CustomerWalletsCompanion.insert(
-        id: Value(walletId),
-        businessId: b,
-        customerId: linkedCustomerId,
-      ),
-    );
+    await db
+        .into(db.customerWallets)
+        .insert(
+          CustomerWalletsCompanion.insert(
+            id: Value(walletId),
+            businessId: b,
+            customerId: linkedCustomerId,
+          ),
+        );
     final at = DateTime.now().subtract(const Duration(minutes: 5));
     final oid = UuidV7.generate();
-    await db.into(db.orders).insert(
-      OrdersCompanion.insert(
-        id: Value(oid),
-        businessId: b,
-        orderNumber: 'ORD-OLD-1',
-        customerId: Value(linkedCustomerId),
-        totalAmountKobo: 100000,
-        netAmountKobo: 100000,
-        amountPaidKobo: const Value(40000),
-        paymentType: 'mixed',
-        status: 'completed',
-        createdAt: Value(at),
-        lastUpdatedAt: Value(at),
-      ),
-    );
-    await db.into(db.walletTransactions).insert(
-      WalletTransactionsCompanion.insert(
-        businessId: b,
-        walletId: walletId,
-        customerId: linkedCustomerId,
-        type: 'debit',
-        amountKobo: 60000,
-        signedAmountKobo: -60000,
-        referenceType: 'order_payment',
-        orderId: Value(oid),
-        createdAt: Value(at),
-        lastUpdatedAt: Value(at),
-      ),
-    );
+    await db
+        .into(db.orders)
+        .insert(
+          OrdersCompanion.insert(
+            id: Value(oid),
+            businessId: b,
+            orderNumber: 'ORD-OLD-1',
+            customerId: Value(linkedCustomerId),
+            totalAmountKobo: 100000,
+            netAmountKobo: 100000,
+            amountPaidKobo: const Value(40000),
+            paymentType: 'mixed',
+            status: 'completed',
+            createdAt: Value(at),
+            lastUpdatedAt: Value(at),
+          ),
+        );
+    await db
+        .into(db.walletTransactions)
+        .insert(
+          WalletTransactionsCompanion.insert(
+            businessId: b,
+            walletId: walletId,
+            customerId: linkedCustomerId,
+            type: 'debit',
+            amountKobo: 60000,
+            signedAmountKobo: -60000,
+            referenceType: 'order_payment',
+            orderId: Value(oid),
+            createdAt: Value(at),
+            lastUpdatedAt: Value(at),
+          ),
+        );
     final topUpId = UuidV7.generate();
-    await db.into(db.walletTransactions).insert(
-      WalletTransactionsCompanion.insert(
-        id: Value(topUpId),
-        businessId: b,
-        walletId: walletId,
-        customerId: linkedCustomerId,
-        type: 'credit',
-        amountKobo: 10000,
-        signedAmountKobo: 10000,
-        referenceType: 'topup_cash',
-        createdAt: Value(at),
-        lastUpdatedAt: Value(at),
-      ),
-    );
+    await db
+        .into(db.walletTransactions)
+        .insert(
+          WalletTransactionsCompanion.insert(
+            id: Value(topUpId),
+            businessId: b,
+            walletId: walletId,
+            customerId: linkedCustomerId,
+            type: 'credit',
+            amountKobo: 10000,
+            signedAmountKobo: 10000,
+            referenceType: 'topup_cash',
+            createdAt: Value(at),
+            lastUpdatedAt: Value(at),
+          ),
+        );
   });
 
   tearDown(() async {
@@ -142,8 +155,9 @@ void main() {
     await env.dispose();
   });
 
-  testWidgets('unlinked driver offers the action; old sales are not shown',
-      (tester) async {
+  testWidgets('unlinked driver: no bring-in button; old sales are not shown', (
+    tester,
+  ) async {
     await pumpScreen(
       tester,
       env: env,
@@ -153,94 +167,39 @@ void main() {
       settle: false,
     );
     await settleFrames(tester);
-    expect(find.byKey(const Key('driver-bring-in-old-account')), findsOneWidget);
+    expect(find.byKey(const Key('driver-bring-in-old-account')), findsNothing);
+    expect(find.text('Bring in old customer account'), findsNothing);
     expect(find.text('ORD-OLD-1'), findsNothing);
     await disposeScreen(tester);
   });
 
-  testWidgets('the flow: pick the customer, read the figures, confirm, and the '
-      'debt moves to the driver', (tester) async {
-    await pumpScreen(
-      tester,
-      env: env,
-      size: pixel7Portrait,
-      screen: DriverProfileScreen(vanDriverId: driverId, initialTab: 'sales'),
-      grantedKeys: grants,
-      settle: false,
-    );
-    await settleFrames(tester);
-
-    // The harness signs in 'test-user-id'; the move records who did it, so
-    // that user must exist as a row.
-    await tester.runAsync(
-      () => env.db.into(env.db.users).insert(
-        UsersCompanion.insert(
-          id: const Value('test-user-id'),
-          businessId: env.businessId,
-          name: 'Test Admin',
-          pin: '1234',
+  testWidgets(
+    'linked driver: Sales tab lists the old sale, tagged; no action',
+    (tester) async {
+      await tester.runAsync(
+        () => env.db.vanDriversDao.linkOldCustomerAccount(
+          vanDriverId: driverId,
+          customerId: linkedCustomerId,
         ),
-      ),
-    );
-    await tester.tap(find.byKey(const Key('driver-bring-in-old-account')));
-    await settleFrames(tester);
-    expect(find.byKey(const Key('bring-in-pick-dialog')), findsOneWidget);
-    // Both customers are offered until one is linked.
-    expect(find.byKey(Key('bring-in-customer-$freeCustomerId')), findsOneWidget);
-    await tester.tap(find.byKey(Key('bring-in-customer-$linkedCustomerId')));
-    await settleFrames(tester);
-
-    // Owes 600 - 100 paid = 500 (whatever the currency symbol is).
-    final balance = tester.widget<Text>(
-      find.byKey(const Key('bring-in-balance')),
-    );
-    expect(balance.data, contains('Balance owed'));
-    expect(balance.data, contains('500'));
-    expect(find.byKey(const Key('bring-in-cannot-undo')), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('bring-in-confirm')));
-    await settleFrames(tester);
-
-    final db = env.db;
-    final (driver, custBal, driverBal) = (await tester.runAsync(() async {
-      return (
-        await db.vanDriversDao.getDriver(driverId),
-        await db.walletTransactionsDao.getBalanceKobo(linkedCustomerId),
-        await db.driverLedgerDao.getBalanceKobo(driverId),
       );
-    }))!;
-    expect(driver!.customerId, linkedCustomerId);
-    expect(custBal, 0);
-    expect(driverBal, -50000);
-    // The action is gone once linked.
-    expect(find.byKey(const Key('driver-bring-in-old-account')), findsNothing);
-    // Let the success banner's timer run out before the tree goes.
-    await tester.pump(const Duration(seconds: 10));
-    await disposeScreen(tester);
-  });
-
-  testWidgets('linked driver: Sales tab lists the old sale, tagged; no action',
-      (tester) async {
-    await tester.runAsync(
-      () => env.db.vanDriversDao.linkOldCustomerAccount(
-        vanDriverId: driverId,
-        customerId: linkedCustomerId,
-      ),
-    );
-    await pumpScreen(
-      tester,
-      env: env,
-      size: pixel7Portrait,
-      screen: DriverProfileScreen(vanDriverId: driverId, initialTab: 'sales'),
-      grantedKeys: grants,
-      settle: false,
-    );
-    await settleFrames(tester);
-    expect(find.text('ORD-OLD-1'), findsOneWidget);
-    expect(find.textContaining('Old customer account'), findsWidgets);
-    expect(find.byKey(const Key('driver-bring-in-old-account')), findsNothing);
-    await disposeScreen(tester);
-  });
+      await pumpScreen(
+        tester,
+        env: env,
+        size: pixel7Portrait,
+        screen: DriverProfileScreen(vanDriverId: driverId, initialTab: 'sales'),
+        grantedKeys: grants,
+        settle: false,
+      );
+      await settleFrames(tester);
+      expect(find.text('ORD-OLD-1'), findsOneWidget);
+      expect(find.textContaining('Old customer account'), findsWidgets);
+      expect(
+        find.byKey(const Key('driver-bring-in-old-account')),
+        findsNothing,
+      );
+      await disposeScreen(tester);
+    },
+  );
 
   testWidgets('linked driver: Ledger tab lists the old payment and the moved '
       'debt, balance is the driver ledger only', (tester) async {
@@ -269,7 +228,9 @@ void main() {
     expect(find.text('Moved from the old customer account'), findsOneWidget);
     // The balance is the driver ledger alone: 50,000 once, not 100,000.
     expect(
-      await tester.runAsync(() => env.db.driverLedgerDao.getBalanceKobo(driverId)),
+      await tester.runAsync(
+        () => env.db.driverLedgerDao.getBalanceKobo(driverId),
+      ),
       -50000,
     );
     await disposeScreen(tester);
@@ -283,9 +244,9 @@ void main() {
       ),
     );
     final data = (await tester.runAsync(
-      () => (env.db.select(env.db.customers)
-            ..where((c) => c.id.equals(linkedCustomerId)))
-          .getSingle(),
+      () => (env.db.select(
+        env.db.customers,
+      )..where((c) => c.id.equals(linkedCustomerId))).getSingle(),
     ))!;
     await pumpScreen(
       tester,
@@ -300,8 +261,9 @@ void main() {
     await disposeScreen(tester);
   });
 
-  testWidgets('a linked customer is absent from the sale customer feed',
-      (tester) async {
+  testWidgets('a linked customer is absent from the sale customer feed', (
+    tester,
+  ) async {
     await tester.runAsync(
       () => env.db.vanDriversDao.linkOldCustomerAccount(
         vanDriverId: driverId,
