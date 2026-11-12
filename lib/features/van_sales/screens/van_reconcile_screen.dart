@@ -15,6 +15,7 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/van_sales/van_trip_position.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/van_return_screen.dart';
 import 'package:reebaplus_pos/features/van_sales/widgets/record_driver_payment_sheet.dart';
+import 'package:reebaplus_pos/features/van_sales/widgets/trip_balance_lines.dart';
 import 'package:reebaplus_pos/features/van_sales/widgets/van_close_barrier.dart';
 import 'package:reebaplus_pos/features/van_sales/widgets/van_write_off_sheet.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
@@ -114,6 +115,11 @@ class VanReconcileScreen extends ConsumerWidget {
         ),
         children: [
           _OutstandingCard(position: position, lex: lex),
+          SizedBox(height: context.getRSize(16)),
+          _Card(
+            accent: Theme.of(context).dividerColor,
+            child: TripBalanceLines(tripId: tripId),
+          ),
           SizedBox(height: context.getRSize(16)),
           _MovementCard(position: position, lex: lex),
           if (position.shortages.isNotEmpty) ...[
