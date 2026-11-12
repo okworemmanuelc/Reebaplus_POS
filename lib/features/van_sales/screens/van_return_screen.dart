@@ -28,15 +28,12 @@ class _ReturnDraft {
   int quantity = 0;
   String condition = kVanReturnConditionGood;
 
-  /// The EMPTY crates counted back (#726) — separate from [quantity], which is
-  /// the unsold FULL crates. Null until the manager types it: for a
-  /// crate-tracked product the line cannot be saved while it is null (0 is a
-  /// valid answer). Stays 0 where [crateTracked] is false.
-  int? shellsBack;
-
-  /// Whether this product's empties are tracked (crate business, bottle,
-  /// track-empties on, has a brand) — decided once when the row is added.
-  final bool crateTracked;
+  /// The manufacturer whose empties this product's crates are, or null when
+  /// the product's empties are not tracked (crate business, bottle,
+  /// track-empties on, has a manufacturer) — decided once when the row is
+  /// added. Empties are counted per manufacturer (#801), not per product, in
+  /// the "Empty crates" section.
+  final String? manufacturerId;
 
   /// The idempotency key for this line, minted ONCE when the row is added and
   /// re-used across every retry, so a double-tap cannot credit twice.
@@ -45,8 +42,10 @@ class _ReturnDraft {
   _ReturnDraft({
     required this.productId,
     required this.productName,
-    this.crateTracked = false,
+    this.manufacturerId,
   });
+
+  bool get crateTracked => manufacturerId != null;
 
   bool get isGood => condition == kVanReturnConditionGood;
 }
@@ -94,27 +93,35 @@ class VanReturnScreen extends ConsumerStatefulWidget {
 
 class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
   final List<_ReturnDraft> _lines = [];
+
+  /// #801 — the EMPTY crates counted back, ONE count per manufacturer
+  /// (`manufacturerId → count`). A missing entry means "not typed yet": goods
+  /// back for that manufacturer's products cannot be saved until it is typed
+  /// (0 is a valid answer). Empties alone need no goods (#790).
+  final Map<String, int?> _empties = {};
   bool _submitting = false;
 
   Color get _subtext =>
       Theme.of(context).textTheme.bodySmall?.color ??
       Theme.of(context).iconTheme.color!;
 
-  /// Whether [productId] is a crate-tracked bottle with a brand in a business
-  /// that tracks crates — the products whose empties must be counted.
-  bool _isCrateTracked(String productId) {
-    if (!businessTracksCrates(ref.read(currentBusinessProvider))) return false;
+  /// The manufacturer of [productId] when it is a crate-tracked bottle in a
+  /// business that tracks crates — the products whose empties must be counted.
+  String? _crateManufacturerOf(String productId) {
+    if (!businessTracksCrates(ref.read(currentBusinessProvider))) return null;
     for (final p
         in ref.read(productsWithStockProvider(null)).valueOrNull ??
             const <ProductDataWithStock>[]) {
       if (p.product.id != productId) continue;
       return p.product.manufacturerId != null &&
-          isCrateTrackedBottle((
-            unit: p.product.unit,
-            trackEmpties: p.product.trackEmpties,
-          ));
+              isCrateTrackedBottle((
+                unit: p.product.unit,
+                trackEmpties: p.product.trackEmpties,
+              ))
+          ? p.product.manufacturerId
+          : null;
     }
-    return false;
+    return null;
   }
 
   /// Every product that went out on this trip gets a row straight away
@@ -134,7 +141,7 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
         _ReturnDraft(
           productId: e.key,
           productName: e.value,
-          crateTracked: _isCrateTracked(e.key),
+          manufacturerId: _crateManufacturerOf(e.key),
         ),
       );
     }
@@ -142,6 +149,15 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
       (a, b) =>
           a.productName.toLowerCase().compareTo(b.productName.toLowerCase()),
     );
+  }
+
+  String _manufacturerName(String id) {
+    for (final m
+        in ref.read(allManufacturersProvider).valueOrNull ??
+            const <ManufacturerData>[]) {
+      if (m.id == id) return m.name;
+    }
+    return 'this manufacturer';
   }
 
   Future<void> _submit() async {
@@ -152,29 +168,73 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
     }
     // Only the rows with something typed are part of this return; the rest
     // of the list is just what is on the van.
-    final counted = [
+    final goods = [
       for (final l in _lines)
-        if (l.quantity > 0 || (l.shellsBack ?? 0) > 0) l,
+        if (l.quantity > 0) l,
     ];
-    if (counted.isEmpty) {
+    final emptiesBack = {
+      for (final e in _empties.entries)
+        if ((e.value ?? 0) > 0) e.key: e.value!,
+    };
+    if (goods.isEmpty && emptiesBack.isEmpty) {
       AppNotification.showError(
         context,
         'Type how many came back beside at least one item.',
       );
       return;
     }
-    for (final line in counted) {
-      // Goods came back on a crate product: the empties must be counted too
-      // (0 is a valid answer). Empties ALONE need no goods count (#790).
-      if (line.quantity > 0 && line.crateTracked && line.shellsBack == null) {
+    // Goods came back on a crate product: that manufacturer's empties must be
+    // counted too (0 is a valid answer). Empties ALONE need no goods (#790).
+    for (final line in goods) {
+      final m = line.manufacturerId;
+      if (m != null && _empties[m] == null) {
         AppNotification.showError(
           context,
-          'Count the empty crates for ${line.productName} — type 0 if none '
-          'came back.',
+          'Count the empty crates for ${_manufacturerName(m)} — type 0 if '
+          'none came back.',
         );
         return;
       }
     }
+
+    // #801 — a manufacturer's count is carried on ONE return line of that
+    // manufacturer: its first goods line, else a goods-free line of its first
+    // product on the trip. The DAO credits the warehouse by that line's
+    // manufacturer, so the totals match what was typed.
+    final carrier = <String, _ReturnDraft>{};
+    for (final l in goods) {
+      final m = l.manufacturerId;
+      if (m != null && emptiesBack.containsKey(m)) {
+        carrier.putIfAbsent(m, () => l);
+      }
+    }
+    for (final m in emptiesBack.keys) {
+      if (carrier.containsKey(m)) continue;
+      final first = _lines.where((l) => l.manufacturerId == m);
+      if (first.isNotEmpty) carrier[m] = first.first;
+    }
+    final lines = <VanReturnLine>[
+      for (final l in goods)
+        VanReturnLine(
+          productId: l.productId,
+          quantity: l.quantity,
+          condition: l.condition,
+          shellsBack: identical(carrier[l.manufacturerId], l)
+              ? emptiesBack[l.manufacturerId]!
+              : 0,
+          eventId: l.eventId,
+        ),
+      for (final e in carrier.entries)
+        if (e.value.quantity == 0)
+          VanReturnLine(
+            productId: e.value.productId,
+            quantity: 0,
+            // Empties alone are not goods, so never 'damaged'.
+            condition: kVanReturnConditionGood,
+            shellsBack: emptiesBack[e.key]!,
+            eventId: e.value.eventId,
+          ),
+    ];
 
     final currentUser = ref.read(authProvider).currentUser;
     if (currentUser == null) return;
@@ -187,20 +247,7 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
           .recordReturn(
             tripId: widget.trip.id,
             performedBy: currentUser.id,
-            lines: counted
-                .map(
-                  (l) => VanReturnLine(
-                    productId: l.productId,
-                    quantity: l.quantity,
-                    // Empties alone are not goods, so never 'damaged'.
-                    condition: l.quantity > 0
-                        ? l.condition
-                        : kVanReturnConditionGood,
-                    shellsBack: l.shellsBack ?? 0,
-                    eventId: l.eventId,
-                  ),
-                )
-                .toList(growable: false),
+            lines: lines,
           );
       if (!mounted) return;
 
@@ -208,7 +255,7 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
         context,
         result.alreadyApplied
             ? 'This return was already recorded.'
-            : counted.every((l) => l.quantity == 0)
+            : goods.isEmpty
             ? 'Empty crates recorded.'
             : result.totalCreditKobo > 0
             ? 'Return recorded — '
@@ -233,6 +280,50 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  /// #801 — "Empty crates": ONE count box per manufacturer that has
+  /// crate-tracked products on this trip. Starts empty; 0 is a valid answer.
+  List<Widget> _emptiesSection(BuildContext context) {
+    final t = Theme.of(context);
+    final ids = <String>[];
+    for (final l in _lines) {
+      final m = l.manufacturerId;
+      if (m != null && !ids.contains(m)) ids.add(m);
+    }
+    if (ids.isEmpty) return const [];
+    final names = {
+      for (final m
+          in ref.watch(allManufacturersProvider).valueOrNull ??
+              const <ManufacturerData>[])
+        m.id: m.name,
+    };
+    ids.sort(
+      (a, b) => (names[a] ?? '').toLowerCase().compareTo(
+        (names[b] ?? '').toLowerCase(),
+      ),
+    );
+    return [
+      SizedBox(height: context.getRSize(12)),
+      Text(
+        'Empty crates',
+        style: t.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+      ),
+      SizedBox(height: context.getRSize(4)),
+      Text(
+        'Count the empty crates once per manufacturer — type 0 if none came '
+        'back.',
+        style: t.textTheme.bodySmall?.copyWith(color: _subtext),
+      ),
+      SizedBox(height: context.getRSize(8)),
+      for (final id in ids)
+        _EmptiesBox(
+          key: ValueKey('return-empties-card-$id'),
+          manufacturerId: id,
+          name: names[id] ?? 'Manufacturer',
+          onChanged: (v) => setState(() => _empties[id] = v),
+        ),
+    ];
   }
 
   @override
@@ -315,6 +406,8 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
                   onChanged: () => setState(() {}),
                 ),
               ),
+
+            ..._emptiesSection(context),
 
             SizedBox(height: context.getRSize(20)),
             Guarded(
@@ -400,8 +493,7 @@ class _CountItYourselfNote extends StatelessWidget {
 }
 
 /// One product that is on the van: its name and an empty count box. The
-/// condition and, for a crate business, the empties box open only once a count
-/// is typed, so a van with twenty products is a short list, not twenty forms.
+/// condition choice opens only once a count is typed, so a van with twenty products is a short list, not twenty forms.
 class _ReturnLineCard extends StatelessWidget {
   final _ReturnDraft line;
   final VoidCallback onChanged;
@@ -418,7 +510,6 @@ class _ReturnLineCard extends StatelessWidget {
     final semantic = t.extension<AppSemanticColors>()!;
     final subtext = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
     final counted = line.quantity > 0;
-    final emptiesOnly = !counted && (line.shellsBack ?? 0) > 0;
 
     return Container(
       margin: EdgeInsets.only(bottom: context.getRSize(8)),
@@ -430,9 +521,7 @@ class _ReturnLineCard extends StatelessWidget {
         color: t.colorScheme.surface.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(AppSpacing.borderRadiusM),
         border: Border.all(
-          color: emptiesOnly
-              ? t.colorScheme.primary
-              : !counted
+          color: !counted
               ? t.dividerColor
               : line.isGood
               ? t.colorScheme.primary
@@ -484,45 +573,6 @@ class _ReturnLineCard extends StatelessWidget {
               ),
             ],
           ),
-          if (line.crateTracked) ...[
-            SizedBox(height: context.getRSize(6)),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    // #726 / #790 — counted SEPARATELY from the full crates
-                    // above, and may be recorded on their own.
-                    counted
-                        ? 'Empty crates back (0 if none)'
-                        : 'Empty crates back',
-                    style: t.textTheme.bodySmall?.copyWith(color: subtext),
-                  ),
-                ),
-                SizedBox(width: context.getRSize(8)),
-                SizedBox(
-                  width: context.getRSize(96),
-                  child: TextField(
-                    key: Key('return-shells-${line.productId}'),
-                    textAlign: TextAlign.center,
-                    keyboardType: TextInputType.number,
-                    textInputAction: TextInputAction.next,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                    decoration: InputDecoration(
-                      isDense: true,
-                      hintText: 'Count',
-                      contentPadding: EdgeInsets.symmetric(
-                        vertical: context.getRSize(8),
-                      ),
-                    ),
-                    onChanged: (v) {
-                      line.shellsBack = int.tryParse(v.trim());
-                      onChanged();
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ],
           if (counted) ...[
             SizedBox(height: context.getRSize(8)),
             SegmentedButton<String>(
@@ -559,6 +609,73 @@ class _ReturnLineCard extends StatelessWidget {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// One manufacturer's empty-crates count box (#801).
+class _EmptiesBox extends StatelessWidget {
+  final String manufacturerId;
+  final String name;
+  final ValueChanged<int?> onChanged;
+
+  const _EmptiesBox({
+    super.key,
+    required this.manufacturerId,
+    required this.name,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    return Container(
+      margin: EdgeInsets.only(bottom: context.getRSize(8)),
+      padding: EdgeInsets.symmetric(
+        horizontal: context.getRSize(12),
+        vertical: context.getRSize(8),
+      ),
+      decoration: BoxDecoration(
+        color: t.colorScheme.surface.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(AppSpacing.borderRadiusM),
+        border: Border.all(color: t.dividerColor),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: t.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          SizedBox(width: context.getRSize(8)),
+          SizedBox(
+            width: context.getRSize(96),
+            child: TextField(
+              key: Key('return-empties-$manufacturerId'),
+              textAlign: TextAlign.center,
+              keyboardType: TextInputType.number,
+              textInputAction: TextInputAction.next,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              style: t.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: 'Count',
+                contentPadding: EdgeInsets.symmetric(
+                  vertical: context.getRSize(8),
+                ),
+              ),
+              onChanged: (v) => onChanged(int.tryParse(v.trim())),
+            ),
+          ),
         ],
       ),
     );

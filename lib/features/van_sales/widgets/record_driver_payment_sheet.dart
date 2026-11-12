@@ -14,6 +14,7 @@ import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/stores/van_store.dart';
+import 'package:reebaplus_pos/features/van_sales/widgets/trip_balance_lines.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
@@ -288,7 +289,7 @@ class _RecordDriverPaymentSheetState
                           vertical: context.getRSize(10),
                         ),
                         children: [
-                          _banner(sourceName, balanceKobo),
+                          _banner(sourceName, balanceKobo, trip?.id),
                           SizedBox(height: context.getRSize(16)),
                           AppInput(
                             labelText: 'Amount handed in',
@@ -402,7 +403,7 @@ class _RecordDriverPaymentSheetState
   /// States the two facts a manager needs before typing a figure: where the
   /// money is being booked (the SOURCE WAREHOUSE — cash comes back to the yard,
   /// never to the van) and what the driver currently owes.
-  Widget _banner(String? sourceName, int? balanceKobo) {
+  Widget _banner(String? sourceName, int? balanceKobo, String? tripId) {
     final primary = Theme.of(context).colorScheme.primary;
     return Container(
       padding: EdgeInsets.all(context.getRSize(12)),
@@ -434,7 +435,10 @@ class _RecordDriverPaymentSheetState
               ),
             ],
           ),
-          if (balanceKobo != null) ...[
+          if (tripId != null) ...[
+            SizedBox(height: context.getRSize(8)),
+            TripBalanceLines(tripId: tripId),
+          ] else if (balanceKobo != null) ...[
             SizedBox(height: context.getRSize(8)),
             Row(
               children: [

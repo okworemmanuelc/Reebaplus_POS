@@ -7,6 +7,11 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #800: driver's balance shown wherever money is taken (2026-11-12, branch `feat/van-balance-lines`)
+- New `TripBalanceLines` (`lib/features/van_sales/widgets/trip_balance_lines.dart`): Balance before this trip / This trip / Total owed now. On the van card (replaces the single "Owes" line), the Record payment sheet for a trip, and Reconcile & close.
+- Display only: total = driver's ledger balance, this trip = the trip position's outstanding, before = the difference. No money rule, table or column change.
+- Tests: `test/van_sales/trip_balance_lines_test.dart`.
+
 ### Issue #790 steps 2 and 3: product grid and "Same as last load" for van loading (2026-11-11, branch `feat/790-load-picker`)
 - `LoadProductPickerScreen` (Browse button beside the add box on Load / Restock Van): the checkout's `ProductTile` grid maths, search, category chips and scan-to-add. Tap adds one, long press sets the number, held at whole units in stock. It only counts; it returns `productId -> quantity` (Back and Done both return it) and writes nothing.
 - "Same as last load" on an empty new load: `VanTripsDao.lastLoadFor` returns the first dispatch of the driver's latest trip (restocks left out; falls back to the van's latest trip). Quantities are held at stock on hand; prices are today's shop prices, not last time's.

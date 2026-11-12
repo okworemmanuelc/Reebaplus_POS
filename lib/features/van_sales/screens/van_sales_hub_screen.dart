@@ -7,7 +7,6 @@ import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
 import 'package:reebaplus_pos/core/permissions/guarded.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
-import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/stores/widgets/add_location_flow.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/driver_payments_screen.dart';
@@ -16,6 +15,7 @@ import 'package:reebaplus_pos/features/van_sales/screens/drivers_list_screen.dar
 import 'package:reebaplus_pos/features/van_sales/screens/load_van_screen.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/van_reconcile_screen.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/van_return_screen.dart';
+import 'package:reebaplus_pos/features/van_sales/widgets/trip_balance_lines.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
 
@@ -39,8 +39,6 @@ class VanSalesHubScreen extends ConsumerWidget {
     final vans = ref.watch(vansProvider);
     final openTrips =
         ref.watch(openVanTripsProvider).valueOrNull ?? const <VanTripData>[];
-    final balances =
-        ref.watch(driverBalancesProvider).valueOrNull ?? DriverBalances.empty;
     final driversById = {
       for (final d
           in ref.watch(vanDriverRowsProvider).valueOrNull ??
@@ -127,11 +125,6 @@ class VanSalesHubScreen extends ConsumerWidget {
                   van: van,
                   trip: trip,
                   driverName: trip == null ? null : nameOf(trip),
-                  driverBalanceKobo: trip == null
-                      ? null
-                      : trip.vanDriverId == null
-                      ? balances.noDriverByVan[trip.vanStoreId] ?? 0
-                      : balances.byDriver[trip.vanDriverId] ?? 0,
                   onLoad: trip != null
                       ? null
                       : () => Navigator.push(
@@ -288,7 +281,6 @@ class _VanCard extends StatelessWidget {
   final StoreData van;
   final VanTripData? trip;
   final String? driverName;
-  final int? driverBalanceKobo;
   final VoidCallback? onLoad;
 
   /// Opens the trip's money story — the driver's balance, the trip's ledger
@@ -315,7 +307,6 @@ class _VanCard extends StatelessWidget {
     required this.van,
     required this.trip,
     required this.driverName,
-    required this.driverBalanceKobo,
     required this.onLoad,
     required this.onPayments,
     required this.onRecordPayment,
@@ -379,18 +370,9 @@ class _VanCard extends StatelessWidget {
               label: 'Out since ${_formatDate(trip!.openedAt)}',
             ),
             SizedBox(height: context.getRSize(6)),
-            // Negative = the driver owes. Shown as a plain "owes ₦X" rather
-            // than a signed figure — a shop owner reads a debt, not a sign.
-            _DetailRow(
-              icon: AppIcons.balance,
-              label: (driverBalanceKobo ?? 0) < 0
-                  ? 'Owes ${formatCurrency(-(driverBalanceKobo ?? 0) / 100)}'
-                  : (driverBalanceKobo ?? 0) == 0
-                  ? 'Settled'
-                  : 'In credit '
-                        '${formatCurrency((driverBalanceKobo ?? 0) / 100)}',
-              color: (driverBalanceKobo ?? 0) < 0 ? t.colorScheme.error : null,
-            ),
+            // #800: the same balance split three ways, so nobody adds it up
+            // by hand when the driver hands money in.
+            TripBalanceLines(tripId: trip!.id),
             SizedBox(height: context.getRSize(12)),
             // #143: the two mid-run events. Side by side because they are the
             // pair a manager reaches for at the tailgate — more goods out, or
@@ -532,9 +514,8 @@ class _StatusChip extends StatelessWidget {
 class _DetailRow extends StatelessWidget {
   final IconData? icon;
   final String label;
-  final Color? color;
 
-  const _DetailRow({required this.icon, required this.label, this.color});
+  const _DetailRow({required this.icon, required this.label});
 
   @override
   Widget build(BuildContext context) {
@@ -542,12 +523,12 @@ class _DetailRow extends StatelessWidget {
     final subtext = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
     return Row(
       children: [
-        Icon(icon, size: context.getRSize(12), color: color ?? subtext),
+        Icon(icon, size: context.getRSize(12), color: subtext),
         SizedBox(width: context.getRSize(8)),
         Expanded(
           child: Text(
             label,
-            style: t.textTheme.bodySmall?.copyWith(color: color ?? subtext),
+            style: t.textTheme.bodySmall?.copyWith(color: subtext),
           ),
         ),
       ],
