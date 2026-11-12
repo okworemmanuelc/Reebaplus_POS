@@ -23,7 +23,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 import 'package:reebaplus_pos/features/auth/widgets/pin_keypad.dart';
 import 'package:reebaplus_pos/features/subscription/subscription_plan_providers.dart';
-import 'package:reebaplus_pos/shared/services/auth_service.dart';
 
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/shared/widgets/reebaplus_logo.dart';
@@ -458,39 +457,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     // If the SDK has no current session, try a silent refresh first — most
     // of the time the access token has just expired while the refresh token
     // is still valid, and the user shouldn't be bounced to OTP over that.
-    // Only fall back to OTP when the refresh genuinely fails on an online
-    // device (refresh token rejected / signed out elsewhere). Offline gets
-    // a pass: the SDK auto-retries on reconnect, sync push self-gates on
-    // auth, so cloud writes safely queue until the JWT comes back.
+    // The result never blocks entry (#798): sync self-gates on auth, so cloud
+    // writes safely queue until the login comes back.
     if (!auth.hasSupabaseSession && (user.email ?? '').isNotEmpty) {
       final refreshResult = await auth.tryRefreshSupabaseSession();
       if (!mounted) return;
 
-      if (refreshResult == SessionRefreshResult.failedAuth) {
-        setState(() {
-          _checking = false;
-          _loginSuccess = false;
-        });
-        _pinNotifier.value = '';
-        AppNotification.showError(
-          context,
-          'Your session expired. Please verify your email to continue.',
-        );
-        final error = await auth.sendOtp(user.email!);
-        if (!mounted) return;
-        if (error != null) {
-          AppNotification.showError(context, error);
-          return;
-        }
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) =>
-                OtpVerificationScreen(user: user, email: user.email!),
-          ),
-        );
-        return;
-      }
-      // refreshed | alreadyValid | offline → continue into the app.
+      // #798: a refused login (failedAuth) no longer forces an email code
+      // here. A correct PIN always opens the app; SignInAgainBanner inside
+      // offers to sign in again and nothing uploads or downloads until then.
+      debugPrint('[LoginScreen] cloud login refresh: ${refreshResult.name}');
+      // Every result continues into the app.
     }
 
     // Brief pause so the user sees all 6 dots filled before the overlay swap.

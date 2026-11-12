@@ -7,6 +7,15 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #798: session expired never stops a sale; "Sign in again" banner (2026-11-12, branch `feat/798-session-expired-banner`, stacked on #796)
+- Removed both blocks: the session gate in `_HomeRouter` and the forced email code on the PIN screen. A correct PIN always opens the app.
+- `cloudLoginLost` (set in `main.dart` from the Supabase auth stream) drives `SignInAgainBanner` at the top of `MainLayout`. It opens `SessionExpiredScreen` (moved out of `main.dart` to `lib/features/auth/screens/session_expired_screen.dart`, now with "Not now"). An accepted code returns to the app via `OtpVerificationScreen.onVerified` and runs `pushThenPull`.
+- `pullChanges` now skips with no cloud login, like `pushPending`, so the last-synced marker cannot move past changes it never read.
+- The `auth.session_expired_gate` record is now written by the banner, once per loss.
+- `architecture.md` "Cloud login lost" paragraph rewritten.
+- Tests: `test/sync/pull_without_login_test.dart`, `test/shared/widgets/sign_in_again_banner_test.dart` (6 pass); the 28 existing test files covering the touched code pass (491). Full suite not run yet. Not checked on a phone.
+- Follow-ups not done: "Sign out instead" still calls the raw `fullLogout()`; the unused remote-kick path and its message remain.
+
 ### Issue #796: 12 hours away locks with PIN, never signs out; refused login renewals are recorded (2026-11-12, branch `fix/796-twelve-hour-lock-refresh-reason`)
 - The 12-hour rule in `AutoLockWrapper` used to call `fullLogout()` (email + code, no un-uploaded-sales check, no message). It now calls `lockApp()`: the phone asks for the PIN and nothing else changes. Decision is the pure `shouldLockOnResume`; the limit is `kLongAbsenceLock`.
 - New `AuthRefreshObserverClient` (`lib/core/services/auth_refresh_observer.dart`) wraps the Supabase HTTP client and keeps the status, error code and message of a refused token refresh (never a token). The `auth.session_lost` and `auth.session_expired_gate` records now end with `refusal: ...`, so a "session expired" report can be traced to its cause from `error_logs`.

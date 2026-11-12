@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/data/currencies.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/theme_notifier.dart';
@@ -16,6 +15,8 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/db_wipe.dart';
 import 'package:reebaplus_pos/core/services/auth_refresh_observer.dart';
 import 'package:reebaplus_pos/core/services/backup_exclusion_service.dart';
+import 'package:reebaplus_pos/core/services/cloud_login_state.dart';
+import 'package:reebaplus_pos/features/auth/screens/session_expired_screen.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/core/services/db_worker_switch_watcher.dart';
 import 'package:reebaplus_pos/core/diagnostics/overflow_route_reporter.dart';
@@ -28,13 +29,6 @@ import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
 import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/welcome_screen.dart';
 import 'package:reebaplus_pos/features/browse/screens/browse_screen.dart';
-import 'package:reebaplus_pos/features/auth/screens/otp_verification_screen.dart';
-import 'package:reebaplus_pos/shared/widgets/app_button.dart';
-import 'package:reebaplus_pos/core/theme/app_decorations.dart'
-    show authTextPrimary, authTextMuted;
-import 'package:reebaplus_pos/core/utils/responsive.dart';
-import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
-import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/main_layout.dart';
 import 'package:reebaplus_pos/shared/widgets/auto_lock_wrapper.dart';
@@ -258,6 +252,7 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
     // Seed from the current state — initialSession also fires post-subscribe
     // but seeding here avoids one frame of stale UI if it has already fired.
     final has = client.auth.currentUser != null;
+    cloudLoginLost.value = !has;
     if (has != _supabaseHasSession) {
       setState(() => _supabaseHasSession = has);
     }
@@ -289,6 +284,7 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
               userId: lostUser?.id,
             );
           }
+          cloudLoginLost.value = !next;
           setState(() => _supabaseHasSession = next);
         }
       },
@@ -548,7 +544,6 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
             navigatorKey: _navigatorKey,
             home: _HomeRouter(
               hasDeviceUser: _hasDeviceUser,
-              supabaseHasSession: _supabaseHasSession,
             ),
           ),
         ),
@@ -597,159 +592,10 @@ class _BrandedSplash extends StatelessWidget {
   }
 }
 
-/// Shown when a local user is loaded but the Supabase JWT is missing. Triggers
-/// a fresh OTP to the user's email so the session can be re-established without
-/// destroying the device session (PIN, biometrics, local data all preserved).
-class _SessionExpiredScreen extends ConsumerStatefulWidget {
-  final UserData user;
-  const _SessionExpiredScreen({required this.user});
-
-  @override
-  ConsumerState<_SessionExpiredScreen> createState() =>
-      _SessionExpiredScreenState();
-}
-
-class _SessionExpiredScreenState extends ConsumerState<_SessionExpiredScreen> {
-  bool _sending = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // Diagnostic breadcrumb (release-visible via the synced `error_logs`
-    // table): record that the session-expired gate actually rendered, tagged
-    // with the stored auth method so the Supabase console shows whether expired
-    // sessions correlate with Google vs email/OTP logins. This is the read-out
-    // for the "did Google end the session?" investigation — the device-kick
-    // (signOut(scope: others)) can never revoke the current device's own
-    // session, so any correlation here is the single-active-device policy
-    // revoking THIS device because the same account signed in elsewhere.
-    final auth = ref.read(authProvider);
-    // The JWT is gone by definition on this screen, so the row can't push until
-    // the OTP re-auth below restores it. Scope it to the in-hand local user so
-    // it's durably enqueued now and flushes on that re-auth, rather than being
-    // dropped local-only by the (cleared) business resolver. See [logError].
-    final bid = widget.user.businessId;
-    final uid = widget.user.id;
-    // #796: the server's own reason, captured before the async lookup below.
-    // On a cold start the refusal lands on the PIN screen (no local user yet),
-    // so this is the record that carries it to the cloud.
-    final refusal = AuthRefreshObserverClient.reasonAt(DateTime.now());
-    unawaited(
-      auth.getAuthMethod().then((method) {
-        CrashReporter.record(
-          'session-expired gate rendered (authMethod=${method ?? 'unknown'}, '
-          'refusal: $refusal)',
-          StackTrace.current,
-          context: 'auth.session_expired_gate',
-          businessId: bid,
-          userId: uid,
-        );
-      }).catchError((Object _) {
-        CrashReporter.record(
-          'session-expired gate rendered (authMethod lookup failed)',
-          StackTrace.current,
-          context: 'auth.session_expired_gate',
-          businessId: bid,
-          userId: uid,
-        );
-      }),
-    );
-  }
-
-  Future<void> _resendOtp() async {
-    final email = widget.user.email;
-    if (email == null || email.isEmpty) {
-      AppNotification.showError(
-        context,
-        'No email on file for this account. Please sign out and start over.',
-      );
-      return;
-    }
-    setState(() => _sending = true);
-    final auth = ref.read(authProvider);
-    final error = await auth.sendOtp(email);
-    if (!mounted) return;
-    setState(() => _sending = false);
-    if (error != null) {
-      AppNotification.showError(context, error);
-      return;
-    }
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => OtpVerificationScreen(user: widget.user, email: email),
-      ),
-    );
-  }
-
-  Future<void> _signOut() async {
-    await ref.read(authProvider).fullLogout();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final textColor = authTextPrimary(context);
-    final email = widget.user.email ?? '';
-
-    return Scaffold(
-      body: BrandedAuthBackground(
-        child: SafeArea(
-          // Centred and scrollable: it fits a phone sideways and a big text
-          // size by scrolling, never by overflowing.
-          child: AuthCenteredScroll(
-            padding: context.rPaddingSymmetric(horizontal: 28, vertical: 32),
-            children: [
-              Icon(
-                AppIcons.lockClock,
-                size: context.getRSize(72),
-                color: theme.colorScheme.primary,
-              ),
-              SizedBox(height: context.getRSize(20)),
-              Text(
-                'Session expired',
-                textAlign: TextAlign.center,
-                style: context.boldStyle(26).copyWith(color: textColor),
-              ),
-              SizedBox(height: context.getRSize(12)),
-              Text(
-                email.isEmpty
-                    ? "Your sign-in has expired. Verify your email to keep your changes syncing."
-                    : "Your sign-in has expired. We'll send a code to $email to restore your session — your PIN and local data stay intact.",
-                textAlign: TextAlign.center,
-                style: context
-                    .regularStyle(14)
-                    .copyWith(height: 1.4, color: authTextMuted(context, 0.75)),
-              ),
-              SizedBox(height: context.getRSize(32)),
-              AppButton(
-                text: _sending ? 'Sending…' : 'Verify email',
-                onPressed: _sending ? null : _resendOtp,
-              ),
-              SizedBox(height: context.getRSize(12)),
-              TextButton(
-                onPressed: _sending ? null : _signOut,
-                style: TextButton.styleFrom(
-                  minimumSize: const Size(48, kMinInteractiveDimension),
-                ),
-                child: Text(
-                  'Sign out instead',
-                  style: context
-                      .mediumStyle(14)
-                      .copyWith(color: authTextMuted(context)),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Test seam: lets widget tests mount the private [_SessionExpiredScreen].
+/// Test seam kept for the golden suite: mounts [SessionExpiredScreen].
 @visibleForTesting
 Widget buildSessionExpiredScreenForTest(UserData user) =>
-    _SessionExpiredScreen(user: user);
+    SessionExpiredScreen(user: user);
 
 /// The entry screen while no user is signed in on this run (#425):
 /// a phone with a business user (a device user) always gets the PIN screen,
@@ -774,11 +620,9 @@ Widget entryScreenWithoutSignedInUser({
 
 class _HomeRouter extends ConsumerWidget {
   final bool? hasDeviceUser;
-  final bool supabaseHasSession;
 
   const _HomeRouter({
     required this.hasDeviceUser,
-    required this.supabaseHasSession,
   });
 
   @override
@@ -834,16 +678,10 @@ class _HomeRouter extends ConsumerWidget {
       return entryScreenWithoutSignedInUser(hasDeviceUser: hasDeviceUser!);
     }
 
-    // Session-gate. Local user is set but Supabase has no JWT —
-    // mounting MainLayout here would render a logged-in shell that
-    // can't reach the cloud: every write would pile up in the queue
-    // with `pushPending` skipping on "no auth session" and the Sync
-    // Issues screen reporting "no profiles row for current
-    // auth.uid()". Bounce through OTP instead so the JWT is
-    // re-established before any tenant-scoped UI renders.
-    if (!supabaseHasSession) {
-      return _SessionExpiredScreen(user: user);
-    }
+    // #798: no session gate here. A phone whose cloud login was refused still
+    // opens the app and keeps selling, exactly like an offline phone: uploads
+    // and downloads pause without a login (see SupabaseSyncService) and
+    // [SignInAgainBanner] in MainLayout offers to sign in again.
 
     // Offline-first entry (Invariant #1): a logged-in device ALWAYS reaches
     // MainLayout — entry is never gated on a network pull. We only wait for the

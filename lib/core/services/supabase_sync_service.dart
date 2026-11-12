@@ -2720,6 +2720,14 @@ class SupabaseSyncService {
   /// Guarded entry: one pull at a time. The flag is set immediately before the
   /// `try` (no await between) so nothing thrown inside can leave it stuck true.
   Future<void> pullChanges(String businessId) async {
+    // #798: with no cloud login every table reads back empty under RLS, and
+    // the pull would still move the last-synced marker forward, skipping
+    // whatever changed in the cloud meanwhile. Skip, like pushPending does;
+    // the pull that follows the next sign-in catches up from the old marker.
+    if (_transport.currentAuthUserId == null) {
+      debugPrint('[SyncService] Skipping pull: no auth session.');
+      return;
+    }
     if (_fullPullRunning) {
       debugPrint(
         '[SyncService] pullChanges already in flight for $businessId — skipping',

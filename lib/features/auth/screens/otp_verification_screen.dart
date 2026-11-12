@@ -32,12 +32,18 @@ class OtpVerificationScreen extends ConsumerStatefulWidget {
   final bool isPinReset;
   final bool createBusinessIntent;
 
+  /// #798: set when the code only restores the cloud login of a user who is
+  /// already signed in and unlocked on this phone. Called once the code is
+  /// accepted, INSTEAD of the account lookup and PIN routing below.
+  final VoidCallback? onVerified;
+
   const OtpVerificationScreen({
     super.key,
     required this.user,
     required this.email,
     this.isPinReset = false,
     this.createBusinessIntent = false,
+    this.onVerified,
   });
 
   @override
@@ -206,6 +212,12 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
     // Brief pause to show success state before navigating.
     await Future.delayed(const Duration(milliseconds: 800));
     if (!mounted) return;
+
+    final onVerified = widget.onVerified;
+    if (onVerified != null) {
+      onVerified();
+      return;
+    }
 
     // Account resolution below does network work (fetchSupabaseAccount and, for
     // a returning device, the minimum-login pull) that can take several seconds

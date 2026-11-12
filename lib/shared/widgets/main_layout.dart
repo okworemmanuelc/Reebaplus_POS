@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:reebaplus_pos/shared/widgets/sign_in_again_banner.dart';
 import 'package:reebaplus_pos/features/subscription/widgets/plan_limit_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -606,7 +607,12 @@ class _MainLayoutState extends ConsumerState<MainLayout>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   // TODO(#584): remove once no legacy trials remain
-                  children: [TrialReminderBanner(), PlanStatusBanner()],
+                  children: [
+                    // #798: cloud login refused; the shop keeps selling.
+                    SignInAgainBanner(),
+                    TrialReminderBanner(),
+                    PlanStatusBanner(),
+                  ],
                 ),
               ),
             ),
