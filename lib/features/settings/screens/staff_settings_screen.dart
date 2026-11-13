@@ -11,13 +11,12 @@ import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/features/settings/screens/theme_settings_screen.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
-import 'package:reebaplus_pos/features/auth/screens/create_pin_screen.dart';
 import 'package:reebaplus_pos/features/profile/widgets/edit_profile_sheet.dart';
 
 /// Staff Settings (§10.5) — the self-service settings home for roles **below
 /// CEO** (Manager, Cashier, Stock keeper). Personal, not business-wide: edit
-/// own name/avatar, change the unlock PIN, and pick the per-device Display mode
-/// (moved here from the side menu for these roles). The CEO never sees this —
+/// own name/avatar, set up the receipt printer, and pick the per-device Display
+/// mode (moved here from the side menu for these roles). The CEO never sees this —
 /// they use CEO Settings. Role-gated here as defense-in-depth (hard rule #6);
 /// the drawer already hides it for the CEO.
 ///
@@ -66,16 +65,6 @@ class StaffSettingsScreen extends ConsumerWidget {
             subtitle: 'Edit your name and avatar',
             onTap: () =>
                 EditProfileSheet.show(context, user: user, parentRef: ref),
-          ),
-          gap,
-          SettingsRow(
-            icon: AppIcons.lock,
-            tone: IconTileTone.danger,
-            title: 'Change PIN',
-            subtitle: 'Update your unlock PIN',
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => CreatePinScreen(user: user)),
-            ),
           ),
           gap,
           SettingsRow(

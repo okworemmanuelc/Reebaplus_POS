@@ -31,9 +31,8 @@ const _steps = <(String, int)>[
   ('full_name', 3),
   ('phone', 4),
   ('address', 5),
-  ('create_pin', 6),
-  ('confirm_pin', 7),
-  ('welcome', 8),
+  ('joining', 6),
+  ('welcome', 7),
 ];
 
 void main() {

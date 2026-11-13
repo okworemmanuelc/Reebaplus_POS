@@ -9,10 +9,8 @@ import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
-import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/otp_verification_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/ceo_sign_up_screen.dart';
-import 'package:reebaplus_pos/features/auth/screens/create_pin_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/no_account_found_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/existing_account_screen.dart';
 import 'package:reebaplus_pos/features/auth/auth_post_verify_route.dart';
@@ -24,7 +22,7 @@ import 'package:reebaplus_pos/core/database/app_database.dart' show UserData;
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/main.dart' show supabaseReady;
 import 'package:reebaplus_pos/shared/services/auth_service.dart'
-    show AuthService, GoogleSignInException;
+    show GoogleSignInException;
 
 class EmailEntryScreen extends ConsumerStatefulWidget {
   /// When non-null, pre-fills the email field. If [lockedEmail] is also
@@ -54,7 +52,6 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
   final _emailController = TextEditingController();
   bool _loading = false;
   bool _isEmailValid = false;
-  bool _hasDeviceAuthenticatedUser = false;
 
   @override
   void initState() {
@@ -64,7 +61,6 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
     }
     _emailController.addListener(_validateEmail);
     _validateEmail();
-    _checkDeviceAuthenticatedUsers();
 
     // One-shot snackbar after a remote-kick logout (another device signed
     // in and revoked this session). Read-and-clear so a later rebuild of
@@ -88,36 +84,6 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
           "You've been signed in on another device — signed out.",
         );
       });
-    }
-  }
-
-  Future<void> _checkDeviceAuthenticatedUsers() async {
-    try {
-      final auth = ref.read(authProvider);
-      final db = ref.read(databaseProvider);
-
-      String? businessId;
-      final userId = await auth.getDeviceUserId();
-      if (userId != null) {
-        final deviceUser = await db.storesDao.getUserById(userId);
-        businessId = deviceUser?.businessId;
-      }
-      if (businessId == null) {
-        final businesses = await db.select(db.businesses).get();
-        if (businesses.length == 1) businessId = businesses.first.id;
-      }
-      if (businessId != null) {
-        final count = await db.userBusinessesDao.countDeviceStaffForBusiness(
-          businessId,
-        );
-        if (mounted) {
-          setState(() {
-            _hasDeviceAuthenticatedUser = count >= 1;
-          });
-        }
-      }
-    } catch (e) {
-      debugPrint('[EmailEntryScreen] Error checking device auth users: $e');
     }
   }
 
@@ -185,16 +151,22 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
       await auth.saveAuthMethod('google');
 
       // Resolve where to go now Google has verified the email. Shared with the
-      // email/OTP path (auth_post_verify_route.dart) so the §7.2a account-scoping
-      // and shared-till PIN rules stay in one place. Google sign-in is never a
-      // PIN reset, so isPinReset stays false. setCurrentUser persists the device
-      // user / last-email at real login, so we don't write them here.
+      // email/OTP path (auth_post_verify_route.dart) so the §7.2a
+      // account-scoping rules stay in one place. setCurrentUser persists the
+      // device user / last-email at real login, so we don't write them here.
       final route = await resolvePostVerifyRoute(
         auth,
         email,
         confirmClearOtherBusiness: confirmClearOtherBusiness,
       );
       if (!mounted) return;
+
+      // #812: no PIN — a known user goes straight into the shop. Binding the
+      // user regenerates the navigator (main.dart), which replaces this screen.
+      if (route is SignedInRoute) {
+        auth.completeSignIn(route.user);
+        return;
+      }
       setState(() => _loading = false);
 
       final Widget? page = switch (route) {
@@ -206,8 +178,8 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
           widget.createBusinessIntent
               ? CeoSignUpScreen(verifiedEmail: email)
               : NoAccountFoundScreen(email: email),
-        LoginRoute(:final user) => LoginScreen(presetUser: user),
-        CreatePinRoute(:final user) => CreatePinScreen(user: user),
+        // Handled above.
+        SignedInRoute() => null,
         // #285: both leave the phone exactly as it was found, so there is
         // nowhere to route to — stay on this screen.
         AccountLookupUnavailableRoute() => null,
@@ -259,17 +231,18 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
 
     final auth = ref.read(authProvider);
 
-    // §9 / M4 — "Create a new business" with an email that already has a
-    // fully-set-up account ON THIS DEVICE can never create a second business
-    // (one email, one business). Recognise that here and route to sign-in
-    // BEFORE spending an OTP. Scoped to createBusinessIntent + a real local PIN
-    // so the ordinary sign-in flow and cloud-only / cross-device accounts are
+    // §9 / M4 — "Create a new business" with an email that already has an
+    // account ON THIS DEVICE can never create a second business (one email,
+    // one business). Recognise that here and turn it into an ordinary sign-in
+    // BEFORE the OTP, so the verified code lands the user in their shop rather
+    // than in the sign-up flow. Cloud-only / cross-device accounts are
     // untouched — those still resolve post-OTP. We deliberately do NOT add a
     // pre-auth "does this email exist" oracle for the cross-device case: account
     // existence is revealed only after the user proves ownership via OTP, which
     // is what prevents email enumeration. This local check leaks nothing — the
     // row is already on this device.
-    if (widget.createBusinessIntent) {
+    var createBusinessIntent = widget.createBusinessIntent;
+    if (createBusinessIntent) {
       UserData? existing;
       try {
         existing = await auth.getUserByEmail(email);
@@ -277,25 +250,12 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
         existing = null; // lookup failure → fall through to the normal OTP path
       }
       if (!mounted) return;
-      final hasRealPin =
-          existing != null &&
-          existing.pin.isNotEmpty &&
-          existing.pin != AuthService.setupRequiredPin;
-      if (hasRealPin) {
-        setState(() => _loading = false);
+      if (existing != null) {
+        createBusinessIntent = false;
         AppNotification.showInfo(
           context,
           'This email already belongs to a business — sign in instead.',
         );
-        Navigator.of(context).push(
-          PageRouteBuilder(
-            pageBuilder: (_, __, ___) => LoginScreen(presetUser: existing!),
-            transitionsBuilder: (_, animation, __, child) =>
-                FadeTransition(opacity: animation, child: child),
-            transitionDuration: const Duration(milliseconds: 500),
-          ),
-        );
-        return;
       }
     }
 
@@ -363,33 +323,10 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
             OtpVerificationScreen(
               user: localUser,
               email: email,
-              createBusinessIntent: widget.createBusinessIntent,
+              createBusinessIntent: createBusinessIntent,
             ),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(opacity: animation, child: child);
-        },
-        transitionDuration: const Duration(milliseconds: 500),
-      ),
-    );
-  }
-
-  void _goToPinDirectly() {
-    Navigator.of(context).pushReplacement(
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) =>
-            const LoginScreen(),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          final curve = CurvedAnimation(
-            parent: animation,
-            curve: Curves.easeInOutCubic,
-          );
-          return FadeTransition(
-            opacity: curve,
-            child: ScaleTransition(
-              scale: Tween<double>(begin: 0.96, end: 1.0).animate(curve),
-              child: child,
-            ),
-          );
         },
         transitionDuration: const Duration(milliseconds: 500),
       ),
@@ -537,27 +474,6 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
                 ),
               ),
               SizedBox(height: context.getRSize(20)),
-
-              if (_hasDeviceAuthenticatedUser) ...[
-                Center(
-                  child: TextButton(
-                    style: TextButton.styleFrom(
-                      minimumSize: const Size(
-                        kMinInteractiveDimension,
-                        kMinInteractiveDimension,
-                      ),
-                    ),
-                    onPressed: _goToPinDirectly,
-                    child: Text(
-                      'Already set up on this device? Login with PIN',
-                      style: context
-                          .regularStyle(13)
-                          .copyWith(color: authTextMuted(context)),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-              ],
             ],
           ),
         ),

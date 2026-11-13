@@ -34,7 +34,7 @@ import 'package:reebaplus_pos/shared/widgets/smooth_route.dart';
 /// [fromTill] (#437): opened from the till's side menu (Shop) on a phone
 /// signed in to a business. The business sign-in is the Shopper login; Sell
 /// on Reebaplus is hidden (this login already has its business) and a back
-/// button returns to the till — through the PIN screen ([openShopFromTill]).
+/// button returns to the till ([openShopFromTill]).
 class BrowseScreen extends ConsumerStatefulWidget {
   const BrowseScreen({super.key, this.fromTill = false});
 

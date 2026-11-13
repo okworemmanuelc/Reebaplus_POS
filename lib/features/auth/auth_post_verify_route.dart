@@ -21,17 +21,13 @@ class NoAccountFoundRoute extends PostVerifyRoute {
   const NoAccountFoundRoute();
 }
 
-/// Known user who already has a PIN on this device — enter their PIN.
-class LoginRoute extends PostVerifyRoute {
+/// Known user with a local row on this device — sign them straight in. There is
+/// no PIN step any more (owner decision #812): the verified email code or
+/// Google sign-in is the whole proof, so the caller hands [user] to
+/// [AuthService.completeSignIn].
+class SignedInRoute extends PostVerifyRoute {
   final UserData user;
-  const LoginRoute(this.user);
-}
-
-/// Known user with no PIN yet (sentinel PIN from a cloud-seeded row, or a
-/// reset) — create their PIN before they can sign in.
-class CreatePinRoute extends PostVerifyRoute {
-  final UserData user;
-  const CreatePinRoute(this.user);
+  const SignedInRoute(this.user);
 }
 
 /// The cloud could not be reached, and this device holds no local row to fall
@@ -59,10 +55,6 @@ class SignInCancelledRoute extends PostVerifyRoute {
 /// multi-business email holds one local row per business, and binding the
 /// wrong tenant's row is a cross-business leak (§7.2a).
 ///
-/// [isPinReset] is true only on the Forgot-PIN flow, where a user who already
-/// has a PIN must still be routed to create a new one. Google sign-in is never
-/// a reset, so it leaves this false.
-///
 /// [confirmClearOtherBusiness] is asked once per older business that still
 /// holds un-uploaded work, and is required rather than optional so neither
 /// entry screen can silently destroy a shop's unsent sales (#285).
@@ -70,17 +62,16 @@ Future<PostVerifyRoute> resolvePostVerifyRoute(
   AuthService auth,
   String email, {
   required StaleBusinessConfirm confirmClearOtherBusiness,
-  bool isPinReset = false,
 }) async {
   final lookup = await auth.fetchSupabaseAccount();
 
   // Decision 2: act only on a clear cloud answer. A network failure clears
-  // nothing — a local row still unlocks with its PIN; with none, say so rather
-  // than guessing.
+  // nothing — a local row still signs in (the email was just verified); with
+  // none, say so rather than guessing.
   if (lookup is SupabaseAccountUnavailable) {
     final offlineUser = await auth.getUserByEmail(email);
     if (offlineUser == null) return const AccountLookupUnavailableRoute();
-    return _pinRouteFor(offlineUser, isPinReset: isPinReset);
+    return SignedInRoute(offlineUser);
   }
 
   final account = switch (lookup) {
@@ -129,17 +120,5 @@ Future<PostVerifyRoute> resolvePostVerifyRoute(
     return const NoAccountFoundRoute();
   }
 
-  return _pinRouteFor(localUser, isPinReset: isPinReset);
-}
-
-/// PIN screen or PIN setup, depending on whether [user] already holds a real
-/// PIN on this device. A row seeded from the cloud profile carries the sentinel
-/// PIN — the user must set up a PIN here before they can sign in.
-PostVerifyRoute _pinRouteFor(UserData user, {required bool isPinReset}) {
-  final isSetupRequired = user.pin == AuthService.setupRequiredPin;
-  final hasPin = user.pin.isNotEmpty && !isSetupRequired;
-  if (hasPin && !isPinReset) {
-    return LoginRoute(user);
-  }
-  return CreatePinRoute(user);
+  return SignedInRoute(localUser);
 }

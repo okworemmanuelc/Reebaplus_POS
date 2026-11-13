@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:reebaplus_pos/core/storefront/browse_switch.dart';
-import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/welcome_screen.dart';
 import 'package:reebaplus_pos/features/browse/screens/browse_screen.dart';
 import 'package:reebaplus_pos/features/browse/screens/storefront_store_screen.dart';
@@ -18,11 +17,12 @@ void main() {
   tearDown(() => debugOverrideBrowseFirstEnabled(null));
 
   group('entry routing (#425)', () {
-    test('a business phone always opens on the PIN screen', () {
+    test('a business phone that could not restore its user signs in again '
+        '(#812: no PIN screen)', () {
       for (final browseFirst in [true, false]) {
         expect(
           entryScreenWithoutSignedInUser(hasDeviceUser: true, browseFirst: browseFirst),
-          isA<LoginScreen>(),
+          isA<WelcomeScreen>(),
         );
       }
     });
@@ -39,7 +39,7 @@ void main() {
       expect(entryScreenWithoutSignedInUser(hasDeviceUser: false), isA<WelcomeScreen>());
       debugOverrideBrowseFirstEnabled(true);
       expect(entryScreenWithoutSignedInUser(hasDeviceUser: false), isA<BrowseScreen>());
-      expect(entryScreenWithoutSignedInUser(hasDeviceUser: true), isA<LoginScreen>());
+      expect(entryScreenWithoutSignedInUser(hasDeviceUser: true), isA<WelcomeScreen>());
     });
   });
 

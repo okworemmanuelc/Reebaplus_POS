@@ -351,8 +351,8 @@ void main() {
         confirmClearOtherBusiness: refuseToPrompt,
       );
 
-      expect(route, isA<LoginRoute>());
-      expect((route as LoginRoute).user.businessId, bizB);
+      expect(route, isA<SignedInRoute>());
+      expect((route as SignedInRoute).user.businessId, bizB);
       expect((await db.select(db.businesses).get()).map((b) => b.id), [bizB]);
       expect(await db.syncDao.countPending(businessId: bizA), 0);
       expect(
@@ -400,8 +400,8 @@ void main() {
         confirmClearOtherBusiness: refuseToPrompt,
       );
 
-      expect(route, isA<LoginRoute>());
-      expect((route as LoginRoute).user.businessId, bizA);
+      expect(route, isA<SignedInRoute>());
+      expect((route as SignedInRoute).user.businessId, bizA);
       expect(await db.select(db.users).get(), hasLength(1));
       expect((await db.select(db.businesses).get()).map((b) => b.id), [bizA]);
     },
@@ -435,13 +435,13 @@ void main() {
         confirmClearOtherBusiness: refuseToPrompt,
       );
 
-      expect(route, isA<LoginRoute>());
-      expect((route as LoginRoute).user.businessId, bizA);
+      expect(route, isA<SignedInRoute>());
+      expect((route as SignedInRoute).user.businessId, bizA);
       expect(await db.select(db.users).get(), hasLength(1));
     },
   );
 
-  test('a row seeded from the cloud profile still routes into PIN setup',
+  test('a row seeded from the cloud profile signs straight in (#812)',
       () async {
     final bizA = await seedBusiness(
       'Only Biz',
@@ -456,7 +456,7 @@ void main() {
       confirmClearOtherBusiness: refuseToPrompt,
     );
 
-    expect(route, isA<CreatePinRoute>());
+    expect(route, isA<SignedInRoute>());
   });
 
   // ── #437: a Shopper login and Create business (invariant #9) ─────────────

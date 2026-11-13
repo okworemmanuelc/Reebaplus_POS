@@ -25,7 +25,7 @@ import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 import 'package:reebaplus_pos/core/result.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 
-import 'package:reebaplus_pos/shared/widgets/auto_lock_wrapper.dart';
+import 'package:reebaplus_pos/shared/widgets/app_resume_sync.dart';
 import 'package:reebaplus_pos/features/inventory/widgets/photo_source_sheet.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -750,7 +750,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       final source = await choosePhotoSource(context);
       if (source == null || !mounted) return;
       setState(() {});
-      AutoLockWrapper.suppressNextResume = true;
+      AppResumeSync.suppressNextResume = true;
       final picked = await ref
           .read(productImageServiceProvider)
           .pickAndProcess(source: source);
@@ -1323,7 +1323,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       final source = await choosePhotoSource(context);
       if (source == null || !mounted) return;
       setState(() {});
-      AutoLockWrapper.suppressNextResume = true;
+      AppResumeSync.suppressNextResume = true;
       final imgSvc = ref.read(productImageServiceProvider);
       final picked = await imgSvc.pickAndProcess(source: source);
       if (!mounted) return;

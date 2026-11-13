@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
@@ -175,40 +174,17 @@ class AppDrawer extends ConsumerWidget {
         if (role != null) (label: role.name, tone: TagPillTone.info),
       ],
       onOpenProfile: () => _pushRoute(context, ref, const ProfileScreen()),
-      // Lock — a quick lock back to the PIN screen, not a full logout.
-      onLock: user == null
-          ? null
-          : () async {
-              // Pop the drawer first — mirrors the Log Out pattern below so
-              // the watched currentUser flipping to null doesn't trip
-              // tenant-scoped widgets while the drawer is still painting.
-              final auth = ref.read(authProvider);
-              Navigator.pop(context);
-              await _lockTill(auth);
-            },
       banner: _buildSyncBanner(context, ref, isSignedIn: user != null),
     );
   }
 
-  /// Locks the till back to the PIN screen (UI-only, never a logout).
-  static Future<void> _lockTill(AuthService auth) async {
-    // Already locked (or logged out) — nothing to do.
-    if (auth.currentUser == null) return;
-    // Drop any stale paused-time marker so a rapid background→resume right
-    // after lock doesn't double-fire the auto-lock branch.
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('app_paused_time');
-    auth.lockApp();
-  }
-
   /// Shop (#437): opens Browse over the till with this phone's business
-  /// sign-in; leaving it locks the till, so the PIN is needed to get back.
-  void _openShop(BuildContext context, WidgetRef ref) {
-    // Capture before the drawer closes — `ref`/`context` die with it.
-    final auth = ref.read(authProvider);
+  /// sign-in; leaving it returns straight to the till (#812: no PIN lock).
+  void _openShop(BuildContext context) {
+    // Capture before the drawer closes — `context` dies with it.
     final root = Navigator.of(context, rootNavigator: true);
     Navigator.pop(context); // close the drawer
-    openShopFromTill(root, lockTill: () => _lockTill(auth));
+    openShopFromTill(root);
   }
 
   /// Sync status banner. Three signals nested so it reflects pending, failed,
@@ -470,7 +446,7 @@ class AppDrawer extends ConsumerWidget {
                 key: AppDrawerKeys.shop,
                 icon: AppIcons.storefront,
                 label: 'Shop',
-                onTap: () => _openShop(context, ref),
+                onTap: () => _openShop(context),
               ),
             ],
             // Pro Tips removed from the sidebar (decision Q7 — not surfaced in
@@ -483,8 +459,8 @@ class AppDrawer extends ConsumerWidget {
 
   /// Log Out (master plan §7.6): a device is used by one user at a time, so
   /// logging out wipes the device's local data — the user re-auths with email
-  /// + a code and a new PIN, and the data is re-downloaded. All roles use this
-  /// one button.
+  /// + a code (or Google), and the data is re-downloaded. All roles use this
+  /// one button; it is also how staff change over on a shared till (#812).
   Future<void> _logOut(BuildContext context, WidgetRef ref) async {
     // Capture the provider up front — `ref` is invalidated once this widget
     // unmounts mid-await.
@@ -497,9 +473,7 @@ class AppDrawer extends ConsumerWidget {
         content: const Text(
           'Logging out will erase all local data on this device. You '
           'will re-download it after signing in again.\n\n'
-          "You'll need your email + a one-time code, and a new PIN, to "
-          'sign back in.\n\n'
-          'To step away without signing out, use the lock button instead.',
+          "You'll need your email + a one-time code to sign back in.",
         ),
         actions: [
           TextButton(

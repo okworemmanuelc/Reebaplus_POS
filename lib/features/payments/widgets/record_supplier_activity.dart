@@ -17,7 +17,7 @@ import 'package:reebaplus_pos/features/payments/widgets/payments_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
-import 'package:reebaplus_pos/shared/widgets/auto_lock_wrapper.dart';
+import 'package:reebaplus_pos/shared/widgets/app_resume_sync.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
 /// §21.4 — "Record Activity" chooser: Invoice Total or Record Payment for a
@@ -362,7 +362,7 @@ class _RecordPaymentSheetState extends ConsumerState<RecordPaymentSheet> {
   bool get _hasProof => _receipt != null || _refCtrl.text.trim().isNotEmpty;
 
   Future<void> _pickReceipt() async {
-    AutoLockWrapper.suppressNextResume = true;
+    AppResumeSync.suppressNextResume = true;
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['jpg', 'png', 'pdf'],
