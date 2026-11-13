@@ -5,7 +5,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform, visibleForTesting;
+    show TargetPlatform, defaultTargetPlatform, kIsWeb, visibleForTesting;
 import 'package:flutter/painting.dart' show FileImage;
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
@@ -46,6 +46,10 @@ class ProductImageService {
 
   final SupabaseClient _client;
   late final ProductPhotoCache _cache;
+
+  /// Browser only (#812): the browser keeps no photo files, so the public url
+  /// of a photo saved this session stands in for the device-copy path.
+  final Map<String, String> _webUrls = {};
 
   static const _bucket = 'product-images';
   // Products get a larger cap than the 512px logo — staff recognise items by
@@ -113,6 +117,19 @@ class ProductImageService {
     Uint8List raw, {
     int maxDimension = _maxDimension,
   }) async {
+    if (kIsWeb) {
+      // The browser has no background isolate (#812): decode and encode in
+      // pure Dart on the main thread. One photo at a time, so this is fine.
+      try {
+        final decoded = img.decodeImage(raw);
+        if (decoded == null) {
+          return Result.err(AppError.io('Could not decode image.'));
+        }
+        return Result.ok(encodePhotoJpeg(decoded, maxDimension: maxDimension));
+      } catch (_) {
+        return Result.err(AppError.io('Could not decode image.'));
+      }
+    }
     ui.Codec? codec;
     ui.Image? image;
     try {
@@ -182,6 +199,20 @@ class ProductImageService {
     required String productId,
     required Uint8List bytes,
   }) async {
+    if (kIsWeb) {
+      // No device copy, no offline retry in the browser (#812): upload now.
+      try {
+        final url = await _upload(businessId, productId, bytes);
+        _webUrls[productId] = url;
+        return Result.ok(url);
+      } on StorageException catch (e) {
+        return Result.err(
+          AppError.network('Storage upload failed: ${e.message}'),
+        );
+      } catch (e) {
+        return Result.err(AppError.unknown(e));
+      }
+    }
     // (a) Device copy first — gives instant + offline render.
     try {
       await _cache.writeLocal(productId, bytes);
@@ -246,6 +277,7 @@ class ProductImageService {
     Future<void> Function(String productId, String url) onUploaded, {
     Future<bool> Function(String productId)? isLiveProduct,
   }) async {
+    if (kIsWeb) return; // nothing is ever saved for later in the browser
     final prefs = await SharedPreferences.getInstance();
     final entries = prefs.getStringList(_pendingKey) ?? const <String>[];
     if (entries.isEmpty) return;
@@ -316,7 +348,8 @@ class ProductImageService {
 
   /// The device-copy path for [productId] — does not check whether the file
   /// exists. Stable per product (see [ProductPhotoCache]).
-  Future<String> localPathFor(String productId) => _cache.pathFor(productId);
+  Future<String> localPathFor(String productId) async =>
+      kIsWeb ? (_webUrls[productId] ?? '') : _cache.pathFor(productId);
 
   /// Returns a local path that shows the photo at [imageUrl]. Downloads only
   /// when this phone has no copy, or its copy is of a different `image_url`
@@ -326,8 +359,11 @@ class ProductImageService {
   Future<String?> ensureCached({
     required String productId,
     required String? imageUrl,
-  }) =>
-      _cache.resolve(productId: productId, imageUrl: imageUrl);
+  }) async {
+    // The browser shows the cloud url itself (#812).
+    if (kIsWeb) return (imageUrl ?? '').isEmpty ? null : imageUrl;
+    return _cache.resolve(productId: productId, imageUrl: imageUrl);
+  }
 
   Future<Uint8List?> _downloadBytes(String imageUrl) async {
     // Prefer the authenticated Storage client (by object path) so a member can
@@ -358,8 +394,10 @@ class ProductImageService {
     required String productId,
   }) async {
     try {
-      await _cache.remove(productId);
-      await _unmarkPending(productId);
+      if (!kIsWeb) {
+        await _cache.remove(productId);
+        await _unmarkPending(productId);
+      }
 
       await _client.storage.from(_bucket).remove([
         _objectPath(businessId, productId),

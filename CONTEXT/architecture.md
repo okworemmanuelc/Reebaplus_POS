@@ -180,6 +180,23 @@ the Log Out teardown (`DeviceTeardown.leave(LeaveReason.logout)`), so the outbox
 answer in 15 s) = the wipe is skipped, the data kept and the date left old so the next
 open retries. Phones and tablets never run it.
 
+**Phone-only features in the browser (#812 S3, 2026-11-13).** `dart:io` `File`,
+`Directory`, `Platform` and `path_provider` throw in the browser, so each is behind
+`kIsWeb` and the browser takes the nearest safe path, never an error:
+- **Printers:** `PrinterService` / `UsbPrinterChannel` are quiet no-ops (`printBytes`
+  false, `hasPrinterSetUp` false, so auto-print after a sale skips), and the Receipt
+  printer entry in Settings is hidden. Receipts still show on screen and can be shared.
+- **Photos and logo:** no on-disk copy. `ProductImageService`, `ProductGalleryImages`
+  and `BusinessLogoService` upload straight to Storage and hand back the cloud URL
+  where a phone hands back a file path; `LocalPhotoImage` / `productPhotoRef`
+  (`lib/shared/widgets/local_photo_image.dart`) draw either. Nothing waits to upload
+  later in the browser. `LocalPhotoFiles.deleteAll` only clears the pending lists.
+- **Share / CSV / payslip:** `shareFileBytes` (`lib/core/utils/share_file.dart`) opens
+  the share sheet on a phone and saves a browser download on the web (share_plus has
+  no file fallback there).
+- **Device registry** records platform `web`; push, Play billing and the schema-audit
+  report file are skipped; `schema_audit` reports `web` for the OS.
+
 **Quantities are quarter-step doubles (#620 / #627, Drift v98, cloud 0239).**
 Stock, sale-line, cost-layer and crate quantities (22 columns: `inventory.quantity`,
 `order_items.quantity`, `stock_transactions.quantity_delta`, `cost_batches.qty_*`,

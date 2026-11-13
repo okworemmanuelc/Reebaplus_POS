@@ -1,7 +1,7 @@
-import 'dart:io';
+import 'dart:convert';
+import 'dart:typed_data';
 
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:reebaplus_pos/core/utils/share_file.dart';
 
 /// Shared CSV export for the Business Reports detail screens (§25.6 / §25.7 —
 /// "CSV from day one"). Builds an RFC-4180 CSV string and opens the system share
@@ -33,17 +33,15 @@ String buildCsv(List<String> header, List<List<String>> rows) {
   return buffer.toString();
 }
 
-/// Writes [csv] to a temporary `<fileName>.csv` and opens the share sheet.
-/// [fileName] must not include the extension.
+/// Opens the share sheet with [csv] as `<fileName>.csv` (a browser download on
+/// the web, #812). [fileName] must not include the extension.
 Future<void> shareCsv({
   required String csv,
   required String fileName,
   String? subject,
-}) async {
-  final tempDir = await getTemporaryDirectory();
-  final file = File('${tempDir.path}/$fileName.csv');
-  await file.writeAsString(csv);
-  await Share.shareXFiles([
-    XFile(file.path, mimeType: 'text/csv'),
-  ], subject: subject);
-}
+}) => shareFileBytes(
+  bytes: Uint8List.fromList(utf8.encode(csv)),
+  fileName: '$fileName.csv',
+  mimeType: 'text/csv',
+  subject: subject,
+);

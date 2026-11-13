@@ -1,10 +1,10 @@
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/shared/widgets/local_photo_image.dart';
 import 'package:reebaplus_pos/features/settings/screens/settings_screen.dart'
     show kSettingsMaxContentWidth;
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
@@ -339,8 +339,8 @@ class InventoryProductRow extends StatelessWidget {
           color: visual.tint,
           child: photoPath == null
               ? fallback
-              : Image.file(
-                  File(photoPath!),
+              : LocalPhotoImage(
+                  photoPath!,
                   fit: BoxFit.cover,
                   errorBuilder: (_, _, _) => fallback,
                 ),

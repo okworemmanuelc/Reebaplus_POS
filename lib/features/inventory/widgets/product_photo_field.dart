@@ -1,8 +1,8 @@
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
+import 'package:reebaplus_pos/shared/widgets/local_photo_image.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
@@ -44,7 +44,7 @@ class ProductPhotoField extends StatelessWidget {
 
   bool get _hasImage =>
       pendingBytes != null ||
-      (existingPath != null && File(existingPath!).existsSync());
+      photoRefExists(existingPath);
 
   @override
   Widget build(BuildContext context) {
@@ -65,9 +65,9 @@ class ProductPhotoField extends StatelessWidget {
         height: box,
         fit: BoxFit.cover,
       );
-    } else if (existingPath != null && File(existingPath!).existsSync()) {
-      preview = Image.file(
-        File(existingPath!),
+    } else if (photoRefExists(existingPath)) {
+      preview = LocalPhotoImage(
+        existingPath!,
         width: box,
         height: box,
         fit: BoxFit.cover,

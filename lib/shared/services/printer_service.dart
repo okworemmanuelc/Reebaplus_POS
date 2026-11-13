@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -49,7 +50,7 @@ class PrinterService {
            connectToPrinter ??
            ((mac) => PrintBluetoothThermal.connect(macPrinterAddress: mac)),
        _wait = wait ?? ((d) => Future<void>.delayed(d)),
-       _isAndroid = isAndroid ?? Platform.isAndroid;
+       _isAndroid = isAndroid ?? (!kIsWeb && Platform.isAndroid);
 
   final Future<bool> Function(List<int> bytes) _writeBytes;
   final Future<bool> Function(String mac) _connectToPrinter;
@@ -67,11 +68,13 @@ class PrinterService {
   /// True when the app may print: Bluetooth access was granted, or a USB
   /// printer is plugged in and allowed (USB needs no Bluetooth access).
   Future<bool> requestPermissions() async {
+    if (kIsWeb) return false;
     if (await _requestBluetoothPermissions()) return true;
     return await attachedUsbPrinter() != null;
   }
 
   Future<bool> _requestBluetoothPermissions() async {
+    if (kIsWeb) return false;
     if (!Platform.isAndroid) {
       // iOS / macOS use CoreBluetooth, not runtime permissions — there is no
       // dialog to request here. The native Bluetooth-access prompt fires the
@@ -126,7 +129,12 @@ class PrinterService {
     return false;
   }
 
+  /// The browser has no printer access (#812): every print path below is a
+  /// quiet no-op there.
+  static bool get supported => !kIsWeb;
+
   Future<bool> get isConnected async {
+    if (kIsWeb) return false;
     return await PrintBluetoothThermal.connectionStatus;
   }
 
@@ -135,6 +143,7 @@ class PrinterService {
     // plugin runs a ~5s BLE scan instead and returns *nearby* devices — which
     // silently finds nothing unless CoreBluetooth has powered on first, so warm
     // it up before scanning. (No-op on Android.)
+    if (kIsWeb) return const [];
     if (!Platform.isAndroid) {
       await _ensureBleReady();
     }
@@ -322,6 +331,7 @@ class PrinterService {
   /// sale skips quietly when false (#614), so phones without a printer never
   /// see a print error.
   Future<bool> hasPrinterSetUp() async {
+    if (kIsWeb) return false;
     try {
       if ((await _usb.list()).any((p) => p.id.isNotEmpty)) return true;
     } catch (e) {
@@ -565,6 +575,7 @@ class PrinterService {
   /// USB gets the bytes as they are — no ESC @ wake gap, which only Bluetooth
   /// links need, and receipts already start with ESC @.
   Future<bool> printBytes(List<int> bytes) async {
+    if (kIsWeb) return false;
     final usb = await attachedUsbPrinter();
     if (usb != null) {
       if (await _usb.write(usb.id, await _withPaperEnd(usb.id, bytes))) {
@@ -596,6 +607,7 @@ class PrinterService {
   /// has manually selected a device through the [PrinterPicker]. Bluetooth
   /// only: it follows a manual Bluetooth pick.
   Future<bool> printBytesDirectly(List<int> bytes) async {
+    if (kIsWeb) return false;
     try {
       if (!await isConnected) return false;
       final mac = await lastConnectedMac();

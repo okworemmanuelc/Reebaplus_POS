@@ -924,6 +924,10 @@ A choice between a few short options: Surface 2 track, the chosen item on a surf
 - A sheet stays open with the spinner until the save ends, and stays open with the typed values on failure. Close it with `if (ctx.mounted && (ModalRoute.of(ctx)?.isCurrent ?? false)) Navigator.pop(ctx);` so a sheet dragged away cannot close the screen under it.
 - A sheet that can be retried needs an all-or-nothing save, so wrap several writes in one transaction.
 
+## Hidden in the browser (#812 S3)
+
+The browser build has no printer and no photo files. Settings hides the **Receipt printer** entry on web (`kIsWeb`); printing from a receipt fails quietly there (the share and download buttons still work). Product and logo photos draw from their cloud URL (`LocalPhotoImage`, `productPhotoRef`) instead of a file. Phones and tablets are unchanged.
+
 ## Test print preview (#702)
 
 - Test print opens `TestPrintPreviewScreen`: status strip (Printing... / Printed / Failed) with `Print again` (`onAsyncPressed`), then the sample receipt on white paper in every theme. Text and Compact lines render monospace at the true column width (`ReceiptLinesPreview`); picture style shows `PaperReceipt`. Both come from `SampleReceipt`, the same source the printer is sent.

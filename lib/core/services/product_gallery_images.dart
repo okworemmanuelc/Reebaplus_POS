@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -67,6 +68,10 @@ class ProductGalleryImages {
   final String Function(String objectPath) _publicUrl;
   final Future<Directory> Function() _directory;
 
+  /// Browser only (#812): the browser keeps no device copy, so a staged
+  /// photo's bytes wait here (keyed by object path) until [tryUpload].
+  final Map<String, Uint8List> _webStaged = {};
+
   /// `<businessId>/<productId>/<photoId>.jpg`.
   static String objectPath(
     String businessId,
@@ -104,6 +109,11 @@ class ProductGalleryImages {
     required Uint8List bytes,
   }) async {
     final photoId = UuidV7.generate();
+    if (kIsWeb) {
+      final path = objectPath(businessId, productId, photoId);
+      _webStaged[path] = bytes;
+      return _publicUrl(path);
+    }
     final file = await _copyFile(productId, photoId);
     await file.parent.create(recursive: true);
     final tmp = File('${file.path}.tmp');
@@ -118,6 +128,18 @@ class ProductGalleryImages {
   Future<bool> tryUpload(String url) async {
     final ref = parseUrl(url);
     if (ref == null) return false;
+    if (kIsWeb) {
+      final path = objectPath(ref.businessId, ref.productId, ref.photoId);
+      final bytes = _webStaged[path];
+      if (bytes == null) return false;
+      try {
+        await _upload(path, bytes);
+      } catch (_) {
+        return false;
+      }
+      _webStaged.remove(path);
+      return true;
+    }
     final file = await _copyFile(ref.productId, ref.photoId);
     if (!file.existsSync()) return false;
     try {
@@ -140,6 +162,14 @@ class ProductGalleryImages {
   Future<void> discard(String url) async {
     final ref = parseUrl(url);
     if (ref == null) return;
+    if (kIsWeb) {
+      _webStaged
+          .remove(objectPath(ref.businessId, ref.productId, ref.photoId));
+      try {
+        await _remove([objectPath(ref.businessId, ref.productId, ref.photoId)]);
+      } catch (_) {}
+      return;
+    }
     try {
       await _setPending(
         '${ref.businessId}|${ref.productId}|${ref.photoId}',
@@ -162,6 +192,7 @@ class ProductGalleryImages {
     String businessId, {
     Future<bool> Function(String productId)? isLiveProduct,
   }) async {
+    if (kIsWeb) return; // nothing waits for later in the browser (#812)
     final prefs = await SharedPreferences.getInstance();
     final entries = prefs.getStringList(_pendingKey) ?? const <String>[];
     if (entries.isEmpty) return;
@@ -248,6 +279,7 @@ class ProductGalleryImages {
   Future<String?> ensureCached(String url) async {
     final ref = parseUrl(url);
     if (ref == null) return null;
+    if (kIsWeb) return url; // the browser shows the cloud url itself (#812)
     final file = await _copyFile(ref.productId, ref.photoId);
     if (file.existsSync()) return file.path;
     final bytes =
