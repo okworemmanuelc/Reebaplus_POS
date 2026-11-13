@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
@@ -1049,95 +1050,117 @@ class _Header extends StatelessWidget {
       ),
       padding: EdgeInsets.all(context.getRSize(16)),
       radius: 20,
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: context.getRSize(60),
-            height: context.getRSize(60),
-            decoration: BoxDecoration(
-              color: t.colorScheme.primary.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                _initials(name),
-                style: TextStyle(
-                  fontSize: context.getRFontSize(22),
-                  fontWeight: FontWeight.w900,
-                  color: t.colorScheme.primary,
+          Row(
+            children: [
+              Container(
+                width: context.getRSize(60),
+                height: context.getRSize(60),
+                decoration: BoxDecoration(
+                  color: t.colorScheme.primary.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: Text(
+                    _initials(name),
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(22),
+                      fontWeight: FontWeight.w900,
+                      color: t.colorScheme.primary,
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ),
-          SizedBox(width: context.getRSize(16)),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+              SizedBox(width: context.getRSize(16)),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Flexible(
-                      child: Text(
-                        name,
-                        style: TextStyle(
-                          fontSize: context.getRFontSize(18),
-                          fontWeight: FontWeight.w800,
-                          color: t.colorScheme.onSurface,
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            name,
+                            style: TextStyle(
+                              fontSize: context.getRFontSize(18),
+                              fontWeight: FontWeight.w800,
+                              color: t.colorScheme.onSurface,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                        if (isRemoved) ...[
+                          SizedBox(width: context.getRSize(8)),
+                          const RemovedDriverBadge(),
+                        ],
+                      ],
+                    ),
+                    if ((phone ?? '').isNotEmpty) ...[
+                      SizedBox(height: context.getRSize(6)),
+                      _InfoRow(icon: AppIcons.phone, text: phone!),
+                    ],
+                    SizedBox(height: context.getRSize(4)),
+                    _InfoRow(icon: AppIcons.supplier, text: _vans),
+                    SizedBox(height: context.getRSize(4)),
+                    _InfoRow(
+                      icon: AppIcons.calendar,
+                      text: joinedAt == null
+                          ? 'No trips yet'
+                          : 'Driving since ${DateFormat('d MMM y').format(joinedAt!)}',
                     ),
                     if (isRemoved) ...[
-                      SizedBox(width: context.getRSize(8)),
-                      const RemovedDriverBadge(),
+                      SizedBox(height: context.getRSize(8)),
+                      Text(
+                        'No longer a driver here. They stay on the Drivers '
+                        'list until this account is settled or written off.',
+                        style: t.textTheme.bodySmall?.copyWith(color: subtext),
+                      ),
                     ],
                   ],
                 ),
-                if ((phone ?? '').isNotEmpty) ...[
-                  SizedBox(height: context.getRSize(6)),
-                  _InfoRow(icon: AppIcons.phone, text: phone!),
-                ],
-                SizedBox(height: context.getRSize(4)),
-                _InfoRow(icon: AppIcons.supplier, text: _vans),
-                SizedBox(height: context.getRSize(4)),
-                _InfoRow(
-                  icon: AppIcons.calendar,
-                  text: joinedAt == null
-                      ? 'No trips yet'
-                      : 'Driving since ${DateFormat('d MMM y').format(joinedAt!)}',
-                ),
-                if (isRemoved) ...[
-                  SizedBox(height: context.getRSize(8)),
-                  Text(
-                    'No longer a driver here. They stay on the Drivers '
-                    'list until this account is settled or written off.',
-                    style: t.textTheme.bodySmall?.copyWith(color: subtext),
-                  ),
-                ],
+              ),
+            ],
+          ),
+          if (onRecordPayment != null || onAssignVan != null) ...[
+            SizedBox(height: context.getRSize(14)),
+            Row(
+              children: [
                 if (onRecordPayment != null)
-                  TextButton.icon(
-                    key: const Key('driver-record-payment'),
-                    onPressed: onRecordPayment,
-                    icon: const Icon(AppIcons.transfer, size: 18),
-                    label: const Text('Record payment'),
+                  Expanded(
+                    child: AppButton(
+                      key: const Key('driver-record-payment'),
+                      text: 'Record payment',
+                      icon: AppIcons.transfer,
+                      variant: AppButtonVariant.secondary,
+                      size: AppButtonSize.small,
+                      onPressed: onRecordPayment,
+                    ),
                   ),
+                if (onRecordPayment != null && onAssignVan != null)
+                  SizedBox(width: context.getRSize(10)),
                 if (onAssignVan != null)
-                  TextButton.icon(
-                    onPressed: onAssignVan,
-                    icon: const Icon(AppIcons.vanDelivery, size: 18),
-                    label: const Text('Set usual van'),
+                  Expanded(
+                    child: AppButton(
+                      text: 'Set usual van',
+                      icon: AppIcons.vanDelivery,
+                      variant: AppButtonVariant.outline,
+                      size: AppButtonSize.small,
+                      onPressed: onAssignVan,
+                    ),
                   ),
-                if (oldAccountName != null) ...[
-                  SizedBox(height: context.getRSize(4)),
-                  _InfoRow(
-                    icon: AppIcons.customers,
-                    text: 'Old customer account: $oldAccountName',
-                  ),
-                ],
               ],
             ),
-          ),
+          ],
+          if (oldAccountName != null) ...[
+            SizedBox(height: context.getRSize(10)),
+            Text(
+              'Old customer account: $oldAccountName',
+              style: t.textTheme.bodySmall?.copyWith(color: subtext),
+            ),
+          ],
         ],
       ),
     );

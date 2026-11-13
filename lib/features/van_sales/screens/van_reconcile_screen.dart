@@ -17,6 +17,7 @@ import 'package:reebaplus_pos/features/van_sales/screens/van_return_screen.dart'
 import 'package:reebaplus_pos/features/van_sales/widgets/record_driver_payment_sheet.dart';
 import 'package:reebaplus_pos/features/van_sales/widgets/trip_balance_lines.dart';
 import 'package:reebaplus_pos/features/van_sales/widgets/van_close_barrier.dart';
+import 'package:reebaplus_pos/features/van_sales/widgets/van_ui.dart';
 import 'package:reebaplus_pos/features/van_sales/widgets/van_write_off_sheet.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
 
@@ -83,7 +84,9 @@ class VanReconcileScreen extends ConsumerWidget {
     // every figure on the screen is captioned from the same source.
     final lex = ref.watch(industryLexiconProvider);
     // The shell memo is a Bar/Beverage surface only.
-    final tracksCrates = businessTracksCrates(ref.watch(currentBusinessProvider));
+    final tracksCrates = businessTracksCrates(
+      ref.watch(currentBusinessProvider),
+    );
     // Names for the shortage lines. Same feed the return screen uses, so one
     // product reads the same on both surfaces.
     final productName = <String, String>{
@@ -103,60 +106,63 @@ class VanReconcileScreen extends ConsumerWidget {
 
     final isOpen = trip.status == kVanTripStatusOpen;
 
+    final list = ListView(
+      padding: EdgeInsets.fromLTRB(
+        context.getRSize(20),
+        context.getRSize(20),
+        context.getRSize(20),
+        context.getRSize(20) + (isOpen ? 0 : context.deviceBottomPadding),
+      ),
+      children: [
+        _OutstandingCard(position: position, lex: lex),
+        SizedBox(height: context.getRSize(16)),
+        _Card(child: TripBalanceLines(tripId: tripId)),
+        SizedBox(height: context.getRSize(16)),
+        _MovementCard(position: position, lex: lex),
+        if (position.shortages.isNotEmpty) ...[
+          SizedBox(height: context.getRSize(16)),
+          _ShortageCard(position: position, productName: productName, lex: lex),
+        ],
+        if (tracksCrates) ...[
+          SizedBox(height: context.getRSize(16)),
+          _ShellMemoCard(position: position),
+        ],
+        if (position.hasUncostedUnits) ...[
+          SizedBox(height: context.getRSize(16)),
+          _UncostedCard(position: position, lex: lex),
+        ],
+        SizedBox(height: context.getRSize(20)),
+        if (isOpen)
+          _actions(context, ref, trip, position)
+        else
+          _ClosedCard(trip: trip, driverName: driverName, lex: lex),
+      ],
+    );
+
     return GlassyScaffold(
       title: 'Reconcile & close',
       subtitle: '$driverName • $vanName',
-      body: ListView(
-        padding: EdgeInsets.fromLTRB(
-          context.getRSize(20),
-          context.getRSize(20),
-          context.getRSize(20),
-          context.getRSize(20) + context.deviceBottomPadding,
-        ),
-        children: [
-          _OutstandingCard(position: position, lex: lex),
-          SizedBox(height: context.getRSize(16)),
-          _Card(
-            accent: Theme.of(context).dividerColor,
-            child: TripBalanceLines(tripId: tripId),
-          ),
-          SizedBox(height: context.getRSize(16)),
-          _MovementCard(position: position, lex: lex),
-          if (position.shortages.isNotEmpty) ...[
-            SizedBox(height: context.getRSize(16)),
-            _ShortageCard(
-              position: position,
-              productName: productName,
-              lex: lex,
-            ),
-          ],
-          if (tracksCrates) ...[
-            SizedBox(height: context.getRSize(16)),
-            _ShellMemoCard(position: position),
-          ],
-          if (position.hasUncostedUnits) ...[
-            SizedBox(height: context.getRSize(16)),
-            _UncostedCard(position: position, lex: lex),
-          ],
-          SizedBox(height: context.getRSize(20)),
-          if (isOpen) ...[
-            _actions(context, ref, trip, position),
-            SizedBox(height: context.getRSize(20)),
-            VanCloseBarrier(
-              pendingSales: pendingSales,
-              lex: lex,
-              onClose: () => _confirmAndClose(
-                context,
-                ref,
-                trip: trip,
-                position: position,
-                pendingSales: pendingSales,
-              ),
-            ),
-          ] else
-            _ClosedCard(trip: trip, driverName: driverName, lex: lex),
-        ],
-      ),
+      body: isOpen
+          ? Column(
+              children: [
+                Expanded(child: list),
+                // The one primary action stays pinned above the system inset.
+                _PinnedClose(
+                  child: VanCloseBarrier(
+                    pendingSales: pendingSales,
+                    lex: lex,
+                    onClose: () => _confirmAndClose(
+                      context,
+                      ref,
+                      trip: trip,
+                      position: position,
+                      pendingSales: pendingSales,
+                    ),
+                  ),
+                ),
+              ],
+            )
+          : list,
     );
   }
 
@@ -166,12 +172,15 @@ class VanReconcileScreen extends ConsumerWidget {
     VanTripData trip,
     VanTripPosition position,
   ) {
+    final gap = SizedBox(width: context.getRSize(10));
     return Column(
       children: [
         Row(
           children: [
             Expanded(
-              child: OutlinedButton.icon(
+              child: VanTonalButton(
+                icon: AppIcons.undo,
+                label: 'Final return',
                 onPressed: () => Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -182,26 +191,18 @@ class VanReconcileScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
-                icon: Icon(
-                  AppIcons.undo,
-                  size: context.getRSize(14),
-                ),
-                label: const Text('Final return'),
               ),
             ),
-            SizedBox(width: context.getRSize(10)),
+            gap,
             Expanded(
-              child: OutlinedButton.icon(
+              child: VanTonalButton(
+                icon: AppIcons.transfer,
+                label: 'Final payment',
                 onPressed: () => RecordDriverPaymentSheet.show(
                   context,
                   trip: trip,
                   driverName: driverName,
                 ),
-                icon: Icon(
-                  AppIcons.transfer,
-                  size: context.getRSize(14),
-                ),
-                label: const Text('Final payment'),
               ),
             ),
           ],
@@ -212,7 +213,9 @@ class VanReconcileScreen extends ConsumerWidget {
         Row(
           children: [
             Expanded(
-              child: OutlinedButton.icon(
+              child: VanTonalButton(
+                icon: AppIcons.zoomOut,
+                label: 'Write off shortage',
                 onPressed: position.shortageOwedKobo <= 0
                     ? null
                     : () => VanWriteOffSheet.show(
@@ -222,16 +225,13 @@ class VanReconcileScreen extends ConsumerWidget {
                         type: kDriverLedgerTypeShortageWriteoff,
                         owedKobo: position.shortageOwedKobo,
                       ),
-                icon: Icon(
-                  AppIcons.zoomOut,
-                  size: context.getRSize(14),
-                ),
-                label: const Text('Write off shortage'),
               ),
             ),
-            SizedBox(width: context.getRSize(10)),
+            gap,
             Expanded(
-              child: OutlinedButton.icon(
+              child: VanTonalButton(
+                icon: AppIcons.wineBottle,
+                label: 'Write off damage',
                 onPressed: position.damageOwedKobo <= 0
                     ? null
                     : () => VanWriteOffSheet.show(
@@ -241,11 +241,6 @@ class VanReconcileScreen extends ConsumerWidget {
                         type: kDriverLedgerTypeDamageWriteoff,
                         owedKobo: position.damageOwedKobo,
                       ),
-                icon: Icon(
-                  AppIcons.wineBottle,
-                  size: context.getRSize(14),
-                ),
-                label: const Text('Write off damage'),
               ),
             ),
           ],
@@ -280,7 +275,9 @@ class VanReconcileScreen extends ConsumerWidget {
     final lex = ref.read(industryLexiconProvider);
     // Same gate as the body's shell memo card — a trade that deals in no
     // empties is not asked to confirm a shell count before closing.
-    final tracksCrates = businessTracksCrates(ref.read(currentBusinessProvider));
+    final tracksCrates = businessTracksCrates(
+      ref.read(currentBusinessProvider),
+    );
     final overriding = pendingSales > 0;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -301,7 +298,9 @@ class VanReconcileScreen extends ConsumerWidget {
                 'from this device yet. Until they go up those '
                 '${lex.itemPluralLower} count as missing and $driverName looks '
                 'liable for them — so this settles on an incomplete picture.',
-                style: t.textTheme.bodyMedium?.copyWith(color: semantic.warning),
+                style: t.textTheme.bodyMedium?.copyWith(
+                  color: semantic.warning,
+                ),
               ),
               SizedBox(height: context.getRSize(10)),
               Text(
@@ -422,7 +421,6 @@ class _OutstandingCard extends StatelessWidget {
         : semantic.info;
 
     return _Card(
-      accent: color,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -491,14 +489,13 @@ class _MovementCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     return _Card(
-      accent: t.colorScheme.primary,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             'The run, at load price',
-            style: t.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w800,
+            style: t.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
             ),
           ),
           SizedBox(height: context.getRSize(12)),
@@ -564,16 +561,14 @@ class _ShortageCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    final semantic = t.extension<AppSemanticColors>()!;
     return _Card(
-      accent: semantic.warning,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             '${lex.itemPlural} that never came back',
-            style: t.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w800,
+            style: t.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
             ),
           ),
           SizedBox(height: context.getRSize(12)),
@@ -608,14 +603,13 @@ class _ShellMemoCard extends StatelessWidget {
     final semantic = t.extension<AppSemanticColors>()!;
     final short = position.shellsDifference;
     return _Card(
-      accent: short > 0 ? semantic.warning : semantic.success,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             'Empty crates',
-            style: t.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w800,
+            style: t.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
             ),
           ),
           SizedBox(height: context.getRSize(10)),
@@ -672,14 +666,13 @@ class _UncostedCard extends StatelessWidget {
     final semantic = t.extension<AppSemanticColors>()!;
     final n = position.uncostedUnits;
     return _Card(
-      accent: semantic.warning,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             'Profit is understated',
-            style: t.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w800,
+            style: t.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
             ),
           ),
           SizedBox(height: context.getRSize(10)),
@@ -718,14 +711,13 @@ class _ClosedCard extends StatelessWidget {
     final t = Theme.of(context);
     final semantic = t.extension<AppSemanticColors>()!;
     return _Card(
-      accent: semantic.success,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             'Trip closed',
-            style: t.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w800,
+            style: t.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
             ),
           ),
           SizedBox(height: context.getRSize(12)),
@@ -765,23 +757,40 @@ class _ClosedCard extends StatelessWidget {
 }
 
 class _Card extends StatelessWidget {
-  final Color accent;
   final Widget child;
 
-  const _Card({required this.accent, required this.child});
+  const _Card({required this.child});
+
+  @override
+  Widget build(BuildContext context) => VanCard(child: child);
+}
+
+/// The bottom bar that holds the primary "Confirm & close trip".
+class _PinnedClose extends StatelessWidget {
+  final Widget child;
+
+  const _PinnedClose({required this.child});
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
     return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(context.getRSize(16)),
-      decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(context.getRSize(16)),
-        border: Border.all(color: t.dividerColor),
+      padding: EdgeInsets.fromLTRB(
+        context.getRSize(20),
+        context.getRSize(12),
+        context.getRSize(20),
+        context.getRSize(12) + context.deviceBottomPadding,
       ),
-      child: child,
+      decoration: BoxDecoration(
+        color: t.colorScheme.surface,
+        border: Border(top: BorderSide(color: t.dividerColor)),
+      ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.4,
+        ),
+        child: SingleChildScrollView(child: child),
+      ),
     );
   }
 }
@@ -794,33 +803,8 @@ class _Row extends StatelessWidget {
   const _Row({required this.label, required this.value, this.strong = false});
 
   @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final subtext = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: context.getRSize(4)),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: t.textTheme.bodySmall?.copyWith(
-                color: strong ? t.colorScheme.onSurface : subtext,
-                fontWeight: strong ? FontWeight.w700 : null,
-              ),
-            ),
-          ),
-          SizedBox(width: context.getRSize(10)),
-          Text(
-            value,
-            style: t.textTheme.bodyMedium?.copyWith(
-              fontWeight: strong ? FontWeight.w800 : FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) =>
+      VanKvRow(label: label, value: value, strong: strong);
 }
 
 class _Empty extends StatelessWidget {

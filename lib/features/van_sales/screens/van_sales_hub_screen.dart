@@ -6,6 +6,8 @@ import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
 import 'package:reebaplus_pos/core/permissions/guarded.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/features/stores/widgets/add_location_flow.dart';
@@ -16,6 +18,7 @@ import 'package:reebaplus_pos/features/van_sales/screens/load_van_screen.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/van_reconcile_screen.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/van_return_screen.dart';
 import 'package:reebaplus_pos/features/van_sales/widgets/trip_balance_lines.dart';
+import 'package:reebaplus_pos/features/van_sales/widgets/van_ui.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
 
@@ -219,11 +222,7 @@ class _DriversLink extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: EdgeInsets.all(context.getRSize(16)),
-        decoration: BoxDecoration(
-          color: t.colorScheme.surface.withValues(alpha: 0.6),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: t.dividerColor),
-        ),
+        decoration: AppDecorations.card(context, radius: 16),
         child: Row(
           children: [
             Container(
@@ -329,13 +328,7 @@ class _VanCard extends StatelessWidget {
     final isOut = trip != null;
     final subtext = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
 
-    return Container(
-      padding: EdgeInsets.all(context.getRSize(16)),
-      decoration: BoxDecoration(
-        color: t.colorScheme.surface.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: t.dividerColor),
-      ),
+    return VanCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -343,89 +336,88 @@ class _VanCard extends StatelessWidget {
             children: [
               Icon(
                 AppIcons.supplier,
-                size: context.getRSize(16),
+                size: context.getRSize(18),
                 color: isOut ? semantic.warning : subtext,
               ),
               SizedBox(width: context.getRSize(10)),
               Expanded(
                 child: Text(
                   van.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: t.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
+              SizedBox(width: context.getRSize(8)),
               _StatusChip(isOut: isOut),
             ],
           ),
-          SizedBox(height: context.getRSize(12)),
           if (isOut) ...[
-            _DetailRow(
-              icon: AppIcons.managerRole,
-              label: driverName ?? 'Driver',
-            ),
             SizedBox(height: context.getRSize(6)),
-            _DetailRow(
-              icon: AppIcons.calendar,
-              label: 'Out since ${_formatDate(trip!.openedAt)}',
+            // Driver and "out since" as one quiet line.
+            Text(
+              '${driverName ?? 'Driver'} \u00b7 Out since '
+              '${_formatDate(trip!.openedAt)}',
+              style: t.textTheme.bodySmall?.copyWith(color: subtext),
             ),
-            SizedBox(height: context.getRSize(6)),
+            SizedBox(height: context.getRSize(12)),
             // #800: the same balance split three ways, so nobody adds it up
             // by hand when the driver hands money in.
-            TripBalanceLines(tripId: trip!.id),
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.symmetric(
+                horizontal: context.getRSize(14),
+                vertical: context.getRSize(10),
+              ),
+              decoration: BoxDecoration(
+                color: t.colorScheme.primary.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(AppSpacing.borderRadiusM),
+              ),
+              child: TripBalanceLines(tripId: trip!.id),
+            ),
             SizedBox(height: context.getRSize(12)),
-            // #143: the two mid-run events. Side by side because they are the
-            // pair a manager reaches for at the tailgate — more goods out, or
-            // goods back — and both move the balance the moment they are logged.
+            // #143 / #144 / #790: the four things a manager reaches for while
+            // the van is out, as equal tonal tiles.
             Row(
               children: [
                 Expanded(
-                  child: OutlinedButton.icon(
+                  child: VanTonalTile(
+                    label: 'Restock',
+                    icon: AppIcons.stockAdjustment,
                     onPressed: onRestock,
-                    icon: Icon(
-                      AppIcons.stockAdjustment,
-                      size: context.getRSize(14),
-                    ),
-                    label: const Text('Restock'),
                   ),
                 ),
-                SizedBox(width: context.getRSize(10)),
+                SizedBox(width: context.getRSize(8)),
                 Expanded(
-                  child: OutlinedButton.icon(
+                  child: VanTonalTile(
+                    label: 'Returns',
+                    icon: AppIcons.undo,
                     onPressed: onReturn,
-                    icon: Icon(AppIcons.undo, size: context.getRSize(14)),
-                    label: const Text('Returns'),
                   ),
                 ),
-              ],
-            ),
-            SizedBox(height: context.getRSize(10)),
-            // #144 / #790: money handed in. "Record payment" opens the form
-            // straight away (it shows what the driver owes); "Payments" is the
-            // trip's money story.
-            Row(
-              children: [
+                SizedBox(width: context.getRSize(8)),
                 Expanded(
-                  child: OutlinedButton.icon(
+                  child: VanTonalTile(
                     key: Key('van-record-payment-${van.id}'),
+                    label: 'Record payment',
+                    icon: AppIcons.transfer,
                     onPressed: onRecordPayment,
-                    icon: Icon(AppIcons.transfer, size: context.getRSize(14)),
-                    label: const Text('Record payment'),
                   ),
                 ),
-                SizedBox(width: context.getRSize(10)),
+                SizedBox(width: context.getRSize(8)),
                 Expanded(
-                  child: OutlinedButton.icon(
+                  child: VanTonalTile(
+                    label: 'Payments',
+                    icon: AppIcons.history,
                     onPressed: onPayments,
-                    icon: Icon(AppIcons.history, size: context.getRSize(14)),
-                    label: const Text('Payments'),
                   ),
                 ),
               ],
             ),
-            SizedBox(height: context.getRSize(10)),
-            // #145 — the end of the run. A filled button because it is the one
-            // action that finishes something; the rest keep a trip going.
+            SizedBox(height: context.getRSize(12)),
+            // #145 — the end of the run. The one primary action.
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
@@ -459,10 +451,11 @@ class _VanCard extends StatelessWidget {
                 ],
               ),
             ],
-          ] else
+          ] else ...[
+            SizedBox(height: context.getRSize(12)),
             SizedBox(
               width: double.infinity,
-              child: OutlinedButton.icon(
+              child: FilledButton.tonalIcon(
                 onPressed: onLoad,
                 icon: Icon(
                   AppIcons.stockAdjustment,
@@ -471,6 +464,7 @@ class _VanCard extends StatelessWidget {
                 label: const Text('Load Van'),
               ),
             ),
+          ],
         ],
       ),
     );
@@ -507,31 +501,6 @@ class _StatusChip extends StatelessWidget {
           fontWeight: FontWeight.w700,
         ),
       ),
-    );
-  }
-}
-
-class _DetailRow extends StatelessWidget {
-  final IconData? icon;
-  final String label;
-
-  const _DetailRow({required this.icon, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final subtext = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
-    return Row(
-      children: [
-        Icon(icon, size: context.getRSize(12), color: subtext),
-        SizedBox(width: context.getRSize(8)),
-        Expanded(
-          child: Text(
-            label,
-            style: t.textTheme.bodySmall?.copyWith(color: subtext),
-          ),
-        ),
-      ],
     );
   }
 }

@@ -11,6 +11,7 @@ import 'package:reebaplus_pos/core/permissions/guarded.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/stores/van_store.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
@@ -510,199 +511,224 @@ class _LoadVanScreenState extends ConsumerState<LoadVanScreen> {
       subtitle: vanName,
       // #790: one scroll view, with the add box PINNED so the next item can be
       // added without scrolling back up a long load.
-      body: CustomScrollView(
-        slivers: [
-          SliverPadding(
-            padding: EdgeInsets.fromLTRB(side, side, side, 0),
-            sliver: SliverToBoxAdapter(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (_isRestock)
-                    // Both axes are FIXED by the open trip, so they are stated, not
-                    // offered: a restock goes to the driver who is out, from the
-                    // warehouse the trip loads from (one per trip in v1, spec §4.2).
-                    _FixedTripCard(
-                      driverName: _driver?.name ?? 'No driver assigned',
-                      sourceName: _sourceStore?.name ?? 'Warehouse',
-                    )
-                  else ...[
-                    // Required (#787). '+' = add a new one.
-                    AppDropdown<String>(
-                      key: const Key('load-van-driver'),
-                      labelText: 'Driver',
-                      hintText: 'Who is taking it out?',
-                      value: _driver?.id,
-                      prefixIcon: Icon(
-                        AppIcons.managerRole,
-                        size: 14,
-                        color: _subtext,
-                      ),
-                      items: [
-                        ...drivers.map(
-                          (d) => DropdownMenuItem(
-                            value: d.id,
-                            child: Text(d.name),
-                          ),
-                        ),
-                        const DropdownMenuItem(
-                          value: '+',
-                          child: Text('Add a new driver...'),
-                        ),
-                      ],
-                      onChanged: (v) {
-                        if (v == '+') {
-                          _addDriver();
-                        } else {
-                          setState(() => _driver = _driverById(v));
-                        }
-                      },
-                    ),
-                    SizedBox(height: context.getRSize(16)),
-
-                    AppDropdown<StoreData>(
-                      labelText: 'Load from',
-                      hintText:
-                          'Which store are the ${lex.itemPluralLower} coming '
-                          'out of?',
-                      value: _sourceStore,
-                      prefixIcon: Icon(
-                        AppIcons.warehouse,
-                        size: 14,
-                        color: _subtext,
-                      ),
-                      items: warehouses
-                          .map(
-                            (s) =>
-                                DropdownMenuItem(value: s, child: Text(s.name)),
+      body: Column(
+        children: [
+          Expanded(
+            child: CustomScrollView(
+              slivers: [
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(side, side, side, 0),
+                  sliver: SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (_isRestock)
+                          // Both axes are FIXED by the open trip, so they are stated, not
+                          // offered: a restock goes to the driver who is out, from the
+                          // warehouse the trip loads from (one per trip in v1, spec §4.2).
+                          _FixedTripCard(
+                            driverName: _driver?.name ?? 'No driver assigned',
+                            sourceName: _sourceStore?.name ?? 'Warehouse',
                           )
-                          .toList(),
-                      onChanged: (v) => setState(() {
-                        _sourceStore = v;
-                        // The lines were priced and stocked against the old store.
-                        _lines.clear();
-                        _belowCost = const {};
-                      }),
-                    ),
-                  ],
-                  SizedBox(height: context.getRSize(20)),
-                  Text(
-                    _isRestock
-                        ? 'What is going on board now'
-                        : 'What is going on board',
-                    style: t.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  SizedBox(height: context.getRSize(4)),
-                ],
-              ),
-            ),
-          ),
-          PinnedHeaderSliver(
-            child: Container(
-              // Opaque, so rows scrolling under the pinned button do not show
-              // through it.
-              color: t.scaffoldBackgroundColor,
-              padding: EdgeInsets.symmetric(
-                horizontal: side,
-                vertical: context.getRSize(6),
-              ),
-              // The ONE way to add (owner, 2026-11-11): it opens the shop's
-              // product grid, with its search, categories and scanner. Pinned,
-              // so the next item is always one tap away on a long load.
-              child: AppButton(
-                key: const Key('load-van-browse'),
-                text: _lines.isEmpty
-                    ? 'Add ${lex.itemPluralLower}'
-                    : 'Add or change ${lex.itemPluralLower}',
-                icon: AppIcons.add,
-                isFullWidth: true,
-                onPressed: _sourceStore == null
-                    ? null
-                    : () => _browse(products),
-              ),
-            ),
-          ),
-          SliverPadding(
-            padding: EdgeInsets.fromLTRB(side, context.getRSize(6), side, 0),
-            sliver: _lines.isEmpty
-                ? SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(
-                        vertical: context.getRSize(12),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Nothing on the load yet.',
-                            style: t.textTheme.bodySmall?.copyWith(
+                        else ...[
+                          // Required (#787). '+' = add a new one.
+                          AppDropdown<String>(
+                            key: const Key('load-van-driver'),
+                            labelText: 'Driver',
+                            hintText: 'Who is taking it out?',
+                            value: _driver?.id,
+                            prefixIcon: Icon(
+                              AppIcons.managerRole,
+                              size: 14,
                               color: _subtext,
                             ),
+                            items: [
+                              ...drivers.map(
+                                (d) => DropdownMenuItem(
+                                  value: d.id,
+                                  child: Text(d.name),
+                                ),
+                              ),
+                              const DropdownMenuItem(
+                                value: '+',
+                                child: Text('Add a new driver...'),
+                              ),
+                            ],
+                            onChanged: (v) {
+                              if (v == '+') {
+                                _addDriver();
+                              } else {
+                                setState(() => _driver = _driverById(v));
+                              }
+                            },
                           ),
-                          if (!_isRestock &&
-                              _driver != null &&
-                              _sourceStore != null)
-                            TextButton.icon(
-                              key: const Key('load-van-same-as-last'),
-                              onPressed: () => _sameAsLastLoad(products),
-                              icon: const Icon(AppIcons.history, size: 18),
-                              label: const Text('Same as last load'),
+                          SizedBox(height: context.getRSize(16)),
+
+                          AppDropdown<StoreData>(
+                            labelText: 'Load from',
+                            hintText:
+                                'Which store are the ${lex.itemPluralLower} coming '
+                                'out of?',
+                            value: _sourceStore,
+                            prefixIcon: Icon(
+                              AppIcons.warehouse,
+                              size: 14,
+                              color: _subtext,
                             ),
+                            items: warehouses
+                                .map(
+                                  (s) => DropdownMenuItem(
+                                    value: s,
+                                    child: Text(s.name),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (v) => setState(() {
+                              _sourceStore = v;
+                              // The lines were priced and stocked against the old store.
+                              _lines.clear();
+                              _belowCost = const {};
+                            }),
+                          ),
                         ],
-                      ),
+                        SizedBox(height: context.getRSize(20)),
+                        Text(
+                          _isRestock
+                              ? 'What is going on board now'
+                              : 'What is going on board',
+                          style: t.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        SizedBox(height: context.getRSize(4)),
+                      ],
                     ),
-                  )
-                : SliverList.builder(
-                    itemCount: _lines.length,
-                    itemBuilder: (_, i) {
-                      final line = _lines[i];
-                      final id = line.product.product.id;
-                      return _LineRow(
-                        key: ValueKey('load-line-$id'),
-                        line: line,
-                        showCrates: tracksCrates,
-                        isBelowCost: _belowCost.contains(id),
-                        onChanged: () => setState(() {}),
-                        onQtyDone: () => FocusScope.of(context).unfocus(),
-                        onRemove: () => setState(() {
-                          _lines.remove(line);
-                          _belowCost = {..._belowCost}..remove(id);
-                        }),
-                      );
-                    },
                   ),
+                ),
+                PinnedHeaderSliver(
+                  child: Container(
+                    // Opaque, so rows scrolling under the pinned button do not show
+                    // through it.
+                    color: t.scaffoldBackgroundColor,
+                    padding: EdgeInsets.symmetric(
+                      horizontal: side,
+                      vertical: context.getRSize(6),
+                    ),
+                    // The ONE way to add (owner, 2026-11-11): it opens the shop's
+                    // product grid, with its search, categories and scanner. Pinned,
+                    // so the next item is always one tap away on a long load.
+                    child: AppButton(
+                      key: const Key('load-van-browse'),
+                      text: _lines.isEmpty
+                          ? 'Add ${lex.itemPluralLower}'
+                          : 'Add or change ${lex.itemPluralLower}',
+                      icon: AppIcons.add,
+                      variant: AppButtonVariant.secondary,
+                      isFullWidth: true,
+                      onPressed: _sourceStore == null
+                          ? null
+                          : () => _browse(products),
+                    ),
+                  ),
+                ),
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(
+                    side,
+                    context.getRSize(6),
+                    side,
+                    0,
+                  ),
+                  sliver: _lines.isEmpty
+                      ? SliverToBoxAdapter(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(
+                              vertical: context.getRSize(12),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Nothing on the load yet.',
+                                  style: t.textTheme.bodySmall?.copyWith(
+                                    color: _subtext,
+                                  ),
+                                ),
+                                if (!_isRestock &&
+                                    _driver != null &&
+                                    _sourceStore != null)
+                                  TextButton.icon(
+                                    key: const Key('load-van-same-as-last'),
+                                    onPressed: () => _sameAsLastLoad(products),
+                                    icon: const Icon(
+                                      AppIcons.history,
+                                      size: 18,
+                                    ),
+                                    label: const Text('Same as last load'),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : SliverList.builder(
+                          itemCount: _lines.length,
+                          itemBuilder: (_, i) {
+                            final line = _lines[i];
+                            final id = line.product.product.id;
+                            return _LineRow(
+                              key: ValueKey('load-line-$id'),
+                              line: line,
+                              showCrates: tracksCrates,
+                              isBelowCost: _belowCost.contains(id),
+                              onChanged: () => setState(() {}),
+                              onQtyDone: () => FocusScope.of(context).unfocus(),
+                              onRemove: () => setState(() {
+                                _lines.remove(line);
+                                _belowCost = {..._belowCost}..remove(id);
+                              }),
+                            );
+                          },
+                        ),
+                ),
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(
+                    side,
+                    context.getRSize(16),
+                    side,
+                    context.getRSize(16),
+                  ),
+                  sliver: SliverToBoxAdapter(
+                    child: _TotalCard(
+                      units: _totalUnits,
+                      valueKobo: _totalValueKobo,
+                      driverName: _driver?.name,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-          SliverPadding(
+          // The one primary action, pinned above the system inset.
+          Container(
             padding: EdgeInsets.fromLTRB(
               side,
-              context.getRSize(16),
+              context.getRSize(12),
               side,
-              side + context.deviceBottomPadding,
+              context.getRSize(12) + context.deviceBottomPadding,
             ),
-            sliver: SliverToBoxAdapter(
-              child: Column(
-                children: [
-                  _TotalCard(
-                    units: _totalUnits,
-                    valueKobo: _totalValueKobo,
-                    driverName: _driver?.name,
-                  ),
-                  SizedBox(height: context.getRSize(20)),
-                  AppButton(
-                    key: const Key('load-van-send'),
-                    text: _submitting
-                        ? 'Sending…'
-                        : _isRestock
-                        ? 'Send Restock'
-                        : 'Dispatch Load',
-                    icon: AppIcons.vanDelivery,
-                    onPressed: _submitting ? null : _dispatch,
-                    isFullWidth: true,
-                  ),
-                ],
-              ),
+            decoration: BoxDecoration(
+              color: t.colorScheme.surface,
+              border: Border(top: BorderSide(color: t.dividerColor)),
+            ),
+            child: AppButton(
+              key: const Key('load-van-send'),
+              text: _submitting
+                  ? 'Sending…'
+                  : _isRestock
+                  ? 'Send Restock'
+                  : 'Dispatch Load',
+              icon: AppIcons.vanDelivery,
+              onPressed: _submitting ? null : _dispatch,
+              isFullWidth: true,
             ),
           ),
         ],
@@ -726,10 +752,9 @@ class _FixedTripCard extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: EdgeInsets.all(context.getRSize(14)),
-      decoration: BoxDecoration(
-        color: t.colorScheme.surface.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(AppSpacing.borderRadiusM),
-        border: Border.all(color: t.dividerColor),
+      decoration: AppDecorations.card(
+        context,
+        radius: AppSpacing.borderRadiusM,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -860,13 +885,12 @@ class _LineRowState extends State<_LineRow> {
         context.getRSize(4),
         context.getRSize(8),
       ),
-      decoration: BoxDecoration(
-        color: t.colorScheme.surface.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: widget.isBelowCost ? semantic.warning : t.dividerColor,
-        ),
-      ),
+      decoration: AppDecorations.card(context, radius: AppSpacing.borderRadiusM)
+          .copyWith(
+            border: Border.all(
+              color: widget.isBelowCost ? semantic.warning : t.dividerColor,
+            ),
+          ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1061,10 +1085,9 @@ class _TotalCard extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: EdgeInsets.all(context.getRSize(16)),
-      decoration: BoxDecoration(
-        color: t.colorScheme.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: t.dividerColor),
+      decoration: AppDecorations.card(
+        context,
+        radius: AppSpacing.borderRadiusM,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1078,6 +1101,7 @@ class _TotalCard extends StatelessWidget {
             formatCurrency(valueKobo / 100),
             style: t.textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.w800,
+              color: t.colorScheme.primary,
             ),
           ),
           SizedBox(height: context.getRSize(4)),
