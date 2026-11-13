@@ -7,6 +7,14 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #798: session expired never stops a sale; "Sign in again" banner (2026-11-13, branch `feat/798-sign-in-again-banner`, replaces PR #799)
+- Rebuilt on the no-PIN code (#812). The blocking session gate in `_HomeRouter` is gone: a device with no cloud login opens the shop and sells like an offline device.
+- `cloudLoginLost` (`lib/core/services/cloud_login_state.dart`, set in `main.dart` from the Supabase auth stream) drives `SignInAgainBanner` (`lib/features/auth/widgets/`) at the top of `MainLayout`. It opens `SessionExpiredScreen` (moved out of `main.dart` to `lib/features/auth/screens/session_expired_screen.dart`, now with "Not now"). An accepted code returns to the app via `OtpVerificationScreen.onVerified` and runs `pushThenPull`.
+- `pullChanges` skips with no cloud login, like `pushPending`, so the last-synced marker cannot move past changes it never read.
+- The `auth.session_expired_gate` record is written by the banner, once per loss. The #796 refusal reason is not included (#797 was closed, `AuthRefreshObserverClient` never landed).
+- Trade-off: a staff member removed while their login is dead keeps access until they sign in again, the same as an offline device.
+- Tests: `test/auth/sign_in_again_banner_test.dart`, `test/sync/pull_without_login_test.dart`, plus the existing files covering main.dart, MainLayout, the verify page and pulls (14 files, 237 pass). Full suite not run. Not checked on a phone or browser.
+- Follow-ups not done: "Sign out instead" still calls the raw `fullLogout()`; the Sync Issues re-sync tap says "A download is already running" when it was skipped for no login; the driver terminal has no banner.
 ### Issue #812 S5: browser 30-day wipe (2026-11-13, branch `feat/812-s5-browser-30-day-wipe`)
 - New `lib/core/services/browser_last_used_service.dart`: last-used date in SharedPreferences, pure `shouldWipe(now, lastUsed)` (more than `kBrowserUnusedWipeAfter` = 30 days), debounced `touch()` (1 h).
 - `AuthService.wipeStaleBrowserCopy` (web only) runs in `_checkDeviceUser` before `restoreSignedInUser`; it reuses `DeviceTeardown.leave(LeaveReason.logout)`, no second wipe. Unsent work: outbox gate pushes once; if rows remain (or offline / 15 s timeout) the wipe is skipped, data kept, date left old so the next open retries.
