@@ -53,6 +53,19 @@ final periodOrdersProvider =
       whenAbsent: const [],
     );
 
+/// #805 - the driver payments (`van_remittance`, not voided) recorded in
+/// [EntryDayWindow], business-scoped: Home's van sales, summed by the pure
+/// `vanMoneyHandedInKobo`. Same bounded shape as [periodOrdersProvider].
+final periodDriverPaymentsProvider =
+    businessScopedStreamAutoDisposeFamily<
+      List<PaymentTransactionData>,
+      EntryDayWindow
+    >(
+      (ref, db, businessId, window) => db.vanTripsDao
+          .watchDriverPaymentsBetween(from: window.from, to: window.to),
+      whenAbsent: const [],
+    );
+
 final pendingOrdersProvider =
     businessScopedStreamFamily<List<OrderWithItems>, String?>(
   (ref, db, businessId, storeId) =>

@@ -36,6 +36,8 @@ import 'package:reebaplus_pos/features/inventory/screens/stock_count_screen.dart
 import 'package:reebaplus_pos/features/receiving/screens/receive_stock_screen.dart';
 import 'package:reebaplus_pos/features/stores/screens/request_stock_screen.dart';
 import 'package:reebaplus_pos/core/stores/van_store.dart';
+import 'package:reebaplus_pos/core/van_sales/van_money_handed_in.dart';
+import 'package:reebaplus_pos/core/van_sales/van_sales_switch.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/sales_detail_screen.dart';
 import 'package:reebaplus_pos/features/dashboard/screens/reports_hub_screen.dart';
@@ -332,7 +334,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       inSpan: (d) => _isDateInPeriod(d, _selectedPeriod),
       inScope: inScope,
     );
-    final totalSales = salesSplit.netKobo / 100.0;
+    // #805 — van sales are the money drivers HANDED IN in the period (the
+    // owner's rule): the non-voided `van_remittance` payment rows, on their
+    // own day and scoped by the store they were booked to, through the same
+    // `inScope`. Added to the headline only, never shown as a line of its own.
+    // Rung road orders stay out (#140), so cash handed in for a rung sale is
+    // counted once. Profit, the staff league and the drill-down rows stay on
+    // shop sales. The read is opened only when it can count.
+    final vanMoneyKobo = showTotalSales && isVanSalesEnabled()
+        ? vanMoneyHandedInKobo(
+            ref
+                    .watch(
+                      periodDriverPaymentsProvider((
+                        from: windowFrom,
+                        to: windowTo,
+                      )),
+                    )
+                    .valueOrNull ??
+                const <PaymentTransactionData>[],
+            inSpan: (d) => _isDateInPeriod(d, _selectedPeriod),
+            inScope: inScope,
+            // A cashier's tile is their own takings only.
+            recordedBy: isCashier ? (userId ?? '') : null,
+          )
+        : 0;
+    final totalSales = (salesSplit.netKobo + vanMoneyKobo) / 100.0;
     // #708 — display-only: returns inside the net figure (zero or negative).
     final returnsTotal = salesSplit.returnsKobo / 100.0;
     final totalExpenses = filteredExpenses.fold<double>(
@@ -551,6 +577,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         cardsFor: (cell) => _buildCards(
                           cell: cell,
                           sales: totalSales,
+                          vanMoney: vanMoneyKobo / 100.0,
                           returns: returnsTotal,
                           profitReturned: profitReturned,
                           pending: pendingOrdersCount,
@@ -789,8 +816,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void _openSalesDetail(
     List<OrderWithItems> orders,
     String mode,
-    bool Function(String? storeId) inScope,
-  ) {
+    bool Function(String? storeId) inScope, {
+    double driverPayments = 0,
+  }) {
     Navigator.of(context).push(
       slideDownRoute(
         SalesDetailScreen(
@@ -800,6 +828,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           // #195 — the drill-down must sum the SAME lines the tile did, or it
           // contradicts the number the user tapped.
           inScope: inScope,
+          driverPayments: driverPayments,
         ),
       ),
     );
@@ -811,6 +840,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   List<Widget> _buildCards({
     required HomeGridCell cell,
     required double sales,
+    required double vanMoney,
     required double returns,
     required double profitReturned,
     required int pending,
@@ -847,7 +877,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           tone: IconTileTone.info,
           pillLabel: sales > 0 ? 'Active' : 'No sales',
           pillTone: homeTrendTone(isNeutral: true),
-          onTap: () => _openSalesDetail(filteredOrders, 'sales', inScope),
+          // #805 — the rows are shop sales; the money drivers handed in is
+          // in [sales] but on no row, so the breakdown names it.
+          onTap: () => _openSalesDetail(
+            filteredOrders,
+            'sales',
+            inScope,
+            driverPayments: vanMoney,
+          ),
         ),
       );
     }
