@@ -1942,6 +1942,26 @@ class VanTripsDao extends DatabaseAccessor<AppDatabase>
         .watch();
   }
 
+  /// #805 — every non-voided driver payment (`van_remittance`, trip or no-trip)
+  /// recorded in `[from, to]` (either bound null = open), business-wide. Home
+  /// sums them with `vanMoneyHandedInKobo`; bounded by the period like
+  /// `watchOrdersWithItemsForEntryDays`, so Home never watches the whole table.
+  Stream<List<PaymentTransactionData>> watchDriverPaymentsBetween({
+    DateTime? from,
+    DateTime? to,
+  }) {
+    return (select(paymentTransactions)..where((p) {
+          Expression<bool> e =
+              whereBusiness(p) &
+              p.type.equals(kPaymentTypeVanRemittance) &
+              p.voidedAt.isNull();
+          if (from != null) e = e & p.createdAt.isBiggerOrEqualValue(from);
+          if (to != null) e = e & p.createdAt.isSmallerOrEqualValue(to);
+          return e;
+        }))
+        .watch();
+  }
+
   /// The load-price value [tripId] has actually recovered in cash — `Σ` its
   /// un-voided remittances. #145's close artifact reads it as one half of
   /// `recovered_kobo` (the other half is good returns).

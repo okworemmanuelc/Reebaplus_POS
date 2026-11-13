@@ -7,6 +7,10 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #806: cloud corrections that never reached a phone (2026-11-12, branch `fix/sync-cursor-race-null-clear`)
+- Pull cursor is now taken at the START of a pull less a 2-minute margin (`SupabaseSyncService.pullCursorFor`); it was stamped after the restore, so a row changed in the cloud during a pull stayed below the cursor for good.
+- `Restore.plain` now overwrites with `Restore.cloudRowUpdate`, which keeps a null the cloud row carried, so a field cleared in the cloud is cleared locally. Tables with a push whitelist keep the old behaviour. Other restores (`_restoreOrders`, monotonic status, users) are unchanged: open question whether they need the same.
+- Tests: `test/sync/pull_cursor_and_null_clear_test.dart`.
 ### Issue #800: driver's balance shown wherever money is taken (2026-11-12, branch `feat/van-balance-lines`)
 - New `TripBalanceLines` (`lib/features/van_sales/widgets/trip_balance_lines.dart`): Balance before this trip / This trip / Total owed now. On the van card (replaces the single "Owes" line), the Record payment sheet for a trip, and Reconcile & close.
 - Display only: total = driver's ledger balance, this trip = the trip position's outstanding, before = the difference. No money rule, table or column change.

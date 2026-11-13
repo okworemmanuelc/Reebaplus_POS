@@ -243,16 +243,50 @@ abstract final class Restore {
       defaults.forEach((k, v) => r.putIfAbsent(k, () => v));
       parsed.add(fromJson(r));
     }
+    // #806: a table with a push whitelist keeps columns that differ from the
+    // cloud's (local-only or never-pushed material), so a cloud null there is
+    // not a real "cleared" and the old leave-nulls-out upsert stays.
+    final clearsNulls = syncedTableForName(table)?.pushColumns == null;
+    Insertable<D> update(int i) =>
+        clearsNulls ? cloudRowUpdate(parsed[i], rows[i]) : parsed[i];
     await ex.restoreChunked(
       table,
       rows,
       fkSkipped,
       resilient: resilient,
       addToBatch: (b, i) =>
-          b.insert(t, parsed[i], onConflict: DoUpdate((_) => parsed[i])),
-      insertOne: (i) => ex.db.into(t).insertOnConflictUpdate(parsed[i]),
+          b.insert(t, parsed[i], onConflict: DoUpdate((_) => update(i))),
+      insertOne: (i) => ex.db
+          .into(t)
+          .insert(parsed[i], onConflict: DoUpdate((_) => update(i))),
     );
   };
+
+  /// #806: what an already-present local row is overwritten with on pull.
+  ///
+  /// Drift's upsert writes a data class with `toColumns(true)`, which LEAVES
+  /// OUT every null column, so a field cleared in the cloud kept its old local
+  /// value for good. This keeps a null whenever the cloud row actually carried
+  /// that column ([json], camelCase keys), and still leaves alone a column the
+  /// cloud does not send (local-only material such as a PIN).
+  @visibleForTesting
+  static Insertable<D> cloudRowUpdate<D extends Insertable<D>>(
+    D data,
+    Map<String, dynamic> json,
+  ) {
+    final nonNull = data.toColumns(true);
+    final all = data.toColumns(false);
+    return RawValuesInsertable<D>({
+      for (final e in all.entries)
+        if (nonNull.containsKey(e.key) || json.containsKey(_camelOf(e.key)))
+          e.key: e.value,
+    });
+  }
+
+  static String _camelOf(String snake) => snake.replaceAllMapped(
+    RegExp(r'_([a-z0-9])'),
+    (m) => m.group(1)!.toUpperCase(),
+  );
 
   /// Like [plain], but for an approval-request table whose `status` is
   /// MONOTONIC: a row goes `pending` → a terminal state (`approved` /
@@ -290,6 +324,7 @@ abstract final class Restore {
         }
         await ex.db.into(t).insertOnConflictUpdate(data);
       }
+
       if (resilient) {
         await ex.insertResilient(table, r, fkSkipped, doInsert);
       } else {
@@ -363,6 +398,7 @@ abstract final class Restore {
         await (ex.db.delete(t)..where((tbl) => logicalTwin(tbl, parsed))).go();
         await ex.db.into(t).insertOnConflictUpdate(parsed);
       }
+
       if (resilient) {
         await ex.insertResilient(table, r, fkSkipped, doInsert);
       } else {
@@ -379,16 +415,17 @@ abstract final class Restore {
     DateTime? Function(D data) voidedAtOf,
     Expression<bool> Function(T tbl, D data) whereNotYetVoided,
     UpdateCompanion<D> Function(D data) buildVoidCompanion,
-  ) => (ex, table, rows, fkSkipped) => ex.restoreLedger<T, D>(
-    rows,
-    tableName: table,
-    table: tableOf(ex.db),
-    fromJson: fromJson,
-    voidedAtOf: voidedAtOf,
-    whereNotYetVoided: whereNotYetVoided,
-    buildVoidCompanion: buildVoidCompanion,
-    fkSkipped: fkSkipped,
-  );
+  ) =>
+      (ex, table, rows, fkSkipped) => ex.restoreLedger<T, D>(
+        rows,
+        tableName: table,
+        table: tableOf(ex.db),
+        fromJson: fromJson,
+        voidedAtOf: voidedAtOf,
+        whereNotYetVoided: whereNotYetVoided,
+        buildVoidCompanion: buildVoidCompanion,
+        fkSkipped: fkSkipped,
+      );
 }
 
 // ---------------------------------------------------------------------------

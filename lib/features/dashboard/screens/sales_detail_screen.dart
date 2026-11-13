@@ -33,12 +33,18 @@ class SalesDetailScreen extends ConsumerStatefulWidget {
   /// to every store for a caller that has already filtered its orders.
   final bool Function(String? storeId) inScope;
 
+  /// #805 — money drivers handed in during the period. Home's Total Sales
+  /// includes it, but it is no order, so no row here carries it; a non-zero
+  /// amount is named in one chip so the rows plus it make Home's figure.
+  final double driverPayments;
+
   const SalesDetailScreen({
     super.key,
     required this.orders,
     required this.mode,
     required this.period,
     this.inScope = _anyStore,
+    this.driverPayments = 0,
   });
 
   @override
@@ -316,6 +322,10 @@ class _SalesDetailScreenState extends ConsumerState<SalesDetailScreen> {
         // up to the headline.
         if (discounts != 0)
           ReportChip('Less discounts: ${formatCurrency(discounts)}'),
+        if (!isProfitMode && widget.driverPayments != 0)
+          ReportChip(
+            'Plus driver payments: ${formatCurrency(widget.driverPayments)}',
+          ),
       ],
     );
   }
