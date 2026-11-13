@@ -111,6 +111,7 @@ security prerequisites, including the separate #467 and #468 fixes.
 ### In Scope
 
 - All authentication and onboarding flows: Welcome, CEO sign-up, staff sign-up via invite code, and email / Google sign-in.
+- Browser copy of the shop is wiped after 30 days without use and on Log Out (phones and tablets unaffected) (#812 S5).
 - Data-driven roles and permissions with CEO toggles and per-staff overrides.
 - Point of Sale, Cart, Checkout, and Receipt, including cash/transfer/credit payment, role discount caps, and thermal-printer receipts.
 - Barcode scanning at the POS for every business type, with an optional per-product barcode and a camera-based scanner: a scanned product opens the "Add to Cart" quantity sheet (or a clear message when it can't be sold here), and continuous scanning — the camera stays open across many items until the cashier closes it — is in scope (ADR 0017 amendment, PRD #316; the quantity sheet shipped in #317, the open-camera loop follows in #319).
