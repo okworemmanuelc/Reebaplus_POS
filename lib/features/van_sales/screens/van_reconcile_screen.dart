@@ -787,7 +787,7 @@ class _PinnedClose extends StatelessWidget {
       ),
       child: ConstrainedBox(
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.sizeOf(context).height * 0.4,
+          maxHeight: context.getRHeight(0.4),
         ),
         child: SingleChildScrollView(child: child),
       ),
