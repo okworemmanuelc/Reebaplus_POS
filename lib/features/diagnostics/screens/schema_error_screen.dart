@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -230,7 +231,7 @@ class _SchemaErrorBody extends StatelessWidget {
                       // Closing the app forces a cold restart, which re-runs
                       // beforeOpen and gives heal another attempt.
                       SystemNavigator.pop();
-                      if (Platform.isAndroid) {
+                      if ((!kIsWeb && Platform.isAndroid)) {
                         // SystemNavigator.pop is a no-op on iOS; on Android it
                         // exits cleanly. As a fallback we exit the isolate.
                       } else {

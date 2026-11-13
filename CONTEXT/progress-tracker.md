@@ -7,6 +7,11 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #812 S3: browser runtime guards (2026-11-13, branch `feat/812-s3-browser-guards`)
+- Browser skips or replaces phone-only code: printers are quiet no-ops (Receipt printer entry hidden in Settings); product photos, gallery and logo use the cloud URL with no on-disk copy and upload straight to Storage; CSV / receipt / payslip / data-export go through new `shareFileBytes` (share sheet on phones, browser download on web); device registry reports `web`; `schema_audit` no longer reads `Platform`; `LocalPhotoFiles.deleteAll` is safe on web.
+- New: `lib/shared/widgets/local_photo_image.dart`, `lib/core/utils/share_file*.dart`; `web` added to pubspec (was transitive). Phones and tablets behave as before.
+- Not touched (S2's files): see PR body. Print buttons on web show "Bluetooth permissions denied" instead of a clearer message.
+- Tests: printer, photo, csv, settings, receipt, golden files for the changed code (ran only those).
 ### Issue #812 S2: PIN removed from sign-in (2026-11-13, branch `feat/812-s2-remove-pin`)
 - Owner decision #812: no PIN anywhere. Every verified sign-in (email code, Google, Existing Account) ends in `AuthService.completeSignIn` = `setCurrentUser(freshSignIn: true)`; `resolvePostVerifyRoute` returns `SignedInRoute` (replaces `LoginRoute` / `CreatePinRoute`; `isPinReset` and Forgot PIN gone). CEO and staff sign-up drop Create/Confirm PIN for one "setting up" / "joining" step (spinner, or the error + Try again): 8 steps each (CEO 6 when the email was verified upstream).
 - Cold start: `main.dart` `_checkDeviceUser` → `AuthService.restoreSignedInUser` binds the device user from local SQLite before the splash lifts (never the network, invariant #11), so a returning device opens straight into `MainLayout`; no live session → `_SessionExpiredScreen` (kept). The deleted-business check runs in the background. A pointer whose row is missing gets Welcome.

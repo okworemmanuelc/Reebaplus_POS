@@ -1,10 +1,11 @@
-import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/shared/widgets/local_photo_image.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/scheme_colors.dart';
@@ -129,13 +130,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     (
       title: 'Devices & Appearance',
       entries: [
-        (
-          icon: AppIcons.print,
-          tone: IconTileTone.neutral,
-          title: 'Receipt printer',
-          subtitle: 'Paper size for each printer (58mm or 80mm)',
-          screen: ReceiptPrinterSettingsScreen(),
-        ),
+        // The browser cannot reach a printer (#812), so the entry is hidden.
+        if (!kIsWeb)
+          (
+            icon: AppIcons.print,
+            tone: IconTileTone.neutral,
+            title: 'Receipt printer',
+            subtitle: 'Paper size for each printer (58mm or 80mm)',
+            screen: ReceiptPrinterSettingsScreen(),
+          ),
         (
           icon: AppIcons.palette,
           tone: IconTileTone.info,
@@ -399,7 +402,7 @@ class _BusinessProfileCard extends ConsumerWidget {
     final subLabel = access.badgeLabel;
 
     final card = ProfileCard(
-      logo: logoPath == null ? null : FileImage(File(logoPath)),
+      logo: logoPath == null ? null : photoRefProvider(logoPath),
       key: const Key('settings-profile-card'),
       title: businessName,
       subtitle: userName,

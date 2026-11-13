@@ -42,7 +42,9 @@ class DeviceRegistryService {
     bool? isPhysical;
 
     try {
-      if (Platform.isAndroid) {
+      if (kIsWeb) {
+        platform = 'web'; // no Platform / device_info fields in the browser
+      } else if (Platform.isAndroid) {
         final a = await info.androidInfo;
         platform = 'android';
         manufacturer = a.manufacturer;

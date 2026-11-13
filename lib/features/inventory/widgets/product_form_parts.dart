@@ -1,10 +1,10 @@
-import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/shared/widgets/local_photo_image.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
@@ -174,8 +174,8 @@ class ProductPhotoBox extends StatelessWidget {
                   child: bytes != null
                       ? Image.memory(bytes, fit: BoxFit.cover)
                       : saved != null
-                      ? Image.file(
-                          File(saved),
+                      ? LocalPhotoImage(
+                          saved,
                           fit: BoxFit.cover,
                           errorBuilder: (_, _, _) => const SizedBox.shrink(),
                         )

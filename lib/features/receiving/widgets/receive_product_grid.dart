@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
+import 'package:reebaplus_pos/shared/widgets/local_photo_image.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -185,7 +186,7 @@ class _ReceiveProductTileState extends ConsumerState<_ReceiveProductTile> {
           : 'Current: ${formatQty(totalStock)}',
       stockLevel: isOutOfStock ? StockLevel.out : StockLevel.ok,
       categoryName: widget.categoryName,
-      photoPath: product.imagePath,
+      photoPath: productPhotoRef(imagePath: product.imagePath, imageUrl: product.imageUrl),
       inCartQty: cartQty.ceil(),
       inCartLabel: cartQty > 0 ? formatQty(cartQty) : null,
       tappableWhenOut: true,

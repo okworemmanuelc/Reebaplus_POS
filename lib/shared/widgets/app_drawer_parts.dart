@@ -1,8 +1,8 @@
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/shared/widgets/local_photo_image.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
@@ -201,8 +201,8 @@ class _BusinessTile extends StatelessWidget {
               ? initialTile
               : ClipRRect(
                   borderRadius: radius,
-                  child: Image.file(
-                    File(path),
+                  child: LocalPhotoImage(
+                    path,
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stack) => initialTile,
                   ),

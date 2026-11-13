@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -466,7 +467,7 @@ class _ReceiptPrinterSettingsScreenState
         Padding(
           padding: EdgeInsets.only(top: context.getRSize(24)),
           child: Text(
-            Platform.isAndroid
+            (!kIsWeb && Platform.isAndroid)
                 ? 'No paired printers found.\nPair your printer '
                       'in Bluetooth settings, then tap refresh.'
                 : 'No printers found nearby.\nMake sure your '

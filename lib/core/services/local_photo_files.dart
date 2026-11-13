@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -50,6 +50,7 @@ class LocalPhotoFiles {
     String businessId, {
     Directory? documents,
   }) async {
+    if (kIsWeb) return const [];
     try {
       final prefs = await SharedPreferences.getInstance();
       final entries =
@@ -95,6 +96,7 @@ class LocalPhotoFiles {
     String businessId, {
     Directory? documents,
   }) async {
+    if (kIsWeb) return const [];
     try {
       final prefs = await SharedPreferences.getInstance();
       final entries =
@@ -190,17 +192,20 @@ class LocalPhotoFiles {
   static Future<void> deleteAll({
     @visibleForTesting Directory? documents,
   }) async {
-    final Directory docs;
-    try {
-      docs = documents ?? await getApplicationDocumentsDirectory();
-    } catch (_) {
-      return;
-    }
-    for (final name in [productImagesFolder, businessLogosFolder]) {
-      final dir = Directory('${docs.path}/$name');
+    // The browser keeps no photo files (#812): only the pending lists below.
+    if (!kIsWeb) {
+      Directory? docs;
       try {
-        if (dir.existsSync()) await dir.delete(recursive: true);
-      } catch (_) {}
+        docs = documents ?? await getApplicationDocumentsDirectory();
+      } catch (_) {
+        return;
+      }
+      for (final name in [productImagesFolder, businessLogosFolder]) {
+        final dir = Directory('${docs.path}/$name');
+        try {
+          if (dir.existsSync()) await dir.delete(recursive: true);
+        } catch (_) {}
+      }
     }
     try {
       final prefs = await SharedPreferences.getInstance();

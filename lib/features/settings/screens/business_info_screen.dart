@@ -1,5 +1,5 @@
 import 'package:reebaplus_pos/core/industry/industry.dart';
-import 'dart:io';
+import 'package:reebaplus_pos/shared/widgets/local_photo_image.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -579,8 +579,13 @@ class _LogoSection extends StatelessWidget {
         fit: BoxFit.cover,
       );
     } else if (logoLocalPath != null) {
-      avatar = Image.file(
-        File(logoLocalPath!),
+      avatar = LocalPhotoImage(
+        logoLocalPath!,
+        errorBuilder: (_, __, ___) => Icon(
+          AppIcons.business,
+          size: context.getRSize(40),
+          color: muted,
+        ),
         width: edge,
         height: edge,
         fit: BoxFit.cover,

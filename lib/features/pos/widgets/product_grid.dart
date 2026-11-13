@@ -1,10 +1,10 @@
-import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
+import 'package:reebaplus_pos/shared/widgets/local_photo_image.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
@@ -362,7 +362,7 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
             stockLabel: formatQty(stock),
             stockLevel: level,
             categoryName: widget.categoryName,
-            photoPath: product.imagePath,
+            photoPath: productPhotoRef(imagePath: product.imagePath, imageUrl: product.imageUrl),
             inCartLabel: inCartQty > 0 ? posCartQtyLabel(cartQty) : null,
             onTap: onTap,
             onLongPress: onLongPress,
@@ -377,7 +377,7 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
           stockLabel: formatQty(stock),
           stockLevel: level,
           categoryName: widget.categoryName,
-          photoPath: product.imagePath,
+          photoPath: productPhotoRef(imagePath: product.imagePath, imageUrl: product.imageUrl),
           inCartQty: inCartQty,
           inCartLabel: posCartQtyLabel(cartQty),
           onTap: onTap,
@@ -466,8 +466,8 @@ class _PosProductListRow extends StatelessWidget {
                 color: visual.tint,
                 child: photoPath == null
                     ? fallback
-                    : Image.file(
-                        File(photoPath!),
+                    : LocalPhotoImage(
+                        photoPath!,
                         fit: BoxFit.cover,
                         errorBuilder: (_, __, ___) => fallback,
                       ),
