@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:reebaplus_pos/features/subscription/widgets/plan_limit_widgets.dart';
+import 'package:reebaplus_pos/features/auth/widgets/sign_in_again_banner.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -595,8 +596,9 @@ class _MainLayoutState extends ConsumerState<MainLayout>
             // Non-blocking sync pull status overlay — first-download
             // progress bar at top, "Synced" pill above the bottom nav.
             const Positioned.fill(child: SyncPullBanner()),
-            // Trial ending soon (7d / 1d): names the plan that keeps the
-            // current setup. Renders nothing the rest of the time.
+            // Sign in again (#798), then trial ending soon (7d / 1d): names
+            // the plan that keeps the current setup. Each renders nothing the
+            // rest of the time.
             const Positioned(
               top: 0,
               left: 0,
@@ -606,7 +608,12 @@ class _MainLayoutState extends ConsumerState<MainLayout>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   // TODO(#584): remove once no legacy trials remain
-                  children: [TrialReminderBanner(), PlanStatusBanner()],
+                  children: [
+                    // #798: cloud login refused; the shop keeps selling.
+                    SignInAgainBanner(),
+                    TrialReminderBanner(),
+                    PlanStatusBanner(),
+                  ],
                 ),
               ),
             ),

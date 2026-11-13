@@ -29,11 +29,17 @@ class OtpVerificationScreen extends ConsumerStatefulWidget {
   final String email;
   final bool createBusinessIntent;
 
+  /// #798: set when the code only restores the cloud login of a user who is
+  /// already signed in on this device. Called once the code is accepted,
+  /// INSTEAD of the account lookup and routing below.
+  final VoidCallback? onVerified;
+
   const OtpVerificationScreen({
     super.key,
     required this.user,
     required this.email,
     this.createBusinessIntent = false,
+    this.onVerified,
   });
 
   @override
@@ -202,6 +208,17 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
     // Brief pause to show success state before navigating.
     await Future.delayed(const Duration(milliseconds: 800));
     if (!mounted) return;
+
+    final onVerified = widget.onVerified;
+    if (onVerified != null) {
+      unawaited(
+        auth.saveAuthMethod('email').catchError((Object e) {
+          debugPrint('[OtpVerification] saveAuthMethod failed: $e');
+        }),
+      );
+      onVerified();
+      return;
+    }
 
     // Account resolution below does network work (fetchSupabaseAccount and, for
     // a returning device, the minimum-login pull) that can take several seconds
