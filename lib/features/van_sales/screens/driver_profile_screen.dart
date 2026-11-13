@@ -21,7 +21,6 @@ import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/van_sales/driver_vans.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/drivers_list_screen.dart';
 import 'package:reebaplus_pos/features/van_sales/screens/van_reconcile_screen.dart';
-import 'package:reebaplus_pos/features/van_sales/widgets/bring_in_old_account_flow.dart';
 import 'package:reebaplus_pos/features/van_sales/widgets/driver_ledger_entry_tile.dart';
 import 'package:reebaplus_pos/features/van_sales/widgets/record_driver_payment_sheet.dart';
 import 'package:reebaplus_pos/features/van_sales/widgets/van_driver_pickers.dart';
@@ -102,11 +101,11 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
   }
 
   List<String> _resolveTabKeys({required bool tracksCrates}) => [
-        'trips',
-        'sales',
-        'ledger',
-        if (tracksCrates) 'crates',
-      ];
+    'trips',
+    'sales',
+    'ledger',
+    if (tracksCrates) 'crates',
+  ];
 
   void _syncTabController(List<String> tabKeys) {
     if (_tabController != null && _listEquals(_tabKeys, tabKeys)) return;
@@ -117,8 +116,9 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
           : 0;
     } else {
       final previousIndex = _tabController!.index;
-      final previousKey =
-          previousIndex < _tabKeys.length ? _tabKeys[previousIndex] : null;
+      final previousKey = previousIndex < _tabKeys.length
+          ? _tabKeys[previousIndex]
+          : null;
       if (previousKey != null && tabKeys.contains(previousKey)) {
         newIndex = tabKeys.indexOf(previousKey);
       } else {
@@ -142,9 +142,9 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
     return true;
   }
 
-
-  List<String> get _periodOptions =>
-      datePeriodLabelsForRole(managerUp: Gates.seeExtendedDateRanges.allows(ref));
+  List<String> get _periodOptions => datePeriodLabelsForRole(
+    managerUp: Gates.seeExtendedDateRanges.allows(ref),
+  );
 
   String get _effectivePeriod {
     final isCustom = _timeFilter.startsWith('Custom:');
@@ -212,9 +212,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
       );
     }
 
-    final vanNameById = {
-      for (final v in ref.watch(vansProvider)) v.id: v.name,
-    };
+    final vanNameById = {for (final v in ref.watch(vansProvider)) v.id: v.name};
     final name = driver?.name ?? 'No driver assigned';
     final isRemoved = driver?.isDeleted ?? false;
 
@@ -289,7 +287,9 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
     // — rather than showing an always-zero tab — is what keeps the profile
     // honest for a trade with no empties, and the tab COUNT has to follow or
     // DefaultTabController and TabBarView disagree.
-    final tracksCrates = businessTracksCrates(ref.watch(currentBusinessProvider));
+    final tracksCrates = businessTracksCrates(
+      ref.watch(currentBusinessProvider),
+    );
 
     final tabKeys = _resolveTabKeys(tracksCrates: tracksCrates);
     _syncTabController(tabKeys);
@@ -301,9 +301,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
         tabBarExtent: context.getRSize(60),
         tabBarChromeExtent: _tabBarBottomMargin,
         tabBar: Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: context.getRSize(16),
-          ),
+          padding: EdgeInsets.symmetric(horizontal: context.getRSize(16)),
           child: _tabBar(context, showCrates: tracksCrates),
         ),
         headerSlivers: [
@@ -323,14 +321,6 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
                       context,
                       vanDriverId: driver.id,
                       driverName: driver.name,
-                    ),
-              onBringInOldAccount:
-                  driver == null || isRemoved || driver.customerId != null
-                  ? null
-                  : () => showBringInOldAccountFlow(
-                      context,
-                      ref,
-                      driver: driver,
                     ),
               oldAccountName: oldCustomerId == null
                   ? null
@@ -416,7 +406,10 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
       ),
     );
     if (van == null) return;
-    await ref.read(databaseProvider).vanDriversDao.assignToVan(van.id, driverId);
+    await ref
+        .read(databaseProvider)
+        .vanDriversDao
+        .assignToVan(van.id, driverId);
   }
 
   /// "Driver since" — the first trip they ever ran.
@@ -576,46 +569,44 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
       decoration: BoxDecoration(
         color: t.colorScheme.surface.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: t.colorScheme.primary.withValues(alpha: 0.1),
-        ),
+        border: Border.all(color: t.colorScheme.primary.withValues(alpha: 0.1)),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
         child: TabBar(
-            controller: _tabController,
-            isScrollable: true,
-            tabAlignment: TabAlignment.center,
-            indicatorSize: TabBarIndicatorSize.tab,
-            indicatorPadding: EdgeInsets.all(context.getRSize(4)),
-            indicator: BoxDecoration(
-              color: t.colorScheme.primary.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: t.colorScheme.primary.withValues(alpha: 0.3),
-              ),
+          controller: _tabController,
+          isScrollable: true,
+          tabAlignment: TabAlignment.center,
+          indicatorSize: TabBarIndicatorSize.tab,
+          indicatorPadding: EdgeInsets.all(context.getRSize(4)),
+          indicator: BoxDecoration(
+            color: t.colorScheme.primary.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: t.colorScheme.primary.withValues(alpha: 0.3),
             ),
-            labelColor: t.colorScheme.primary,
-            unselectedLabelColor: t.colorScheme.onSurface.withAlpha(150),
-            labelStyle: TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: context.getRFontSize(13),
-            ),
-            unselectedLabelStyle: TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: context.getRFontSize(13),
-            ),
-            dividerColor: Colors.transparent,
-            tabs: [
-              const Tab(text: 'Trips'),
-              const Tab(text: 'Sales'),
-              const Tab(text: 'Ledger'),
-              // Must stay in lockstep with the TabBarView children and the
-              // controller length above.
-              if (showCrates) const Tab(text: 'Crates'),
-            ],
           ),
+          labelColor: t.colorScheme.primary,
+          unselectedLabelColor: t.colorScheme.onSurface.withAlpha(150),
+          labelStyle: TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: context.getRFontSize(13),
+          ),
+          unselectedLabelStyle: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: context.getRFontSize(13),
+          ),
+          dividerColor: Colors.transparent,
+          tabs: [
+            const Tab(text: 'Trips'),
+            const Tab(text: 'Sales'),
+            const Tab(text: 'Ledger'),
+            // Must stay in lockstep with the TabBarView children and the
+            // controller length above.
+            if (showCrates) const Tab(text: 'Crates'),
+          ],
         ),
+      ),
     );
   }
 
@@ -743,15 +734,16 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
     // only: the summary tiles and the balance count the driver's own rows.
     final lines =
         <
-          ({
-            DateTime at,
-            DriverLedgerEntryData? entry,
-            WalletTransactionData? old,
-          })
-        >[
-          for (final e in entries) (at: e.createdAt, entry: e, old: null),
-          for (final p in oldPayments) (at: p.createdAt, entry: null, old: p),
-        ]..sort((a, b) => b.at.compareTo(a.at));
+            ({
+              DateTime at,
+              DriverLedgerEntryData? entry,
+              WalletTransactionData? old,
+            })
+          >[
+            for (final e in entries) (at: e.createdAt, entry: e, old: null),
+            for (final p in oldPayments) (at: p.createdAt, entry: null, old: p),
+          ]
+          ..sort((a, b) => b.at.compareTo(a.at));
 
     return [
       SliverPadding(
@@ -795,8 +787,9 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
             return DriverLedgerEntryTile(
               key: driverLedgerRowKey(entry.id),
               entry: entry,
-              vanName:
-                  entry.tripId == null ? null : vanNameByTripId[entry.tripId!],
+              vanName: entry.tripId == null
+                  ? null
+                  : vanNameByTripId[entry.tripId!],
             );
           },
         ),
@@ -897,46 +890,46 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              vanNameById[trip.vanStoreId] ?? 'Van',
-                              style: TextStyle(
-                                fontSize: context.getRFontSize(14),
-                                fontWeight: FontWeight.w700,
-                                color: t.colorScheme.onSurface,
-                              ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  vanNameById[trip.vanStoreId] ?? 'Van',
+                                  style: TextStyle(
+                                    fontSize: context.getRFontSize(14),
+                                    fontWeight: FontWeight.w700,
+                                    color: t.colorScheme.onSurface,
+                                  ),
+                                ),
+                                SizedBox(height: context.getRSize(4)),
+                                Text(
+                                  '${DateFormat('d MMM y').format(trip.openedAt)}'
+                                  '${trip.status == kVanTripStatusOpen ? ' • on the road' : ''}',
+                                  style: TextStyle(
+                                    fontSize: context.getRFontSize(12),
+                                    color: subtext,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
                             ),
-                            SizedBox(height: context.getRSize(4)),
-                            Text(
-                              '${DateFormat('d MMM y').format(trip.openedAt)}'
-                              '${trip.status == kVanTripStatusOpen ? ' • on the road' : ''}',
-                              style: TextStyle(
-                                fontSize: context.getRFontSize(12),
-                                color: subtext,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                          _CrateStat(label: 'Out', value: trip.shellsOut),
+                          SizedBox(width: context.getRSize(14)),
+                          _CrateStat(label: 'Back', value: trip.shellsBack),
+                          SizedBox(width: context.getRSize(14)),
+                          _CrateStat(
+                            label: 'Short',
+                            value: trip.shellsOut - trip.shellsBack,
+                            color: trip.shellsOut - trip.shellsBack > 0
+                                ? semantic.warning
+                                : null,
+                          ),
+                        ],
                       ),
-                      _CrateStat(label: 'Out', value: trip.shellsOut),
-                      SizedBox(width: context.getRSize(14)),
-                      _CrateStat(label: 'Back', value: trip.shellsBack),
-                      SizedBox(width: context.getRSize(14)),
-                      _CrateStat(
-                        label: 'Short',
-                        value: trip.shellsOut - trip.shellsBack,
-                        color: trip.shellsOut - trip.shellsBack > 0
-                            ? semantic.warning
-                            : null,
-                      ),
-                    ],
-                  ),
                       SizedBox(height: context.getRSize(8)),
                       _LostCratesLine(tripIds: [trip.id]),
                     ],
@@ -998,9 +991,6 @@ class _Header extends StatelessWidget {
   final String? phone;
   final bool isRemoved;
   final VoidCallback? onAssignVan;
-
-  /// #783: null once an old account is brought in (or for a removed driver).
-  final VoidCallback? onBringInOldAccount;
   final VoidCallback? onRecordPayment;
 
   /// #783: the brought-in old customer account's name, when linked.
@@ -1019,7 +1009,6 @@ class _Header extends StatelessWidget {
     required this.phone,
     required this.isRemoved,
     required this.onAssignVan,
-    this.onBringInOldAccount,
     this.onRecordPayment,
     this.oldAccountName,
     required this.trips,
@@ -1146,13 +1135,6 @@ class _Header extends StatelessWidget {
                     text: 'Old customer account: $oldAccountName',
                   ),
                 ],
-                if (onBringInOldAccount != null)
-                  TextButton.icon(
-                    key: const Key('driver-bring-in-old-account'),
-                    onPressed: onBringInOldAccount,
-                    icon: const Icon(AppIcons.link, size: 18),
-                    label: const Text('Bring in old customer account'),
-                  ),
               ],
             ),
           ),
@@ -1264,7 +1246,7 @@ class _TripRow extends ConsumerWidget {
               Text(
                 'Out on ${DateFormat('d MMM y').format(trip.openedAt)}'
                 '${trip.closedAt == null ? '' : ' • closed '
-                      '${DateFormat('d MMM y').format(trip.closedAt!)}'}',
+                          '${DateFormat('d MMM y').format(trip.closedAt!)}'}',
                 style: TextStyle(
                   fontSize: context.getRFontSize(12),
                   color: subtext,
@@ -1348,11 +1330,7 @@ class _SaleRow extends StatelessWidget {
   /// #783: this sale is from the driver's old customer account (history).
   final bool fromOldAccount;
 
-  const _SaleRow({
-    super.key,
-    required this.sale,
-    this.fromOldAccount = false,
-  });
+  const _SaleRow({super.key, required this.sale, this.fromOldAccount = false});
 
   @override
   Widget build(BuildContext context) {
