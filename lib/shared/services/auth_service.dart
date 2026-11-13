@@ -14,6 +14,8 @@ import 'package:reebaplus_pos/features/auth/onboarding/onboarding_draft.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
 import 'package:reebaplus_pos/shared/services/device_registry_service.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:reebaplus_pos/core/services/browser_last_used_service.dart';
 import 'package:reebaplus_pos/shared/services/device_teardown.dart';
 import 'package:reebaplus_pos/core/services/first_load_marker_service.dart';
 import 'package:reebaplus_pos/core/services/local_photo_files.dart';
@@ -673,6 +675,50 @@ class AuthService extends ValueNotifier<UserData?> {
       }),
     );
     return user;
+  }
+
+  /// Browser-only cold-start rule (#812 S5): a browser copy of the shop that
+  /// has not been opened for more than [kBrowserUnusedWipeAfter] is wiped and
+  /// signed out, through the same teardown Log Out uses. Call BEFORE
+  /// [restoreSignedInUser]. No-op off the web ([isWeb] defaults to kIsWeb).
+  ///
+  /// Unsent work (invariant #12): the logout gate tries one push first. If rows
+  /// are still unsent (or the push cannot finish within [pushTimeout], or we
+  /// are offline) the wipe is SKIPPED this time and the data is kept, so the
+  /// user's sales are never destroyed. The caller must not refresh the
+  /// last-used date in that case, so the next open tries again.
+  /// Returns true only when the copy was wiped.
+  Future<bool> wipeStaleBrowserCopy({
+    DateTime? now,
+    bool? isWeb,
+    Duration pushTimeout = const Duration(seconds: 15),
+  }) async {
+    if (!(isWeb ?? kIsWeb)) return false;
+    final lastUsed = await BrowserLastUsedService.read();
+    if (!BrowserLastUsedService.shouldWipe(
+      now: now ?? DateTime.now(),
+      lastUsed: lastUsed,
+    )) {
+      return false;
+    }
+    try {
+      final userId = await getDeviceUserId();
+      final userBusiness = userId == null
+          ? null
+          : (await _db.storesDao.getUserById(userId))?.businessId;
+      final bid = userBusiness ?? await _soleLocalBusinessId();
+      if (bid != null) {
+        await _assertOutboxClearBeforeWipe(bid).timeout(pushTimeout);
+      }
+      // Gate is clean (or there is no business data): same wipe + sign-out.
+      await _teardown.leave(LeaveReason.logout, businessId: bid ?? '');
+      return true;
+    } catch (e) {
+      debugPrint(
+        '[AuthService] browser 30-day wipe skipped, unsent work kept: $e',
+      );
+      return false;
+    }
   }
 
   /// Marks [user] as the active logged-in user and applies store lock.
