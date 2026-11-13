@@ -25,7 +25,7 @@ authenticated identity and business membership as separate checks.
 |---|---|---|
 | Client app | Flutter (Dart) | Single mobile codebase (Android/iOS) for the entire POS UI and business logic. |
 | State management | Riverpod | App-wide state, dependency injection, and reactive rebuilds. All repositories and services are exposed as providers; widgets never construct dependencies directly. |
-| Local database | Drift over SQLite | On-device source of truth. Holds all business data (products, orders, customers, suppliers, wallet ledgers, staff, roles, permissions) plus the sync outbox. Every screen reads from Drift, never from the network. Runs on **Drift's background worker** (`NativeDatabase.createInBackground`, #687) with **one connection and no read pool**: the logout wipe, delete guards and upgrade steps toggle foreign keys and triggers, which only hold on a single connection. `lib/core/database/local_database_connection.dart` owns the open. The open steps run on the worker, so they use no globals or Flutter bindings. SQLite errors reach the app wrapped (`DriftRemoteException`) with the same text, so they are matched by message, never by type. **Off switch:** `app_config` key `db_background_worker` (0253, `on`/`off`, read on launch and resume like `min_android_build`) is remembered in the file `.db_background_worker` beside the database and applied only at the next app open; no answer keeps the last one, nothing remembered means the worker, and `off` is the old open on the screen's thread. Opening reads only that local file, never the network. |
+| Local database | Drift over SQLite | On-device source of truth. Holds all business data (products, orders, customers, suppliers, wallet ledgers, staff, roles, permissions) plus the sync outbox. Every screen reads from Drift, never from the network. Runs on **Drift's background worker** (`NativeDatabase.createInBackground`, #687) with **one connection and no read pool**: the logout wipe, delete guards and upgrade steps toggle foreign keys and triggers, which only hold on a single connection. `lib/core/database/local_database_connection.dart` owns the phone open (the browser opens through `local_database_platform_web.dart`, see Storage Model). The open steps run on the worker, so they use no globals or Flutter bindings. SQLite errors reach the app wrapped (`DriftRemoteException`) with the same text, so they are matched by message, never by type. **Off switch:** `app_config` key `db_background_worker` (0253, `on`/`off`, read on launch and resume like `min_android_build`) is remembered in the file `.db_background_worker` beside the database and applied only at the next app open; no answer keeps the last one, nothing remembered means the worker, and `off` is the old open on the screen's thread. Opening reads only that local file, never the network. |
 | Local key–value store | flutter_secure_storage | Device-local secrets and session pointers: the device user pointer, the active business/store IDs, and the auth refresh token. Never synced. (No PIN since #812.) |
 | Cloud database | Supabase Postgres | Cloud source of truth and the convergence point across devices. Holds the authoritative copy of all business data and enforces Row-Level Security. |
 | Cloud auth | Supabase Auth | Identity provider supporting **email + OTP** and **Google OAuth**. Issues the JWT that authorizes all Postgres and RPC access; the resolved email is the canonical identity key. There is no PIN (#812). All transactional auth email (OTP / login) is sent from the Reebaplus domain via Supabase Auth **Custom SMTP** (Resend) — a dashboard configuration, not app code. |
@@ -154,6 +154,23 @@ cloud table. See `docs/data/nigerian-areas.md`; migration 0189 is verified on th
 `reebaplus-dev` project and not deployed to production. No invariant changes.
 
 ## Storage Model
+
+**The browser database (#812 S1, 2026-11-13).** The app also builds for the web
+(`flutter build web`). `AppDatabase` opens through
+`lib/core/database/local_database_platform.dart`, a conditional export: phones and
+tablets get `local_database_platform_native.dart`, which calls the unchanged
+`local_database_connection.dart` (SQLite file, background worker, off switch); the
+browser gets `local_database_platform_web.dart`, which opens the same Drift schema
+with `WasmDatabase.open` (database name `reebaplus_pos.sqlite`). It needs
+`web/sqlite3.wasm` (sqlite3 3.1.7) and `web/drift_worker.js` (drift 2.32.0); both must
+be upgraded together whenever drift or sqlite3 moves in `pubspec.lock`. Drift picks
+the browser storage (OPFS, else IndexedDB) and stays on the one an existing database
+lives in. Still ONE connection, hosted by drift's web worker, so the open-step
+PRAGMAs do not run there: `foreign_keys` comes from `beforeOpen`, WAL does not apply.
+The browser keeps a full copy of the shop's data and runs the same sync engine
+(owner, 2026-11-13); the logout wipe is the same `clearAllData`. On web there is no
+legacy-file wipe, no iCloud backup exclusion and no off-switch file
+(`kIsWeb` guards in `db_wipe.dart`, `BackupExclusionService`, `main.dart`).
 
 **Quantities are quarter-step doubles (#620 / #627, Drift v98, cloud 0239).**
 Stock, sale-line, cost-layer and crate quantities (22 columns: `inventory.quantity`,
