@@ -9,7 +9,7 @@
 //     flashes while the role is still resolving (null).
 //   * membershipStatusReaction — the pure mapping the main.dart live guard uses:
 //     an admin-removed membership (`removed`) → offboard (gate → logout);
-//     `suspended` → lock; everything else → none.
+//     `suspended` → block; everything else → none.
 //   * the local `removed` flip (markRemovedLocal, as applied by a pull) drives
 //     the offboard reaction — the admin-removed detection decision.
 //   * the logout/resign wipe gate's three branches, at the DAO-signal level that
@@ -68,9 +68,9 @@ void main() {
           MembershipStatusReaction.offboard);
     });
 
-    test('suspended → lock', () {
+    test('suspended → block', () {
       expect(membershipStatusReaction('suspended'),
-          MembershipStatusReaction.lock);
+          MembershipStatusReaction.block);
     });
 
     test('active / null / unknown → none', () {
@@ -78,6 +78,15 @@ void main() {
       expect(membershipStatusReaction(null), MembershipStatusReaction.none);
       expect(membershipStatusReaction('whatever'),
           MembershipStatusReaction.none);
+    });
+
+    // #812: the Account Blocked screen replaces the PIN lock.
+    test('accountBlockedMessage: suspended wins, paused next, else none', () {
+      expect(accountBlockedMessage(suspended: true, paused: true),
+          contains('suspended'));
+      expect(accountBlockedMessage(suspended: false, paused: true),
+          contains('paused'));
+      expect(accountBlockedMessage(suspended: false, paused: false), isNull);
     });
   });
 

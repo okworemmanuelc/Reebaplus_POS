@@ -114,10 +114,10 @@ class PosController extends ChangeNotifier {
   void _subscribeToProducts() {
     _productsSub?.cancel();
 
-    // The lockedStoreId listener fires during lockApp/logout. If the
+    // The lockedStoreId listener fires during logout. If the
     // ordering ever regresses (or another teardown path nulls businessId
     // before clearing the store), bail rather than throw. Mirrors the
-    // currentUser==null guard in auto_lock_wrapper.dart.
+    // currentUser==null guard in app_resume_sync.dart.
     if (_database.currentBusinessId == null) {
       return;
     }

@@ -23,7 +23,6 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/storefront/browse_switch.dart';
 import 'package:reebaplus_pos/core/storefront/online_ordering_switch.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
-import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/welcome_screen.dart';
 import 'package:reebaplus_pos/features/browse/screens/browse_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/otp_verification_screen.dart';
@@ -35,7 +34,7 @@ import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
 import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/main_layout.dart';
-import 'package:reebaplus_pos/shared/widgets/auto_lock_wrapper.dart';
+import 'package:reebaplus_pos/shared/widgets/app_resume_sync.dart';
 import 'package:reebaplus_pos/features/payroll/widgets/daily_allowance_runner.dart';
 import 'package:reebaplus_pos/shared/widgets/force_update_wrapper.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
@@ -181,9 +180,8 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
   late final PushNotificationService _pushService;
 
   /// Business bound for push registration, tracked to detect the sign-in edge
-  /// (`_onAuthChanged`) and the full-logout edge (`_onDeviceUserChanged`). A
-  /// lock keeps it — a locked device still receives pushes;
-  /// only a full logout (device-user cleared → Welcome) nulls the token.
+  /// (`_onAuthChanged`) and the full-logout edge (`_onDeviceUserChanged`).
+  /// Only a full logout (device-user cleared → Welcome) nulls the token.
   String? _pushBusinessId;
 
   /// Tracks whether Supabase currently has an active JWT. Seeded `true`
@@ -409,7 +407,7 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
     }
   }
 
-  /// The sign-in edge: a business became bound (login or app-open unlock).
+  /// The sign-in edge: a business became bound (login or cold-start restore).
   /// Registers the FCM token if OS permission is already granted.
   void _syncPushSignIn() {
     final businessId = _auth.currentUser?.businessId;
@@ -420,8 +418,7 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
   }
 
   /// The full-logout edge: the device user was cleared (→ Welcome). Null the
-  /// token client-side + in `devices`. A lock does NOT hit
-  /// this (device user retained), so a locked device keeps receiving pushes.
+  /// token client-side + in `devices`.
   void _syncPushSignOut() {
     if (_auth.deviceUserIdNotifier.value == null && _pushBusinessId != null) {
       final previous = _pushBusinessId!;
@@ -430,7 +427,16 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
     }
   }
 
+  /// Cold start (#812): there is no PIN unlock, so a device with a signed-in
+  /// user is restored straight into the shop before the splash lifts. Local
+  /// reads only — never the network (invariant #11).
   Future<void> _checkDeviceUser() async {
+    try {
+      await _auth.restoreSignedInUser();
+    } catch (e, stack) {
+      // Never trap the app on the splash: fall through to the sign-in screen.
+      debugPrint('[main] cold-start restore failed: $e\n$stack');
+    }
     final userId = await _auth.getDeviceUserId();
     if (mounted) {
       _auth.deviceUserIdNotifier.value = userId;
@@ -466,29 +472,21 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
     // the `user_businesses` realtime/broadcast pull flips the local status and
     // this provider re-emits. Guard on `value != null` so a null (logged-out)
     // re-emission is ignored.
-    //   • suspended → lockApp() (UI-only; keeps the Supabase session): drop to
-    //     the PIN screen, which refuses a suspended member's PIN so they can't
-    //     unlock themselves again.
+    //   • suspended → nothing here: [_HomeRouter] shows the Account Blocked
+    //     screen instead of the shop while the status stays suspended (#812 —
+    //     there is no PIN screen to lock to any more). A plan-paused user
+    //     (reebaplus-web#90) is blocked the same way.
     //   • removed → run the SAME offboarding the drawer logout uses (unsynced-
     //     data gate → log out and wipe the device).
     ref.listen(currentUserMembershipStatusProvider, (_, next) {
       if (_auth.value == null) return;
       switch (membershipStatusReaction(next)) {
         case MembershipStatusReaction.none:
+        case MembershipStatusReaction.block:
           break;
-        case MembershipStatusReaction.lock:
-          _auth.lockApp();
         case MembershipStatusReaction.offboard:
           unawaited(_handleSelfRemoved());
       }
-    });
-
-    // Plan downgrade (reebaplus-web#90): staff beyond the effective plan's
-    // account limit are paused (nothing deleted). Lock the app for a paused
-    // user, same UI-only lock as a suspension; the PIN screen refuses them too.
-    ref.listen(pausedStaffIdsProvider, (_, paused) {
-      final me = _auth.value?.id;
-      if (me != null && paused.contains(me)) _auth.lockApp();
     });
 
     // Keep the app-wide money formatter in sync with the CEO-chosen currency
@@ -501,7 +499,7 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
     setActiveCurrencyCode(currencyCode);
 
     return ForceUpdateWrapper(
-      child: AutoLockWrapper(
+      child: AppResumeSync(
         // #669 — posts the automatic Daily Allowance on open / resume, offline.
         child: DailyAllowanceRunner(
           child: MaterialApp(
@@ -593,7 +591,7 @@ class _BrandedSplash extends StatelessWidget {
 
 /// Shown when a local user is loaded but the Supabase JWT is missing. Triggers
 /// a fresh OTP to the user's email so the session can be re-established without
-/// destroying the device session (PIN, biometrics, local data all preserved).
+/// destroying the device session (local data preserved).
 class _SessionExpiredScreen extends ConsumerStatefulWidget {
   final UserData user;
   const _SessionExpiredScreen({required this.user});
@@ -703,7 +701,7 @@ class _SessionExpiredScreenState extends ConsumerState<_SessionExpiredScreen> {
               Text(
                 email.isEmpty
                     ? "Your sign-in has expired. Verify your email to keep your changes syncing."
-                    : "Your sign-in has expired. We'll send a code to $email to restore your session — your PIN and local data stay intact.",
+                    : "Your sign-in has expired. We'll send a code to $email to restore your session — your local data stays intact.",
                 textAlign: TextAlign.center,
                 style: context
                     .regularStyle(14)
@@ -740,20 +738,119 @@ class _SessionExpiredScreenState extends ConsumerState<_SessionExpiredScreen> {
 Widget buildSessionExpiredScreenForTest(UserData user) =>
     _SessionExpiredScreen(user: user);
 
-/// The entry screen while no user is signed in on this run (#425):
-/// a phone with a business user (a device user) always gets the PIN screen,
-/// offline too (invariant #11); a phone without one gets Browse when the
-/// Browse-first switch is on, otherwise today's Welcome screen.
+/// Shown instead of the shop while the signed-in member is suspended or
+/// paused by the plan (#812). It replaces the old PIN lock: there is no PIN
+/// screen to drop them to any more. The user stays bound, so sync keeps running
+/// and a reactivation (or an upgrade) reopens the shop by itself. Log out runs
+/// the normal drawer logout — the unsynced-data gate, then the wipe.
+class _AccountBlockedScreen extends ConsumerWidget {
+  final String message;
+  const _AccountBlockedScreen({required this.message});
+
+  Future<void> _logOut(BuildContext context, WidgetRef ref) async {
+    try {
+      await ref.read(authProvider).logOutCurrentUser();
+    } on LogoutBlockedByUnsyncedDataException catch (e) {
+      if (context.mounted) {
+        await showResolveUnsyncedDataDialog(
+          context,
+          ref,
+          pendingCount: e.pendingCount,
+          orphanCount: e.orphanCount,
+          photoCount: e.photoCount,
+        );
+      }
+    } on LogoutWipeException catch (e) {
+      if (context.mounted) AppNotification.showError(context, e.message);
+    } catch (e) {
+      debugPrint('[main] blocked-screen logout error: $e');
+      if (context.mounted) {
+        AppNotification.showError(
+          context,
+          'An unexpected error occurred during logout.',
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      body: BrandedAuthBackground(
+        child: SafeArea(
+          child: AuthCenteredScroll(
+            padding: context.rPaddingSymmetric(horizontal: 28, vertical: 32),
+            children: [
+              Icon(
+                AppIcons.block,
+                size: context.getRSize(72),
+                color: theme.colorScheme.error,
+              ),
+              SizedBox(height: context.getRSize(20)),
+              Text(
+                'Account on hold',
+                textAlign: TextAlign.center,
+                style: context
+                    .boldStyle(26)
+                    .copyWith(color: authTextPrimary(context)),
+              ),
+              SizedBox(height: context.getRSize(12)),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: context
+                    .regularStyle(14)
+                    .copyWith(height: 1.4, color: authTextMuted(context, 0.75)),
+              ),
+              SizedBox(height: context.getRSize(32)),
+              AppButton(
+                text: 'Log out',
+                onAsyncPressed: () => _logOut(context, ref),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Test seam: lets widget tests mount the private [_AccountBlockedScreen].
+@visibleForTesting
+Widget buildAccountBlockedScreenForTest(String message) =>
+    _AccountBlockedScreen(message: message);
+
+/// The entry screen while no user is signed in on this run (#425, #812):
+/// a phone that still holds a business user pointer but could not restore it
+/// (its local row is missing) gets the Welcome screen to sign in again — never
+/// Browse, it is a business phone; a phone without one gets Browse when the
+/// Browse-first switch is on, otherwise today's Welcome screen. A device whose
+/// user restores at cold start never reaches here: it opens straight into the
+/// shop (no PIN screen any more).
 @visibleForTesting
 Widget entryScreenWithoutSignedInUser({
   required bool hasDeviceUser,
   bool? browseFirst,
 }) {
-  if (hasDeviceUser) return const LoginScreen();
+  if (hasDeviceUser) return const WelcomeScreen();
   return (browseFirst ?? isBrowseFirstEnabled())
       ? const BrowseScreen()
       : const WelcomeScreen();
 }
+
+/// #812: the Account Blocked screen's message while the signed-in member is
+/// suspended or paused by the plan, else null. Replaces the old PIN lock.
+final _accountBlockedMessageProvider = Provider<String?>((ref) {
+  final userId = ref.watch(authProvider).currentUser?.id;
+  if (userId == null) return null;
+  final status = ref.watch(currentUserMembershipStatusProvider);
+  return accountBlockedMessage(
+    suspended:
+        membershipStatusReaction(status) == MembershipStatusReaction.block,
+    paused: ref.watch(pausedStaffIdsProvider).contains(userId),
+  );
+});
 
 // ---------------------------------------------------------------------------
 // Home routing widget — extracted from _ReebaplusPosAppState so all
@@ -776,9 +873,12 @@ class _HomeRouter extends ConsumerWidget {
     final user = auth.value;
     final localBusinessesAsync = ref.watch(localBusinessesProvider);
 
+    final blockedMessage = ref.watch(_accountBlockedMessageProvider);
+
     final screen = _resolve(
       auth: auth,
       user: user,
+      blockedMessage: blockedMessage,
       localBusinessesAsync: localBusinessesAsync,
       // #142 — resolved here (in `build`) so the router rebuilds when the
       // driver's permissions land, rather than reading a stale one-shot.
@@ -799,6 +899,7 @@ class _HomeRouter extends ConsumerWidget {
   Widget _resolve({
     required AuthService auth,
     required UserData? user,
+    required String? blockedMessage,
     required AsyncValue<List<BusinessData>> localBusinessesAsync,
     required bool isDriverTerminal,
   }) {
@@ -809,17 +910,18 @@ class _HomeRouter extends ConsumerWidget {
       //
       // Legacy in-progress onboarding (a half-built business from
       // before the collect-first wizard) is no longer auto-resumed
-      // — the new wizard commits atomically at PIN, so abandonment
-      // can't leave a half-state to resume into. Users in that
-      // transitional bucket re-enter via EmailEntry / LoginScreen.
+      // — the new wizard commits atomically, so abandonment can't leave
+      // a half-state to resume into. Users in that transitional bucket
+      // re-enter via EmailEntry.
       //
       // #425: with the Browse-first switch on, a phone with no business user
       // (fresh install, or after a logout — logout always wipes) opens on
       // Browse instead; its "Sell on Reebaplus" pushes today's Welcome.
       //
-      // Known device — cold start, the drawer lock button, and auto-lock all
-      // land on the device user's PIN screen. Another staff member on a
-      // shared till signs in through its "Not you? Switch account" link.
+      // Known device — the cold-start restore (`_checkDeviceUser`) binds the
+      // device user before the splash lifts, so it opens straight into the
+      // shop (#812: no PIN screen). Another staff member on a shared till
+      // logs out (which wipes) and signs in with their own email code.
       return entryScreenWithoutSignedInUser(hasDeviceUser: hasDeviceUser!);
     }
 
@@ -852,7 +954,13 @@ class _HomeRouter extends ConsumerWidget {
       return const _BrandedSplash();
     }
 
-    // Check for special post-login screens set by BiometricSetupScreen.
+    // A suspended / plan-paused member never sees the shop (#812).
+    if (blockedMessage != null) {
+      return _AccountBlockedScreen(message: blockedMessage);
+    }
+
+    // Special post-login screens. Nothing sets these since the PIN screens
+    // went (#812); kept until the screens themselves are retired.
     final pendingRoute = auth.pendingPostLoginRoute;
     if (pendingRoute != PostLoginRoute.none) {
       auth.pendingPostLoginRoute = PostLoginRoute.none;

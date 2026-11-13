@@ -18,7 +18,6 @@ import 'package:reebaplus_pos/features/settings/screens/delete_business_screen.d
 import 'package:reebaplus_pos/features/settings/screens/online_store_settings_screen.dart';
 import 'package:reebaplus_pos/features/settings/screens/receipt_printer_settings_screen.dart';
 import 'package:reebaplus_pos/features/settings/screens/roles_permissions_screen.dart';
-import 'package:reebaplus_pos/features/settings/screens/security_settings_screen.dart';
 import 'package:reebaplus_pos/core/settings/settings_widgets.dart';
 import 'package:reebaplus_pos/features/settings/screens/stores_settings_screen.dart';
 import 'package:reebaplus_pos/features/settings/screens/subscription_screen.dart';
@@ -104,13 +103,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     (
       title: 'Access & Security',
       entries: [
-        (
-          icon: AppIcons.lock,
-          tone: IconTileTone.danger,
-          title: 'Security',
-          subtitle: 'Auto-lock and biometric login',
-          screen: SecuritySettingsScreen(),
-        ),
         (
           icon: AppIcons.adminPanel,
           tone: IconTileTone.info,

@@ -19,7 +19,7 @@ import 'package:reebaplus_pos/features/van_sales/widgets/trip_balance_lines.dart
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
-import 'package:reebaplus_pos/shared/widgets/auto_lock_wrapper.dart';
+import 'package:reebaplus_pos/shared/widgets/app_resume_sync.dart';
 
 /// Record Payment — the manager logs cash a driver handed in (#144, PRD #139 /
 /// ADR 0019 decision 2, van-sales spec §5.3).
@@ -115,7 +115,7 @@ class _RecordDriverPaymentSheetState
   }
 
   Future<void> _pickReceipt() async {
-    AutoLockWrapper.suppressNextResume = true;
+    AppResumeSync.suppressNextResume = true;
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['jpg', 'png', 'pdf'],

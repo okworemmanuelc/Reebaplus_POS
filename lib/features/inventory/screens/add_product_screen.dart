@@ -41,7 +41,7 @@ import 'package:reebaplus_pos/features/receiving/state/receive_cart.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/app_dropdown.dart';
 import 'package:reebaplus_pos/shared/widgets/app_input.dart';
-import 'package:reebaplus_pos/shared/widgets/auto_lock_wrapper.dart';
+import 'package:reebaplus_pos/shared/widgets/app_resume_sync.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 
 /// Keys the Add Product tests find its boxes and buttons by (#487).
@@ -1387,8 +1387,8 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       if (source == null || !mounted) return;
       setState(() => _photoProcessing = true);
       // Coming back from the camera or gallery is not a return from the
-      // background: no auto-lock check, no catch-up download meanwhile.
-      AutoLockWrapper.suppressNextResume = true;
+      // background: no catch-up download meanwhile.
+      AppResumeSync.suppressNextResume = true;
       final result = await ref
           .read(productImageServiceProvider)
           .pickAndProcess(source: source);

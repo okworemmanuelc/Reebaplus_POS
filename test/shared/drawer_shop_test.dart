@@ -1,6 +1,6 @@
 // #437 — the side menu's Shop entry. Behind the marketplace switch; opens
-// Browse over the till with this phone's business sign-in; leaving it locks
-// the till so the PIN is needed to get back.
+// Browse over the till with this phone's business sign-in; leaving it returns
+// straight to the till (#812: no PIN lock).
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -103,7 +103,7 @@ void main() {
     });
   }
 
-  testWidgets('Shop opens Browse unlocked; leaving it asks for the PIN', (
+  testWidgets('Shop opens Browse; leaving it returns to the till (#812)', (
     tester,
   ) async {
     debugOverrideBrowseFirstEnabled(true);
@@ -132,7 +132,7 @@ void main() {
     final browse = tester.widget<BrowseScreen>(find.byType(BrowseScreen));
     expect(browse.fromTill, isTrue);
     expect(find.byKey(const Key('browse-sell-on-reebaplus')), findsNothing);
-    // Still unlocked while shopping — the till underneath is untouched.
+    // Still signed in while shopping — the till underneath is untouched.
     expect(auth.currentUser, isNotNull);
 
     await tester.tap(find.byKey(const Key('browse-back-to-till')));
@@ -143,9 +143,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 200));
     }
 
-    // Locked: the app's router now shows the PIN screen (LoginScreen).
+    // Back on the till, still signed in: no PIN lock any more.
     expect(find.byType(BrowseScreen), findsNothing);
-    expect(auth.currentUser, isNull);
+    expect(auth.currentUser, isNotNull);
     await disposeScreen(tester);
   });
 }

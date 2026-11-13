@@ -1,6 +1,6 @@
-// Visual goldens + layout checks for Auth PR 3 (#462): the lock screen, Create
-// PIN, Biometric setup, Session expired, PinDialog, the user picker sheet and
-// the success overlay.
+// Visual goldens + layout checks for Auth PR 3 (#462): Session expired, the
+// Account Blocked screen (#812) and PinDialog. The lock screen, Create PIN,
+// Biometric setup, user picker and success overlay went with the PIN (#812).
 //
 // Goldens: <screen>_<size>_<theme>.png at 390x844, 844x390 (24dp status bar +
 // 48dp side inset), 800x1280 and 1280x800, light and dark. Dialog and sheet
@@ -11,7 +11,6 @@
 // Animations are frozen: every pump is a fixed duration and nothing waits for
 // a repeating animation (step pulse, loading dots) to settle.
 
-import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,20 +18,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
-import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/services/supabase_cloud_transport.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
-import 'package:reebaplus_pos/features/auth/screens/biometric_setup_screen.dart';
-import 'package:reebaplus_pos/features/auth/screens/create_pin_screen.dart';
-import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
-import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
-import 'package:reebaplus_pos/features/auth/widgets/pin_keypad.dart';
-import 'package:reebaplus_pos/main.dart' show buildSessionExpiredScreenForTest;
+import 'package:reebaplus_pos/main.dart'
+    show buildAccountBlockedScreenForTest, buildSessionExpiredScreenForTest;
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
-import 'package:reebaplus_pos/shared/services/pin_hasher.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
 import 'package:reebaplus_pos/shared/widgets/pin_dialog.dart';
 
@@ -42,8 +35,7 @@ const _connectivityChannel = MethodChannel(
   'dev.fluttercommunity.plus/connectivity',
 );
 
-/// No device user, no plugin-backed storage reads: the lock screen opens on a
-/// preset user or on the email box.
+/// No device user, no plugin-backed storage reads.
 class _FakeAuth extends AuthService {
   _FakeAuth(super.db, super.nav, super.secure, super.sync, super.supabase);
 
@@ -157,16 +149,13 @@ void main() {
   }
 
   final screens = <String, (Widget Function(), Type)>{
-    'login': (() => LoginScreen(presetUser: ada), LoginScreen),
-    'create_pin': (
-      () => const CreatePinScreen(isNewBusinessSetup: true),
-      CreatePinScreen,
-    ),
-    'biometric_setup': (
-      () => BiometricSetupScreen(user: ada, isNewBusinessSetup: true),
-      BiometricSetupScreen,
-    ),
     'session_expired': (() => buildSessionExpiredScreenForTest(ada), Scaffold),
+    'account_blocked': (
+      () => buildAccountBlockedScreenForTest(
+        'Your account is suspended. Ask your manager to reactivate it.',
+      ),
+      Scaffold,
+    ),
   };
 
   // ── Screen goldens ─────────────────────────────────────────────────────────
@@ -195,23 +184,6 @@ void main() {
     }
   }
 
-  // Create PIN, plain reset path (no step indicator, with the user's name).
-  testWidgets('create PIN (reset path) renders at every size', (tester) async {
-    for (final s in _sizes.values) {
-      final (size, padding) = s;
-      await pump(
-        tester,
-        CreatePinScreen(user: ada),
-        size: size,
-        padding: padding,
-      );
-      expect(tester.takeException(), isNull);
-      expect(find.text('Create a PIN'), findsOneWidget);
-      expect(find.byType(PinKeypad), findsOneWidget);
-      await unmount(tester);
-    }
-  });
-
   // ── No overflow ────────────────────────────────────────────────────────────
   final overflowSizes = <String, (Size, EdgeInsets)>{
     '360x640@1.3': (const Size(360, 640), const EdgeInsets.only(top: 24)),
@@ -236,29 +208,7 @@ void main() {
     }
   }
 
-  testWidgets('lock screen keeps a two-column keypad off the greeting', (
-    tester,
-  ) async {
-    await pump(
-      tester,
-      LoginScreen(presetUser: ada),
-      size: const Size(844, 390),
-      padding: const EdgeInsets.only(top: 24, right: 48),
-    );
-    final greeting = tester.getRect(find.text('Welcome back, Ada'));
-    final keypad = tester.getRect(find.byType(PinKeypad));
-    expect(greeting.right, lessThan(keypad.left));
-    expect(find.text('Forgot PIN?'), findsOneWidget);
-    expect(find.text('Not Ada? Switch account'), findsOneWidget);
-    // Keys are at least 48dp.
-    expect(
-      tester.getSize(find.byType(PinKey).first).shortestSide,
-      greaterThanOrEqualTo(48),
-    );
-    await unmount(tester);
-  });
-
-  // ── Dialog, sheet and overlay goldens ──────────────────────────────────────
+  // ── Dialog goldens ─────────────────────────────────────────────────────────
   const popupSizes = <String, (Size, EdgeInsets)>{
     '390x844': (Size(390, 844), EdgeInsets.only(top: 24, bottom: 24)),
     '844x390': (Size(844, 390), EdgeInsets.only(top: 24, right: 48)),
@@ -284,74 +234,8 @@ void main() {
         );
         await unmount(tester);
       });
-
-      testWidgets('golden user_picker_sheet_${s.key}_$themeKey', (
-        tester,
-      ) async {
-        final (size, padding) = s.value;
-        await _seedSharedPin(env);
-        await pump(
-          tester,
-          const LoginScreen(),
-          size: size,
-          padding: padding,
-          brightness: b,
-        );
-        await _openPicker(tester);
-        expect(find.text('Who is logging in?'), findsOneWidget);
-        expect(tester.takeException(), isNull);
-        await expectLater(
-          find.byType(MaterialApp),
-          matchesGoldenFile('goldens/user_picker_sheet_${s.key}_$themeKey.png'),
-        );
-        await unmount(tester);
-      });
-
-      testWidgets('golden success_overlay_${s.key}_$themeKey', (tester) async {
-        final (size, padding) = s.value;
-        await pump(
-          tester,
-          Scaffold(
-            body: BrandedAuthBackground(
-              child: SafeArea(
-                child: SuccessOverlay(
-                  user: ada,
-                  checkScale: const AlwaysStoppedAnimation(1.0),
-                  checkFade: const AlwaysStoppedAnimation(1.0),
-                ),
-              ),
-            ),
-          ),
-          size: size,
-          padding: padding,
-          brightness: b,
-        );
-        expect(tester.takeException(), isNull);
-        await expectLater(
-          find.byType(Scaffold).first,
-          matchesGoldenFile('goldens/success_overlay_${s.key}_$themeKey.png'),
-        );
-        await unmount(tester);
-      });
     }
   }
-
-  testWidgets('user picker sheet scrolls and never overflows at 360x640@1.3', (
-    tester,
-  ) async {
-    await _seedSharedPin(env);
-    await pump(
-      tester,
-      const LoginScreen(),
-      size: const Size(360, 640),
-      padding: const EdgeInsets.only(top: 24, bottom: 24),
-      textScaler: const TextScaler.linear(1.3),
-    );
-    await _openPicker(tester);
-    expect(find.text('Who is logging in?'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-    await unmount(tester);
-  });
 
   // ── Keyboard up ────────────────────────────────────────────────────────────
   const phones = <(String, Size, EdgeInsets, double)>[
@@ -360,49 +244,6 @@ void main() {
   ];
 
   for (final (name, size, padding, keyboard) in phones) {
-    testWidgets('lock screen email box fits above the keyboard $name', (
-      tester,
-    ) async {
-      await pump(
-        tester,
-        const LoginScreen(),
-        size: size,
-        padding: padding,
-        followView: true,
-        textScaler: const TextScaler.linear(1.15),
-      );
-      await tester.tap(find.byType(TextFormField));
-      await tester.pump();
-      tester.view.viewInsets = FakeViewPadding(bottom: keyboard);
-      await tester.pump(const Duration(milliseconds: 600));
-      await tester.pump(const Duration(milliseconds: 600));
-      await tester.enterText(find.byType(TextFormField), 'ada@example.com');
-      await tester.pump(const Duration(milliseconds: 600));
-      expect(tester.takeException(), isNull);
-      final field = tester.getRect(find.byType(TextFormField));
-      expect(field.bottom, lessThanOrEqualTo(size.height - keyboard + 1));
-      tester.view.resetViewInsets();
-      await unmount(tester);
-    });
-
-    testWidgets('lock screen (preset user) with the keyboard up $name', (
-      tester,
-    ) async {
-      await pump(
-        tester,
-        LoginScreen(presetUser: ada),
-        size: size,
-        padding: padding,
-        followView: true,
-        textScaler: const TextScaler.linear(1.15),
-      );
-      tester.view.viewInsets = FakeViewPadding(bottom: keyboard);
-      await tester.pump(const Duration(milliseconds: 600));
-      expect(tester.takeException(), isNull);
-      tester.view.resetViewInsets();
-      await unmount(tester);
-    });
-
     testWidgets('PIN pop-up fits above the keyboard $name', (tester) async {
       await pump(
         tester,
@@ -442,81 +283,6 @@ void main() {
     expect(find.byType(PinDialog), findsNothing);
     await unmount(tester);
   });
-}
-
-/// Two staff on one email sharing PIN 123456, so the lock screen asks who.
-Future<void> _seedSharedPin(ScreenTestEnvironment env) async {
-  final roleId = UuidV7.generate();
-  await env.db
-      .into(env.db.roles)
-      .insert(
-        RolesCompanion.insert(
-          id: Value(roleId),
-          businessId: env.businessId,
-          name: 'Cashier',
-          slug: 'cashier',
-        ),
-      );
-  // The same email can sit in two businesses (unique per business), and both
-  // staff share the PIN.
-  final otherBusiness = UuidV7.generate();
-  await env.db
-      .into(env.db.businesses)
-      .insert(
-        BusinessesCompanion.insert(
-          id: Value(otherBusiness),
-          name: 'Abuja Traders',
-        ),
-      );
-  for (final (name, business) in [
-    ('Ada Okafor', env.businessId),
-    ('Bola Adeyemi', otherBusiness),
-  ]) {
-    final id = UuidV7.generate();
-    final salt = PinHasher.generateSaltBase64();
-    await env.db
-        .into(env.db.users)
-        .insert(
-          UsersCompanion.insert(
-            id: Value(id),
-            businessId: business,
-            name: name,
-            email: const Value('ada@example.com'),
-            pin: '__HASHED__',
-            pinHash: Value(PinHasher.hashBase64('123456', salt, 1)),
-            pinSalt: Value(salt),
-            pinIterations: const Value(1),
-          ),
-        );
-    await env.db
-        .into(env.db.userBusinesses)
-        .insert(
-          UserBusinessesCompanion.insert(
-            id: Value(UuidV7.generate()),
-            businessId: business,
-            userId: id,
-            roleId: roleId,
-            status: const Value('active'),
-          ),
-        );
-  }
-}
-
-/// Types the shared email and PIN on the lock screen and waits for the picker.
-Future<void> _openPicker(WidgetTester tester) async {
-  await tester.enterText(find.byType(TextFormField), 'ada@example.com');
-  await tester.pump();
-  for (final d in '123456'.split('')) {
-    await tester.tap(find.text(d));
-    await tester.pump();
-  }
-  // Real async DB + hashing work, then the sheet's route animation.
-  for (var i = 0; i < 20; i++) {
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 50)),
-    );
-    await tester.pump(const Duration(milliseconds: 100));
-  }
 }
 
 /// Opens [PinDialog] over an empty page as soon as it is mounted.

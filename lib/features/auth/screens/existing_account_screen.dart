@@ -9,14 +9,13 @@ import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
-import 'package:reebaplus_pos/features/auth/screens/create_pin_screen.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
 import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 
 /// Shown after OTP verification on a fresh device when the email already has
 /// a Supabase account. Lists the linked business + role so the user can
-/// confirm before setting up a new device PIN.
+/// confirm before signing in on this device.
 class ExistingAccountScreen extends ConsumerStatefulWidget {
   final String email;
   final SupabaseAccountInfo account;
@@ -61,9 +60,9 @@ class _ExistingAccountScreenState extends ConsumerState<ExistingAccountScreen> {
         return;
       }
       if (!mounted) return;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => CreatePinScreen(user: user)),
-      );
+      // #812: no PIN — sign straight in. Binding the user regenerates the
+      // navigator (main.dart), which replaces this screen with the shop.
+      auth.completeSignIn(user);
     } catch (e, stack) {
       debugPrint('[ExistingAccountScreen] syncOnLogin failed: $e\n$stack');
       if (!mounted) return;

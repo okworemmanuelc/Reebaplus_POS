@@ -1,4 +1,4 @@
-// Visual goldens for Security, the Subscription page, Activity Logs access,
+// Visual goldens for the Subscription page, Activity Logs access,
 // the Activity Logs list and Delete Business (#442 PR 3, PRD #346 Wave 2 C).
 // No mockups: they follow the CEO Settings menu's design language.
 //
@@ -14,7 +14,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/features/settings/screens/activity_logs_access_screen.dart';
 import 'package:reebaplus_pos/features/settings/screens/delete_business_screen.dart';
-import 'package:reebaplus_pos/features/settings/screens/security_settings_screen.dart';
 import 'package:reebaplus_pos/features/settings/screens/subscription_screen.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/features/subscription/billing/play_billing_providers.dart';
@@ -42,7 +41,6 @@ void main() {
   tearDownAll(() => WidgetsApp.debugAllowBannerOverride = true);
 
   final screens = <String, (Type, Widget, bool)>{
-    'security': (SecuritySettingsScreen, const SecuritySettingsScreen(), true),
     'subscription_settings': (
       SubscriptionScreen,
       const SubscriptionScreen(),

@@ -27,8 +27,8 @@ import 'package:reebaplus_pos/shared/scanner/scan_cart_count.dart';
 /// the first scan.
 ///
 /// The camera never runs behind the app: it stops when the app is backgrounded
-/// and, if the app locks (auto-lock, suspension), the page stops it and closes.
-/// In production a lock also rebuilds the root navigator (main.dart
+/// and, if the signed-in user goes (logout, a remote kick), the page stops it
+/// and closes. In production that also rebuilds the root navigator (main.dart
 /// `_onAuthChanged`), which disposes this page and releases the camera.
 class BarcodeScanPage extends ConsumerStatefulWidget {
   const BarcodeScanPage({

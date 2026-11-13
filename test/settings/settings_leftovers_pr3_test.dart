@@ -1,4 +1,4 @@
-// Security, Subscription, Activity Logs (access + log) and Delete Business
+// Subscription, Activity Logs (access + log) and Delete Business
 // after the #442 restyle (PR 3 of 3, PRD #346 Wave 2 C): every control still
 // renders, the permission-hidden ones stay hidden, the main actions still work
 // and nothing overflows at the reference sizes.
@@ -12,7 +12,6 @@ import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/features/settings/screens/activity_logs_access_screen.dart';
 import 'package:reebaplus_pos/features/settings/screens/delete_business_screen.dart';
-import 'package:reebaplus_pos/features/settings/screens/security_settings_screen.dart';
 import 'package:reebaplus_pos/features/settings/screens/subscription_screen.dart';
 import 'package:reebaplus_pos/features/subscription/billing/play_billing_providers.dart';
 import 'package:reebaplus_pos/features/subscription/billing/plans_paywall.dart';
@@ -29,45 +28,6 @@ void main() {
   late ScreenTestEnvironment env;
   setUp(() async => env = await setupSettingsEnv());
   tearDown(() => env.dispose());
-
-  group('Security', () {
-    testWidgets('renders every control and a preset saves', (tester) async {
-      await pumpSettingsPage(
-        tester,
-        env: env,
-        screen: const SecuritySettingsScreen(),
-        size: const Size(390, 844),
-      );
-      expect(find.text('Auto-lock'), findsOneWidget);
-      expect(find.text('Biometric login'), findsOneWidget);
-      for (final m in ['1', '3', '5', '10', '15', '30']) {
-        expect(find.text('$m min'), findsOneWidget, reason: m);
-      }
-      await tester.tap(find.text('3 min'));
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 200)),
-      );
-      await tester.pump(const Duration(milliseconds: 300));
-      expect(await env.db.settingsDao.get('auto_lock_interval_seconds'), '180');
-      await tester.pumpAndSettle(const Duration(seconds: 5));
-      await disposeScreen(tester);
-    });
-
-    testWidgets('hidden without settings.manage', (tester) async {
-      await pumpSettingsPage(
-        tester,
-        env: env,
-        screen: const SecuritySettingsScreen(),
-        size: const Size(390, 844),
-        grantedKeys: const {},
-        roleSlug: 'cashier',
-        roleName: 'Cashier',
-      );
-      expect(find.text("You don't have access to settings."), findsOneWidget);
-      expect(find.text('Auto-lock'), findsNothing);
-      await disposeScreen(tester);
-    });
-  });
 
   group('Subscription page', () {
     testWidgets('shows the plan, status and renewal; paywall is non-Android here', (
@@ -357,7 +317,6 @@ void main() {
     ];
     for (final (name, size, insets, scale) in cases) {
       for (final (label, screen, pushed) in <(String, Widget, bool)>[
-        ('security', const SecuritySettingsScreen(), true),
         ('subscription', const SubscriptionScreen(), true),
         ('activity logs access', const ActivityLogsAccessScreen(), true),
         ('activity logs', const ActivityLogScreen(), false),

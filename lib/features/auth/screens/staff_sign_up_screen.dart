@@ -21,25 +21,18 @@ import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
 import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 import 'package:reebaplus_pos/features/auth/widgets/otp_input.dart';
-import 'package:reebaplus_pos/features/auth/widgets/pin_keypad.dart';
 import 'package:reebaplus_pos/features/auth/widgets/shake_widget.dart';
 import 'package:reebaplus_pos/features/auth/widgets/sign_up_step_dots.dart';
-import 'package:reebaplus_pos/features/settings/screens/settings_screen.dart'
-    show kSettingsMaxContentWidth;
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 
-/// Master plan §6 — Staff Sign Up. One screen, content fades between 9 steps
-/// (invite code → email → OTP → full name → phone → address → create PIN →
-/// confirm PIN → "Welcome to {business}"). A small dots indicator sits at the
-/// top. State lives in [StaffSignUpDraft]; the redemption
-/// (`redeem_invite_code` RPC + local mirror) runs after Confirm PIN, then
-/// straight to Home.
-///
-/// The §6.2 "email already linked to another business → confirm existing PIN"
-/// branch is deferred to Phase 2. This Phase 1 flow handles a fresh device
-/// PIN setup.
+/// Master plan §6 — Staff Sign Up. One screen, content fades between 8 steps
+/// (invite code → email → OTP → full name → phone → address → "joining" →
+/// "Welcome to {business}"). A small dots indicator sits at the top. State
+/// lives in [StaffSignUpDraft]; the redemption (`redeem_invite_code` RPC +
+/// local mirror) runs on the "joining" step, then straight to Home. There is
+/// no PIN step (owner decision #812).
 class StaffSignUpScreen extends ConsumerStatefulWidget {
   final int? initialStep;
   const StaffSignUpScreen({super.key, @visibleForTesting this.initialStep});
@@ -61,8 +54,6 @@ class StaffSignUpDraft {
   String? roleId;
   String? storeId;
 
-  String pin = '';
-
   // Collected in steps 4 & 5.
   String? phone;
   String? streetAddress;
@@ -82,19 +73,15 @@ class StaffSignUpDraft {
 }
 
 class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
-  // Nine dots — invite code → email → OTP → full name → phone → address →
-  // create PIN → confirm PIN → welcome (master plan §6.1).
-  static const int _totalSteps = 9;
+  // Eight dots — invite code → email → OTP → full name → phone → address →
+  // joining → welcome (master plan §6.1, PIN steps dropped in #812).
+  static const int _totalSteps = 8;
 
-  // Obvious PINs to block (master plan §6.1). Mirrors ceo_sign_up_screen.dart.
-  static const Set<String> _blockedPins = {
-    '000000',
-    '111111',
-    '123456',
-    '654321',
-    '222222',
-    '333333',
-  };
+  /// The redemption step (spinner, or the error + Try again).
+  static const int _joinStep = 6;
+
+  /// The final "Welcome to {business}" step.
+  static const int _readyStep = 7;
 
   late int _step = widget.initialStep ?? 0;
 
@@ -143,15 +130,8 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
   String _dialCode = '';
   String? _addressError;
 
-  // Steps 6 & 7 — PIN. Distinct shake keys: the create (step 6) and confirm
-  // (step 7) PIN bodies are both produced by _buildPinStep() and stay mounted
-  // together during the AnimatedSwitcher cross-fade — one shared GlobalKey
-  // across two live widgets crashes. One key per sub-step avoids the collision.
-  String _pin = '';
-  String _firstPin = '';
-  String? _pinError;
-  final GlobalKey<ShakeWidgetState> _createPinShakeKey = GlobalKey();
-  final GlobalKey<ShakeWidgetState> _confirmPinShakeKey = GlobalKey();
+  // Step 6 — joining: the redemption's failure message (null while it runs).
+  String? _commitError;
 
   bool _committing = false;
 
@@ -229,22 +209,15 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
   // ── Navigation ─────────────────────────────────────────────────────────
 
   void _back() {
-    if (_committing || _step == 8) return;
+    if (_committing || _step == _readyStep) return;
     if (_step == 0) {
       Navigator.of(context).maybePop();
       return;
     }
     setState(() {
       switch (_step) {
-        case 7:
-          _pin = '';
-          _firstPin = '';
-          _pinError = null;
-          _step = 6;
-          break;
-        case 6:
-          _pin = '';
-          _pinError = null;
+        case _joinStep:
+          _commitError = null;
           _step = 5;
           break;
         case 2:
@@ -440,7 +413,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
     }
 
     // Verified — Supabase now has an authenticated session, so the
-    // redemption at Confirm PIN can call redeem_invite_code. Advance to the
+    // redemption on the joining step can call redeem_invite_code. Advance to the
     // full-name step (3).
     await auth.saveAuthMethod('email');
     if (!mounted) return;
@@ -531,72 +504,19 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
       ..country = _countryValue.trim();
     setState(() {
       _addressError = null;
-      _step = 6;
+      _step = _joinStep;
     });
-  }
-
-  // ── Steps 6 & 7: PIN ─────────────────────────────────────────────────────
-
-  void _onPinDigit(String digit) {
-    if (_committing || _pin.length >= 6) return;
-    setState(() {
-      _pin += digit;
-      _pinError = null;
-    });
-    if (_pin.length == 6) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _onPinComplete());
-    }
-  }
-
-  void _onPinBackspace() {
-    if (_committing || _pin.isEmpty) return;
-    setState(() {
-      _pin = _pin.substring(0, _pin.length - 1);
-      _pinError = null;
-    });
-  }
-
-  void _onPinComplete() {
-    if (_step == 6) {
-      if (_blockedPins.contains(_pin)) {
-        setState(() {
-          _pinError = 'Please choose a stronger PIN.';
-          _pin = '';
-        });
-        // Stay on step 6 — the create body is mounted, shake synchronously.
-        _createPinShakeKey.currentState?.shake();
-        return;
-      }
-      setState(() {
-        _firstPin = _pin;
-        _pin = '';
-        _step = 7;
-      });
-      return;
-    }
-    // Confirm phase (step 7).
-    if (_pin != _firstPin) {
-      setState(() {
-        _pin = '';
-        _firstPin = '';
-        _pinError = "PINs don't match. Try again.";
-        _step = 6;
-      });
-      // We just switched back to step 6; the create body isn't mounted yet at
-      // this synchronous point, so shake it after the frame lands.
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _createPinShakeKey.currentState?.shake(),
-      );
-      return;
-    }
     _commit();
   }
 
   // ── Commit (redeem + local mirror) ───────────────────────────────────────
 
   Future<void> _commit() async {
-    setState(() => _committing = true);
-    _draft.pin = _firstPin;
+    if (_committing) return;
+    setState(() {
+      _committing = true;
+      _commitError = null;
+    });
 
     // Capture providers before the awaits — setCurrentUser at the end
     // regenerates the navigator key and tears this element down.
@@ -604,7 +524,6 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
     final db = ref.read(databaseProvider);
     final sync = ref.read(supabaseSyncServiceProvider);
     final supabase = ref.read(supabaseClientProvider);
-    final pin = _draft.pin;
     final code = _draft.code;
 
     try {
@@ -612,9 +531,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
         if (mounted) {
           setState(() {
             _committing = false;
-            _pin = '';
-            _firstPin = '';
-            _step = 6;
+            _commitError = 'No internet connection. Connect and tap Try again.';
           });
         }
         return;
@@ -752,16 +669,16 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
         }
       });
 
-      // Device-local PIN (§5 exception #4) on the canonical users row.
-      await auth.setUserPin(userId, pin);
-
       final localUser = await db.storesDao.getUserById(userId);
       if (localUser == null) {
         throw StateError('local users row missing after redemption');
       }
 
       if (!mounted) return;
-      setState(() => _step = 8);
+      setState(() {
+        _committing = false;
+        _step = _readyStep;
+      });
 
       // Let the user read "Welcome to {business}" before landing on Home.
       await Future.delayed(const Duration(seconds: 3));
@@ -785,12 +702,9 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
         if (mounted) {
           setState(() {
             _committing = false;
-            _pin = '';
-            _firstPin = '';
-            _pinError =
+            _commitError =
                 'This email already belongs to another business. '
                 'Use a different email to join this one.';
-            _step = 6;
           });
         }
         return;
@@ -803,10 +717,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
         if (mounted) {
           setState(() {
             _committing = false;
-            _pin = '';
-            _firstPin = '';
-            _pinError = planMsg;
-            _step = 6;
+            _commitError = planMsg;
           });
         }
         return;
@@ -818,11 +729,13 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
         final hydrated = await auth.upsertLocalUserFromProfile();
         if (hydrated != null) {
           await sync.pullChanges(hydrated.businessId);
-          await auth.setUserPin(hydrated.id, pin);
           final refreshed = await db.storesDao.getUserById(hydrated.id);
           if (refreshed != null) {
             if (!mounted) return;
-            setState(() => _step = 8);
+            setState(() {
+              _committing = false;
+              _step = _readyStep;
+            });
             await Future.delayed(const Duration(seconds: 3));
             auth.setCurrentUser(refreshed);
             return;
@@ -836,10 +749,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
         if (hydrateMsg != null && mounted) {
           setState(() {
             _committing = false;
-            _pin = '';
-            _firstPin = '';
-            _pinError = hydrateMsg;
-            _step = 6;
+            _commitError = hydrateMsg;
           });
           return;
         }
@@ -847,10 +757,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
       if (mounted) {
         setState(() {
           _committing = false;
-          _pin = '';
-          _firstPin = '';
-          _pinError = 'Something went wrong. Please re-enter your PIN.';
-          _step = 6;
+          _commitError = 'Something went wrong. Please try again.';
         });
       }
     }
@@ -860,23 +767,16 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // The PIN steps go two-column when one column won't fit the measured
-    // height (a phone sideways); everything else scrolls inside the 480 column.
+    // Every step scrolls inside the 480 column.
     return LayoutBuilder(
       builder: (context, constraints) {
         final mq = MediaQuery.of(context);
         final bodyHeight = constraints.maxHeight - mq.padding.vertical;
-        final isPinStep = _step == 6 || _step == 7;
-        final twoColumn =
-            isPinStep &&
-            !_committing &&
-            bodyHeight < _pinOneColumnHeight &&
-            constraints.maxWidth - mq.padding.horizontal >= _pinTwoColumnWidth;
         return Scaffold(
           resizeToAvoidBottomInset: false,
           backgroundColor: Theme.of(context).scaffoldBackgroundColor,
           body: BrandedAuthBackground(
-            maxWidth: twoColumn ? kSettingsMaxContentWidth : 480.0,
+            maxWidth: 480.0,
             child: SafeArea(
               child: Column(
                 children: [
@@ -886,7 +786,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
                       duration: const Duration(milliseconds: 300),
                       child: KeyedSubtree(
                         key: ValueKey(_step),
-                        child: _buildStepBody(twoColumn: twoColumn),
+                        child: _buildStepBody(),
                       ),
                     ),
                   ),
@@ -903,14 +803,8 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
   /// one-line "Step n of N" label.
   static const double _compactBarHeight = 520;
 
-  /// Measured body height under which the PIN steps need two columns.
-  static const double _pinOneColumnHeight = 600;
-
-  /// Measured body width a two-column PIN step needs.
-  static const double _pinTwoColumnWidth = 560;
-
   Widget _buildTopBar({required bool compact}) {
-    final showBack = _step != 8 && !_committing;
+    final showBack = _step != _readyStep && !_committing;
     final back = Opacity(
       opacity: showBack ? 1 : 0,
       child: IconButton(
@@ -972,7 +866,7 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
     );
   }
 
-  Widget _buildStepBody({required bool twoColumn}) {
+  Widget _buildStepBody() {
     switch (_step) {
       case 0:
         return _buildCodeStep();
@@ -986,10 +880,9 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
         return _buildPhoneStep();
       case 5:
         return _buildAddressStep();
-      case 6:
-      case 7:
-        return _buildPinStep(twoColumn: twoColumn);
-      case 8:
+      case _joinStep:
+        return _buildJoinStep();
+      case _readyStep:
         return _buildSuccessStep();
       default:
         return const SizedBox.shrink();
@@ -1283,76 +1176,28 @@ class _StaffSignUpScreenState extends ConsumerState<StaffSignUpScreen> {
     );
   }
 
-  Widget _buildPinStep({required bool twoColumn}) {
-    if (_committing) {
+  /// The redemption step: the "Joining your team…" spinner while it runs, or
+  /// its failure message with a Try again button.
+  Widget _buildJoinStep() {
+    final error = _commitError;
+    if (error == null) {
       return AuthCenteredScroll(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [_buildCommitting()],
       );
     }
-    final confirming = _step == 7;
-    final heading = <Widget>[
-      Text(
-        confirming ? 'Confirm your PIN' : 'Create a PIN',
-        textAlign: TextAlign.center,
-        style: authTitleStyle(context),
-      ),
-      SizedBox(height: context.getRSize(8)),
-      Text(
-        confirming
-            ? 'Re-enter the same 6-digit PIN to confirm.'
-            : 'Choose a 6-digit PIN you\'ll use to log in.',
-        textAlign: TextAlign.center,
-        style: authSubtitleStyle(context),
-      ),
-      SizedBox(height: context.getRSize(28)),
-      ShakeWidget(
-        key: confirming ? _confirmPinShakeKey : _createPinShakeKey,
-        child: PinDots(filled: _pin.length),
-      ),
-      SizedBox(height: context.getRSize(12)),
-      AuthErrorText(_pinError),
-    ];
-    final keypad = PinKeypad(
-      onDigit: _onPinDigit,
-      onBackspace: _onPinBackspace,
-    );
-    if (twoColumn) {
-      // A phone sideways: heading + dots on the left, keypad on the right.
-      return LayoutBuilder(
-        builder: (context, constraints) => SingleChildScrollView(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                context.getRSize(28),
-                context.getRSize(8),
-                context.getRSize(28),
-                context.getRSize(16),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: heading,
-                    ),
-                  ),
-                  SizedBox(width: context.getRSize(24)),
-                  Expanded(child: Center(child: keypad)),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-    }
     return AuthCenteredScroll(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        ...heading,
+        Text(
+          'We could not finish joining',
+          textAlign: TextAlign.center,
+          style: authTitleStyle(context),
+        ),
         SizedBox(height: context.getRSize(12)),
-        keypad,
+        AuthErrorText(error),
+        SizedBox(height: context.getRSize(24)),
+        AppButton(text: 'Try again', onAsyncPressed: _commit),
       ],
     );
   }

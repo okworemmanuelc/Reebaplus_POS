@@ -31,9 +31,8 @@ const _steps = <(String, int, String?)>[
   ('full_name', 3, 'ceo@example.com'),
   ('email', 4, null),
   ('otp', 5, null),
-  ('create_pin', 6, 'ceo@example.com'),
-  ('confirm_pin', 7, 'ceo@example.com'),
-  ('ready', 8, 'ceo@example.com'),
+  ('setting_up', 6, 'ceo@example.com'),
+  ('ready', 7, 'ceo@example.com'),
 ];
 
 void main() {
