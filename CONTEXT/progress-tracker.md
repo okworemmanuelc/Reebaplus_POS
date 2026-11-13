@@ -7,6 +7,8 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #812: browser shows email-code sign-in only (2026-11-13, branch `feat/812-web-hide-google`)
+- Owner decision: Google sign-in is hidden in the browser (`kIsWeb` in `email_entry_screen.dart`, the OR divider goes with it); phones keep it. Google for the browser needs Google Cloud web client setup first.
 ### Issue #798: session expired never stops a sale; "Sign in again" banner (2026-11-13, branch `feat/798-sign-in-again-banner`, replaces PR #799)
 - Rebuilt on the no-PIN code (#812). The blocking session gate in `_HomeRouter` is gone: a device with no cloud login opens the shop and sells like an offline device.
 - `cloudLoginLost` (`lib/core/services/cloud_login_state.dart`, set in `main.dart` from the Supabase auth stream) drives `SignInAgainBanner` (`lib/features/auth/widgets/`) at the top of `MainLayout`. It opens `SessionExpiredScreen` (moved out of `main.dart` to `lib/features/auth/screens/session_expired_screen.dart`, now with "Not now"). An accepted code returns to the app via `OtpVerificationScreen.onVerified` and runs `pushThenPull`.
