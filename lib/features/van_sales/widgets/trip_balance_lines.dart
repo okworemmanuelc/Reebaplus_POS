@@ -96,10 +96,13 @@ class TripBalanceLines extends ConsumerWidget {
           Expanded(
             child: Text(
               label,
-              style: t.textTheme.bodySmall?.copyWith(
-                color: strong ? (color ?? t.colorScheme.onSurface) : subtext,
-                fontWeight: strong ? FontWeight.w700 : null,
-              ),
+              style: (strong ? t.textTheme.bodyMedium : t.textTheme.bodySmall)
+                  ?.copyWith(
+                    color: strong
+                        ? (color ?? t.colorScheme.onSurface)
+                        : subtext,
+                    fontWeight: strong ? FontWeight.w700 : null,
+                  ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -107,10 +110,12 @@ class TripBalanceLines extends ConsumerWidget {
           SizedBox(width: context.getRSize(10)),
           Text(
             value,
-            style: t.textTheme.bodySmall?.copyWith(
-              color: color ?? t.colorScheme.onSurface,
-              fontWeight: strong ? FontWeight.w800 : FontWeight.w600,
-            ),
+            textAlign: TextAlign.right,
+            style: (strong ? t.textTheme.titleMedium : t.textTheme.bodySmall)
+                ?.copyWith(
+                  color: color ?? t.colorScheme.onSurface,
+                  fontWeight: strong ? FontWeight.w800 : FontWeight.w600,
+                ),
           ),
         ],
       ),

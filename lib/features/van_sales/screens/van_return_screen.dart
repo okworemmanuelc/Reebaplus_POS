@@ -10,11 +10,13 @@ import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
 import 'package:reebaplus_pos/core/permissions/guarded.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
+import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
 import 'package:reebaplus_pos/core/theme/semantic_colors.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
+import 'package:reebaplus_pos/features/van_sales/widgets/van_ui.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
 import 'package:reebaplus_pos/shared/widgets/glassy_scaffold.dart';
 
@@ -285,7 +287,6 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
   /// #801 — "Empty crates": ONE count box per manufacturer that has
   /// crate-tracked products on this trip. Starts empty; 0 is a valid answer.
   List<Widget> _emptiesSection(BuildContext context) {
-    final t = Theme.of(context);
     final ids = <String>[];
     for (final l in _lines) {
       final m = l.manufacturerId;
@@ -305,24 +306,32 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
     );
     return [
       SizedBox(height: context.getRSize(12)),
-      Text(
-        'Empty crates',
-        style: t.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
-      ),
-      SizedBox(height: context.getRSize(4)),
-      Text(
-        'Count the empty crates once per manufacturer — type 0 if none came '
-        'back.',
-        style: t.textTheme.bodySmall?.copyWith(color: _subtext),
-      ),
-      SizedBox(height: context.getRSize(8)),
-      for (final id in ids)
-        _EmptiesBox(
-          key: ValueKey('return-empties-card-$id'),
-          manufacturerId: id,
-          name: names[id] ?? 'Manufacturer',
-          onChanged: (v) => setState(() => _empties[id] = v),
+      VanCard(
+        padding: EdgeInsets.fromLTRB(
+          context.getRSize(14),
+          context.getRSize(14),
+          context.getRSize(14),
+          context.getRSize(6),
         ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const VanSectionHeader(
+              title: 'Empty crates',
+              caption:
+                  'Count the empty crates once per manufacturer — type 0 if '
+                  'none came back.',
+            ),
+            for (final id in ids)
+              _EmptiesBox(
+                key: ValueKey('return-empties-card-$id'),
+                manufacturerId: id,
+                name: names[id] ?? 'Manufacturer',
+                onChanged: (v) => setState(() => _empties[id] = v),
+              ),
+          ],
+        ),
+      ),
     ];
   }
 
@@ -369,6 +378,20 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
       );
     }
     _listLoaded(loadedProducts);
+
+    final mfrOfProduct = <String, String>{
+      for (final p
+          in ref.watch(productsWithStockProvider(null)).valueOrNull ??
+              const <ProductDataWithStock>[])
+        if (p.product.manufacturerId != null)
+          p.product.id: p.product.manufacturerId!,
+    };
+    final mfrNames = {
+      for (final m
+          in ref.watch(allManufacturersProvider).valueOrNull ??
+              const <ManufacturerData>[])
+        m.id: m.name,
+    };
 
     final recorded =
         ref.watch(vanTripReturnsProvider(widget.trip.id)).valueOrNull ??
@@ -424,8 +447,8 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
             SizedBox(height: context.getRSize(28)),
             Text(
               'Already returned on this trip',
-              style: t.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w800,
+              style: t.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
               ),
             ),
             SizedBox(height: context.getRSize(12)),
@@ -440,6 +463,7 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
                   event: e,
                   showCrates: tracksCrates,
                   productName: names[e.productId] ?? lex.item,
+                  manufacturerName: mfrNames[mfrOfProduct[e.productId]],
                 ),
                 SizedBox(height: context.getRSize(10)),
               ],
@@ -457,37 +481,12 @@ class _CountItYourselfNote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final semantic = t.extension<AppSemanticColors>()!;
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(context.getRSize(14)),
-      decoration: BoxDecoration(
-        color: semantic.info.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(AppSpacing.borderRadiusM),
-        border: Border.all(color: t.dividerColor),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            AppIcons.auditCheck,
-            size: context.getRSize(14),
-            color: semantic.info,
-          ),
-          SizedBox(width: context.getRSize(10)),
-          Expanded(
-            child: Text(
-              'Count what actually came off the van and type it in. The app '
-              'will not guess for you — sales the driver rang may not have '
-              'reached this device yet.',
-              style: t.textTheme.bodySmall?.copyWith(
-                color: t.textTheme.bodySmall?.color,
-              ),
-            ),
-          ),
-        ],
-      ),
+    return const VanInfoBanner(
+      icon: AppIcons.auditCheck,
+      text:
+          'Count what actually came off the van and type it in. The app '
+          'will not guess for you — sales the driver rang may not have '
+          'reached this device yet.',
     );
   }
 }
@@ -512,22 +511,21 @@ class _ReturnLineCard extends StatelessWidget {
     final counted = line.quantity > 0;
 
     return Container(
-      margin: EdgeInsets.only(bottom: context.getRSize(8)),
+      margin: EdgeInsets.only(bottom: context.getRSize(6)),
       padding: EdgeInsets.symmetric(
         horizontal: context.getRSize(12),
-        vertical: context.getRSize(8),
+        vertical: context.getRSize(6),
       ),
-      decoration: BoxDecoration(
-        color: t.colorScheme.surface.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(AppSpacing.borderRadiusM),
-        border: Border.all(
-          color: !counted
-              ? t.dividerColor
-              : line.isGood
-              ? t.colorScheme.primary
-              : semantic.warning,
-        ),
-      ),
+      decoration: AppDecorations.card(context, radius: AppSpacing.borderRadiusM)
+          .copyWith(
+            border: Border.all(
+              color: !counted
+                  ? t.dividerColor
+                  : line.isGood
+                  ? t.colorScheme.primary
+                  : semantic.warning,
+            ),
+          ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -545,7 +543,7 @@ class _ReturnLineCard extends StatelessWidget {
               ),
               SizedBox(width: context.getRSize(8)),
               SizedBox(
-                width: context.getRSize(96),
+                width: context.getRSize(80),
                 child: TextField(
                   key: Key('return-qty-${line.productId}'),
                   // NO initial value and NO hint number: the emptiness is the
@@ -631,17 +629,8 @@ class _EmptiesBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
-    return Container(
-      margin: EdgeInsets.only(bottom: context.getRSize(8)),
-      padding: EdgeInsets.symmetric(
-        horizontal: context.getRSize(12),
-        vertical: context.getRSize(8),
-      ),
-      decoration: BoxDecoration(
-        color: t.colorScheme.surface.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(AppSpacing.borderRadiusM),
-        border: Border.all(color: t.dividerColor),
-      ),
+    return Padding(
+      padding: EdgeInsets.only(bottom: context.getRSize(8)),
       child: Row(
         children: [
           Expanded(
@@ -656,7 +645,7 @@ class _EmptiesBox extends StatelessWidget {
           ),
           SizedBox(width: context.getRSize(8)),
           SizedBox(
-            width: context.getRSize(96),
+            width: context.getRSize(80),
             child: TextField(
               key: Key('return-empties-$manufacturerId'),
               textAlign: TextAlign.center,
@@ -687,12 +676,17 @@ class _RecordedReturnRow extends StatelessWidget {
   final VanReturnEventData event;
   final String productName;
 
+  /// The manufacturer the line's empties belong to (empties are counted per
+  /// manufacturer, not per product), when known.
+  final String? manufacturerName;
+
   /// Whether to print the shell count alongside the condition and date.
   final bool showCrates;
 
   const _RecordedReturnRow({
     required this.event,
     required this.productName,
+    required this.manufacturerName,
     required this.showCrates,
   });
 
@@ -709,10 +703,9 @@ class _RecordedReturnRow extends StatelessWidget {
 
     return Container(
       padding: EdgeInsets.all(context.getRSize(14)),
-      decoration: BoxDecoration(
-        color: t.colorScheme.surface.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(AppSpacing.borderRadiusM),
-        border: Border.all(color: t.dividerColor),
+      decoration: AppDecorations.card(
+        context,
+        radius: AppSpacing.borderRadiusM,
       ),
       child: Row(
         children: [
@@ -722,7 +715,7 @@ class _RecordedReturnRow extends StatelessWidget {
               children: [
                 Text(
                   event.quantity == 0
-                      ? 'Empty crates only — $productName'
+                      ? 'Empty crates only'
                       : '${event.quantity} × $productName',
                   style: t.textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w700,
@@ -734,7 +727,8 @@ class _RecordedReturnRow extends StatelessWidget {
                     good ? 'Good' : 'Damaged',
                     _date(event.recordedAt),
                     if (showCrates && event.shellsBack > 0)
-                      '${event.shellsBack} empty crates',
+                      'Empties: ${event.shellsBack}'
+                          '${manufacturerName == null ? '' : ' · $manufacturerName'}',
                   ].join(' • '),
                   style: t.textTheme.bodySmall?.copyWith(color: subtext),
                 ),

@@ -1,5 +1,6 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/features/van_sales/widgets/van_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
@@ -189,7 +190,11 @@ class _RecordDriverPaymentSheetState
         context,
         '${formatCurrency(amountKobo / 100)} from ${widget.driverName} '
         'recorded. '
-        '${owed < 0 ? '${formatCurrency(-owed / 100)} still owed.' : owed == 0 ? 'Settled.' : 'In credit ${formatCurrency(owed / 100)}.'}',
+        '${owed < 0
+            ? '${formatCurrency(-owed / 100)} still owed.'
+            : owed == 0
+            ? 'Settled.'
+            : 'In credit ${formatCurrency(owed / 100)}.'}',
       );
     } on VanTripNotOpenException catch (e) {
       if (!mounted) return;
@@ -219,8 +224,10 @@ class _RecordDriverPaymentSheetState
     final trip = widget.trip;
     final balanceKobo = trip != null
         ? ref.watch(tripOwnerBalanceProvider(trip.id)).valueOrNull
-        : (ref.watch(driverBalancesProvider).valueOrNull?.byDriver[widget
-                  .vanDriverId] ??
+        : (ref
+                  .watch(driverBalancesProvider)
+                  .valueOrNull
+                  ?.byDriver[widget.vanDriverId] ??
               0);
     final stores =
         ref.watch(allStoresProvider).valueOrNull ?? const <StoreData>[];
@@ -404,68 +411,33 @@ class _RecordDriverPaymentSheetState
   /// money is being booked (the SOURCE WAREHOUSE — cash comes back to the yard,
   /// never to the van) and what the driver currently owes.
   Widget _banner(String? sourceName, int? balanceKobo, String? tripId) {
-    final primary = Theme.of(context).colorScheme.primary;
-    return Container(
-      padding: EdgeInsets.all(context.getRSize(12)),
-      decoration: BoxDecoration(
-        color: primary.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _border),
+    final t = Theme.of(context);
+    return VanCard(
+      padding: EdgeInsets.symmetric(
+        horizontal: context.getRSize(14),
+        vertical: context.getRSize(10),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(
-                AppIcons.store,
-                size: context.getRSize(13),
-                color: primary,
-              ),
-              SizedBox(width: context.getRSize(8)),
-              Expanded(
-                child: Text(
-                  'Booked to ${sourceName ?? 'the loading store'}',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: _subtext),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
+          VanKvRow(
+            label: 'Booked to',
+            value: sourceName ?? 'the loading store',
           ),
           if (tripId != null) ...[
-            SizedBox(height: context.getRSize(8)),
+            Divider(color: t.dividerColor, height: context.getRSize(16)),
             TripBalanceLines(tripId: tripId),
           ] else if (balanceKobo != null) ...[
-            SizedBox(height: context.getRSize(8)),
-            Row(
-              children: [
-                Icon(
-                  AppIcons.balance,
-                  size: context.getRSize(13),
-                  color: balanceKobo < 0
-                      ? Theme.of(context).colorScheme.error
-                      : _subtext,
-                ),
-                SizedBox(width: context.getRSize(8)),
-                Expanded(
-                  child: Text(
-                    balanceKobo < 0
-                        ? 'Owes ${formatCurrency(-balanceKobo / 100)}'
-                        : balanceKobo == 0
-                        ? 'Settled'
-                        : 'In credit ${formatCurrency(balanceKobo / 100)}',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: balanceKobo < 0
-                          ? Theme.of(context).colorScheme.error
-                          : _subtext,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
+            Divider(color: t.dividerColor, height: context.getRSize(16)),
+            VanKvRow(
+              label: 'Balance',
+              strong: true,
+              valueColor: balanceKobo < 0 ? t.colorScheme.error : null,
+              value: balanceKobo < 0
+                  ? 'Owes ${formatCurrency(-balanceKobo / 100)}'
+                  : balanceKobo == 0
+                  ? 'Settled'
+                  : 'In credit ${formatCurrency(balanceKobo / 100)}',
             ),
           ],
         ],
@@ -507,9 +479,7 @@ class _RecordDriverPaymentSheetState
             child: Row(
               children: [
                 Icon(
-                  _receipt == null
-                      ? AppIcons.attachment
-                      : AppIcons.document,
+                  _receipt == null ? AppIcons.attachment : AppIcons.document,
                   size: context.getRSize(16),
                   color: _receipt == null
                       ? _subtext
