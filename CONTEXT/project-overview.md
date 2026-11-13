@@ -10,7 +10,7 @@ The approved product direction adds Browse without sign-up, a multi-shop cart,
 email-OTP Shopper accounts and one Online Order per store. Shops accept requests,
 print slips and Send to till for normal Checkout; the Sale occurs at Checkout.
 Reebaplus neither collects order payments nor manages delivery in v1. Business
-phones retain PIN/till entry and offline operation. Browse-first stays behind a
+phones retain till entry and offline operation. Browse-first stays behind a
 switch until the full ordering loop works, and screen slices await owner designs.
 
 Groundwork #422 is authorized in its own workspace. Other slices remain on hold.
@@ -26,33 +26,33 @@ security prerequisites, including the separate #467 and #468 fixes.
 3. During registration, the business type picker shows all nine catalogue types (Restaurant, Supermarket, Bar, Beverage distributor, Pharmacy, Building Materials, Boutique, Phone & Gadgets, and Frozen Foods & Grocery) plus "Other" (with free-text custom type input), all selectable. Empty-crate tracking is an onboarding opt-in for crate-eligible types only (Bar and Beverage distributor, default on): the type picker shows a "Track empty crates" switch when a crate-eligible type is selected, and the choice is editable later in Settings → Business Info. Non-crate types and custom types never display crate-tracking surfaces.
 4. A CEO can change what any role is allowed to do — a Manager's maximum discount, whether a Cashier sees wallet totals — by toggling a permission in Settings, with no code release and without affecting any other business on the platform.
 5. Every money movement for a registered customer and a registered supplier is recorded in their ledger, so the credit balance is the single source of truth for what each customer or supplier owes or is owed.
-6. Multiple staff share one till: each unlocks with their own 6-digit PIN. The lock screen shows the last signed-in staff member, and anyone else taps "Not you? Switch account". Auto-lock after inactivity is off by default; the owner turns it on by picking a timer in Settings > Security.
+6. Multiple staff can share one till, one at a time: there is no PIN (owner decision #812, 2026-11-13). The signed-in person stays in until they Log Out; the next person signs in with their own email code (or Google). There is no lock button and no auto-lock.
 7. An uncaught error never drops a cashier to a blank or red error screen mid-sale; it is caught, recorded to a synced crash log, shown as a calm message, and the till keeps working.
 
 ## Core User Flow
 
 1. On a fresh install, the user opens the app and lands on the Welcome screen.
-2. The CEO taps "Create a new business" and completes sign-up step by step: business name, business type (all nine industry catalogue types plus "Other" are selectable; picking "Other" prompts for a custom business type), business contact (country, business phone number; currency auto-fills from country), full name, email, 6-digit email OTP, create 6-digit PIN, confirm PIN. Store creation is decoupled from registration.
+2. The CEO taps "Create a new business" and completes sign-up step by step: business name, business type (all nine industry catalogue types plus "Other" are selectable; picking "Other" prompts for a custom business type), business contact (country, business phone number; currency auto-fills from country), full name, email, 6-digit email OTP. There is no PIN step (#812). Store creation is decoupled from registration.
 3. On completion, the app auto-creates the four default roles with default permissions and lands the CEO immediately on Home (the dashboard) with zero stores. A first-run guided rail (overlay on the main shell) walks the new CEO through creating their first store (Stores -> Add Store) and adding their first product (Inventory -> Add Product), then hands off to the Get-started card on Home for remaining setup milestones (make a sale, invite team). Landing is per role: CEO, Manager and Stock keeper open on Home; Cashier opens on Point of Sale; a Driver gets the driver terminal instead of the shell.
 4. The CEO opens Staff Management, taps "Invite new staff", picks a role and store, and generates an 8-character invite code. The code is emailed to the invitee automatically (branded as Reebaplus, sent server-side once the invite syncs to the cloud), and the CEO can still copy or share it via SMS / WhatsApp.
-5. A staff member installs the app, taps "Join with invite code", and enters the code, then their email (must match the invite), email OTP, their first name and last name, phone number, street address, local government / district, state / region, country, create PIN, and confirm PIN; they are signed in with the role and store carried from the invite.
+5. A staff member installs the app, taps "Join with invite code", and enters the code, then their email (must match the invite), email OTP, their first name and last name, phone number, street address, local government / district, state / region, and country (no PIN step, #812); they are signed in with the role and store carried from the invite.
 6. The CEO opens Inventory and adds products (name, per-tier prices, stock quantity, store) so the POS grid has stock to sell.
-7. On the shared till, a cold start shows the PIN screen for the last signed-in staff member. A different staff member taps "Not you? Switch account", then Sign in → "Already set up on this device? Login with PIN", and enters their email and PIN, which unlocks only that identity.
+7. On a device with a signed-in user and a live sign-in session, a cold start opens straight into the shop, offline too. If the sign-in session has expired, the Session Expired screen sends a fresh email code without wiping anything. To change staff on a shared till, the person logs out (which wipes the device's local data) and the next person signs in with their email code.
 8. They open Point of Sale, select a price tier (Retailer or Wholesaler) and category, and tap products to add them to the cart; out-of-stock products appear greyed out and are not tappable.
 9. In the Cart they review line items, adjust quantities, apply any discount allowed by their role (capped if they exceed the cap), optionally attach a registered customer, then tap "Proceed to Checkout".
 10. At Checkout they pick a payment method — Cash/Transfer (enter amount paid), Pay with Credit, or Register as Credit Sale — and tap "Confirm Payment"; a sale that would push a customer past their debt limit is blocked. In a crate business they first enter any empties the customer hands over, per brand: if those cover every crate in the sale it completes straight away, otherwise it goes to Pending for the rest.
 11. The order is recorded with status Pending, the registered customer's credit balance is updated (debit the order total, credit the amount paid), and the Receipt opens with Print and Share options.
 12. The cashier taps "Done — Back to POS"; the cart clears and the till is ready for the next sale.
 13. The order moves to the Orders > Completed tab once confirmed (pickup or rider assigned), and Activity Logs, Reports, and the customer's credit history all reflect the sale.
-14. After inactivity, or when staff tap the lock button in the drawer, the till locks back to the PIN screen.
+14. A suspended member, or one paused because the plan allows fewer staff, sees an "Account on hold" screen instead of the shop, with a Log out button; reactivation reopens the shop by itself.
 
 ## Features
 
 ### Authentication & Onboarding
 
-- Welcome screen, CEO sign-up (9 steps), staff sign-up via invite code (7 steps), login with email + OTP + PIN, and Forgot PIN via email OTP. All transactional email — OTP, login, Forgot PIN, and the staff invite code — is sent from the Reebaplus domain (auth email via Supabase Custom SMTP; the invite code via the `send-invite-email` Edge Function), with the invite code also copyable/shareable on-device.
-- PINs are device-local unlock factors that are never sent to the cloud; email + OTP is the portable identity and the recovery path. A new device re-establishes the PIN locally after OTP.
-- A lock button in the drawer and auto-lock both return to the PIN screen and keep the current PIN. A device is used by one user at a time, so Log Out wipes the device's local data (it is re-downloaded at the next sign-in). A suspended member's PIN is refused. (The "Who's working?" staff picker was removed 2026-09-17.)
+- Welcome screen, CEO sign-up (8 steps), staff sign-up via invite code (8 steps), and sign-in with email + OTP (or Google). There is no PIN, no Forgot PIN, no biometric unlock and no lock screen (#812). All transactional email — OTP, login, and the staff invite code — is sent from the Reebaplus domain (auth email via Supabase Custom SMTP; the invite code via the `send-invite-email` Edge Function), with the invite code also copyable/shareable on-device.
+- Email + OTP (or Google) is the identity and the only sign-in step. A returning device with a signed-in user and a live session opens straight into the shop.
+- A device is used by one user at a time, so Log Out wipes the device's local data (it is re-downloaded at the next sign-in); Log Out is also how staff change over on a shared till. A suspended or plan-paused member sees an "Account on hold" screen instead of the shop. (The "Who's working?" staff picker was removed 2026-09-17; the PIN, lock button and auto-lock were removed 2026-11-13, #812.)
 
 ### Roles & Permissions
 
@@ -110,7 +110,7 @@ security prerequisites, including the separate #467 and #468 fixes.
 
 ### In Scope
 
-- All authentication and onboarding flows: Welcome, CEO sign-up, staff sign-up via invite code, login, Forgot PIN, and the lock screen.
+- All authentication and onboarding flows: Welcome, CEO sign-up, staff sign-up via invite code, and email / Google sign-in.
 - Data-driven roles and permissions with CEO toggles and per-staff overrides.
 - Point of Sale, Cart, Checkout, and Receipt, including cash/transfer/credit payment, role discount caps, and thermal-printer receipts.
 - Barcode scanning at the POS for every business type, with an optional per-product barcode and a camera-based scanner: a scanned product opens the "Add to Cart" quantity sheet (or a clear message when it can't be sold here), and continuous scanning — the camera stays open across many items until the cashier closes it — is in scope (ADR 0017 amendment, PRD #316; the quantity sheet shipped in #317, the open-camera loop follows in #319).
@@ -139,13 +139,13 @@ security prerequisites, including the separate #467 and #468 fixes.
 - Funds Register (per-account balances, Open/Close Day, the POS opening-cash gate) — removed entirely; money is tracked as recorded sales, expenses, refunds, and supplier payments.
 - Track Shipments as a standalone feature — folded into Supplier Accounts.
 - An in-app crash-log viewer; crashes are reviewed in the Supabase console.
-- Cloud-stored PINs; PINs remain device-local by design.
+- PINs, biometric unlock, a lock screen and auto-lock (removed by owner decision #812).
 
 ## Success Criteria
 
 1. A CEO can create a business from a fresh install, land on Home (the dashboard), reach Point of Sale from the nav bar, and see themselves as the first staff card in Staff Management.
 2. A CEO can generate an invite code, and a new staff member can join with it and sign in with the role and store carried from the invite.
-3. A staff member can unlock the shared till with their own PIN (switching account from the lock screen if someone else was last signed in), and five wrong PIN attempts force the Forgot-PIN (email OTP) flow.
+3. A staff member can use a shared till by signing in with their own email code after the previous person logs out; a returning device opens straight into the shop.
 4. A cashier can add in-stock products to the cart, apply a discount up to their role cap (and be capped if they exceed it), and complete a Cash/Transfer sale that produces a printable and shareable receipt — fully offline.
 5. A registered-customer sale posts two ledger rows (debit the total, credit the amount paid) so the credit balance net equals paid minus total, and a credit sale that would breach the debt limit is blocked.
 6. A price edit, new sale, or stock adjustment made on one device appears on another device in the same business without a manual refresh (when realtime sync is healthy).
