@@ -38,6 +38,7 @@ import 'package:reebaplus_pos/shared/widgets/main_layout.dart';
 import 'package:reebaplus_pos/shared/widgets/app_resume_sync.dart';
 import 'package:reebaplus_pos/features/payroll/widgets/daily_allowance_runner.dart';
 import 'package:reebaplus_pos/shared/widgets/force_update_wrapper.dart';
+import 'package:reebaplus_pos/core/services/browser_last_used_service.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/services/push_notification_service.dart';
 import 'package:reebaplus_pos/shared/widgets/notifications_modal.dart';
@@ -156,7 +157,8 @@ class ReebaplusPosApp extends ConsumerStatefulWidget {
   ConsumerState<ReebaplusPosApp> createState() => _ReebaplusPosAppState();
 }
 
-class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
+class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp>
+    with WidgetsBindingObserver {
   /// null = still checking SharedPreferences
   /// true  = a user has logged in on this device before → show PIN screen
   /// false = fresh device / first login → show email screen
@@ -213,6 +215,7 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
     _auth = ref.read(authProvider);
     _pushService = ref.read(pushNotificationServiceProvider);
 
+    if (kIsWeb) WidgetsBinding.instance.addObserver(this);
     _checkDeviceUser();
     _auth.deviceUserIdNotifier.addListener(_onDeviceUserChanged);
     _auth.addListener(_onAuthChanged);
@@ -434,6 +437,18 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
   /// reads only — never the network (invariant #11).
   Future<void> _checkDeviceUser() async {
     try {
+      if (kIsWeb) {
+        // #812 S5: a browser copy unused for 30+ days is wiped (after one push
+        // attempt for unsent work) BEFORE a user is bound.
+        final wiped = await _auth.wipeStaleBrowserCopy();
+        // Kept-because-unsent: leave the old date so the next open retries.
+        if (wiped || !BrowserLastUsedService.shouldWipe(
+              now: DateTime.now(),
+              lastUsed: await BrowserLastUsedService.read(),
+            )) {
+          await BrowserLastUsedService.touch(force: true);
+        }
+      }
       await _auth.restoreSignedInUser();
     } catch (e, stack) {
       // Never trap the app on the splash: fall through to the sign-in screen.
@@ -447,7 +462,16 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // #812 S5: browser "last used" date, debounced inside the service.
+    if (kIsWeb && state == AppLifecycleState.resumed) {
+      unawaited(BrowserLastUsedService.touch());
+    }
+  }
+
+  @override
   void dispose() {
+    if (kIsWeb) WidgetsBinding.instance.removeObserver(this);
     _auth.deviceUserIdNotifier.removeListener(_onDeviceUserChanged);
     _auth.removeListener(_onAuthChanged);
     _supabaseAuthSub?.cancel();

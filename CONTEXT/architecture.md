@@ -171,6 +171,14 @@ The browser keeps a full copy of the shop's data and runs the same sync engine
 (owner, 2026-11-13); the logout wipe is the same `clearAllData`. On web there is no
 legacy-file wipe, no iCloud backup exclusion and no off-switch file
 (`kIsWeb` guards in `db_wipe.dart`, `BackupExclusionService`, `main.dart`).
+**Browser 30-day wipe (#812 S5).** `BrowserLastUsedService` keeps a last-used date in
+SharedPreferences (stamped at open and on resume, at most once an hour). At cold start,
+web only, `main.dart` `_checkDeviceUser` calls `AuthService.wipeStaleBrowserCopy` BEFORE
+`restoreSignedInUser`: more than 30 days (`kBrowserUnusedWipeAfter`) since last use runs
+the Log Out teardown (`DeviceTeardown.leave(LeaveReason.logout)`), so the outbox gate
+(invariant #12) applies. Gate not clean (rows still unsent after one push, offline, or no
+answer in 15 s) = the wipe is skipped, the data kept and the date left old so the next
+open retries. Phones and tablets never run it.
 
 **Phone-only features in the browser (#812 S3, 2026-11-13).** `dart:io` `File`,
 `Directory`, `Platform` and `path_provider` throw in the browser, so each is behind

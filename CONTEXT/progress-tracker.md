@@ -7,6 +7,11 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #812 S5: browser 30-day wipe (2026-11-13, branch `feat/812-s5-browser-30-day-wipe`)
+- New `lib/core/services/browser_last_used_service.dart`: last-used date in SharedPreferences, pure `shouldWipe(now, lastUsed)` (more than `kBrowserUnusedWipeAfter` = 30 days), debounced `touch()` (1 h).
+- `AuthService.wipeStaleBrowserCopy` (web only) runs in `_checkDeviceUser` before `restoreSignedInUser`; it reuses `DeviceTeardown.leave(LeaveReason.logout)`, no second wipe. Unsent work: outbox gate pushes once; if rows remain (or offline / 15 s timeout) the wipe is skipped, data kept, date left old so the next open retries.
+- Log Out already wipes via the same teardown (`clearAllData`), no web-specific code needed; `flutter build web` passes.
+- Tests: `test/auth/browser_30_day_wipe_test.dart` (pure decision + hook: not web, recent, stale clean, stale unsent).
 ### Issue #812 S3: browser runtime guards (2026-11-13, branch `feat/812-s3-browser-guards`)
 - Browser skips or replaces phone-only code: printers are quiet no-ops (Receipt printer entry hidden in Settings); product photos, gallery and logo use the cloud URL with no on-disk copy and upload straight to Storage; CSV / receipt / payslip / data-export go through new `shareFileBytes` (share sheet on phones, browser download on web); device registry reports `web`; `schema_audit` no longer reads `Platform`; `LocalPhotoFiles.deleteAll` is safe on web.
 - New: `lib/shared/widgets/local_photo_image.dart`, `lib/core/utils/share_file*.dart`; `web` added to pubspec (was transitive). Phones and tablets behave as before.
