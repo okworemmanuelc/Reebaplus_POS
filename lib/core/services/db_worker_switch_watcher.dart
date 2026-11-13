@@ -3,9 +3,12 @@ import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:reebaplus_pos/core/database/local_database_connection.dart';
+import 'package:reebaplus_pos/core/database/local_database_platform.dart';
 import 'package:reebaplus_pos/main.dart' show supabaseReady;
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+/// The `app_config` key behind the off switch (migration 0253).
+const String kDbBackgroundWorkerConfigKey = 'db_background_worker';
 
 /// Minimum gap between two cloud reads (launch + resume are debounced).
 const Duration kDbWorkerSwitchCheckGap = Duration(minutes: 1);
@@ -74,7 +77,7 @@ class DbWorkerSwitchWatcher with WidgetsBindingObserver {
     _lastCheck = DateTime.now();
     try {
       final answer = await _fetch();
-      await DbWorkerSwitch(await _directory()).remember(answer);
+      await rememberDbWorkerSwitch(await _directory(), answer);
     } catch (e) {
       debugPrint('[DbWorkerSwitch] remember failed: $e');
     } finally {

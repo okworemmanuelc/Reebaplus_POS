@@ -17,9 +17,6 @@ enum LocalDatabaseHome {
   screenThread,
 }
 
-/// The `app_config` key behind the off switch (migration 0253).
-const String kDbBackgroundWorkerConfigKey = 'db_background_worker';
-
 /// Holds the phone's last answer. A file beside the database, not a database
 /// row: it has to be read before the database opens. Not cleared by a logout
 /// wipe: it describes the phone, not the shop.

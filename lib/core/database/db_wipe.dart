@@ -21,6 +21,8 @@ const _cutoverMarkerFilename = '.uuid_cutover_complete_v2';
 /// A marker file is written after the wipe so subsequent launches skip the
 /// deletion path entirely.
 Future<void> wipeLegacyDatabaseIfPresent() async {
+  // The browser (#812) never had a legacy file, and has no documents folder.
+  if (kIsWeb) return;
   final dir = await getApplicationDocumentsDirectory();
   final dbPath = p.join(dir.path, _legacyDbFilename);
   final markerPath = p.join(dir.path, _cutoverMarkerFilename);

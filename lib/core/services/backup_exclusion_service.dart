@@ -24,7 +24,8 @@ class BackupExclusionService {
   /// No-op off iOS. Best-effort: never throws, because failing to set a backup
   /// attribute must not stop the till from opening.
   static Future<void> excludeLocalDatabase() async {
-    if (!Platform.isIOS) return;
+    // `Platform` throws in the browser (#812), which has no iCloud backup.
+    if (kIsWeb || !Platform.isIOS) return;
     try {
       final dir = await getApplicationDocumentsDirectory();
       await _channel.invokeMethod<bool>('excludeFromICloudBackup', {
