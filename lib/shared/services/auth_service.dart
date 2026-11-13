@@ -19,18 +19,9 @@ import 'package:reebaplus_pos/core/services/first_load_marker_service.dart';
 import 'package:reebaplus_pos/core/services/local_photo_files.dart';
 import 'package:reebaplus_pos/core/services/pending_photo_uploads.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
-import 'package:reebaplus_pos/shared/services/pin_hasher.dart';
 
 /// Route to show after login instead of the default MainLayout.
 enum PostLoginRoute { none, successDashboard, accessGranted }
-
-/// Outcome of a silent JWT refresh attempt.
-///
-/// Callers use this to decide whether to proceed (refreshed/alreadyValid/
-/// offline) or fall back to OTP (failedAuth). Offline is deliberately
-/// tolerated — the SDK auto-retries on reconnect and sync push already
-/// gates on auth, so cloud writes queue safely until the JWT is back.
-enum SessionRefreshResult { refreshed, alreadyValid, offline, failedAuth }
 
 /// Thrown by [AuthService.deleteBusinessAndAccount] when the irreversible
 /// delete cannot proceed. Carries a plain-English [message] safe to show the
@@ -157,8 +148,8 @@ class AuthService extends ValueNotifier<UserData?> {
     this.googleWebClientId =
         '807123945489-048eug40i2jn7novlblidott50sqcl7b.apps.googleusercontent.com',
     PendingPhotoUploads? pendingPhotos,
-  })  : _pendingPhotos = pendingPhotos,
-        super(null) {
+  }) : _pendingPhotos = pendingPhotos,
+       super(null) {
     // Hand the database a thin closure over `value` so DAOs that mix in
     // BusinessScopedDao always read the current session's businessId
     // (auto-tracks login/logout through the ValueNotifier).
@@ -246,82 +237,11 @@ class AuthService extends ValueNotifier<UserData?> {
   /// cheap and does not force a network refresh — supabase-flutter refreshes
   /// the JWT lazily on the next cloud call. A `false` result means there is
   /// no persisted session at all (signed out, refresh-token rotation gave up,
-  /// SDK storage wiped, or this device never authenticated). PIN unlock and
-  /// the post-auth shell must gate on this so we never mount tenant-scoped UI
+  /// SDK storage wiped, or this device never authenticated). The post-auth
+  /// shell must gate on this so we never mount tenant-scoped UI
   /// without a JWT — every cloud write would otherwise pile up in the queue
   /// with `pushPending` skipping on "no auth session".
   bool get hasSupabaseSession => _supabase.auth.currentUser != null;
-
-  /// Returns every user whose stored PBKDF2 hash matches [pin]. Sentinel /
-  /// placeholder rows (no hash yet) never match — they must go through
-  /// [setUserPin] first.
-  Future<List<UserData>> getUsersByPin(
-    String pin, {
-    String? email,
-    String? userId,
-  }) async {
-    final query = _db.select(_db.users);
-    // Scope the candidate set as tightly as the caller knows the identity.
-    // When the signer was already identified (device user or post-OTP preset),
-    // pin to their exact user id (globally unique) so a different business's
-    // row that happens to share this email — or any other staff who shares
-    // this PIN — can never match. Fall back to email only when no identity is
-    // known. See master plan §7.2a.
-    if (userId != null && userId.isNotEmpty) {
-      query.where((u) => u.id.equals(userId));
-    } else if (email != null && email.isNotEmpty) {
-      query.where((u) => u.email.equals(email));
-    }
-    final candidates = await query.get();
-    return candidates.where((u) {
-      final hash = u.pinHash;
-      final salt = u.pinSalt;
-      final iterations = u.pinIterations;
-      if (hash == null || salt == null || iterations == null) {
-        return false;
-      }
-      final computed = PinHasher.hashBase64(pin, salt, iterations);
-      return PinHasher.constantTimeEquals(hash, computed);
-    }).toList();
-  }
-
-  /// Hashes [plaintext] with a fresh per-user salt and writes the PIN to
-  /// the users table. PIN unlock is device-local; the hashed PIN columns
-  /// (pin_hash / pin_salt / pin_iterations) live on the users row.
-  Future<void> setUserPin(String userId, String plaintext) async {
-    // sync-exempt: §5 #4 — pin/pinHash/pinSalt/pinIterations are local-only
-    // columns by schema design; they do not exist in Supabase.
-    debugPrint('[AuthService] setUserPin: userId=$userId');
-    final salt = PinHasher.generateSaltBase64();
-    final hash = PinHasher.hashBase64(
-      plaintext,
-      salt,
-      PinHasher.defaultIterations,
-    );
-    const iterations = PinHasher.defaultIterations;
-
-    final usersUpdated =
-        await (_db.update(_db.users)..where((u) => u.id.equals(userId))).write(
-          UsersCompanion(
-            pin: const Value('__HASHED__'),
-            pinHash: Value(hash),
-            pinSalt: Value(salt),
-            pinIterations: const Value(iterations),
-          ),
-        );
-    debugPrint(
-      '[AuthService] setUserPin: users.pin* updated '
-      '(rows affected: $usersUpdated)',
-    );
-    if (usersUpdated == 0) {
-      debugPrint(
-        '[AuthService] setUserPin: WARNING no local users row for '
-        'id=$userId — PIN write landed on zero rows. Caller likely passed '
-        'a userId that was never inserted locally (e.g. complete_onboarding '
-        'local mirror failed silently or was skipped).',
-      );
-    }
-  }
 
   // ── Device persistence (encrypted) ──────────────────────────────────────
 
@@ -332,7 +252,8 @@ class AuthService extends ValueNotifier<UserData?> {
   /// Returns the last successfully logged-in email.
   Future<String?> getLastLoggedInEmail() => _secure.getLastLoggedInEmail();
 
-  /// Persists [userId] so the next app launch goes straight to PIN screen.
+  /// Persists [userId] so the next app launch opens straight into the shop
+  /// ([restoreSignedInUser]).
   Future<void> saveDeviceUserId(String userId) async {
     await _secure.saveDeviceUserId(userId);
     deviceUserIdNotifier.value = userId;
@@ -359,13 +280,13 @@ class AuthService extends ValueNotifier<UserData?> {
   // ── Supabase Sync ─────────────────────────────────────────────────────────
 
   /// Sentinel PIN written to a local user row when it's been seeded from a
-  /// cloud profile but the device hasn't set up a PIN yet. The OTP flow
-  /// detects this and routes the user into PIN setup.
+  /// cloud profile. The app no longer uses PINs (#812); the `users.pin` column
+  /// is still NOT NULL, so rows keep being written with this placeholder.
   ///
   /// Canonical definition is [kSetupRequiredPin] in `app_database.dart` —
   /// kept there so the sync layer can write it during restore without a
   /// circular import. This static alias preserves the existing public API
-  /// (`AuthService.setupRequiredPin`) used by the OTP/email-entry screens.
+  /// (`AuthService.setupRequiredPin`).
   static const String setupRequiredPin = kSetupRequiredPin;
 
   /// Reads the current auth user's cloud profile and the linked business
@@ -524,14 +445,14 @@ class AuthService extends ValueNotifier<UserData?> {
 
   /// Reads the current user's cloud profile (by `auth.uid()`) and reflects it
   /// into the local `users` table. On a fresh device this recreates the row
-  /// so the existing PIN-entry / device-session flow can pick up.
+  /// so the sign-in flow can bind it.
   ///
   /// Only profile-owned fields (name, businessId) are written.
   /// Device-local fields (pin, passwordHash, biometricEnabled, avatarColor,
   /// storeId) are never overwritten on existing rows.
   ///
   /// If no local row exists yet, one is inserted with [setupRequiredPin] as a
-  /// placeholder so the caller can route to PIN setup.
+  /// placeholder (the `pin` column is NOT NULL; PINs are gone since #812).
   ///
   /// Identity contract (post-0039): when the local row has to be created
   /// from cloud, the inserted `users.id` MUST be the cloud's canonical
@@ -624,10 +545,9 @@ class AuthService extends ValueNotifier<UserData?> {
     // the insert would throw a raw FK-787 (SqliteException(787)). Refuse
     // gracefully so the caller can show a clean error and retry after a pull,
     // rather than crashing.
-    final localBiz =
-        await (_db.select(_db.businesses)
-              ..where((b) => b.id.equals(businessId)))
-            .getSingleOrNull();
+    final localBiz = await (_db.select(
+      _db.businesses,
+    )..where((b) => b.id.equals(businessId))).getSingleOrNull();
     if (localBiz == null) {
       debugPrint(
         '[AuthService] upsertLocalUserFromProfile: local businesses row '
@@ -681,43 +601,6 @@ class AuthService extends ValueNotifier<UserData?> {
     }
   }
 
-  /// Attempts a one-shot JWT refresh without bouncing the user to OTP.
-  ///
-  /// Used by PIN unlock to recover an expired access token silently when
-  /// the refresh token is still valid (typical case: device was idle long
-  /// enough for the access token to expire but the refresh token hasn't).
-  Future<SessionRefreshResult> tryRefreshSupabaseSession() async {
-    if (_supabase.auth.currentSession != null) {
-      return SessionRefreshResult.alreadyValid;
-    }
-    try {
-      final response = await _supabase.auth.refreshSession().timeout(
-        const Duration(seconds: 8),
-      );
-      return response.session != null
-          ? SessionRefreshResult.refreshed
-          : SessionRefreshResult.failedAuth;
-    } on AuthRetryableFetchException catch (e) {
-      debugPrint('[AuthService] refreshSession offline: $e');
-      return SessionRefreshResult.offline;
-    } on TimeoutException catch (_) {
-      return SessionRefreshResult.offline;
-    } on AuthException catch (e) {
-      // "No current session" / refresh-token rejected — genuine auth fail.
-      debugPrint('[AuthService] refreshSession auth failure: $e');
-      return SessionRefreshResult.failedAuth;
-    } catch (e) {
-      final msg = e.toString().toLowerCase();
-      if (msg.contains('socketexception') ||
-          msg.contains('failed host lookup') ||
-          msg.contains('clientexception')) {
-        return SessionRefreshResult.offline;
-      }
-      debugPrint('[AuthService] refreshSession unknown error: $e');
-      return SessionRefreshResult.failedAuth;
-    }
-  }
-
   /// Verifies the [otp] code for [email].
   /// Returns null on success, or an error string on failure.
   Future<String?> verifyOtp(String email, String otp) async {
@@ -757,6 +640,40 @@ class AuthService extends ValueNotifier<UserData?> {
   }
 
   // ── Session management ─────────────────────────────────────────────────────
+
+  /// Finishes a verified sign-in — the email code or Google — by binding
+  /// [user] as the signed-in user and registering this device's cloud session.
+  /// There is no PIN step any more (owner decision #812): every post-verify
+  /// path (OTP, Google, Existing Account) ends here and the router opens the
+  /// shop. Same call the old Create PIN → Biometric finish step made.
+  void completeSignIn(UserData user) => setCurrentUser(user, freshSignIn: true);
+
+  /// Cold start (#812): a device with a signed-in user opens straight into the
+  /// shop — there is no PIN unlock. Reads the device user pointer and its local
+  /// `users` row (SQLite only, never the network — invariant #11) and binds it.
+  /// A live Supabase session is checked by the router, which shows the
+  /// Session Expired screen (re-verify by email, no wipe) when there is none.
+  ///
+  /// The deleted-business check that used to run on the PIN screen now runs
+  /// here in the background; it only acts on a confirmed cloud tombstone.
+  ///
+  /// Returns the restored user, or null when this device has no signed-in user
+  /// (or its row is missing — the router then shows sign-in).
+  Future<UserData?> restoreSignedInUser() async {
+    if (value != null) return value;
+    final userId = await getDeviceUserId();
+    if (userId == null) return null;
+    final user = await _db.storesDao.getUserById(userId);
+    if (user == null) return null;
+    setCurrentUser(user);
+    unawaited(
+      wipeIfActiveBusinessDeleted().catchError((Object e) {
+        debugPrint('[AuthService] cold-start deletion check failed: $e');
+        return false;
+      }),
+    );
+    return user;
+  }
 
   /// Marks [user] as the active logged-in user and applies store lock.
   ///
@@ -843,8 +760,8 @@ class AuthService extends ValueNotifier<UserData?> {
         }
         // Record this device's make/model + last-seen for the console. Separate
         // from the session try above so a session-create failure doesn't skip
-        // it (and vice versa). Covers fresh sign-in AND app-open re-auth, since
-        // PIN/biometric/who's-working unlock all route through setCurrentUser.
+        // it (and vice versa). Covers fresh sign-in AND the cold-start restore,
+        // since both route through setCurrentUser.
         _recordDevicePresence();
       });
     } catch (e, stack) {
@@ -854,7 +771,7 @@ class AuthService extends ValueNotifier<UserData?> {
 
   /// Pushes this device's new session to the cloud. Previously, this method
   /// also revoked other active sessions and signed out other devices.
-  /// That kick-out behavior has been disabled to allow concurrent sign-ins 
+  /// That kick-out behavior has been disabled to allow concurrent sign-ins
   /// on multiple devices.
   ///
   /// Called only on fresh OTP/Google sign-ins.
@@ -884,7 +801,9 @@ class AuthService extends ValueNotifier<UserData?> {
         'last_updated_at': now,
       });
     } catch (e) {
-      debugPrint('[AuthService] registerCloudSession: cloud session upsert error: $e');
+      debugPrint(
+        '[AuthService] registerCloudSession: cloud session upsert error: $e',
+      );
     }
   }
 
@@ -947,12 +866,8 @@ class AuthService extends ValueNotifier<UserData?> {
     for (final business in others) {
       final wasDeleted = await _sync.confirmBusinessDeleted(business.id);
       if (!wasDeleted) {
-        final pending = await _db.syncDao.countPending(
-          businessId: business.id,
-        );
-        final orphans = await _db.syncDao.countOrphans(
-          businessId: business.id,
-        );
+        final pending = await _db.syncDao.countPending(businessId: business.id);
+        final orphans = await _db.syncDao.countOrphans(businessId: business.id);
         final unsent = pending + orphans;
         if (unsent > 0) {
           final proceed = await confirm(
@@ -1023,7 +938,10 @@ class AuthService extends ValueNotifier<UserData?> {
     // exactly the one whose `auth_user_id` collides — so the tenants the
     // `users` table references count even when no `businesses` row names them.
     final users = await _db.select(_db.users).get();
-    final ids = <String>{...namesById.keys, for (final u in users) u.businessId};
+    final ids = <String>{
+      ...namesById.keys,
+      for (final u in users) u.businessId,
+    };
 
     return [
       for (final id in ids)
@@ -1058,11 +976,11 @@ class AuthService extends ValueNotifier<UserData?> {
     }
   }
 
-  /// Cold-start / pre-sign-in gate (§10.3). Before the PIN screen renders for a
-  /// KNOWN device, confirm the device's local business hasn't been permanently
-  /// deleted by its owner. If the cloud tombstone confirms deletion, wipe +
-  /// full-logout (→ WelcomeScreen) exactly like the session-bound triggers, and
-  /// return true so the caller leaves the PIN screen.
+  /// Cold-start gate (§10.3). Run in the background by [restoreSignedInUser] on
+  /// a KNOWN device: confirm the device's local business hasn't been
+  /// permanently deleted by its owner. If the cloud tombstone confirms
+  /// deletion, wipe + full-logout (→ WelcomeScreen) exactly like the
+  /// session-bound triggers, and return true.
   ///
   /// Resolves the business id from the device user (single-local-business
   /// fallback). Returns false on any ambiguity (offline, no tombstone, no
@@ -1150,8 +1068,7 @@ class AuthService extends ValueNotifier<UserData?> {
           '(pending=$pending orphans=$orphans photos=$photos)';
       debugPrint('[AuthService] WIPE DATA LOSS: $entry');
       final prefs = await SharedPreferences.getInstance();
-      final list =
-          prefs.getStringList(_wipeLossBreadcrumbsKey) ?? <String>[];
+      final list = prefs.getStringList(_wipeLossBreadcrumbsKey) ?? <String>[];
       list.add(entry);
       while (list.length > 20) {
         list.removeAt(0);
@@ -1191,12 +1108,8 @@ class AuthService extends ValueNotifier<UserData?> {
     }
   }
 
-  /// If true, the LoginScreen will skip automatically prompting for Biometrics
-  /// so that users who explicitly pressed "Log Out" aren't immediately logged back in.
-  bool bypassNextBiometric = false;
-
-  /// Clears the active user, removes the store lock, but retains the
-  /// device-level session so the next launch shows the personalized PIN screen.
+  /// Clears the active user and removes the store lock, but retains the
+  /// device-level user pointer.
   ///
   /// The Supabase refresh token for THIS device is revoked
   /// ([SignOutScope.local]) so the on-device JWT cannot be silently
@@ -1226,22 +1139,6 @@ class AuthService extends ValueNotifier<UserData?> {
           (e) => debugPrint('[AuthService] Supabase signOut(local) error: $e'),
         );
     value = null;
-    bypassNextBiometric = true;
-  }
-
-  /// UI-only lock: drops the in-memory user so the PIN screen takes over,
-  /// but does NOT revoke the sessions row or sign out of Supabase. The
-  /// same device session continues across the lock — keeps RLS happy and
-  /// avoids verifyLocalSessionStillActive treating us as a remote kick
-  /// on the next resume (it early-returns when value == null).
-  void lockApp() {
-    // The picked store survives a lock (#653), so the store lock is NOT
-    // cleared here. The unlock path (setCurrentUser) re-applies it from the
-    // remembered pick. Ordering rule from logout() no longer applies: no
-    // lockedStoreId listener fires at lock.
-    _nav.resetNavigation();
-    value = null;
-    bypassNextBiometric = true;
   }
 
   /// Completely wipes the session, reverting the device to a fresh state.
@@ -1456,9 +1353,10 @@ class AuthService extends ValueNotifier<UserData?> {
 
   /// Deliberate "Log Out" from the drawer (master plan §7.6), also run when an
   /// admin removes the signed-in user. A device is used by one user at a time,
-  /// so logging out WIPES the device: local business data, every PIN, the
-  /// device pointer, and the Supabase/Google tokens. Next launch demands
-  /// Email + OTP, then a NEW PIN (per §7.4), and the data is re-downloaded.
+  /// so logging out WIPES the device: local business data, the device pointer,
+  /// and the Supabase/Google tokens. Next launch demands Email + OTP (or
+  /// Google), and the data is re-downloaded. This is also how staff change
+  /// over on a shared till now there is no PIN (#812).
   ///
   /// Separate from [fullLogout] (the involuntary remote-kick / shift-expiry /
   /// session-expired path), which does not wipe local data.
@@ -1562,7 +1460,8 @@ class AuthService extends ValueNotifier<UserData?> {
     required int photos,
   }) {
     final parts = [
-      if (changes > 0) '$changes change${changes == 1 ? "" : "s"} not yet synced',
+      if (changes > 0)
+        '$changes change${changes == 1 ? "" : "s"} not yet synced',
       if (photos > 0)
         '$photos product photo${photos == 1 ? "" : "s"} not uploaded yet',
     ];
@@ -1717,15 +1616,6 @@ class AuthService extends ValueNotifier<UserData?> {
     return 'Could not leave your account. Please try again.';
   }
 
-  /// Returns true if [pin] matches at least one local user. The lone
-  /// owner is the only user post-staff-removal, so this collapses to a
-  /// simple PIN-belongs-to-anyone check. Callers that historically passed
-  /// a `minimumTier` argument can drop it.
-  Future<bool> verifyPinForTier(String pin, int minimumTier) async {
-    final matches = await getUsersByPin(pin);
-    return matches.isNotEmpty;
-  }
-
   /// Creates a new owner (CEO) account. Online-first: Supabase is the source
   /// of truth during onboarding; Drift mirrors after the Supabase write returns.
   ///
@@ -1815,8 +1705,7 @@ class AuthService extends ValueNotifier<UserData?> {
   /// (migration 0018, last amended by 0178) which inserts businesses +
   /// profiles + settings in one server-side transaction with
   /// `onboarding_complete=true`, then mirrors the same rows into local Drift
-  /// in one client-side transaction. PIN is NOT part of this — it's
-  /// device-local and written separately by [setUserPin] after this returns.
+  /// in one client-side transaction.
   ///
   /// No Store is created on either side (#232). The owner lands in the app
   /// with zero Stores and creates their first one there; until then
@@ -1861,9 +1750,8 @@ class AuthService extends ValueNotifier<UserData?> {
     } catch (e, stack) {
       // Surface the exact RPC failure (code/message/details for
       // PostgrestException) before propagating to the caller. The catch
-      // upstream in create_pin_screen converts every exception into a
-      // generic "Failed to save PIN" — this log is the only way to see
-      // the real reason.
+      // upstream in the CEO sign-up screen converts every exception into a
+      // generic message — this log is the only way to see the real reason.
       debugPrint(
         '[AuthService] completeOnboarding: cloud RPC FAILED: '
         '${e.runtimeType}: $e\n$stack',
@@ -2011,8 +1899,7 @@ class AuthService extends ValueNotifier<UserData?> {
   Future<bool> hasLocalRoleBinding(String userId, String businessId) async {
     final membership =
         await (_db.select(_db.userBusinesses)..where(
-              (t) =>
-                  t.userId.equals(userId) & t.businessId.equals(businessId),
+              (t) => t.userId.equals(userId) & t.businessId.equals(businessId),
             ))
             .getSingleOrNull();
     if (membership == null) return false;
@@ -2030,8 +1917,7 @@ class AuthService extends ValueNotifier<UserData?> {
         await (_db.select(_db.rolePermissions)
               ..where(
                 (t) =>
-                    t.roleId.equals(role.id) &
-                    t.businessId.equals(businessId),
+                    t.roleId.equals(role.id) & t.businessId.equals(businessId),
               )
               ..limit(1))
             .getSingleOrNull();
@@ -2087,7 +1973,8 @@ class AuthService extends ValueNotifier<UserData?> {
         CrashReporter.record(
           'Google sign-in: Supabase returned null email after token exchange',
           null,
-          context: 'auth.google_signin_error session_had_user='
+          context:
+              'auth.google_signin_error session_had_user='
               '${res.session?.user != null}',
         );
         throw const GoogleSignInException(
@@ -2114,7 +2001,8 @@ class AuthService extends ValueNotifier<UserData?> {
       CrashReporter.record(
         e,
         null,
-        context: 'auth.google_signin_error code=${e.code} '
+        context:
+            'auth.google_signin_error code=${e.code} '
             'message=${e.message} details=${e.details}',
       );
       throw GoogleSignInException(
@@ -2130,10 +2018,7 @@ class AuthService extends ValueNotifier<UserData?> {
         null,
         context: 'auth.google_signin_error unexpected: $e',
       );
-      throw GoogleSignInException(
-        code: 'unexpected',
-        message: e.toString(),
-      );
+      throw GoogleSignInException(code: 'unexpected', message: e.toString());
     }
   }
 

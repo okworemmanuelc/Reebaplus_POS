@@ -16,7 +16,6 @@ import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
 import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 import 'package:reebaplus_pos/features/auth/widgets/onboarding_step_indicator.dart';
 import 'package:reebaplus_pos/features/auth/widgets/otp_input.dart';
-import 'package:reebaplus_pos/features/auth/widgets/pin_keypad.dart';
 
 void main() {
   final galleries = <String, List<Widget> Function(BuildContext)>{
@@ -46,12 +45,6 @@ void main() {
         currentStep: 7,
         totalSteps: 7,
         stepLabels: OnboardingStepIndicator.pathALabels,
-      ),
-    ],
-    'pin_keypad': (context) => [
-      const Center(child: PinDots(filled: 2)),
-      Center(
-        child: PinKeypad(onDigit: (_) {}, onBackspace: () {}),
       ),
     ],
     'otp_input': (context) {

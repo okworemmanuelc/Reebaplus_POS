@@ -21,32 +21,29 @@ import 'package:reebaplus_pos/features/auth/onboarding/onboarding_draft.dart';
 import 'package:reebaplus_pos/features/auth/widgets/auth_form_kit.dart';
 import 'package:reebaplus_pos/features/auth/widgets/branded_auth_background.dart';
 import 'package:reebaplus_pos/features/auth/widgets/otp_input.dart';
-import 'package:reebaplus_pos/features/auth/widgets/pin_keypad.dart';
 import 'package:reebaplus_pos/features/auth/widgets/shake_widget.dart';
 import 'package:reebaplus_pos/features/auth/widgets/sign_up_step_dots.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/tag_pill.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
-import 'package:reebaplus_pos/features/settings/screens/settings_screen.dart'
-    show kSettingsMaxContentWidth;
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 
-/// Master plan §5 — CEO Sign Up. One screen, content fades between 9 steps
+/// Master plan §5 — CEO Sign Up. One screen, content fades between 8 steps
 /// (business name → type → contact → full name → email → OTP →
-/// create PIN → confirm PIN → "business is ready"). A small dots indicator
-/// sits at the top. State lives in [onboardingDraftProvider]; the atomic
-/// commit (`complete_onboarding` RPC + local mirror) runs after Confirm PIN,
-/// followed by a roles-carrying pull, then straight to Home.
+/// "setting up" → "business is ready"). A small dots indicator sits at the
+/// top. State lives in [onboardingDraftProvider]; the atomic commit
+/// (`complete_onboarding` RPC + local mirror) runs on the "setting up" step,
+/// followed by a roles-carrying pull, then straight to Home. There is no PIN
+/// step (owner decision #812).
 ///
-/// Biometric setup is no longer part of this flow (PIVOT_PLAN §10 will wire it
-/// into CEO Settings › Security). The §5.2 "email already linked to another
-/// business" branch is deferred — this flow handles new-email CEO sign-up.
+/// The §5.2 "email already linked to another business" branch is deferred —
+/// this flow handles new-email CEO sign-up.
 class CeoSignUpScreen extends ConsumerStatefulWidget {
   /// When non-null, the email has already been verified upstream (the Login
   /// flow's OTP → "No account found" → Create path). The Supabase session
   /// already exists, so the flow skips its own email (step 4) and OTP (step 5)
-  /// steps: business name → type → contact → full name → create PIN → confirm
-  /// PIN → ready (7 steps). When null (the Welcome path) the full 9-step flow
-  /// runs and collects + verifies the email itself.
+  /// steps: business name → type → contact → full name → setting up → ready
+  /// (6 steps). When null (the Welcome path) the full 8-step flow runs and
+  /// collects + verifies the email itself.
   final String? verifiedEmail;
   final int? initialStep;
 
@@ -61,22 +58,18 @@ class CeoSignUpScreen extends ConsumerStatefulWidget {
 }
 
 class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
-  static const int _totalSteps = 9;
+  static const int _totalSteps = 8;
+
+  /// The commit step (spinner, or the error + Try again).
+  static const int _setupStep = 6;
+
+  /// The final "your business is ready" step.
+  static const int _readyStep = 7;
 
   // The business-type picker is rendered from [Industry.selectableCatalogue] —
   // the selectable subset of the one Industry registry (ADR 0015, #112). Only
   // the three offered trades appear here; each entry carries its own label,
   // icon and coming-soon flag, so this screen keeps no private duplicate list.
-
-  // Obvious PINs to block (master plan §5.1). Mirrors create_pin_screen.dart.
-  static const Set<String> _blockedPins = {
-    '000000',
-    '111111',
-    '123456',
-    '654321',
-    '222222',
-    '333333',
-  };
 
   late int _step = widget.initialStep ?? 0;
   late bool _booting = widget.initialStep == null;
@@ -85,14 +78,14 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
   /// steps are skipped.
   bool get _emailSkipped => widget.verifiedEmail != null;
 
-  /// Total dots to show: 7 when the email/OTP steps are skipped, else 9.
+  /// Total dots to show: 6 when the email/OTP steps are skipped, else 8.
   int get _displayTotal => _emailSkipped ? _totalSteps - 2 : _totalSteps;
 
   /// Maps the internal step index (which keeps the email=4/OTP=5 slots even
   /// when skipped) onto the visible dot index.
   int get _displayStep {
     if (!_emailSkipped) return _step;
-    return _step <= 3 ? _step : _step - 2; // 6→4, 7→5, 8→6
+    return _step <= 3 ? _step : _step - 2; // 6→4, 7→5
   }
 
   // Step controllers (persist across step navigation so back keeps values).
@@ -133,16 +126,8 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
   DateTime? _lockoutEndTime;
   Timer? _lockoutTimer;
 
-  // PIN.
-  String _pin = '';
-  String _firstPin = '';
-  String? _pinError;
-  // Distinct keys: the create (step 6) and confirm (step 7) PIN bodies are
-  // both produced by _buildPinStep() and stay mounted together during the
-  // AnimatedSwitcher cross-fade — one shared GlobalKey across two live widgets
-  // crashes. One key per sub-step avoids the collision.
-  final GlobalKey<ShakeWidgetState> _createPinShakeKey = GlobalKey();
-  final GlobalKey<ShakeWidgetState> _confirmPinShakeKey = GlobalKey();
+  // Setup step: the commit's failure message (null while it runs / succeeds).
+  String? _commitError;
 
   bool _committing = false;
 
@@ -253,23 +238,16 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
   // ── Navigation ─────────────────────────────────────────────────────────
 
   void _back() {
-    if (_committing || _step == 8) return;
+    if (_committing || _step == _readyStep) return;
     if (_step == 0) {
       Navigator.of(context).maybePop();
       return;
     }
     setState(() {
       switch (_step) {
-        case 7:
-          _pin = '';
-          _firstPin = '';
-          _pinError = null;
-          _step = 6;
-          break;
-        case 6:
-          _pin = '';
-          _pinError = null;
-          // When email/OTP were skipped, step 6 follows full name (step 3).
+        case _setupStep:
+          _commitError = null;
+          // When email/OTP were skipped, the setup step follows full name (3).
           _step = _emailSkipped ? 3 : 5;
           break;
         case 5:
@@ -284,6 +262,13 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
   }
 
   void _goTo(int step) => setState(() => _step = step);
+
+  /// Moves to the setup step and runs the commit there (#812: no PIN step
+  /// stands between the last form step and the commit any more).
+  void _startSetup() {
+    _goTo(_setupStep);
+    _commit();
+  }
 
   // ── Step 1: business name ────────────────────────────────────────────────
 
@@ -385,7 +370,11 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
         .update((d) => d.ownerName = name);
     setState(() => _fullNameError = null);
     // Skip email (4) + OTP (5) when the email was verified upstream.
-    _goTo(_emailSkipped ? 6 : 4);
+    if (_emailSkipped) {
+      _startSetup();
+    } else {
+      _goTo(4);
+    }
   }
 
   // ── Step 5: email (send OTP on advance) ──────────────────────────────────
@@ -511,7 +500,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
     }
 
     // Verified — Supabase now has an authenticated session, so the
-    // commit at Confirm PIN can call complete_onboarding.
+    // commit on the setup step can call complete_onboarding.
     await auth.saveAuthMethod('email');
     if (!mounted) return;
     setState(() {
@@ -521,7 +510,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
     await Future.delayed(const Duration(milliseconds: 500));
     if (!mounted) return;
     setState(() => _otpVerified = false);
-    _goTo(6);
+    _startSetup();
   }
 
   void _startLockoutTimer() {
@@ -544,67 +533,14 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
     });
   }
 
-  // ── Steps 7 & 8: PIN ─────────────────────────────────────────────────────
-
-  void _onPinDigit(String digit) {
-    if (_committing || _pin.length >= 6) return;
-    setState(() {
-      _pin += digit;
-      _pinError = null;
-    });
-    if (_pin.length == 6) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _onPinComplete());
-    }
-  }
-
-  void _onPinBackspace() {
-    if (_committing || _pin.isEmpty) return;
-    setState(() {
-      _pin = _pin.substring(0, _pin.length - 1);
-      _pinError = null;
-    });
-  }
-
-  void _onPinComplete() {
-    if (_step == 6) {
-      if (_blockedPins.contains(_pin)) {
-        setState(() {
-          _pinError = 'Please choose a stronger PIN.';
-          _pin = '';
-        });
-        // Stay on step 6 — the create body is mounted, shake synchronously.
-        _createPinShakeKey.currentState?.shake();
-        return;
-      }
-      setState(() {
-        _firstPin = _pin;
-        _pin = '';
-        _step = 7;
-      });
-      return;
-    }
-    // Confirm phase (step 7).
-    if (_pin != _firstPin) {
-      setState(() {
-        _pin = '';
-        _firstPin = '';
-        _pinError = "PINs don't match. Try again.";
-        _step = 6;
-      });
-      // We just switched back to step 6; the create body isn't mounted yet at
-      // this synchronous point, so shake it after the frame lands.
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _createPinShakeKey.currentState?.shake(),
-      );
-      return;
-    }
-    _commit();
-  }
-
   // ── Commit ───────────────────────────────────────────────────────────────
 
   Future<void> _commit() async {
-    setState(() => _committing = true);
+    if (_committing) return;
+    setState(() {
+      _committing = true;
+      _commitError = null;
+    });
 
     // Capture providers before the awaits — setCurrentUser at the end
     // regenerates the navigator key and tears this element down.
@@ -612,7 +548,6 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
     final db = ref.read(databaseProvider);
     final sync = ref.read(supabaseSyncServiceProvider);
     final draftNotifier = ref.read(onboardingDraftProvider.notifier);
-    final pin = _firstPin;
 
     try {
       final draft = draftNotifier.require();
@@ -625,10 +560,9 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
       draft.taxRegNumber = null;
 
       final persistedUser = await auth.completeOnboarding(draft);
-      await auth.setUserPin(persistedUser.id, pin);
       final updatedUser = await db.storesDao.getUserById(persistedUser.id);
       if (updatedUser == null) {
-        throw StateError('local users row missing after PIN save');
+        throw StateError('local users row missing after onboarding commit');
       }
 
       // Post-onboarding pull so the 4 seeded roles (+ permissions/settings/
@@ -657,30 +591,29 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
       if (!bindingReady) {
         // The business is committed cloud-side (idempotent), but its roles
         // never reached this device. Don't enter the app permission-less —
-        // keep the draft and let the user retry by re-entering their PIN.
+        // keep the draft and let the user retry from the setup step.
         if (mounted) {
           setState(() {
             _committing = false;
-            _pin = '';
-            _firstPin = '';
-            _pinError =
+            _commitError =
                 'Your business was created, but we could not finish loading '
-                'it on this device. Check your connection and re-enter your '
-                'PIN to retry.';
-            _step = 6;
+                'it on this device. Check your connection and tap Try again.';
           });
         }
         return;
       }
 
       // Only drop the draft once ALL critical work has landed (cloud commit +
-      // PIN + role binding mirrored locally). The commit is idempotent
+      // role binding mirrored locally). The commit is idempotent
       // (ON CONFLICT), so keeping the draft until here lets a mid-failure
       // retry safely re-run the whole flow.
       draftNotifier.clear();
 
       if (!mounted) return;
-      setState(() => _step = 8);
+      setState(() {
+        _committing = false;
+        _step = _readyStep;
+      });
 
       // Let the user read "your business is ready" before landing on POS,
       // then hand off to the authed shell — no auto-push. With no Store yet
@@ -695,8 +628,8 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
       // cannot create another. complete_onboarding rejects this cleanly (P0001
       // "already linked to another business"); the raw global-unique constraint
       // name is matched too as a backstop for an older RPC without the guard.
-      // Re-entering the PIN can NEVER clear this (the email is permanently
-      // bound), so the generic "re-enter your PIN" copy is a dead-end loop —
+      // Retrying can NEVER clear this (the email is permanently bound), so the
+      // generic "try again" copy is a dead-end loop —
       // surface a clear, actionable message instead and let the user back out
       // to restart with a different email. Mirrors staff_sign_up_screen's
       // handling of the same P0001 from redeem_invite_code.
@@ -708,9 +641,9 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
       if (!mounted) return;
 
       if (alreadyLinkedElsewhere) {
-        // The email is permanently bound to another business — re-entering the
-        // PIN can never clear it, so holding the user on the PIN step is a
-        // dead-end loop. With the post-OTP detection fix (fetchSupabaseAccount
+        // The email is permanently bound to another business — retrying can
+        // never clear it, so holding the user on the setup step is a dead-end
+        // loop. With the post-OTP detection fix (fetchSupabaseAccount
         // → ExistingAccountRoute) an existing email is now caught right after
         // OTP, before any onboarding step, so reaching here is a rare race (the
         // link appeared between OTP verify and this commit). Route the user out
@@ -729,10 +662,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
 
       setState(() {
         _committing = false;
-        _pin = '';
-        _firstPin = '';
-        _pinError = 'Something went wrong. Please re-enter your PIN.';
-        _step = 6;
+        _commitError = 'Something went wrong. Please try again.';
       });
     }
   }
@@ -741,23 +671,16 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // The pin steps go two-column when one column won't fit the measured
-    // height (a phone sideways); everything else scrolls inside the 480 column.
+    // Every step scrolls inside the 480 column.
     return LayoutBuilder(
       builder: (context, constraints) {
         final mq = MediaQuery.of(context);
         final bodyHeight = constraints.maxHeight - mq.padding.vertical;
-        final isPinStep = _step == 6 || _step == 7;
-        final twoColumn =
-            isPinStep &&
-            !_committing &&
-            bodyHeight < _pinOneColumnHeight &&
-            constraints.maxWidth - mq.padding.horizontal >= _pinTwoColumnWidth;
         return Scaffold(
           resizeToAvoidBottomInset: false,
           backgroundColor: Theme.of(context).scaffoldBackgroundColor,
           body: BrandedAuthBackground(
-            maxWidth: twoColumn ? kSettingsMaxContentWidth : 480.0,
+            maxWidth: 480.0,
             child: SafeArea(
               child: _booting
                   ? const SizedBox.shrink()
@@ -769,7 +692,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
                             duration: const Duration(milliseconds: 300),
                             child: KeyedSubtree(
                               key: ValueKey(_step),
-                              child: _buildStepBody(twoColumn: twoColumn),
+                              child: _buildStepBody(),
                             ),
                           ),
                         ),
@@ -786,14 +709,8 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
   /// one-line "Step n of N" label.
   static const double _compactBarHeight = 520;
 
-  /// Measured body height under which the PIN steps need two columns.
-  static const double _pinOneColumnHeight = 600;
-
-  /// Measured body width a two-column PIN step needs.
-  static const double _pinTwoColumnWidth = 560;
-
   Widget _buildTopBar({required bool compact}) {
-    final showBack = _step != 8 && !_committing;
+    final showBack = _step != _readyStep && !_committing;
     final back = Opacity(
       opacity: showBack ? 1 : 0,
       child: IconButton(
@@ -855,7 +772,7 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
     );
   }
 
-  Widget _buildStepBody({required bool twoColumn}) {
+  Widget _buildStepBody() {
     switch (_step) {
       case 0:
         return _buildBusinessNameStep();
@@ -869,10 +786,9 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
         return _buildEmailStep();
       case 5:
         return _buildOtpStep();
-      case 6:
-      case 7:
-        return _buildPinStep(twoColumn: twoColumn);
-      case 8:
+      case _setupStep:
+        return _buildSetupStep();
+      case _readyStep:
         return _buildSuccessStep();
       default:
         return const SizedBox.shrink();
@@ -1235,76 +1151,28 @@ class _CeoSignUpScreenState extends ConsumerState<CeoSignUpScreen> {
     );
   }
 
-  Widget _buildPinStep({required bool twoColumn}) {
-    if (_committing) {
+  /// The commit step: the "Setting up your business…" spinner while the commit
+  /// runs, or its failure message with a Try again button.
+  Widget _buildSetupStep() {
+    final error = _commitError;
+    if (error == null) {
       return AuthCenteredScroll(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [_buildCommitting()],
       );
     }
-    final confirming = _step == 7;
-    final heading = <Widget>[
-      Text(
-        confirming ? 'Confirm your PIN' : 'Create a PIN',
-        textAlign: TextAlign.center,
-        style: authTitleStyle(context),
-      ),
-      SizedBox(height: context.getRSize(8)),
-      Text(
-        confirming
-            ? 'Re-enter the same 6-digit PIN to confirm.'
-            : 'Choose a 6-digit PIN you\'ll use to log in.',
-        textAlign: TextAlign.center,
-        style: authSubtitleStyle(context),
-      ),
-      SizedBox(height: context.getRSize(28)),
-      ShakeWidget(
-        key: confirming ? _confirmPinShakeKey : _createPinShakeKey,
-        child: PinDots(filled: _pin.length),
-      ),
-      SizedBox(height: context.getRSize(12)),
-      AuthErrorText(_pinError),
-    ];
-    final keypad = PinKeypad(
-      onDigit: _onPinDigit,
-      onBackspace: _onPinBackspace,
-    );
-    if (twoColumn) {
-      // A phone sideways: heading + dots on the left, keypad on the right.
-      return LayoutBuilder(
-        builder: (context, constraints) => SingleChildScrollView(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                context.getRSize(28),
-                context.getRSize(8),
-                context.getRSize(28),
-                context.getRSize(16),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: heading,
-                    ),
-                  ),
-                  SizedBox(width: context.getRSize(24)),
-                  Expanded(child: Center(child: keypad)),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-    }
     return AuthCenteredScroll(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        ...heading,
+        Text(
+          'We could not finish setting up',
+          textAlign: TextAlign.center,
+          style: authTitleStyle(context),
+        ),
         SizedBox(height: context.getRSize(12)),
-        keypad,
+        AuthErrorText(error),
+        SizedBox(height: context.getRSize(24)),
+        AppButton(text: 'Try again', onAsyncPressed: _commit),
       ],
     );
   }

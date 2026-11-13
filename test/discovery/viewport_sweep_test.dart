@@ -17,7 +17,6 @@ import 'package:reebaplus_pos/features/settings/screens/business_info_screen.dar
 import 'package:reebaplus_pos/features/settings/screens/delete_business_screen.dart';
 import 'package:reebaplus_pos/features/settings/screens/role_permissions_detail_screen.dart';
 import 'package:reebaplus_pos/features/settings/screens/roles_permissions_screen.dart';
-import 'package:reebaplus_pos/features/settings/screens/security_settings_screen.dart';
 import 'package:reebaplus_pos/features/settings/screens/settings_screen.dart';
 import 'package:reebaplus_pos/features/settings/screens/stores_settings_screen.dart';
 import 'package:reebaplus_pos/features/settings/screens/subscription_screen.dart';
@@ -25,9 +24,7 @@ import 'package:reebaplus_pos/features/settings/screens/sync_issues_access_scree
 import 'package:reebaplus_pos/features/settings/screens/theme_settings_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/ceo_sign_up_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/coming_soon_screen.dart';
-import 'package:reebaplus_pos/features/auth/screens/create_pin_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/email_entry_screen.dart';
-import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/no_account_found_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/staff_sign_up_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/success_dashboard_entry_screen.dart';
@@ -273,7 +270,6 @@ final List<_Screen> _screens = [
   _Screen('AppearanceSettingsScreen', (_) => const AppearanceSettingsScreen()),
   _Screen('ThemeSettingsScreen', (_) => const ThemeSettingsScreen()),
   _Screen('BusinessInfoScreen', (_) => const BusinessInfoScreen()),
-  _Screen('SecuritySettingsScreen', (_) => const SecuritySettingsScreen()),
   _Screen('StoresSettingsScreen', (_) => const StoresSettingsScreen()),
   _Screen('RolesPermissionsScreen', (_) => const RolesPermissionsScreen()),
   _Screen('RolePermissionsDetailScreen', (s) => RolePermissionsDetailScreen(role: s.role)),
@@ -283,8 +279,6 @@ final List<_Screen> _screens = [
   _Screen('DeleteBusinessScreen', (_) => const DeleteBusinessScreen()),
   // Pre-shell (auth). The fuller auth suite already pumps these at 800x360.
   _Screen('WelcomeScreen', (_) => const WelcomeScreen()),
-  _Screen('LoginScreen', (_) => const LoginScreen()),
-  _Screen('CreatePinScreen', (_) => const CreatePinScreen(isNewBusinessSetup: true)),
   _Screen('EmailEntryScreen', (_) => const EmailEntryScreen()),
   _Screen('CeoSignUpScreen', (_) => const CeoSignUpScreen()),
   _Screen('StaffSignUpScreen', (_) => const StaffSignUpScreen()),

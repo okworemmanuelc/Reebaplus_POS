@@ -43,12 +43,6 @@ const _rows = <(String group, String title, String subtitle, IconTileTone)>[
   ),
   (
     'Access & Security',
-    'Security',
-    'Auto-lock and biometric login',
-    IconTileTone.danger,
-  ),
-  (
-    'Access & Security',
     'Roles & Permissions',
     'What each role can do',
     IconTileTone.info,

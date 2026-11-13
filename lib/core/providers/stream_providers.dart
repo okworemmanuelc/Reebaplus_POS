@@ -1500,8 +1500,8 @@ final currentUserRoleProvider = Provider<RoleData?>((ref) {
 /// Reactive: a suspension or removal performed on another device arrives via the
 /// `user_businesses` realtime channel, flips the local row, and re-emits here.
 /// Drives the live membership guard in main.dart (master plan §9.5 / §8.3 +
-/// #117): 'suspended' locks the device (the PIN screen refuses a suspended
-/// member's PIN, so they can't unlock themselves again); 'removed' (an admin ran
+/// #117): 'suspended' blocks the shop behind the Account Blocked screen (the
+/// app router, #812 — no PIN screen any more); 'removed' (an admin ran
 /// `remove_staff_member`) runs the offboarding gate → logout, wiping local data.
 final currentUserMembershipStatusProvider = Provider<String?>((ref) {
   final user = ref.watch(authProvider).currentUser;
@@ -1518,8 +1518,8 @@ final currentUserMembershipStatusProvider = Provider<String?>((ref) {
 
 /// A counter that forces [currentBusinessSubscriptionProvider] to recompute even
 /// when no underlying row changed. A trial expires by the device clock with no
-/// realtime event, so bump this on app resume (AutoLockWrapper) — and on a
-/// low-frequency timer — to re-evaluate the deadline mid-session (§32).
+/// realtime event, so bump this on a
+/// low-frequency timer (main.dart) to re-evaluate the deadline mid-session (§32).
 final subscriptionClockTickProvider = StateProvider<int>((ref) => 0);
 
 /// Effective subscription access for the bound business (master plan §32).

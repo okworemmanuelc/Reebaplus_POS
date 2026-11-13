@@ -122,7 +122,7 @@ void main() {
   });
 
   group('Staff Settings', () {
-    testWidgets('lists the four rows for a manager', (tester) async {
+    testWidgets('lists the three rows for a manager', (tester) async {
       await pumpProfilePage(
         tester,
         env: env,
@@ -131,7 +131,7 @@ void main() {
         slug: 'manager',
         roleName: 'Manager',
       );
-      for (final t in ['Profile', 'Change PIN', 'Receipt printer', 'Display']) {
+      for (final t in ['Profile', 'Receipt printer', 'Display']) {
         expect(find.text(t), findsOneWidget, reason: t);
       }
       await tester.tap(find.text('Profile'));
@@ -165,7 +165,7 @@ void main() {
         roleName: 'CEO',
       );
       expect(find.text("You don't have access to settings."), findsOneWidget);
-      expect(find.text('Change PIN'), findsNothing);
+      expect(find.text('Receipt printer'), findsNothing);
       await disposeScreen(tester);
     });
   });

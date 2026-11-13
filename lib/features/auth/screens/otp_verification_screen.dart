@@ -15,9 +15,7 @@ import 'package:reebaplus_pos/features/auth/widgets/stale_business_clear_prompt.
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/core/utils/notifications.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
-import 'package:reebaplus_pos/features/auth/screens/create_pin_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/existing_account_screen.dart';
-import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/ceo_sign_up_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/no_account_found_screen.dart';
 import 'package:reebaplus_pos/shared/widgets/smooth_route.dart';
@@ -29,14 +27,12 @@ import 'package:reebaplus_pos/features/auth/widgets/otp_input.dart';
 class OtpVerificationScreen extends ConsumerStatefulWidget {
   final UserData? user;
   final String email;
-  final bool isPinReset;
   final bool createBusinessIntent;
 
   const OtpVerificationScreen({
     super.key,
     required this.user,
     required this.email,
-    this.isPinReset = false,
     this.createBusinessIntent = false,
   });
 
@@ -218,22 +214,26 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
     final confirmClearOtherBusiness = staleBusinessClearPrompt(context);
 
     try {
-      // Mark this session as email-authenticated (triggers second OTP after PIN).
+      // Mark this session as email-authenticated.
       await auth.saveAuthMethod('email');
 
       // Resolve where to go now the email is verified. Shared with the Google
-      // sign-in handler (auth_post_verify_route.dart) so the §7.2a account-scoping
-      // and shared-till PIN rules live in one place and can't drift between the
-      // two entry points. LoginRoute passes the OTP-authenticated user as
-      // presetUser so the PIN screen binds THIS identity, not the last device
-      // user (the wrong-user-PIN bug on a shared till).
+      // sign-in handler (auth_post_verify_route.dart) so the §7.2a
+      // account-scoping rules live in one place and can't drift between the
+      // two entry points.
       final route = await resolvePostVerifyRoute(
         auth,
         widget.email,
-        isPinReset: widget.isPinReset,
         confirmClearOtherBusiness: confirmClearOtherBusiness,
       );
       if (!mounted) return;
+
+      // #812: no PIN — a known user goes straight into the shop. Binding the
+      // user regenerates the navigator (main.dart), which replaces this screen.
+      if (route is SignedInRoute) {
+        auth.completeSignIn(route.user);
+        return;
+      }
 
       final Widget? page = switch (route) {
         ExistingAccountRoute(:final account) => ExistingAccountScreen(
@@ -244,8 +244,8 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen> {
           widget.createBusinessIntent
               ? CeoSignUpScreen(verifiedEmail: widget.email)
               : NoAccountFoundScreen(email: widget.email),
-        LoginRoute(:final user) => LoginScreen(presetUser: user),
-        CreatePinRoute(:final user) => CreatePinScreen(user: user),
+        // Handled above.
+        SignedInRoute() => null,
         // #285: both leave the phone exactly as it was found. Drop back to the
         // code entry state rather than routing anywhere.
         AccountLookupUnavailableRoute() => null,

@@ -24,7 +24,7 @@
 //   - the scanner stays open (#319): each read shows its outcome over the
 //     live camera (never paused, so the torch stays on); other reads are
 //     ignored meanwhile; the same code is ignored for the debounce window; the running count follows the cart; ✕ / back close it
-//     with the cart intact; backgrounding stops the camera; a lock closes it.
+//     with the cart intact; backgrounding stops the camera; a sign-out closes it.
 //
 // The button is placed in a bare Scaffold's FAB slot (its real home, ADR 0017)
 // with an empty cart to prove it is not gated on the cart.
@@ -1600,7 +1600,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 1));
     });
 
-    testWidgets('the app locking closes the scanner and stops the camera', (
+    testWidgets('the user signing out closes the scanner and stops the camera', (
       tester,
     ) async {
       final a = await seedProduct(name: 'Star Lager', barcode: 'BC-A');
@@ -1612,12 +1612,13 @@ void main() {
         ),
       );
 
-      // Locks with the quantity sheet open over the scanner.
+      // Signs out with the quantity sheet open over the scanner (#812: the
+      // app never locks any more; a logout is what drops the user).
       await scan(tester);
       expect(find.byType(EditItemModal), findsOneWidget);
       final camera = scanner.camera!;
 
-      auth.lockApp();
+      auth.logout();
       await tester.pumpAndSettle();
 
       expect(camera.stopCount, greaterThan(0));

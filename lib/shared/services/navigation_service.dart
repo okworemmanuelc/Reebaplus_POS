@@ -425,9 +425,7 @@ class NavigationService {
     allStoresChosen.value = false;
   }
 
-  /// Called on logout — removes all store restrictions (in memory only). The
-  /// lock path (`AuthService.lockApp`) deliberately does NOT call this (#653):
-  /// the picked store survives a lock.
+  /// Called on logout — removes all store restrictions (in memory only).
   void clearStoreLock() {
     storeLocked.value = false;
     lockedStoreId.value = null;

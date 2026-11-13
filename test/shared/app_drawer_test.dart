@@ -462,7 +462,8 @@ void main() {
       expect(pro.tone, TagPillTone.solidInfo);
       final role = tester.widget<TagPill>(find.widgetWithText(TagPill, 'CEO'));
       expect(role.tone, TagPillTone.info);
-      expect(find.byKey(AppDrawerKeys.lock), findsOneWidget);
+      // #812: no PIN, so no Lock button.
+      expect(find.byTooltip('Lock app'), findsNothing);
       await disposeScreen(tester);
     });
 
@@ -516,8 +517,6 @@ void main() {
             findsNothing,
           );
           expect(find.byTooltip('Close'), findsNothing);
-          // The lock button stays.
-          expect(find.byKey(AppDrawerKeys.lock), findsOneWidget);
           await disposeScreen(tester);
         },
       );

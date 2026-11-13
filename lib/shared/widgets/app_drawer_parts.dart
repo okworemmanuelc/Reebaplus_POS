@@ -39,7 +39,6 @@ abstract final class AppDrawerKeys {
   static const list = Key('drawer-list');
   static const footer = Key('drawer-footer');
   static const profileTile = Key('drawer-profile-tile');
-  static const lock = Key('drawer-lock');
   static const syncBanner = Key('drawer-sync-banner');
   static const storePicker = Key('drawer-store-picker');
   static const display = Key('drawer-display');
@@ -63,7 +62,6 @@ class DrawerHeaderBlock extends StatelessWidget {
     required this.tags,
     required this.terminalLabel,
     required this.onOpenProfile,
-    required this.onLock,
     this.banner,
   });
 
@@ -75,9 +73,6 @@ class DrawerHeaderBlock extends StatelessWidget {
   final List<DrawerTag> tags;
   final String terminalLabel;
   final VoidCallback onOpenProfile;
-
-  /// Null hides the lock button (nobody is signed in).
-  final VoidCallback? onLock;
 
   /// The sync banner, when there is one to show.
   final Widget? banner;
@@ -125,10 +120,6 @@ class DrawerHeaderBlock extends StatelessWidget {
                 ],
               ),
             ),
-            if (onLock != null) ...[
-              SizedBox(width: context.getRSize(4)),
-              _LockButton(onPressed: onLock!),
-            ],
           ],
         ),
         SizedBox(height: gap),
@@ -223,47 +214,6 @@ class _BusinessTile extends StatelessWidget {
 }
 
 /// The lock button: a bordered square on Surface 2.
-class _LockButton extends StatelessWidget {
-  const _LockButton({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-    final edge = context
-        .getRSize(48)
-        .clamp(kMinInteractiveDimension, double.infinity);
-    final radius = BorderRadius.circular(AppSpacing.borderRadiusL);
-    return Tooltip(
-      message: 'Lock app',
-      child: SizedBox(
-        key: AppDrawerKeys.lock,
-        width: edge,
-        height: edge,
-        child: Material(
-          color: t.inputDecorationTheme.fillColor ?? t.colorScheme.surface,
-          shape: RoundedRectangleBorder(
-            borderRadius: radius,
-            side: BorderSide(color: t.dividerColor),
-          ),
-          child: InkWell(
-            borderRadius: radius,
-            onTap: onPressed,
-            child: Center(
-              child: AppIcon(
-                AppIcons.lock,
-                filled: true,
-                size: context.getRSize(22),
-                color: t.colorScheme.onSurface,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 /// How serious the sync banner is: amber for records waiting, red once
 /// something failed.

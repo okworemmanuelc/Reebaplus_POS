@@ -18,7 +18,6 @@ import 'package:reebaplus_pos/core/industry/lexicon.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/providers/business_scoped_stream.dart';
 import 'package:reebaplus_pos/core/providers/mirror_notifier.dart';
-import 'package:reebaplus_pos/core/services/biometric_service.dart';
 import 'package:reebaplus_pos/core/services/business_logo_service.dart';
 import 'package:reebaplus_pos/core/services/barcode_catalogue_service.dart';
 import 'package:reebaplus_pos/core/services/product_gallery_images.dart';
@@ -412,9 +411,6 @@ final deliveryReceiptServiceProvider =
 // ── Stateless services ─────────────────────────────────────────────────────
 final printerServiceProvider = Provider<PrinterService>((ref) {
   return PrinterService();
-});
-final biometricServiceProvider = Provider<BiometricService>((ref) {
-  return BiometricService();
 });
 final reorderAlertServiceProvider = Provider<ReorderAlertService>((ref) {
   return ReorderAlertService(ref.read(databaseProvider).stockLedgerDao);

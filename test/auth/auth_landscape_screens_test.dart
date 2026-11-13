@@ -15,15 +15,12 @@ import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
-import 'package:reebaplus_pos/features/auth/widgets/pin_keypad.dart';
 
 import 'package:reebaplus_pos/features/auth/screens/access_granted_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/ceo_sign_up_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/coming_soon_screen.dart';
-import 'package:reebaplus_pos/features/auth/screens/create_pin_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/email_entry_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/existing_account_screen.dart';
-import 'package:reebaplus_pos/features/auth/screens/login_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/no_account_found_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/otp_verification_screen.dart';
 import 'package:reebaplus_pos/features/auth/screens/staff_sign_up_screen.dart';
@@ -176,37 +173,6 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
     }
   }
-
-  group('Phase 1 - LoginScreen responsive layout', () {
-    for (final (name, size) in [
-      ('pixel7Landscape', pixel7Landscape),
-      ('androidCompactLandscape', androidCompactLandscape),
-      ('pixel7Portrait', pixel7Portrait),
-    ]) {
-      testWidgets('renders cleanly without overflow at $name', (tester) async {
-        await pumpScreen(tester, LoginScreen(presetUser: testUser), size);
-        expect(tester.takeException(), isNull);
-
-        // Verify key elements render
-        expect(find.text('Welcome back, Alice'), findsOneWidget);
-        expect(find.byType(PinKeypad), findsOneWidget);
-      });
-    }
-  });
-
-  group('Phase 1 - CreatePinScreen responsive layout', () {
-    for (final (name, size) in [
-      ('pixel7Landscape', pixel7Landscape),
-      ('androidCompactLandscape', androidCompactLandscape),
-      ('pixel7Portrait', pixel7Portrait),
-    ]) {
-      testWidgets('renders cleanly without overflow at $name', (tester) async {
-        await pumpScreen(tester, CreatePinScreen(user: testUser, isNewBusinessSetup: false), size);
-        expect(tester.takeException(), isNull);
-        expect(find.text('Create a PIN'), findsOneWidget);
-      });
-    }
-  });
 
   group('Phase 1 - CeoSignUpScreen responsive layout', () {
     for (final (name, size) in [

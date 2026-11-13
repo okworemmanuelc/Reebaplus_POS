@@ -12,12 +12,12 @@ import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/widgets/app_button.dart';
-import 'package:reebaplus_pos/shared/widgets/pin_dialog.dart';
+import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 
 /// CEO-only "Delete Business & Account" confirmation (master plan §10.3 — the
 /// Danger Zone). Irreversible. A prominent warning makes clear the action is
-/// permanent and cannot be undone; the CEO confirms by re-entering their PIN —
-/// the PIN is the confirmation gate. Online-only — the
+/// permanent and cannot be undone; the CEO confirms by typing the business
+/// name, which unlocks the Delete button (#812: no PIN). Online-only — the
 /// [AuthService.deleteBusinessAndAccount] flow blocks when offline and only
 /// wipes the device after the cloud confirms the hard delete.
 class DeleteBusinessScreen extends ConsumerStatefulWidget {
@@ -30,24 +30,15 @@ class DeleteBusinessScreen extends ConsumerStatefulWidget {
 
 class _DeleteBusinessScreenState extends ConsumerState<DeleteBusinessScreen> {
   bool _deleting = false;
+  final TextEditingController _nameController = TextEditingController();
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
 
   Future<void> _confirmDelete(String businessId) async {
-    // The confirmation gate: re-enter the CEO's PIN. PinDialog returns the
-    // matching user.
-    final approver = await PinDialog.show(
-      context,
-      title: 'Re-enter your PIN to delete',
-    );
-    if (approver == null || !mounted) return; // cancelled / wrong PIN
-
-    // The PIN must belong to the CEO performing the deletion — on a shared
-    // till another staff member's PIN must not authorise this.
-    final currentUser = ref.read(authProvider).currentUser;
-    if (currentUser == null || approver.id != currentUser.id) {
-      _showError('Re-enter your own PIN to confirm.');
-      return;
-    }
-
     setState(() => _deleting = true);
     try {
       await ref
@@ -65,6 +56,12 @@ class _DeleteBusinessScreenState extends ConsumerState<DeleteBusinessScreen> {
       _showError('Could not delete your business. Please try again.');
     }
   }
+
+  /// Trimmed and case-insensitive, so a stray space or capital letter does
+  /// not block the owner; any other difference keeps the button locked.
+  bool _nameMatches(String businessName) =>
+      _nameController.text.trim().toLowerCase() ==
+      businessName.trim().toLowerCase();
 
   void _showError(String message) {
     if (!mounted) return;
@@ -152,21 +149,29 @@ class _DeleteBusinessScreenState extends ConsumerState<DeleteBusinessScreen> {
             ),
             SizedBox(height: context.getRSize(28)),
 
-            // ── Delete (opens the PIN confirmation gate) ────────────────
+            // ── Confirmation gate: type the business name (#812) ────────
+            Text(
+              'Type the business name to confirm.',
+              style: context.regularStyle(12).copyWith(color: muted),
+            ),
+            SizedBox(height: context.getRSize(8)),
+            AppInput(
+              key: const Key('delete-business-name-input'),
+              controller: _nameController,
+              hintText: business.name,
+              autocorrect: false,
+              enabled: !_deleting,
+              onChanged: (_) => setState(() {}),
+            ),
+            SizedBox(height: context.getRSize(16)),
             AppButton(
               text: 'Delete Business',
               variant: AppButtonVariant.danger,
               icon: AppIcons.deleteForever,
               isLoading: _deleting,
-              onPressed: _deleting ? null : () => _confirmDelete(business.id),
-            ),
-            SizedBox(height: context.getRSize(12)),
-            Center(
-              child: Text(
-                'You will be asked for your PIN to confirm.',
-                style: context.regularStyle(12).copyWith(color: muted),
-                textAlign: TextAlign.center,
-              ),
+              onPressed: _deleting || !_nameMatches(business.name)
+                  ? null
+                  : () => _confirmDelete(business.id),
             ),
           ],
         ),
