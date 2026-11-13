@@ -1,14 +1,12 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/utils/perf_log.dart';
+import 'package:reebaplus_pos/core/utils/share_file.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:screenshot/screenshot.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:path_provider/path_provider.dart';
 
 import 'package:reebaplus_pos/core/crates/crate_exchange.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
@@ -1630,15 +1628,13 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         return;
       }
 
-      final dir = await getTemporaryDirectory();
-      final file = File(
-        '${dir.path}/reebaplus_pos_receipt_${DateTime.now().millisecondsSinceEpoch}.png',
+      await shareFileBytes(
+        bytes: imageBytes,
+        fileName:
+            'reebaplus_pos_receipt_${DateTime.now().millisecondsSinceEpoch}.png',
+        mimeType: 'image/png',
+        text: 'Reebaplus POS Receipt',
       );
-      await file.writeAsBytes(imageBytes);
-
-      await Share.shareXFiles([
-        XFile(file.path),
-      ], text: 'Reebaplus POS Receipt');
     } catch (e) {
       if (!mounted) return;
       AppNotification.showError(context, 'Error sharing receipt: $e');

@@ -1,7 +1,7 @@
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/settings/vat_settings.dart';
+import 'package:reebaplus_pos/shared/widgets/local_photo_image.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/name_case.dart';
@@ -130,7 +130,7 @@ class ReceiptWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     // Receipts always use black-on-white regardless of app theme.
     final primary = Theme.of(context).colorScheme.primary;
-    final hasLogo = logoPath != null && File(logoPath!).existsSync();
+    final hasLogo = logoPath != null && photoRefExists(logoPath);
     final name = businessName?.trim() ?? '';
     final contact = [
       if (businessPhone != null && businessPhone!.trim().isNotEmpty)
@@ -192,7 +192,7 @@ class ReceiptWidget extends StatelessWidget {
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: Image.file(File(logoPath!), fit: BoxFit.contain),
+                  child: LocalPhotoImage(logoPath!, fit: BoxFit.contain),
                 ),
               ),
             ),

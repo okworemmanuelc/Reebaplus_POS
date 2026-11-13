@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -29,6 +30,10 @@ class BusinessLogoService {
 
   static const _bucket = 'business-logos';
   static const _maxDimension = 512;
+
+  /// Browser only (#812): the browser keeps no logo file, so the public url of
+  /// a logo saved this session stands in for the device-copy path.
+  final Map<String, String> _webUrls = {};
 
   // ── Pick + resize ──────────────────────────────────────────────────────────
 
@@ -64,10 +69,12 @@ class BusinessLogoService {
     required Uint8List bytes,
   }) async {
     try {
-      // (a) Local cache.
-      final path = await _localPath(businessId);
-      await File(path).parent.create(recursive: true);
-      await File(path).writeAsBytes(bytes, flush: true);
+      // (a) Local cache (the browser keeps no files, #812).
+      if (!kIsWeb) {
+        final path = await _localPath(businessId);
+        await File(path).parent.create(recursive: true);
+        await File(path).writeAsBytes(bytes, flush: true);
+      }
 
       // (b) Upload to Storage.
       final objectPath = '$businessId.jpg';
@@ -85,6 +92,7 @@ class BusinessLogoService {
 
       // (c) Public URL.
       final url = _client.storage.from(_bucket).getPublicUrl(objectPath);
+      if (kIsWeb) _webUrls[businessId] = url;
       return Result.ok(url);
     } on StorageException catch (e) {
       return Result.err(AppError.network('Storage upload failed: ${e.message}'));
@@ -97,10 +105,12 @@ class BusinessLogoService {
 
   /// Returns the expected local file path for [businessId] — does not
   /// check whether the file exists.
-  Future<String> localPathFor(String businessId) => _localPath(businessId);
+  Future<String> localPathFor(String businessId) async =>
+      kIsWeb ? (_webUrls[businessId] ?? '') : _localPath(businessId);
 
   /// Returns the local file path if the cached file exists, otherwise null.
   Future<String?> localPathIfExists(String businessId) async {
+    if (kIsWeb) return _webUrls[businessId];
     final path = await _localPath(businessId);
     return File(path).existsSync() ? path : null;
   }
@@ -111,6 +121,8 @@ class BusinessLogoService {
     required String businessId,
     required String? logoUrl,
   }) async {
+    // The browser shows the cloud url itself (#812).
+    if (kIsWeb) return (logoUrl ?? '').isEmpty ? null : logoUrl;
     final path = await _localPath(businessId);
     if (File(path).existsSync()) return path;
     if (logoUrl == null || logoUrl.isEmpty) return null;
@@ -136,9 +148,10 @@ class BusinessLogoService {
   /// Deletes the local cache file and the Storage object.
   Future<Result<void, AppError>> clear(String businessId) async {
     try {
-      final path = await _localPath(businessId);
-      final file = File(path);
-      if (file.existsSync()) await file.delete();
+      if (!kIsWeb) {
+        final file = File(await _localPath(businessId));
+        if (file.existsSync()) await file.delete();
+      }
 
       await _client.storage
           .from(_bucket)

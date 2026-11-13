@@ -1,8 +1,8 @@
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
+import 'package:reebaplus_pos/shared/widgets/local_photo_image.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/design_tokens.dart';
@@ -117,8 +117,8 @@ class ProductTile extends StatelessWidget {
         color: visual.tint,
         child: photoPath == null
             ? fallback
-            : Image.file(
-                File(photoPath!),
+            : LocalPhotoImage(
+                photoPath!,
                 fit: BoxFit.cover,
                 width: double.infinity,
                 height: double.infinity,

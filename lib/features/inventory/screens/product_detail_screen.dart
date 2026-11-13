@@ -1,8 +1,8 @@
 import 'dart:math' as math;
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/utils/perf_log.dart';
+import 'package:reebaplus_pos/shared/widgets/local_photo_image.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/shared/utils/quantity_input.dart';
 import 'package:flutter/services.dart';
@@ -691,7 +691,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       hasCover: hasCover,
       cover: coverPath == null || coverPath.isEmpty
           ? null
-          : Image.file(File(coverPath), fit: BoxFit.cover,
+          : LocalPhotoImage(coverPath, fit: BoxFit.cover,
               errorBuilder: (_, __, ___) => placeholder()),
       photos: urls,
       maxPhotos: kMaxProductPhotos,
@@ -701,7 +701,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
           final path = ref.watch(galleryPhotoPathProvider(url)).valueOrNull;
           return path == null
               ? placeholder()
-              : Image.file(File(path), fit: BoxFit.cover,
+              : LocalPhotoImage(path, fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) => placeholder());
         },
       ),

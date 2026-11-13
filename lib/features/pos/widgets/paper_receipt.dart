@@ -1,7 +1,7 @@
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/core/settings/vat_settings.dart';
+import 'package:reebaplus_pos/shared/widgets/local_photo_image.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/utils/name_case.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
@@ -169,7 +169,7 @@ class PaperReceipt extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasLogo = logoPath != null && File(logoPath!).existsSync();
+    final hasLogo = logoPath != null && photoRefExists(logoPath);
     final name = businessName?.trim() ?? '';
     final addr = storeAddress?.trim() ?? '';
     final phone = businessPhone?.trim() ?? '';
@@ -222,7 +222,7 @@ class PaperReceipt extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: _ink, width: 1.5),
                   ),
-                  child: Image.file(File(logoPath!), fit: BoxFit.contain),
+                  child: LocalPhotoImage(logoPath!, fit: BoxFit.contain),
                 ),
               ),
             if (name.isNotEmpty)

@@ -1,16 +1,14 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math';
 import 'package:drift/drift.dart' show innerJoin;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
+import 'package:reebaplus_pos/core/utils/share_file.dart';
 import 'package:reebaplus_pos/shared/utils/quantity_input.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:screenshot/screenshot.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/features/customers/data/services/customer_service.dart';
 import 'package:reebaplus_pos/shared/services/printer_service.dart';
@@ -1230,14 +1228,13 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
       );
       if (imageBytes == null) return;
 
-      final tempDir = await getTemporaryDirectory();
-      final file = File('${tempDir.path}/receipt_$orderNumber.png');
-      await file.writeAsBytes(imageBytes);
-
       if (!ctx.mounted) return;
-      await Share.shareXFiles([
-        XFile(file.path),
-      ], subject: 'Receipt #$orderNumber');
+      await shareFileBytes(
+        bytes: imageBytes,
+        fileName: 'receipt_$orderNumber.png',
+        mimeType: 'image/png',
+        subject: 'Receipt #$orderNumber',
+      );
     } catch (e) {
       if (ctx.mounted) AppNotification.showError(ctx, 'Error sharing: $e');
     }

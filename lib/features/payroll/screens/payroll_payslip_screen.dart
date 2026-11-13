@@ -1,13 +1,11 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:screenshot/screenshot.dart';
-import 'package:share_plus/share_plus.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/core/utils/share_file.dart';
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
@@ -165,12 +163,12 @@ class _PayrollPayslipScreenState extends ConsumerState<PayrollPayslipScreen> {
     try {
       final image = await _shot.capture(pixelRatio: 3.0);
       if (image == null) return;
-      final dir = await getTemporaryDirectory();
-      final file = File(
-        '${dir.path}/payslip_${data.salaryMonth}_${widget.statementId}.png',
+      await shareFileBytes(
+        bytes: image,
+        fileName: 'payslip_${data.salaryMonth}_${widget.statementId}.png',
+        mimeType: 'image/png',
+        text: 'Payslip',
       );
-      await file.writeAsBytes(image);
-      await Share.shareXFiles([XFile(file.path)], text: 'Payslip');
     } catch (e) {
       if (mounted) AppNotification.showError(context, 'Share failed: $e');
     }

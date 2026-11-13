@@ -1,8 +1,8 @@
 import 'dart:math' as dm;
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
+import 'package:reebaplus_pos/shared/widgets/local_photo_image.dart';
 import 'package:flutter/services.dart';
 
 import 'package:reebaplus_pos/core/listings/listing_content.dart';
@@ -443,8 +443,8 @@ class ProductHeroCard extends StatelessWidget {
     );
     final path = imagePath;
     if (path == null) return fallback;
-    return Image.file(
-      File(path),
+    return LocalPhotoImage(
+      path,
       fit: BoxFit.cover,
       errorBuilder: (_, __, ___) => fallback,
     );

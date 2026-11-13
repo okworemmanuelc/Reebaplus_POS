@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 
 import 'package:reebaplus_pos/core/utils/logger.dart';
@@ -57,7 +58,7 @@ abstract class UsbPrinterChannel {
 class MethodChannelUsbPrinterChannel implements UsbPrinterChannel {
   MethodChannelUsbPrinterChannel({MethodChannel? channel, bool? isAndroid})
     : _channel = channel ?? const MethodChannel('reebaplus/usb_printer'),
-      _isAndroid = isAndroid ?? Platform.isAndroid;
+      _isAndroid = isAndroid ?? (!kIsWeb && Platform.isAndroid);
 
   final MethodChannel _channel;
   final bool _isAndroid;

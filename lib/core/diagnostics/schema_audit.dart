@@ -3,12 +3,17 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/utils/logger.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
+
+// `Platform` throws in the browser (#812).
+String get _osName => kIsWeb ? 'web' : Platform.operatingSystem;
+String get _osVersion => kIsWeb ? 'web' : Platform.operatingSystemVersion;
 
 /// One row read from `migration_events` (or the flat-file mirror written by
 /// MigrationLogger when a critical error rolls back its in-DB write).
@@ -110,8 +115,8 @@ class SchemaAuditResult {
     'schema_version': schemaVersion,
     'ran_at': ranAt.toIso8601String(),
     'fatal': fatal,
-    'platform': Platform.operatingSystem,
-    'os_version': Platform.operatingSystemVersion,
+    'platform': _osName,
+    'os_version': _osVersion,
     'device_user_id': deviceUserId,
     'business_id': businessId,
     'missing_tables': missingTables.map((t) => t.toJson()).toList(),
@@ -387,6 +392,8 @@ class SchemaAudit {
         recentMigrationEvents.isEmpty) {
       return null;
     }
+    // No documents folder in the browser (#812): nothing to write there.
+    if (kIsWeb) return null;
     try {
       final docsDir = await getApplicationDocumentsDirectory();
       final dir = Directory(p.join(docsDir.path, 'diagnostics'));
@@ -400,8 +407,8 @@ class SchemaAudit {
         'schema_version': schemaVersion,
         'ran_at': DateTime.now().toIso8601String(),
         'fatal': fatal,
-        'platform': Platform.operatingSystem,
-        'os_version': Platform.operatingSystemVersion,
+        'platform': _osName,
+        'os_version': _osVersion,
         'device_user_id': deviceUserId,
         'business_id': businessId,
         'missing_tables': missingTables.map((t) => t.toJson()).toList(),

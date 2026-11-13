@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:reebaplus_pos/core/database/app_database.dart';
+import 'package:reebaplus_pos/shared/widgets/local_photo_image.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
@@ -310,7 +311,7 @@ class _LoadProductPickerScreenState
                                     : StockLevel.ok,
                                 categoryName:
                                     categoryNames[p.product.categoryId],
-                                photoPath: p.product.imagePath,
+                                photoPath: productPhotoRef(imagePath: p.product.imagePath, imageUrl: p.product.imageUrl),
                                 inCartQty: onLoad,
                                 onTap: () => _addOne(p),
                                 onLongPress: () => _typeQuantity(p),

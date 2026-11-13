@@ -1,12 +1,10 @@
 import 'dart:convert';
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
-
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
+import 'package:reebaplus_pos/core/utils/share_file.dart';
 import 'package:reebaplus_pos/core/storefront/shopper_models.dart';
 import 'package:reebaplus_pos/core/storefront/shopper_service.dart';
 import 'package:reebaplus_pos/core/storefront/shopper_session.dart';
@@ -40,12 +38,14 @@ final shopperOrdersProvider = FutureProvider.autoDispose<List<ShopperOrder>>((
 typedef ShopperExportSharer = Future<void> Function(Map<String, Object?> data);
 
 Future<void> shareShopperExport(Map<String, Object?> data) async {
-  final dir = await getTemporaryDirectory();
-  final file = File('${dir.path}/my-reebaplus-data.json');
-  await file.writeAsString(const JsonEncoder.withIndent('  ').convert(data));
-  await Share.shareXFiles([
-    XFile(file.path, mimeType: 'application/json'),
-  ], subject: 'My Reebaplus data');
+  await shareFileBytes(
+    bytes: Uint8List.fromList(
+      utf8.encode(const JsonEncoder.withIndent('  ').convert(data)),
+    ),
+    fileName: 'my-reebaplus-data.json',
+    mimeType: 'application/json',
+    subject: 'My Reebaplus data',
+  );
 }
 
 final shopperExportSharerProvider = Provider<ShopperExportSharer>(

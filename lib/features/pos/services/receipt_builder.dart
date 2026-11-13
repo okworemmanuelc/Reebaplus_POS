@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:screenshot/screenshot.dart';
@@ -67,7 +68,7 @@ class ThermalReceiptService {
     final compact = receiptSize == ReceiptSize.compact;
     // Compact (#676) always prints as text, whatever the print style says.
     if (printStyle == ReceiptPrintStyle.text || compact || slipTitle != null) {
-      final hasLogo = logoPath != null && File(logoPath).existsSync();
+      final hasLogo = logoPath != null && !kIsWeb && File(logoPath).existsSync();
       final lines = buildReceiptLines(
         paperSize: paperSize,
         orderId: orderId,

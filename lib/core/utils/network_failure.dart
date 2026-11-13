@@ -17,6 +17,7 @@ bool isNetworkFailure(Object error) {
   }
   final text = error.toString().toLowerCase();
   return text.contains('failed host lookup') ||
+      text.contains('failed to fetch') || // the browser's name for it (#812)
       text.contains('connection closed') ||
       text.contains('connection refused') ||
       text.contains('connection reset') ||

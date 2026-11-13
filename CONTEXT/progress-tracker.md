@@ -7,6 +7,11 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #812 S3: browser runtime guards (2026-11-13, branch `feat/812-s3-browser-guards`)
+- Browser skips or replaces phone-only code: printers are quiet no-ops (Receipt printer entry hidden in Settings); product photos, gallery and logo use the cloud URL with no on-disk copy and upload straight to Storage; CSV / receipt / payslip / data-export go through new `shareFileBytes` (share sheet on phones, browser download on web); device registry reports `web`; `schema_audit` no longer reads `Platform`; `LocalPhotoFiles.deleteAll` is safe on web.
+- New: `lib/shared/widgets/local_photo_image.dart`, `lib/core/utils/share_file*.dart`; `web` added to pubspec (was transitive). Phones and tablets behave as before.
+- Not touched (S2's files): see PR body. Print buttons on web show "Bluetooth permissions denied" instead of a clearer message.
+- Tests: printer, photo, csv, settings, receipt, golden files for the changed code (ran only those).
 ### Issue #812 S1: browser database (2026-11-13, branch `feat/812-s1-browser-database`)
 - `flutter build web` now succeeds. `AppDatabase` opens through `local_database_platform.dart` (conditional export): phones/tablets use the unchanged native open; the browser opens Drift with `WasmDatabase.open` using `web/sqlite3.wasm` (sqlite3 3.1.7) and `web/drift_worker.js` (drift 2.32.0).
 - Web paths without `dart:io` files: legacy-file wipe skipped, iCloud exclusion skipped, off-switch watcher not started (`kIsWeb`). `kDbBackgroundWorkerConfigKey` moved to `db_worker_switch_watcher.dart`.

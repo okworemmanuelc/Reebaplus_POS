@@ -1,11 +1,11 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
+import 'package:reebaplus_pos/core/utils/share_file.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
@@ -20,8 +20,6 @@ import 'package:reebaplus_pos/shared/widgets/app_input.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/icon_tile.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/tag_pill.dart';
 import 'package:screenshot/screenshot.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 
 import 'package:reebaplus_pos/core/utils/number_format.dart';
@@ -1895,16 +1893,14 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         return;
       }
 
-      final dir = await getTemporaryDirectory();
       final stamp = reshareDate != null ? 'reshare' : 'reprint';
-      final file = File(
-        '${dir.path}/reebaplus_pos_${stamp}_${order.id}_${DateTime.now().millisecondsSinceEpoch}.png',
+      await shareFileBytes(
+        bytes: imageBytes,
+        fileName:
+            'reebaplus_pos_${stamp}_${order.id}_${DateTime.now().millisecondsSinceEpoch}.png',
+        mimeType: 'image/png',
+        text: 'Reebaplus POS Receipt Reprint #${order.id}',
       );
-      await file.writeAsBytes(imageBytes);
-
-      await Share.shareXFiles([
-        XFile(file.path),
-      ], text: 'Reebaplus POS Receipt Reprint #${order.id}');
       _logReprint(order.id.toString());
     } catch (e) {
       if (context.mounted) {
