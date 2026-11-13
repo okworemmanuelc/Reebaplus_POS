@@ -30,42 +30,45 @@ void main() {
   tearDown(() => env.dispose());
 
   group('Subscription page', () {
-    testWidgets('shows the plan, status and renewal; paywall is non-Android here', (
+    testWidgets(
+      'shows the plan, status and renewal; paywall is non-Android here',
+      (tester) async {
+        await seedSubscription(
+          env,
+          plan: 'basic',
+          periodEnd: DateTime(2099, 4, 14),
+        );
+        await pumpSettingsPage(
+          tester,
+          env: env,
+          screen: const SubscriptionScreen(),
+          size: const Size(390, 844),
+          overrides: [
+            billingSupportedProvider.overrideWithValue(false),
+            currentBusinessSubscriptionProvider.overrideWithValue(
+              SubscriptionAccess.active,
+            ),
+          ],
+        );
+        expect(find.text('Basic plan'), findsOneWidget);
+        expect(find.text('ACTIVE'), findsOneWidget);
+        expect(find.text('Renews'), findsOneWidget);
+        expect(find.text('14 Apr 2099'), findsOneWidget);
+        expect(find.byKey(const Key('paywall-non-android')), findsOneWidget);
+        expect(find.text('Current plan: Basic'), findsOneWidget);
+        // Read-only: the cloud-owned columns are untouched.
+        final b = await (env.db.select(
+          env.db.businesses,
+        )..where((t) => t.id.equals(env.businessId))).getSingle();
+        expect(b.currentPeriodEnd, DateTime(2099, 4, 14));
+        expect(b.subscriptionPlan, 'basic');
+        await disposeScreen(tester);
+      },
+    );
+
+    testWidgets('an ended trial shows FREE PLAN (never locked, #586)', (
       tester,
     ) async {
-      await seedSubscription(
-        env,
-        plan: 'basic',
-        periodEnd: DateTime(2099, 4, 14),
-      );
-      await pumpSettingsPage(
-        tester,
-        env: env,
-        screen: const SubscriptionScreen(),
-        size: const Size(390, 844),
-        overrides: [
-          billingSupportedProvider.overrideWithValue(false),
-          currentBusinessSubscriptionProvider.overrideWithValue(
-            SubscriptionAccess.active,
-          ),
-        ],
-      );
-      expect(find.text('Basic plan'), findsOneWidget);
-      expect(find.text('ACTIVE'), findsOneWidget);
-      expect(find.text('Renews'), findsOneWidget);
-      expect(find.text('14 Apr 2099'), findsOneWidget);
-      expect(find.byKey(const Key('paywall-non-android')), findsOneWidget);
-      expect(find.text('Current plan: Basic'), findsOneWidget);
-      // Read-only: the cloud-owned columns are untouched.
-      final b = await (env.db.select(
-        env.db.businesses,
-      )..where((t) => t.id.equals(env.businessId))).getSingle();
-      expect(b.currentPeriodEnd, DateTime(2099, 4, 14));
-      expect(b.subscriptionPlan, 'basic');
-      await disposeScreen(tester);
-    });
-
-    testWidgets('an ended trial shows FREE PLAN (never locked, #586)', (tester) async {
       await seedSubscription(env, trialEnds: DateTime(2026, 2, 1));
       await pumpSettingsPage(
         tester,
@@ -266,30 +269,42 @@ void main() {
   });
 
   group('Delete Business', () {
-    testWidgets('shows the warning; the button asks for the PIN', (
-      tester,
-    ) async {
-      await pumpSettingsPage(
-        tester,
-        env: env,
-        screen: const DeleteBusinessScreen(),
-        size: const Size(390, 844),
-        grantedKeys: const {'settings.delete_business'},
-      );
-      expect(
-        find.text('This is permanent and cannot be undone'),
-        findsOneWidget,
-      );
-      expect(find.textContaining('Stallion Global'), findsWidgets);
-      expect(
-        find.text('You will be asked for your PIN to confirm.'),
-        findsOneWidget,
-      );
-      await tester.tap(find.widgetWithText(AppButton, 'Delete Business'));
-      await tester.pumpAndSettle();
-      expect(find.text('Re-enter your PIN to delete'), findsOneWidget);
-      await disposeScreen(tester);
-    });
+    testWidgets(
+      'shows the warning; Delete unlocks only when the name is typed',
+      (tester) async {
+        await pumpSettingsPage(
+          tester,
+          env: env,
+          screen: const DeleteBusinessScreen(),
+          size: const Size(390, 844),
+          grantedKeys: const {'settings.delete_business'},
+        );
+        expect(
+          find.text('This is permanent and cannot be undone'),
+          findsOneWidget,
+        );
+        expect(find.textContaining('Stallion Global'), findsWidgets);
+        expect(find.text('Type the business name to confirm.'), findsOneWidget);
+
+        AppButton deleteButton() => tester.widget<AppButton>(
+          find.widgetWithText(AppButton, 'Delete Business'),
+        );
+        final input = find.descendant(
+          of: find.byKey(const Key('delete-business-name-input')),
+          matching: find.byType(EditableText),
+        );
+
+        expect(deleteButton().onPressed, isNull);
+        await tester.enterText(input, 'Stallion');
+        await tester.pump();
+        expect(deleteButton().onPressed, isNull);
+        // Case and surrounding spaces do not matter.
+        await tester.enterText(input, '  stallion global ');
+        await tester.pump();
+        expect(deleteButton().onPressed, isNotNull);
+        await disposeScreen(tester);
+      },
+    );
 
     testWidgets('hidden without settings.delete_business', (tester) async {
       await pumpSettingsPage(

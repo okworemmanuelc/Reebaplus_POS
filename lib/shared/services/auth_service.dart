@@ -19,7 +19,6 @@ import 'package:reebaplus_pos/core/services/first_load_marker_service.dart';
 import 'package:reebaplus_pos/core/services/local_photo_files.dart';
 import 'package:reebaplus_pos/core/services/pending_photo_uploads.dart';
 import 'package:reebaplus_pos/core/services/supabase_sync_service.dart';
-import 'package:reebaplus_pos/shared/services/pin_hasher.dart';
 
 /// Route to show after login instead of the default MainLayout.
 enum PostLoginRoute { none, successDashboard, accessGranted }
@@ -149,8 +148,8 @@ class AuthService extends ValueNotifier<UserData?> {
     this.googleWebClientId =
         '807123945489-048eug40i2jn7novlblidott50sqcl7b.apps.googleusercontent.com',
     PendingPhotoUploads? pendingPhotos,
-  })  : _pendingPhotos = pendingPhotos,
-        super(null) {
+  }) : _pendingPhotos = pendingPhotos,
+       super(null) {
     // Hand the database a thin closure over `value` so DAOs that mix in
     // BusinessScopedDao always read the current session's businessId
     // (auto-tracks login/logout through the ValueNotifier).
@@ -243,81 +242,6 @@ class AuthService extends ValueNotifier<UserData?> {
   /// without a JWT — every cloud write would otherwise pile up in the queue
   /// with `pushPending` skipping on "no auth session".
   bool get hasSupabaseSession => _supabase.auth.currentUser != null;
-
-  /// Returns every user whose stored PBKDF2 hash matches [pin]. Sentinel /
-  /// placeholder rows (no hash yet) never match — they must go through
-  /// [setUserPin] first.
-  Future<List<UserData>> getUsersByPin(
-    String pin, {
-    String? email,
-    String? userId,
-  }) async {
-    final query = _db.select(_db.users);
-    // Scope the candidate set as tightly as the caller knows the identity.
-    // When the signer was already identified (device user or post-OTP preset),
-    // pin to their exact user id (globally unique) so a different business's
-    // row that happens to share this email — or any other staff who shares
-    // this PIN — can never match. Fall back to email only when no identity is
-    // known. See master plan §7.2a.
-    if (userId != null && userId.isNotEmpty) {
-      query.where((u) => u.id.equals(userId));
-    } else if (email != null && email.isNotEmpty) {
-      query.where((u) => u.email.equals(email));
-    }
-    final candidates = await query.get();
-    return candidates.where((u) {
-      final hash = u.pinHash;
-      final salt = u.pinSalt;
-      final iterations = u.pinIterations;
-      if (hash == null || salt == null || iterations == null) {
-        return false;
-      }
-      final computed = PinHasher.hashBase64(pin, salt, iterations);
-      return PinHasher.constantTimeEquals(hash, computed);
-    }).toList();
-  }
-
-  /// Hashes [plaintext] with a fresh per-user salt and writes the PIN to
-  /// the users table (pin_hash / pin_salt / pin_iterations on the users row).
-  ///
-  /// The app no longer creates PINs (#812). Only tests write one now, for the
-  /// Delete Business PIN gate ([PinDialog] / [getUsersByPin]); this goes away
-  /// with that gate in #812 S4.
-  @visibleForTesting
-  Future<void> setUserPin(String userId, String plaintext) async {
-    // sync-exempt: §5 #4 — pin/pinHash/pinSalt/pinIterations are local-only
-    // columns by schema design; they do not exist in Supabase.
-    debugPrint('[AuthService] setUserPin: userId=$userId');
-    final salt = PinHasher.generateSaltBase64();
-    final hash = PinHasher.hashBase64(
-      plaintext,
-      salt,
-      PinHasher.defaultIterations,
-    );
-    const iterations = PinHasher.defaultIterations;
-
-    final usersUpdated =
-        await (_db.update(_db.users)..where((u) => u.id.equals(userId))).write(
-          UsersCompanion(
-            pin: const Value('__HASHED__'),
-            pinHash: Value(hash),
-            pinSalt: Value(salt),
-            pinIterations: const Value(iterations),
-          ),
-        );
-    debugPrint(
-      '[AuthService] setUserPin: users.pin* updated '
-      '(rows affected: $usersUpdated)',
-    );
-    if (usersUpdated == 0) {
-      debugPrint(
-        '[AuthService] setUserPin: WARNING no local users row for '
-        'id=$userId — PIN write landed on zero rows. Caller likely passed '
-        'a userId that was never inserted locally (e.g. complete_onboarding '
-        'local mirror failed silently or was skipped).',
-      );
-    }
-  }
 
   // ── Device persistence (encrypted) ──────────────────────────────────────
 
@@ -621,10 +545,9 @@ class AuthService extends ValueNotifier<UserData?> {
     // the insert would throw a raw FK-787 (SqliteException(787)). Refuse
     // gracefully so the caller can show a clean error and retry after a pull,
     // rather than crashing.
-    final localBiz =
-        await (_db.select(_db.businesses)
-              ..where((b) => b.id.equals(businessId)))
-            .getSingleOrNull();
+    final localBiz = await (_db.select(
+      _db.businesses,
+    )..where((b) => b.id.equals(businessId))).getSingleOrNull();
     if (localBiz == null) {
       debugPrint(
         '[AuthService] upsertLocalUserFromProfile: local businesses row '
@@ -848,7 +771,7 @@ class AuthService extends ValueNotifier<UserData?> {
 
   /// Pushes this device's new session to the cloud. Previously, this method
   /// also revoked other active sessions and signed out other devices.
-  /// That kick-out behavior has been disabled to allow concurrent sign-ins 
+  /// That kick-out behavior has been disabled to allow concurrent sign-ins
   /// on multiple devices.
   ///
   /// Called only on fresh OTP/Google sign-ins.
@@ -878,7 +801,9 @@ class AuthService extends ValueNotifier<UserData?> {
         'last_updated_at': now,
       });
     } catch (e) {
-      debugPrint('[AuthService] registerCloudSession: cloud session upsert error: $e');
+      debugPrint(
+        '[AuthService] registerCloudSession: cloud session upsert error: $e',
+      );
     }
   }
 
@@ -941,12 +866,8 @@ class AuthService extends ValueNotifier<UserData?> {
     for (final business in others) {
       final wasDeleted = await _sync.confirmBusinessDeleted(business.id);
       if (!wasDeleted) {
-        final pending = await _db.syncDao.countPending(
-          businessId: business.id,
-        );
-        final orphans = await _db.syncDao.countOrphans(
-          businessId: business.id,
-        );
+        final pending = await _db.syncDao.countPending(businessId: business.id);
+        final orphans = await _db.syncDao.countOrphans(businessId: business.id);
         final unsent = pending + orphans;
         if (unsent > 0) {
           final proceed = await confirm(
@@ -1017,7 +938,10 @@ class AuthService extends ValueNotifier<UserData?> {
     // exactly the one whose `auth_user_id` collides — so the tenants the
     // `users` table references count even when no `businesses` row names them.
     final users = await _db.select(_db.users).get();
-    final ids = <String>{...namesById.keys, for (final u in users) u.businessId};
+    final ids = <String>{
+      ...namesById.keys,
+      for (final u in users) u.businessId,
+    };
 
     return [
       for (final id in ids)
@@ -1144,8 +1068,7 @@ class AuthService extends ValueNotifier<UserData?> {
           '(pending=$pending orphans=$orphans photos=$photos)';
       debugPrint('[AuthService] WIPE DATA LOSS: $entry');
       final prefs = await SharedPreferences.getInstance();
-      final list =
-          prefs.getStringList(_wipeLossBreadcrumbsKey) ?? <String>[];
+      final list = prefs.getStringList(_wipeLossBreadcrumbsKey) ?? <String>[];
       list.add(entry);
       while (list.length > 20) {
         list.removeAt(0);
@@ -1537,7 +1460,8 @@ class AuthService extends ValueNotifier<UserData?> {
     required int photos,
   }) {
     final parts = [
-      if (changes > 0) '$changes change${changes == 1 ? "" : "s"} not yet synced',
+      if (changes > 0)
+        '$changes change${changes == 1 ? "" : "s"} not yet synced',
       if (photos > 0)
         '$photos product photo${photos == 1 ? "" : "s"} not uploaded yet',
     ];
@@ -1690,15 +1614,6 @@ class AuthService extends ValueNotifier<UserData?> {
       return 'You must be signed in to leave your account.';
     }
     return 'Could not leave your account. Please try again.';
-  }
-
-  /// Returns true if [pin] matches at least one local user. The lone
-  /// owner is the only user post-staff-removal, so this collapses to a
-  /// simple PIN-belongs-to-anyone check. Callers that historically passed
-  /// a `minimumTier` argument can drop it.
-  Future<bool> verifyPinForTier(String pin, int minimumTier) async {
-    final matches = await getUsersByPin(pin);
-    return matches.isNotEmpty;
   }
 
   /// Creates a new owner (CEO) account. Online-first: Supabase is the source
@@ -1984,8 +1899,7 @@ class AuthService extends ValueNotifier<UserData?> {
   Future<bool> hasLocalRoleBinding(String userId, String businessId) async {
     final membership =
         await (_db.select(_db.userBusinesses)..where(
-              (t) =>
-                  t.userId.equals(userId) & t.businessId.equals(businessId),
+              (t) => t.userId.equals(userId) & t.businessId.equals(businessId),
             ))
             .getSingleOrNull();
     if (membership == null) return false;
@@ -2003,8 +1917,7 @@ class AuthService extends ValueNotifier<UserData?> {
         await (_db.select(_db.rolePermissions)
               ..where(
                 (t) =>
-                    t.roleId.equals(role.id) &
-                    t.businessId.equals(businessId),
+                    t.roleId.equals(role.id) & t.businessId.equals(businessId),
               )
               ..limit(1))
             .getSingleOrNull();
@@ -2060,7 +1973,8 @@ class AuthService extends ValueNotifier<UserData?> {
         CrashReporter.record(
           'Google sign-in: Supabase returned null email after token exchange',
           null,
-          context: 'auth.google_signin_error session_had_user='
+          context:
+              'auth.google_signin_error session_had_user='
               '${res.session?.user != null}',
         );
         throw const GoogleSignInException(
@@ -2087,7 +2001,8 @@ class AuthService extends ValueNotifier<UserData?> {
       CrashReporter.record(
         e,
         null,
-        context: 'auth.google_signin_error code=${e.code} '
+        context:
+            'auth.google_signin_error code=${e.code} '
             'message=${e.message} details=${e.details}',
       );
       throw GoogleSignInException(
@@ -2103,10 +2018,7 @@ class AuthService extends ValueNotifier<UserData?> {
         null,
         context: 'auth.google_signin_error unexpected: $e',
       );
-      throw GoogleSignInException(
-        code: 'unexpected',
-        message: e.toString(),
-      );
+      throw GoogleSignInException(code: 'unexpected', message: e.toString());
     }
   }
 

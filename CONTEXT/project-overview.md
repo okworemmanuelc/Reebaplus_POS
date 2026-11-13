@@ -122,7 +122,7 @@ security prerequisites, including the separate #467 and #468 fixes.
 - Activity Logs, role-aware Reports (Daily Reconciliation, Supplier Accounts, Profit, Approvals), and Notifications.
 - Offline-first cloud sync, multi-store data structures with one active-store picker, staff multi-store assignment, and the stock-transfer UI.
 - A read-only in-app subscription surface and a global crash safety net writing to a synced crash log.
-- The CEO Danger Zone: permanent, atomic deletion of the business and account behind a two-gate confirmation; this also deletes the accounts of all staff and wipes the data from all their devices — the ultimate kill switch for a business.
+- The CEO Danger Zone: permanent, atomic deletion of the business and account behind a typed business-name confirmation; this also deletes the accounts of all staff and wipes the data from all their devices — the ultimate kill switch for a business.
 - One email, one business: each email address is tied to exactly one business; a user who needs to belong to a second business signs up with a different email.
 
 ### Out of Scope
@@ -152,7 +152,7 @@ security prerequisites, including the separate #467 and #468 fixes.
 7. A stock-keeper stock adjustment and a cashier Quick Sale each create a pending request that a CEO or Manager can Approve or Reject from the Reports → Approvals card.
 8. An out-of-stock product appears in the POS grid greyed out and is not tappable, and a Beverage distributor business that opted into crate tracking at onboarding (the default for crate-eligible types) shows the Empty Crates tab and empty-crate deposit flow that no other business type exposes in this phase; a crate-eligible business that opted out shows none of these surfaces.
 9. An uncaught error during the sale flow shows a calm "try again" message instead of a red or blank screen, is written to the synced crash log, and does not silently lose the cart.
-10. A CEO can permanently delete the business and account through the two-gate Danger Zone (type the business name plus PIN), wiping local data, deleting all staff accounts, and logging out every device.
+10. A CEO can permanently delete the business and account through the Danger Zone (type the business name to confirm), wiping local data, deleting all staff accounts, and logging out every device.
 11. A supplier payment or invoice recorded in Supplier Accounts is reflected in that supplier's running ledger balance, confirming the supplier ledger is the source of truth for what the business owes or has paid each supplier.
 12. Attempting to create a second business with an email already registered returns an error, confirming the one-email-one-business constraint is enforced at sign-up.
 13. On the business type selection screen, all nine industry types plus "Other" are selectable, allowing onboarding for any shop type.

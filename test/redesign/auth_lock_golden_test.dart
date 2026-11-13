@@ -1,5 +1,5 @@
 // Visual goldens + layout checks for Auth PR 3 (#462): Session expired, the
-// Account Blocked screen (#812) and PinDialog. The lock screen, Create PIN,
+// Account Blocked screen (#812). The lock screen, Create PIN, PinDialog,
 // Biometric setup, user picker and success overlay went with the PIN (#812).
 //
 // Goldens: <screen>_<size>_<theme>.png at 390x844, 844x390 (24dp status bar +
@@ -27,7 +27,6 @@ import 'package:reebaplus_pos/main.dart'
 import 'package:reebaplus_pos/shared/services/auth_service.dart';
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
-import 'package:reebaplus_pos/shared/widgets/pin_dialog.dart';
 
 import '../helpers/screen_harness.dart';
 
@@ -207,101 +206,4 @@ void main() {
       });
     }
   }
-
-  // ── Dialog goldens ─────────────────────────────────────────────────────────
-  const popupSizes = <String, (Size, EdgeInsets)>{
-    '390x844': (Size(390, 844), EdgeInsets.only(top: 24, bottom: 24)),
-    '844x390': (Size(844, 390), EdgeInsets.only(top: 24, right: 48)),
-  };
-
-  for (final s in popupSizes.entries) {
-    for (final b in Brightness.values) {
-      final themeKey = b == Brightness.light ? 'light' : 'dark';
-      testWidgets('golden pin_dialog_${s.key}_$themeKey', (tester) async {
-        final (size, padding) = s.value;
-        await pump(
-          tester,
-          const _DialogHost(),
-          size: size,
-          padding: padding,
-          brightness: b,
-        );
-        expect(find.byType(PinDialog), findsOneWidget);
-        expect(tester.takeException(), isNull);
-        await expectLater(
-          find.byType(MaterialApp),
-          matchesGoldenFile('goldens/pin_dialog_${s.key}_$themeKey.png'),
-        );
-        await unmount(tester);
-      });
-    }
-  }
-
-  // ── Keyboard up ────────────────────────────────────────────────────────────
-  const phones = <(String, Size, EdgeInsets, double)>[
-    ('360x640', Size(360, 640), EdgeInsets.only(top: 24, bottom: 24), 280),
-    ('844x390', Size(844, 390), EdgeInsets.only(top: 24, right: 48), 300),
-  ];
-
-  for (final (name, size, padding, keyboard) in phones) {
-    testWidgets('PIN pop-up fits above the keyboard $name', (tester) async {
-      await pump(
-        tester,
-        const _DialogHost(),
-        size: size,
-        padding: padding,
-        followView: true,
-        textScaler: const TextScaler.linear(1.15),
-      );
-      tester.view.viewInsets = FakeViewPadding(bottom: keyboard);
-      await tester.pump(const Duration(milliseconds: 600));
-      expect(find.byType(PinDialog), findsOneWidget);
-      expect(tester.takeException(), isNull);
-      tester.view.resetViewInsets();
-      await unmount(tester);
-    });
-  }
-
-  testWidgets('PinDialog still cancels with null and the keys type a PIN', (
-    tester,
-  ) async {
-    await pump(
-      tester,
-      const _DialogHost(),
-      size: const Size(390, 844),
-      padding: const EdgeInsets.only(top: 24, bottom: 24),
-    );
-    expect(find.text('Manager Authorisation'), findsOneWidget);
-    expect(
-      find.text('Enter a 6-digit manager PIN to continue'),
-      findsOneWidget,
-    );
-    await tester.tap(find.text('Cancel'));
-    for (var i = 0; i < 5; i++) {
-      await tester.pump(const Duration(milliseconds: 300));
-    }
-    expect(find.byType(PinDialog), findsNothing);
-    await unmount(tester);
-  });
-}
-
-/// Opens [PinDialog] over an empty page as soon as it is mounted.
-class _DialogHost extends StatefulWidget {
-  const _DialogHost();
-
-  @override
-  State<_DialogHost> createState() => _DialogHostState();
-}
-
-class _DialogHostState extends State<_DialogHost> {
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) PinDialog.show(context);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) => const Scaffold(body: SizedBox());
 }
