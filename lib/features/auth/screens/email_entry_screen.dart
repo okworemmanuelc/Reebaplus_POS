@@ -1,4 +1,6 @@
 import 'dart:async';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -413,67 +415,74 @@ class _EmailEntryScreenState extends ConsumerState<EmailEntryScreen> {
               ),
               SizedBox(height: context.getRSize(16)),
 
-              // OR divider
-              Row(
-                children: [
-                  Expanded(
-                    child: Divider(color: Theme.of(context).dividerColor),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Text(
-                      'OR',
-                      style: context
-                          .semiBoldStyle(12)
-                          .copyWith(color: authTextMuted(context, 0.5)),
+              // Google sign-in is phone-only for now (#812): the browser
+              // needs Google Cloud web setup first, so it offers the email
+              // code alone.
+              if (!kIsWeb) ...[
+                // OR divider
+                Row(
+                  children: [
+                    Expanded(
+                      child: Divider(color: Theme.of(context).dividerColor),
                     ),
-                  ),
-                  Expanded(
-                    child: Divider(color: Theme.of(context).dividerColor),
-                  ),
-                ],
-              ),
-              SizedBox(height: context.getRSize(16)),
-
-              // Google Sign-In button
-              Container(
-                decoration: AppDecorations.card(context),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: _loading ? null : _signInWithGoogle,
-                    borderRadius: BorderRadius.circular(context.getRSize(16)),
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        minHeight: kMinInteractiveDimension,
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Text(
+                        'OR',
+                        style: context
+                            .semiBoldStyle(12)
+                            .copyWith(color: authTextMuted(context, 0.5)),
                       ),
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(
-                          vertical: context.getRSize(14),
+                    ),
+                    Expanded(
+                      child: Divider(color: Theme.of(context).dividerColor),
+                    ),
+                  ],
+                ),
+                SizedBox(height: context.getRSize(16)),
+
+                // Google Sign-In button
+                Container(
+                  decoration: AppDecorations.card(context),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: _loading ? null : _signInWithGoogle,
+                      borderRadius: BorderRadius.circular(context.getRSize(16)),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          minHeight: kMinInteractiveDimension,
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              AppIcons.googleBrand,
-                              size: 20,
-                              color: textColor.withValues(alpha: 0.8),
-                            ),
-                            const SizedBox(width: 12),
-                            Text(
-                              'Sign in with Google',
-                              style: context
-                                  .semiBoldStyle(15)
-                                  .copyWith(color: authTextMuted(context, 0.8)),
-                            ),
-                          ],
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(
+                            vertical: context.getRSize(14),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                AppIcons.googleBrand,
+                                size: 20,
+                                color: textColor.withValues(alpha: 0.8),
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                'Sign in with Google',
+                                style: context
+                                    .semiBoldStyle(15)
+                                    .copyWith(
+                                      color: authTextMuted(context, 0.8),
+                                    ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              SizedBox(height: context.getRSize(20)),
+                SizedBox(height: context.getRSize(20)),
+              ],
             ],
           ),
         ),
