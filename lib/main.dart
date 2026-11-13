@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -123,7 +124,8 @@ Future<void> _bootstrap() async {
   // #687: remember the cloud off switch for the next app open. Not awaited, and
   // it does not need the database, so a phone whose worker failed can still
   // receive the "off" answer.
-  DbWorkerSwitchWatcher().start();
+  // The browser (#812) has no off-switch file: drift's web worker always runs.
+  if (!kIsWeb) DbWorkerSwitchWatcher().start();
 
   // #285: the database file now exists, so mark it (and its WAL sidecars) as
   // excluded from iCloud backup. Android does the same declaratively in the

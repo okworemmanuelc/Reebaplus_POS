@@ -7,13 +7,12 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:flutter/foundation.dart';
 import 'package:reebaplus_pos/core/crates/crate_deposit_ledger_types.dart';
 import 'package:reebaplus_pos/core/crates/crate_money_arrangement.dart';
 import 'package:reebaplus_pos/core/crates/crate_shortfall.dart';
 import 'package:reebaplus_pos/core/database/daos.dart';
-import 'package:reebaplus_pos/core/database/local_database_connection.dart';
+import 'package:reebaplus_pos/core/database/local_database_platform.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/diagnostics/schema_audit.dart';
 import 'package:reebaplus_pos/core/services/first_load_marker_service.dart';
@@ -8251,7 +8250,7 @@ void markDbReadyWithError([Object? error]) {
 
 LazyDatabase _openConnection() {
   return LazyDatabase(() async {
-    return openRememberedLocalDatabase(await getApplicationDocumentsDirectory());
+    return openPlatformLocalDatabase();
   });
 }
 
