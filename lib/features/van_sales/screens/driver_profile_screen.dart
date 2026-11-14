@@ -297,78 +297,87 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
 
     return _shell(
       context,
-      TabbedSliverScaffold(
-        controller: _tabController!,
-        tabBarExtent: context.getRSize(60),
-        tabBarChromeExtent: _tabBarBottomMargin,
-        tabBar: Padding(
-          padding: EdgeInsets.symmetric(horizontal: context.getRSize(16)),
-          child: _tabBar(context, showCrates: tracksCrates),
-        ),
-        headerSlivers: [
-          SliverToBoxAdapter(
-            child: _Header(
-              name: name,
-              phone: driver?.phone,
-              isRemoved: isRemoved,
-              onAssignVan: driverId == null || isRemoved
-                  ? null
-                  : () => _assignVan(driverId),
-              // #787: a payment is taken from the driver, with or without a
-              // trip. A removed driver who still owes can pay too.
-              onRecordPayment: driver == null
-                  ? null
-                  : () => RecordDriverPaymentSheet.showForDriver(
-                      context,
-                      vanDriverId: driver.id,
-                      driverName: driver.name,
-                    ),
-              oldAccountName: oldCustomerId == null
-                  ? null
-                  : toNameCase(oldCustomerName ?? 'Old customer account'),
-              trips: trips,
-              vanNameById: vanNameById,
-              assignedVanStoreIds: assignedVanStoreIds,
-              joinedAt: _driverSince(trips),
+      LayoutBuilder(
+        builder: (context, constraints) {
+          // Capped to the 720 column and centred (#820); read by the tab
+          // paddings, the balance card and the header below.
+          _gutter = contentGutter(context, constraints.maxWidth);
+          return TabbedSliverScaffold(
+            controller: _tabController!,
+            tabBarExtent: context.getRSize(60),
+            tabBarChromeExtent: _tabBarBottomMargin,
+            tabBar: Padding(
+              padding: EdgeInsets.symmetric(horizontal: _gutter),
+              child: _tabBar(context, showCrates: tracksCrates),
             ),
-          ),
-          SliverToBoxAdapter(child: _balanceCard(context, balanceKobo)),
-        ],
-        tabViews: [
-          TabSliverView(
-            storageKey: 'driver-profile-trips',
-            slivers: _tripsTabSlivers(
-              trips: periodTrips,
-              vanNameById: vanNameById,
-              driverName: name,
-            ),
-          ),
-          TabSliverView(
-            storageKey: 'driver-profile-sales',
-            slivers: _salesTabSlivers(
-              sales: periodSales,
-              oldSaleIds: oldSaleIds,
-            ),
-          ),
-          TabSliverView(
-            storageKey: 'driver-profile-ledger',
-            slivers: _ledgerTabSlivers(
-              entries: periodLedger,
-              oldPayments: periodOldPayments,
-              vanNameByTripId: {
-                for (final t in trips) t.id: vanNameById[t.vanStoreId] ?? '',
-              },
-            ),
-          ),
-          if (tracksCrates)
-            TabSliverView(
-              storageKey: 'driver-profile-crates',
-              slivers: _cratesTabSlivers(
-                trips: periodTrips,
-                vanNameById: vanNameById,
+            headerSlivers: [
+              SliverToBoxAdapter(
+                child: _Header(
+                  name: name,
+                  phone: driver?.phone,
+                  isRemoved: isRemoved,
+                  onAssignVan: driverId == null || isRemoved
+                      ? null
+                      : () => _assignVan(driverId),
+                  // #787: a payment is taken from the driver, with or without a
+                  // trip. A removed driver who still owes can pay too.
+                  onRecordPayment: driver == null
+                      ? null
+                      : () => RecordDriverPaymentSheet.showForDriver(
+                          context,
+                          vanDriverId: driver.id,
+                          driverName: driver.name,
+                        ),
+                  oldAccountName: oldCustomerId == null
+                      ? null
+                      : toNameCase(oldCustomerName ?? 'Old customer account'),
+                  trips: trips,
+                  vanNameById: vanNameById,
+                  assignedVanStoreIds: assignedVanStoreIds,
+                  joinedAt: _driverSince(trips),
+                  gutter: _gutter,
+                ),
               ),
-            ),
-        ],
+              SliverToBoxAdapter(child: _balanceCard(context, balanceKobo)),
+            ],
+            tabViews: [
+              TabSliverView(
+                storageKey: 'driver-profile-trips',
+                slivers: _tripsTabSlivers(
+                  trips: periodTrips,
+                  vanNameById: vanNameById,
+                  driverName: name,
+                ),
+              ),
+              TabSliverView(
+                storageKey: 'driver-profile-sales',
+                slivers: _salesTabSlivers(
+                  sales: periodSales,
+                  oldSaleIds: oldSaleIds,
+                ),
+              ),
+              TabSliverView(
+                storageKey: 'driver-profile-ledger',
+                slivers: _ledgerTabSlivers(
+                  entries: periodLedger,
+                  oldPayments: periodOldPayments,
+                  vanNameByTripId: {
+                    for (final t in trips)
+                      t.id: vanNameById[t.vanStoreId] ?? '',
+                  },
+                ),
+              ),
+              if (tracksCrates)
+                TabSliverView(
+                  storageKey: 'driver-profile-crates',
+                  slivers: _cratesTabSlivers(
+                    trips: periodTrips,
+                    vanNameById: vanNameById,
+                  ),
+                ),
+            ],
+          );
+        },
       ),
       subtitle: name,
     );
@@ -437,12 +446,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
         : (balanceKobo > 0 ? 'Owed to this driver' : 'Settled');
 
     return GlassyCard(
-      margin: EdgeInsets.fromLTRB(
-        context.getRSize(16),
-        0,
-        context.getRSize(16),
-        context.getRSize(12),
-      ),
+      margin: EdgeInsets.fromLTRB(_gutter, 0, _gutter, context.getRSize(12)),
       padding: EdgeInsets.all(context.getRSize(18)),
       radius: 20,
       child: Row(
@@ -561,6 +565,9 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
 
   /// Height the pinned tab bar gives up to its bottom margin. Read by the
   /// header delegate so the TabBar keeps its full interactive height.
+  /// Side gutter of the 720 column, set each layout pass (#820).
+  double _gutter = 16;
+
   double get _tabBarBottomMargin => context.getRSize(8);
 
   Widget _tabBar(BuildContext context, {required bool showCrates}) {
@@ -629,7 +636,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
     }
     return [
       SliverPadding(
-        padding: _tabPadding(context),
+        padding: _tabPadding(context, _gutter),
         sliver: SliverList.builder(
           itemCount: trips.length,
           itemBuilder: (_, i) => _TripRow(
@@ -672,7 +679,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
 
     return [
       SliverPadding(
-        padding: _tabPadding(context),
+        padding: _tabPadding(context, _gutter),
         sliver: SliverList.builder(
           itemCount: sales.length + 1,
           itemBuilder: (_, i) {
@@ -748,7 +755,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
 
     return [
       SliverPadding(
-        padding: _tabPadding(context),
+        padding: _tabPadding(context, _gutter),
         sliver: SliverList.builder(
           itemCount: lines.length + 1,
           itemBuilder: (_, i) {
@@ -815,7 +822,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
 
     return [
       SliverPadding(
-        padding: _tabPadding(context),
+        padding: _tabPadding(context, _gutter),
         sliver: SliverList(
           delegate: SliverChildListDelegate([
             GlassyCard(
@@ -1005,6 +1012,9 @@ class _Header extends StatelessWidget {
 
   final DateTime? joinedAt;
 
+  /// Side margin that centres the 720 column (#820).
+  final double gutter;
+
   const _Header({
     required this.name,
     required this.phone,
@@ -1016,6 +1026,7 @@ class _Header extends StatelessWidget {
     required this.vanNameById,
     required this.assignedVanStoreIds,
     required this.joinedAt,
+    required this.gutter,
   });
 
   static String _initials(String name) {
@@ -1043,9 +1054,9 @@ class _Header extends StatelessWidget {
 
     return GlassyCard(
       margin: EdgeInsets.fromLTRB(
+        gutter,
         context.getRSize(16),
-        context.getRSize(16),
-        context.getRSize(16),
+        gutter,
         context.getRSize(12),
       ),
       padding: EdgeInsets.all(context.getRSize(16)),
@@ -1541,12 +1552,13 @@ class _CrateStat extends StatelessWidget {
 
 // ── Shared bits ─────────────────────────────────────────────────────────────
 
-EdgeInsets _tabPadding(BuildContext context) => EdgeInsets.fromLTRB(
-  context.getRSize(16),
-  context.getRSize(12),
-  context.getRSize(16),
-  context.getRSize(32) + context.deviceBottomPadding,
-);
+EdgeInsets _tabPadding(BuildContext context, double gutter) =>
+    EdgeInsets.fromLTRB(
+      gutter,
+      context.getRSize(12),
+      gutter,
+      context.getRSize(32) + context.deviceBottomPadding,
+    );
 
 class _Chip extends StatelessWidget {
   final String label;

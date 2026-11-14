@@ -400,75 +400,82 @@ class _VanReturnScreenState extends ConsumerState<VanReturnScreen> {
     return GlassyScaffold(
       title: 'Record Return',
       subtitle: '${widget.driverName} • ${widget.vanName}',
-      body: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(
-          context.getRSize(20),
-          context.getRSize(20),
-          context.getRSize(20),
-          context.getRSize(20) + context.deviceBottomPadding,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const _CountItYourselfNote(),
-            SizedBox(height: context.getRSize(16)),
-
-            if (_lines.isEmpty)
-              Padding(
-                padding: EdgeInsets.symmetric(vertical: context.getRSize(16)),
-                child: Text(
-                  'Nothing was loaded on this trip.',
-                  style: t.textTheme.bodySmall?.copyWith(color: _subtext),
-                ),
-              )
-            else
-              ..._lines.map(
-                (line) => _ReturnLineCard(
-                  key: ValueKey('return-line-${line.productId}'),
-                  line: line,
-                  onChanged: () => setState(() {}),
-                ),
-              ),
-
-            ..._emptiesSection(context),
-
-            SizedBox(height: context.getRSize(20)),
-            Guarded(
-              gate: Gates.vanManage,
-              builder: (context, allow) => AppButton(
-                key: const Key('return-submit'),
-                text: _submitting ? 'Recording…' : 'Record Return',
-                icon: AppIcons.undo,
-                onPressed: _submitting ? null : allow(_submit),
-                isFullWidth: true,
-              ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final gutter = contentGutter(context, constraints.maxWidth);
+          return SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              gutter,
+              context.getRSize(20),
+              gutter,
+              context.getRSize(20) + context.deviceBottomPadding,
             ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const _CountItYourselfNote(),
+                SizedBox(height: context.getRSize(16)),
 
-            SizedBox(height: context.getRSize(28)),
-            Text(
-              'Already returned on this trip',
-              style: t.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            SizedBox(height: context.getRSize(12)),
-            if (recorded.isEmpty)
-              Text(
-                'Nothing has come back yet.',
-                style: t.textTheme.bodySmall?.copyWith(color: _subtext),
-              )
-            else
-              for (final e in recorded) ...[
-                _RecordedReturnRow(
-                  event: e,
-                  showCrates: tracksCrates,
-                  productName: names[e.productId] ?? lex.item,
-                  manufacturerName: mfrNames[mfrOfProduct[e.productId]],
+                if (_lines.isEmpty)
+                  Padding(
+                    padding: EdgeInsets.symmetric(
+                      vertical: context.getRSize(16),
+                    ),
+                    child: Text(
+                      'Nothing was loaded on this trip.',
+                      style: t.textTheme.bodySmall?.copyWith(color: _subtext),
+                    ),
+                  )
+                else
+                  ..._lines.map(
+                    (line) => _ReturnLineCard(
+                      key: ValueKey('return-line-${line.productId}'),
+                      line: line,
+                      onChanged: () => setState(() {}),
+                    ),
+                  ),
+
+                ..._emptiesSection(context),
+
+                SizedBox(height: context.getRSize(20)),
+                Guarded(
+                  gate: Gates.vanManage,
+                  builder: (context, allow) => AppButton(
+                    key: const Key('return-submit'),
+                    text: _submitting ? 'Recording…' : 'Record Return',
+                    icon: AppIcons.undo,
+                    onPressed: _submitting ? null : allow(_submit),
+                    isFullWidth: true,
+                  ),
                 ),
-                SizedBox(height: context.getRSize(10)),
+
+                SizedBox(height: context.getRSize(28)),
+                Text(
+                  'Already returned on this trip',
+                  style: t.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                SizedBox(height: context.getRSize(12)),
+                if (recorded.isEmpty)
+                  Text(
+                    'Nothing has come back yet.',
+                    style: t.textTheme.bodySmall?.copyWith(color: _subtext),
+                  )
+                else
+                  for (final e in recorded) ...[
+                    _RecordedReturnRow(
+                      event: e,
+                      showCrates: tracksCrates,
+                      productName: names[e.productId] ?? lex.item,
+                      manufacturerName: mfrNames[mfrOfProduct[e.productId]],
+                    ),
+                    SizedBox(height: context.getRSize(10)),
+                  ],
               ],
-          ],
-        ),
+            ),
+          );
+        },
       ),
     );
   }

@@ -5,45 +5,15 @@ import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 
-/// The three figures behind a driver's balance while a trip is out (#800).
-///
-/// [totalBalanceKobo] is the driver's whole ledger balance (negative = owes)
-/// and [tripOutstandingKobo] is what THIS trip still owes (positive = owed,
-/// `VanTripPosition.outstandingKobo`). What is left over is the balance the
-/// driver carried from outside this trip: earlier trips, and payments or
-/// account entries recorded on no trip.
-class TripBalanceSplit {
-  final int beforeOwedKobo;
-  final int tripOwedKobo;
-  final int totalOwedKobo;
-
-  const TripBalanceSplit._({
-    required this.beforeOwedKobo,
-    required this.tripOwedKobo,
-    required this.totalOwedKobo,
-  });
-
-  factory TripBalanceSplit({
-    required int totalBalanceKobo,
-    required int tripOutstandingKobo,
-  }) {
-    final total = -totalBalanceKobo;
-    return TripBalanceSplit._(
-      beforeOwedKobo: total - tripOutstandingKobo,
-      tripOwedKobo: tripOutstandingKobo,
-      totalOwedKobo: total,
-    );
-  }
-}
-
 /// "Owes ₦X" for a debt, "In credit ₦X" when the shop owes the driver.
 String owedLabel(int owedKobo) => owedKobo >= 0
     ? formatCurrency(owedKobo / 100)
     : 'In credit ${formatCurrency(-owedKobo / 100)}';
 
-/// Balance before this trip / This trip / Total owed now, for one open trip
-/// (#800). Shown wherever a manager takes money from a driver, so nobody has
-/// to add the figures up by hand. Renders nothing until both figures load.
+/// What one open trip still owes, as a single "This trip" line. Shown
+/// wherever a manager takes money from a driver (#800). The owner dropped the
+/// "Balance before this trip" and "Total owed now" lines on 2026-11-14 (#820):
+/// only this trip's figure is shown. Renders nothing until the figure loads.
 class TripBalanceLines extends ConsumerWidget {
   final String tripId;
 
@@ -51,32 +21,15 @@ class TripBalanceLines extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final total = ref.watch(tripOwnerBalanceProvider(tripId)).valueOrNull;
     final position = ref.watch(vanTripPositionProvider(tripId)).valueOrNull;
-    if (total == null || position == null) return const SizedBox.shrink();
-    final split = TripBalanceSplit(
-      totalBalanceKobo: total,
-      tripOutstandingKobo: position.outstandingKobo,
-    );
-    final t = Theme.of(context);
-    final owes = split.totalOwedKobo > 0;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _line(
-          context,
-          'Balance before this trip',
-          owedLabel(split.beforeOwedKobo),
-        ),
-        _line(context, 'This trip', owedLabel(split.tripOwedKobo)),
-        _line(
-          context,
-          split.totalOwedKobo < 0 ? 'Total now' : 'Total owed now',
-          owedLabel(split.totalOwedKobo),
-          strong: true,
-          color: owes ? t.colorScheme.error : null,
-        ),
-      ],
+    if (position == null) return const SizedBox.shrink();
+    final owed = position.outstandingKobo;
+    return _line(
+      context,
+      'This trip',
+      owedLabel(owed),
+      strong: true,
+      color: owed > 0 ? Theme.of(context).colorScheme.error : null,
     );
   }
 

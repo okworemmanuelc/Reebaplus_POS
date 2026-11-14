@@ -106,37 +106,46 @@ class VanReconcileScreen extends ConsumerWidget {
 
     final isOpen = trip.status == kVanTripStatusOpen;
 
-    final list = ListView(
-      padding: EdgeInsets.fromLTRB(
-        context.getRSize(20),
-        context.getRSize(20),
-        context.getRSize(20),
-        context.getRSize(20) + (isOpen ? 0 : context.deviceBottomPadding),
-      ),
-      children: [
-        _OutstandingCard(position: position, lex: lex),
-        SizedBox(height: context.getRSize(16)),
-        _Card(child: TripBalanceLines(tripId: tripId)),
-        SizedBox(height: context.getRSize(16)),
-        _MovementCard(position: position, lex: lex),
-        if (position.shortages.isNotEmpty) ...[
-          SizedBox(height: context.getRSize(16)),
-          _ShortageCard(position: position, productName: productName, lex: lex),
-        ],
-        if (tracksCrates) ...[
-          SizedBox(height: context.getRSize(16)),
-          _ShellMemoCard(position: position),
-        ],
-        if (position.hasUncostedUnits) ...[
-          SizedBox(height: context.getRSize(16)),
-          _UncostedCard(position: position, lex: lex),
-        ],
-        SizedBox(height: context.getRSize(20)),
-        if (isOpen)
-          _actions(context, ref, trip, position)
-        else
-          _ClosedCard(trip: trip, driverName: driverName, lex: lex),
-      ],
+    final list = LayoutBuilder(
+      builder: (context, constraints) {
+        final gutter = contentGutter(context, constraints.maxWidth);
+        return ListView(
+          padding: EdgeInsets.fromLTRB(
+            gutter,
+            context.getRSize(20),
+            gutter,
+            context.getRSize(20) + (isOpen ? 0 : context.deviceBottomPadding),
+          ),
+          children: [
+            _OutstandingCard(position: position, lex: lex),
+            SizedBox(height: context.getRSize(16)),
+            _Card(child: TripBalanceLines(tripId: tripId)),
+            SizedBox(height: context.getRSize(16)),
+            _MovementCard(position: position, lex: lex),
+            if (position.shortages.isNotEmpty) ...[
+              SizedBox(height: context.getRSize(16)),
+              _ShortageCard(
+                position: position,
+                productName: productName,
+                lex: lex,
+              ),
+            ],
+            if (tracksCrates) ...[
+              SizedBox(height: context.getRSize(16)),
+              _ShellMemoCard(position: position),
+            ],
+            if (position.hasUncostedUnits) ...[
+              SizedBox(height: context.getRSize(16)),
+              _UncostedCard(position: position, lex: lex),
+            ],
+            SizedBox(height: context.getRSize(20)),
+            if (isOpen)
+              _actions(context, ref, trip, position)
+            else
+              _ClosedCard(trip: trip, driverName: driverName, lex: lex),
+          ],
+        );
+      },
     );
 
     return GlassyScaffold(
@@ -786,10 +795,15 @@ class _PinnedClose extends StatelessWidget {
         border: Border(top: BorderSide(color: t.dividerColor)),
       ),
       child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: context.getRHeight(0.4),
+        constraints: BoxConstraints(maxHeight: context.getRHeight(0.4)),
+        child: SingleChildScrollView(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: kContentMaxWidth),
+              child: child,
+            ),
+          ),
         ),
-        child: SingleChildScrollView(child: child),
       ),
     );
   }

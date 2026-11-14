@@ -7,6 +7,13 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #820: Van Sales screens fit every screen size + screen-size rule (2026-11-14, branch `feat/van-wide-layout`)
+- Owner screenshot: the #810 redesign stretched across a large screen. Every van screen, the hub included, sits in one centred 720 column like Orders (owner chose this over side-by-side cards). Layout only, no money change.
+- New shared helpers in `lib/core/utils/responsive.dart`: `kContentMaxWidth`, `kCardMaxWidth`, `contentGutter`, `cardGridColumns`, `cardGridMaxWidth`.
+- New **Screen-size rule** in `ui-context.md` (every redesign: content capped, cards in columns, five sizes tested) and item 9 in `ai-workflow-rules.md`.
+- Owner 2026-11-14: money screens show ONLY the "This trip" owed line; "Balance before this trip" and "Total owed now" removed (`trip_balance_lines.dart`, `TripBalanceSplit` deleted). A driver's whole balance is still on the driver's page and the Drivers list.
+- Tests: `test/van_sales/van_wide_layout_test.dart`, `trip_balance_lines_test.dart`. Not checked on a device.
+- Earlier van work merged 2026-11-13 with no entry here: #801 (empties per manufacturer on returns), #804 ("Bring in old customer account" button removed), #805 (driver payments counted in Home's Total Sales; web parity reebaplus-web#250), #810 (Van Sales restyle, `widgets/van_ui.dart`).
 ### Issue #812: browser shows email-code sign-in only (2026-11-13, branch `feat/812-web-hide-google`)
 - Owner decision: Google sign-in is hidden in the browser (`kIsWeb` in `email_entry_screen.dart`, the OR divider goes with it); phones keep it. Google for the browser needs Google Cloud web client setup first.
 ### Issue #798: session expired never stops a sale; "Sign in again" banner (2026-11-13, branch `feat/798-sign-in-again-banner`, replaces PR #799)

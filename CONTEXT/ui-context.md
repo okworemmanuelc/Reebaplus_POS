@@ -437,6 +437,64 @@ form-factor-vs-available-width split — land here in Phase 9; see
 `docs/adr/0025-two-curve-responsive-scale.md` and
 `docs/design/responsive-layout-plan.md` in the meantime.
 
+### Screen-size rule: every redesign (#820, owner 2026-11-14)
+
+The Van Sales redesign (#810) was drawn for a phone and shipped stretched on a
+large screen: a label at the far left, its figure 1,700dp away, four action
+tiles 430dp wide each, half the screen empty. **Every new screen and every
+redesign must follow this rule before it is merged.** It applies to phones,
+sideways phones, tablets, large screens and the browser.
+
+1. **Nothing stretches with the window.** Content grows to a cap and then
+   stops; the extra width becomes side margin. Bars (top bar, pinned bottom
+   bar) span the screen, the content inside them follows the cap.
+2. **One centred column, 720, like Orders.** This is the default for every
+   screen: lists, forms, and pages of cards (the Van Sales hub). Use
+   `kContentMaxWidth` (720) and the side gutter from
+   `contentGutter(context, measuredWidth)` (never under `getRSize(16)`). Detail
+   pages with two panes may use 960.
+3. **Columns only for small like cards, and only when asked.** A dashboard of
+   short figure cards (Home) may use `cardGridColumns(measuredWidth, itemCount:)`
+   capped at `cardGridMaxWidth(columns)`, no card wider than `kCardMaxWidth`
+   (540). Do not turn a list of working cards into columns unless the owner
+   asks; the owner chose the centred column for Van Sales (2026-11-14).
+4. **A label and its figure stay within one card width.** If the eye has to
+   cross more than about 700dp to pair them, the layout is wrong.
+5. **Buttons follow their card.** A full-width button is only as wide as the
+   capped card or column it sits in. Action tiles in a row never exceed about
+   160dp each.
+6. **Decide by measured width.** Use `LayoutBuilder` and the helpers in
+   `lib/core/utils/responsive.dart`. Never branch on the device type for
+   content layout, and never read the screen size directly (the
+   `media_query_size_ban` test fails it).
+7. **Pad inside the scroll view.** The gutter is the scroll view's `padding`,
+   so a drag or mouse wheel in the margin still scrolls. Never wrap the scroll
+   view itself in a narrow box.
+8. **Check five sizes.** 360×800 (phone), 844×390 (sideways phone), 800×1280
+   (tablet), 1280×800 (wide) and 1920×1080 (large screen / browser). Each
+   redesign PR carries a widget test that pumps the screen at all five with no
+   overflow and asserts the cap at 1920 (pattern:
+   `test/van_sales/van_wide_layout_test.dart`). The PR body says which sizes
+   were looked at on a real device or emulator and which were only tested.
+9. **Tap targets and text scale still apply** (48dp minimum, text scale 1.3 at
+   360dp), as above.
+
+Older per-feature gutters (`reportGutter`, `receiveSidePadding`,
+`inventoryGutter`, the expenses / payments / stores ones) already follow point
+2 and stay; new work uses the shared helpers.
+
+### Van Sales (`lib/features/van_sales/`, #810, #820)
+
+Shared look-only parts in `widgets/van_ui.dart`. **Layout only: every figure,
+gate and write path is unchanged.**
+- **Hub**: the Drivers row and one van card per row in the centred 720 column
+  (rule 2 above), at every size. A van on the road shows one "This trip" owed
+  line (no before / total lines, owner 2026-11-14), four tonal tiles and the primary "Reconcile & close"; a van at
+  the yard shows one primary "Load Van".
+- **Drivers list, driver page, payments, Load / Restock, Record Return,
+  Reconcile & close**: one 720 column, centred; pinned bottom bars span the
+  screen with their content inside the column.
+
 ## Shared parts (`lib/shared/widgets/redesign/`, #352 PR 2)
 
 The redesign's building blocks. Import the barrel
