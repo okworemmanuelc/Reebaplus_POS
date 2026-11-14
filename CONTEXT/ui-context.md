@@ -448,16 +448,18 @@ sideways phones, tablets, large screens and the browser.
 1. **Nothing stretches with the window.** Content grows to a cap and then
    stops; the extra width becomes side margin. Bars (top bar, pinned bottom
    bar) span the screen, the content inside them follows the cap.
-2. **Lists and forms: 720.** One centred column, `kContentMaxWidth` (720), side
-   gutter from `contentGutter(context, measuredWidth)` (never under
-   `getRSize(16)`). Detail pages with two panes may use 960.
-3. **Cards that repeat go into columns, not wider cards.** A screen of like
-   cards (vans, stores, figures) uses `cardGridColumns(measuredWidth, itemCount:)`
-   (cards at least 340 wide, at most 3 columns, never more columns than
-   cards) and is capped at `cardGridMaxWidth(columns)`. No single card is
-   wider than `kCardMaxWidth` (540). Cards in a row keep their own height.
+2. **One centred column, 720, like Orders.** This is the default for every
+   screen: lists, forms, and pages of cards (the Van Sales hub). Use
+   `kContentMaxWidth` (720) and the side gutter from
+   `contentGutter(context, measuredWidth)` (never under `getRSize(16)`). Detail
+   pages with two panes may use 960.
+3. **Columns only for small like cards, and only when asked.** A dashboard of
+   short figure cards (Home) may use `cardGridColumns(measuredWidth, itemCount:)`
+   capped at `cardGridMaxWidth(columns)`, no card wider than `kCardMaxWidth`
+   (540). Do not turn a list of working cards into columns unless the owner
+   asks; the owner chose the centred column for Van Sales (2026-11-14).
 4. **A label and its figure stay within one card width.** If the eye has to
-   cross more than about 540dp to pair them, the layout is wrong.
+   cross more than about 700dp to pair them, the layout is wrong.
 5. **Buttons follow their card.** A full-width button is only as wide as the
    capped card or column it sits in. Action tiles in a row never exceed about
    160dp each.
@@ -485,8 +487,8 @@ Older per-feature gutters (`reportGutter`, `receiveSidePadding`,
 
 Shared look-only parts in `widgets/van_ui.dart`. **Layout only: every figure,
 gate and write path is unchanged.**
-- **Hub**: van cards in 1 / 2 / 3 columns by measured width (rule 3 above);
-  the Drivers row is one column wide. A van on the road shows one "This trip" owed
+- **Hub**: the Drivers row and one van card per row in the centred 720 column
+  (rule 2 above), at every size. A van on the road shows one "This trip" owed
   line (no before / total lines, owner 2026-11-14), four tonal tiles and the primary "Reconcile & close"; a van at
   the yard shows one primary "Load Van".
 - **Drivers list, driver page, payments, Load / Restock, Record Return,

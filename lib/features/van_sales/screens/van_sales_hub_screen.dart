@@ -91,14 +91,9 @@ class VanSalesHubScreen extends ConsumerWidget {
           : LayoutBuilder(
               builder: (context, constraints) {
                 final width = constraints.maxWidth;
-                final columns = cardGridColumns(width, itemCount: vans.length);
-                final gutter = contentGutter(
-                  context,
-                  width,
-                  maxWidth: columns == 1
-                      ? kContentMaxWidth
-                      : cardGridMaxWidth(columns, gap: context.getRSize(12)),
-                );
+                // One centred column, 720 at most, like Orders (owner
+                // 2026-11-14): the cards never spread across a large screen.
+                final gutter = contentGutter(context, width);
                 final padding = EdgeInsets.fromLTRB(
                   gutter,
                   context.getRSize(20),
@@ -202,53 +197,13 @@ class VanSalesHubScreen extends ConsumerWidget {
                 // hub's axis is the fleet, but the money's axis is the PERSON
                 // (spec §9.4 #14), so the way to a driver's account cannot
                 // live behind a van card that may not even be out.
-                if (columns == 1) {
-                  return ListView.separated(
-                    padding: padding,
-                    itemCount: vans.length + 1,
-                    separatorBuilder: (_, _) =>
-                        SizedBox(height: context.getRSize(12)),
-                    itemBuilder: (context, index) =>
-                        index == 0 ? driversLink() : vanCard(index - 1),
-                  );
-                }
-
-                // Wide: van cards in rows of [columns]; the Drivers link is one
-                // column wide, at the start. Short last row is padded with
-                // empty Expandeds so every card keeps the same width.
-                final rowCount = (vans.length / columns).ceil();
-                final gap = context.getRSize(12);
                 return ListView.separated(
                   padding: padding,
-                  itemCount: rowCount + 1,
-                  separatorBuilder: (_, _) => SizedBox(height: gap),
-                  itemBuilder: (context, index) {
-                    if (index == 0) {
-                      return Row(
-                        children: [
-                          Expanded(child: driversLink()),
-                          for (var c = 1; c < columns; c++) ...[
-                            SizedBox(width: gap),
-                            const Expanded(child: SizedBox.shrink()),
-                          ],
-                        ],
-                      );
-                    }
-                    final start = (index - 1) * columns;
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        for (var c = 0; c < columns; c++) ...[
-                          if (c > 0) SizedBox(width: gap),
-                          Expanded(
-                            child: start + c < vans.length
-                                ? vanCard(start + c)
-                                : const SizedBox.shrink(),
-                          ),
-                        ],
-                      ],
-                    );
-                  },
+                  itemCount: vans.length + 1,
+                  separatorBuilder: (_, _) =>
+                      SizedBox(height: context.getRSize(12)),
+                  itemBuilder: (context, index) =>
+                      index == 0 ? driversLink() : vanCard(index - 1),
                 );
               },
             ),

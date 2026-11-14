@@ -143,7 +143,7 @@ void main() {
       });
     }
 
-    testWidgets('hub at 1920x1080: two cards side by side, capped', (
+    testWidgets('hub at 1920x1080: one centred column, capped at 720', (
       tester,
     ) async {
       await pumpScreen(
@@ -157,9 +157,13 @@ void main() {
       await settleFrames(tester);
       final a = find.byType(VanCard).at(0);
       final b = find.byType(VanCard).at(1);
-      expect(tester.getTopLeft(a).dy, tester.getTopLeft(b).dy);
-      expect(tester.getSize(a).width, lessThanOrEqualTo(kCardMaxWidth));
-      expect(tester.getSize(b).width, lessThanOrEqualTo(kCardMaxWidth));
+      expect(tester.getTopLeft(b).dy, greaterThan(tester.getTopLeft(a).dy));
+      expect(tester.getSize(a).width, lessThanOrEqualTo(kContentMaxWidth));
+      expect(tester.getSize(b).width, lessThanOrEqualTo(kContentMaxWidth));
+      // Centred: the same margin on both sides of the column.
+      final left = tester.getTopLeft(a).dx;
+      final right = 1920 - tester.getTopRight(a).dx;
+      expect((left - right).abs(), lessThan(100));
       expect(tester.takeException(), isNull);
       await tester.pump(const Duration(seconds: 10));
       await disposeScreen(tester);
