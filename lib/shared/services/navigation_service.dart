@@ -33,7 +33,7 @@ class NavigationService {
   void _mirrorTabToUrl() {
     // Not before the landing is applied: the neutral Home default must not
     // overwrite the remembered tab in the address bar.
-    if (!_landingApplied) return;
+    if (!kIsWeb || !_landingApplied) return;
     final f = fragmentForTab(currentIndex.value);
     if (f != null) replaceUrlRoute(f);
   }
