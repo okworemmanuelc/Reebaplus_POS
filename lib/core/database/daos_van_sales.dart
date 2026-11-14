@@ -3356,6 +3356,34 @@ class VanDriversDao extends DatabaseAccessor<AppDatabase>
         .watch();
   }
 
+  /// The old account's empty-crate movements (#821), newest first, with the
+  /// manufacturer's name — read-only history on the driver's page. Every
+  /// customer `crate_ledger` row is returned, voided ones included (the
+  /// screen marks them), the same set the customer's crate balance sums.
+  Stream<List<OldAccountCrateMovement>> watchOldAccountCrateHistory(
+    String customerId,
+  ) {
+    final l = db.crateLedger;
+    final m = db.manufacturers;
+    final query =
+        db.select(l).join([leftOuterJoin(m, m.id.equalsExp(l.manufacturerId))])
+          ..where(
+            whereBusiness(l) &
+                l.customerId.equals(customerId) &
+                l.manufacturerId.isNotNull(),
+          )
+          ..orderBy([OrderingTerm.desc(l.createdAt)]);
+    return query.watch().map(
+      (rows) => [
+        for (final r in rows)
+          OldAccountCrateMovement(
+            row: r.readTable(l),
+            manufacturerName: r.readTableOrNull(m)?.name,
+          ),
+      ],
+    );
+  }
+
   /// Link [vanDriverId] to the old customer account [customerId] — ONCE, in one
   /// transaction. Returns the kobo moved (0 when the customer owed nothing).
   ///
@@ -3500,6 +3528,13 @@ class OldAccountSummary {
 
   /// What the customer owes (kobo), 0 when nothing or in credit.
   int get owedKobo => balanceKobo < 0 ? -balanceKobo : 0;
+}
+
+/// One empty-crate movement on a driver's old customer account (#821).
+class OldAccountCrateMovement {
+  final CrateLedgerData row;
+  final String? manufacturerName;
+  const OldAccountCrateMovement({required this.row, this.manufacturerName});
 }
 
 /// A refused link (#783): the message is shown to the manager as is.

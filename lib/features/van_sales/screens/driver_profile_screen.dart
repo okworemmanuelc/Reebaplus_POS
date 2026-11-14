@@ -35,6 +35,7 @@ const kDriverTripRowKeyPrefix = 'driver-trip-row-';
 const kDriverSaleRowKeyPrefix = 'driver-sale-row-';
 const kDriverLedgerRowKeyPrefix = 'driver-ledger-row-';
 const kDriverCrateRowKeyPrefix = 'driver-crate-row-';
+const kDriverOldCrateRowKeyPrefix = 'driver-old-crate-row-';
 
 Key driverTripRowKey(String tripId) =>
     ValueKey('$kDriverTripRowKeyPrefix$tripId');
@@ -44,6 +45,11 @@ Key driverLedgerRowKey(String entryId) =>
     ValueKey('$kDriverLedgerRowKeyPrefix$entryId');
 Key driverCrateRowKey(String tripId) =>
     ValueKey('$kDriverCrateRowKeyPrefix$tripId');
+Key driverOldCrateRowKey(String ledgerId) =>
+    ValueKey('$kDriverOldCrateRowKeyPrefix$ledgerId');
+
+/// The "Empty crates owed" card on a linked driver's Crates owed tab (#821).
+const kDriverCratesOwedCardKey = ValueKey('driver-crates-owed-card');
 
 /// One driver's whole money story (#146, reworked by #748; PRD #139 / ADR 0019,
 /// van-sales spec §9.5 / §11).
@@ -101,11 +107,15 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
     super.dispose();
   }
 
-  List<String> _resolveTabKeys({required bool tracksCrates}) => [
+  List<String> _resolveTabKeys({
+    required bool tracksCrates,
+    required bool showOldCrates,
+  }) => [
     'trips',
     'sales',
     'ledger',
     if (tracksCrates) 'crates',
+    if (showOldCrates) 'oldCrates',
   ];
 
   void _syncTabController(List<String> tabKeys) {
@@ -292,7 +302,26 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
       ref.watch(currentBusinessProvider),
     );
 
-    final tabKeys = _resolveTabKeys(tracksCrates: tracksCrates);
+    // #821: the old customer account's empty crates, shown only (never
+    // rewritten). Only for a linked driver of a shop that tracks crates.
+    final showOldCrates = tracksCrates && oldCustomerId != null;
+    final oldCrateBalances = showOldCrates
+        ? ref
+                  .watch(oldAccountCrateBalancesProvider(oldCustomerId))
+                  .valueOrNull ??
+              const <CrateBalanceEntry>[]
+        : const <CrateBalanceEntry>[];
+    final oldCrateHistory = showOldCrates
+        ? ref
+                  .watch(oldAccountCrateHistoryProvider(oldCustomerId))
+                  .valueOrNull ??
+              const <OldAccountCrateMovement>[]
+        : const <OldAccountCrateMovement>[];
+
+    final tabKeys = _resolveTabKeys(
+      tracksCrates: tracksCrates,
+      showOldCrates: showOldCrates,
+    );
     _syncTabController(tabKeys);
 
     return _shell(
@@ -308,7 +337,11 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
             tabBarChromeExtent: _tabBarBottomMargin,
             tabBar: Padding(
               padding: EdgeInsets.symmetric(horizontal: _gutter),
-              child: _tabBar(context, showCrates: tracksCrates),
+              child: _tabBar(
+                context,
+                showCrates: tracksCrates,
+                showOldCrates: showOldCrates,
+              ),
             ),
             headerSlivers: [
               SliverToBoxAdapter(
@@ -373,6 +406,14 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
                   slivers: _cratesTabSlivers(
                     trips: periodTrips,
                     vanNameById: vanNameById,
+                  ),
+                ),
+              if (showOldCrates)
+                TabSliverView(
+                  storageKey: 'driver-profile-old-crates',
+                  slivers: _oldCratesTabSlivers(
+                    balances: oldCrateBalances,
+                    history: oldCrateHistory,
                   ),
                 ),
             ],
@@ -570,7 +611,11 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
 
   double get _tabBarBottomMargin => context.getRSize(8);
 
-  Widget _tabBar(BuildContext context, {required bool showCrates}) {
+  Widget _tabBar(
+    BuildContext context, {
+    required bool showCrates,
+    required bool showOldCrates,
+  }) {
     final t = Theme.of(context);
     return Container(
       margin: EdgeInsets.only(bottom: _tabBarBottomMargin),
@@ -612,6 +657,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
             // Must stay in lockstep with the TabBarView children and the
             // controller length above.
             if (showCrates) const Tab(text: 'Crates'),
+            if (showOldCrates) const Tab(text: 'Crates owed'),
           ],
         ),
       ),
@@ -944,6 +990,137 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen>
                   ),
                 ),
               ),
+          ]),
+        ),
+      ),
+    ];
+  }
+
+  /// #821: the empty crates the driver's OLD customer account still owes, per
+  /// manufacturer, then that account's crate history, newest first. Shown
+  /// only: nothing here is written, and it is all time (the period selector
+  /// does not apply, like the balance card).
+  List<Widget> _oldCratesTabSlivers({
+    required List<CrateBalanceEntry> balances,
+    required List<OldAccountCrateMovement> history,
+  }) {
+    final t = Theme.of(context);
+    final subtext = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
+    final owed = [
+      for (final b in balances)
+        if (b.balance != 0) b,
+    ]..sort((a, b) => a.manufacturerName.compareTo(b.manufacturerName));
+    final total = owed.fold<double>(0, (s, b) => s + b.balance);
+
+    TextStyle rowStyle({bool bold = false}) => TextStyle(
+      fontSize: context.getRFontSize(13),
+      fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+      color: t.colorScheme.onSurface,
+    );
+
+    return [
+      SliverPadding(
+        padding: _tabPadding(context, _gutter),
+        sliver: SliverList(
+          delegate: SliverChildListDelegate([
+            GlassyCard(
+              key: kDriverCratesOwedCardKey,
+              padding: EdgeInsets.all(context.getRSize(16)),
+              radius: 16,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Empty crates owed',
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(14),
+                      fontWeight: FontWeight.w800,
+                      color: t.colorScheme.onSurface,
+                    ),
+                  ),
+                  SizedBox(height: context.getRSize(4)),
+                  Text(
+                    'From the old customer account. Shown only, all time.',
+                    style: TextStyle(
+                      fontSize: context.getRFontSize(12),
+                      color: subtext,
+                    ),
+                  ),
+                  SizedBox(height: context.getRSize(12)),
+                  if (owed.isEmpty)
+                    Text(
+                      'No empty crates owed.',
+                      style: TextStyle(
+                        fontSize: context.getRFontSize(13),
+                        fontWeight: FontWeight.w600,
+                        color: subtext,
+                      ),
+                    )
+                  else ...[
+                    for (final b in owed)
+                      Padding(
+                        padding: EdgeInsets.only(bottom: context.getRSize(6)),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                b.manufacturerName,
+                                style: rowStyle(),
+                              ),
+                            ),
+                            Text(
+                              b.balance > 0
+                                  ? formatQty(b.balance)
+                                  : '${formatQty(-b.balance)} in credit',
+                              style: rowStyle(),
+                            ),
+                          ],
+                        ),
+                      ),
+                    Divider(height: context.getRSize(12)),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text('Total', style: rowStyle(bold: true)),
+                        ),
+                        Text(
+                          total >= 0
+                              ? formatQty(total)
+                              : '${formatQty(-total)} in credit',
+                          key: const ValueKey('driver-crates-owed-total'),
+                          style: rowStyle(bold: true),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            SizedBox(height: context.getRSize(16)),
+            Text(
+              'Crate history',
+              style: TextStyle(
+                fontSize: context.getRFontSize(14),
+                fontWeight: FontWeight.w800,
+                color: t.colorScheme.onSurface,
+              ),
+            ),
+            SizedBox(height: context.getRSize(8)),
+            if (history.isEmpty)
+              Padding(
+                padding: EdgeInsets.symmetric(vertical: context.getRSize(20)),
+                child: Text(
+                  'No empty crates recorded on the old customer account',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(13),
+                    color: subtext,
+                  ),
+                ),
+              )
+            else
+              for (final h in history)
+                _OldCrateRow(key: driverOldCrateRowKey(h.row.id), movement: h),
           ]),
         ),
       ),
@@ -1732,6 +1909,94 @@ class _OldPaymentTile extends StatelessWidget {
               fontSize: context.getRFontSize(15),
               fontWeight: FontWeight.w800,
               color: tone,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// What a crate movement on the old customer account means, in shop words
+/// (#821). Customer rows are only ever given out, returned, damaged or a
+/// correction; anything else reads as a correction.
+String oldCrateMovementLabel(String movementType) {
+  switch (movementType) {
+    case 'issued':
+      return 'Given out';
+    case 'returned':
+      return 'Returned';
+    case 'damaged':
+    case 'full_crate_damage':
+      return 'Damaged';
+    default:
+      return 'Correction';
+  }
+}
+
+/// One empty-crate movement from the driver's OLD customer account (#821):
+/// date, manufacturer, what happened, and the signed count (+ = more owed).
+/// A voided row stays listed, marked "Voided" and greyed.
+class _OldCrateRow extends StatelessWidget {
+  final OldAccountCrateMovement movement;
+  const _OldCrateRow({super.key, required this.movement});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context);
+    final semantic = t.extension<AppSemanticColors>()!;
+    final subtext = t.textTheme.bodySmall?.color ?? t.iconTheme.color!;
+    final row = movement.row;
+    final voided = row.voidedAt != null;
+    final delta = row.quantityDelta;
+    final tone = voided
+        ? subtext
+        : delta > 0
+        ? semantic.warning
+        : delta < 0
+        ? semantic.success
+        : t.colorScheme.onSurface;
+    final sign = delta > 0 ? '+' : (delta < 0 ? '−' : '');
+    return GlassyCard(
+      margin: EdgeInsets.only(bottom: context.getRSize(10)),
+      radius: 16,
+      padding: EdgeInsets.all(context.getRSize(14)),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${oldCrateMovementLabel(row.movementType)}'
+                  '${voided ? ' • Voided' : ''}',
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(14),
+                    fontWeight: FontWeight.bold,
+                    color: voided ? subtext : t.colorScheme.onSurface,
+                  ),
+                ),
+                SizedBox(height: context.getRSize(4)),
+                Text(
+                  '${DateFormat('d MMM y').format(row.createdAt)}'
+                  ' • ${movement.manufacturerName ?? 'Unknown'}',
+                  style: TextStyle(
+                    fontSize: context.getRFontSize(12),
+                    color: subtext,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(width: context.getRSize(8)),
+          Text(
+            '$sign${formatQty(delta.abs())}',
+            style: TextStyle(
+              fontSize: context.getRFontSize(15),
+              fontWeight: FontWeight.w800,
+              color: tone,
+              decoration: voided ? TextDecoration.lineThrough : null,
             ),
           ),
         ],

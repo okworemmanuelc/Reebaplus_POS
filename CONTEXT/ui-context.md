@@ -494,6 +494,12 @@ gate and write path is unchanged.**
 - **Drivers list, driver page, payments, Load / Restock, Record Return,
   Reconcile & close**: one 720 column, centred; pinned bottom bars span the
   screen with their content inside the column.
+- **Driver page "Crates owed" tab (#821)**: only for a driver linked to an old
+  customer account in a shop that tracks crates. An "Empty crates owed" card
+  (manufacturer and count for each non-zero brand, plus Total, or "No empty
+  crates owed.") and a "Crate history" list, newest first (Given out /
+  Returned / Damaged / Correction, signed count, voided rows marked). Read-only,
+  all time, from the customer's own crate ledger.
 
 ## Shared parts (`lib/shared/widgets/redesign/`, #352 PR 2)
 
