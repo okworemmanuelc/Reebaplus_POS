@@ -7,6 +7,12 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #821: driver page shows empty crates from the old customer account (2026-11-14, branch `feat/driver-crates`)
+- Owner: the old customer accounts' empty-crate history shows under the driver. Read-only through `van_drivers.customer_id`; nothing rewritten, no schema or money change.
+- Driver page gets a "Crates owed" tab (linked driver + crate-tracking shop only): "Empty crates owed" per manufacturer with a total, then "Crate history". New `VanDriversDao.watchOldAccountCrateHistory`, `oldAccountCrateBalancesProvider`, `oldAccountCrateHistoryProvider`.
+- Not built: crates out and back on van trips are not in the figure (the driver and manufacturer are not saved on lots / returns, and unreturned crates are shown, not charged).
+- Live data 2026-11-14: Johnson's old ₦610,150 was posted to his driver account again at the owner's order (new rows; the 12 Nov reversal was the owner's mistake). Driver balance ₦750,050.
+- Tests: `test/van_sales/driver_old_account_crates_test.dart`. Not checked on a device.
 ### Issue #820: Van Sales screens fit every screen size + screen-size rule (2026-11-14, branch `feat/van-wide-layout`)
 - Owner screenshot: the #810 redesign stretched across a large screen. Every van screen, the hub included, sits in one centred 720 column like Orders (owner chose this over side-by-side cards). Layout only, no money change.
 - New shared helpers in `lib/core/utils/responsive.dart`: `kContentMaxWidth`, `kCardMaxWidth`, `contentGutter`, `cardGridColumns`, `cardGridMaxWidth`.

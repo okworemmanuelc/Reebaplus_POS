@@ -1998,6 +1998,24 @@ final oldAccountPaymentsProvider =
       whenAbsent: const [],
     );
 
+/// A linked driver's old customer account: empty crates owed per manufacturer
+/// (read-only, #821). The customer page's own derived balance stream.
+final oldAccountCrateBalancesProvider =
+    businessScopedStreamFamily<List<CrateBalanceEntry>, String>(
+      (ref, db, businessId, customerId) =>
+          db.customersDao.watchCrateBalancesWithGroups(customerId),
+      whenAbsent: const [],
+    );
+
+/// A linked driver's old customer account: its empty-crate history, newest
+/// first (read-only, #821).
+final oldAccountCrateHistoryProvider =
+    businessScopedStreamFamily<List<OldAccountCrateMovement>, String>(
+      (ref, db, businessId, customerId) =>
+          db.vanDriversDao.watchOldAccountCrateHistory(customerId),
+      whenAbsent: const [],
+    );
+
 /// The Drivers list (#146, reworked by #748) — every current driver, plus every
 /// REMOVED driver the ledger still has a balance for, badged.
 ///
