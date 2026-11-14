@@ -8,7 +8,7 @@ const kSignInNetworkMessage =
 /// Shown for every other sign-in failure. Deliberately free of exception text:
 /// the raw detail goes to the crash log, not to a shop floor (#285 decision 8).
 const kSignInSetupFailedMessage =
-    'We couldn\'t finish setting up this phone. Try again, or contact support.';
+    'We couldn\'t finish setting up this device. Try again, or contact support.';
 
 /// The message to show the user for a failed sign-in. Both entry screens use
 /// this so the email-code path and the Google path can never drift apart.

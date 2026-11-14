@@ -2718,7 +2718,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
   // all inside ONE transaction. Commit enqueues the `pos_claim_order_reversal`
   // envelope and HOLDS every outbox row enqueued since begin behind it (keyed by
   // the reversal id). The drain releases them when the claim lands, or — when
-  // another phone's reversal won — [undoRejectedReversal] withdraws them.
+  // another device's reversal won — [undoRejectedReversal] withdraws them.
 
   /// Starts a guarded reversal: snapshots the outbox so [commitGuardedReversal]
   /// can hold exactly the rows the reversal enqueues. Call inside the
@@ -2933,7 +2933,7 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
 
   /// #550 — alerts the CEO and the Managers (of the order's store, when it has
   /// one) that a refund of [orderId] made on this phone was rejected because the
-  /// sale had already been refunded on another phone: cash may have been handed
+  /// sale had already been refunded on another device: cash may have been handed
   /// back twice. Best-effort: never throws.
   Future<void> alertRefundRejected(
     String orderId, {
@@ -2970,10 +2970,10 @@ class OrdersDao extends DatabaseAccessor<AppDatabase>
               ? '$label: $kEditRejectedMessage'
               : partReturn
               ? 'A return on $label was rejected: more of it was returned on '
-                    'another phone than was sold. Check whether goods or money '
+                    'another device than was sold. Check whether goods or money '
                     'were handed back twice.'
               : 'A refund of $label was rejected: the sale had already been '
-                    'refunded on another phone. Check whether money was handed '
+                    'refunded on another device. Check whether money was handed '
                     'back twice.',
           severity: 'warning',
           linkedRecordId: orderId,

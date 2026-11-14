@@ -144,7 +144,7 @@ class _DriverTerminalScreenState extends ConsumerState<DriverTerminalScreen> {
           title: 'Sale Complete',
           subtitle: rail
               ? 'Saved on this tablet · sends when online'
-              : 'Saved on this phone · sends when online',
+              : 'Saved on this device · sends when online',
           leadingIcon: AppIcons.close,
           leadingLabel: 'Close',
           onLeading: _newSale,

@@ -192,7 +192,7 @@ class ScannerErrorView extends StatelessWidget {
             const SizedBox(height: 16),
             Text(
               isPermissionDenied
-                  ? 'Camera is off for this app. Turn it on in your phone '
+                  ? 'Camera is off for this app. Turn it on in your device '
                         'settings, then close and reopen the scanner.'
                   : 'Camera unavailable. Allow camera access for this app in '
                         'your device settings to scan barcodes.',

@@ -75,7 +75,7 @@ class _NotificationSettingsTileState
       case PushPermissionStatus.granted:
         return 'On — important updates reach this device.';
       case PushPermissionStatus.denied:
-        return 'Off — turn on in your phone settings.';
+        return 'Off — turn on in your device settings.';
       case PushPermissionStatus.notDetermined:
         return 'Get important updates, even when the app is closed.';
       case null:
