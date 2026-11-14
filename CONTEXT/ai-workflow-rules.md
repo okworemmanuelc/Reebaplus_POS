@@ -87,6 +87,7 @@ Do not start the next unit until all of the following are true. Verify each one 
 6. `flutter analyze` passes with zero errors and zero new warnings.
 7. `flutter test` passes.
 8. Generated code, if any schema or model changed, was regenerated with `dart run build_runner build` and committed.
+9. A new or redesigned screen follows the **Screen-size rule** in `ui-context.md` (#820): content capped, cards in columns, five sizes tested. Write the rule into every helper's brief for screen work.
 
 ## Token-Saving Rules (owner decision 2026-10-23, all agents and platforms)
 

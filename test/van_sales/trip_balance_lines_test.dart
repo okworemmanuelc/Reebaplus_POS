@@ -6,7 +6,7 @@ import 'package:reebaplus_pos/core/utils/number_format.dart';
 import 'package:reebaplus_pos/core/van_sales/van_trip_position.dart';
 import 'package:reebaplus_pos/features/van_sales/widgets/trip_balance_lines.dart';
 
-// #800: the driver's balance split three ways wherever money is taken.
+// #800 / #820: this trip's owed figure wherever money is taken.
 
 VanTripPosition _position(int outstandingKobo) => VanTripPosition(
   loadedUnits: 10,
@@ -65,48 +65,22 @@ Future<void> _pump(
 }
 
 void main() {
-  test('split: earlier debt plus this trip makes the total', () {
-    final s = TripBalanceSplit(
-      totalBalanceKobo: -101065000,
-      tripOutstandingKobo: 40050000,
-    );
-    expect(s.beforeOwedKobo, 61015000);
-    expect(s.tripOwedKobo, 40050000);
-    expect(s.totalOwedKobo, 101065000);
-  });
-
-  test('split: a payment made on no trip shows as credit from before', () {
-    final s = TripBalanceSplit(
-      totalBalanceKobo: -30000000,
-      tripOutstandingKobo: 40050000,
-    );
-    expect(s.beforeOwedKobo, -10050000);
-    expect(owedLabel(s.beforeOwedKobo), contains('In credit'));
-  });
-
-  testWidgets('shows before, this trip and the total owed now', (tester) async {
+  testWidgets('shows only this trip, no before or total lines', (tester) async {
     await _pump(
       tester,
       totalBalanceKobo: -101065000,
       tripOutstandingKobo: 40050000,
     );
-    expect(find.text('Balance before this trip'), findsOneWidget);
-    expect(find.text(formatCurrency(610150)), findsOneWidget);
     expect(find.text('This trip'), findsOneWidget);
     expect(find.text(formatCurrency(400500)), findsOneWidget);
-    expect(find.text('Total owed now'), findsOneWidget);
-    expect(find.text(formatCurrency(1010650)), findsOneWidget);
+    expect(find.text('Balance before this trip'), findsNothing);
+    expect(find.text('Total owed now'), findsNothing);
+    expect(find.text(formatCurrency(610150)), findsNothing);
+    expect(find.text(formatCurrency(1010650)), findsNothing);
   });
 
-  testWidgets('a driver with nothing from before shows zero, not a blank', (
-    tester,
-  ) async {
-    await _pump(
-      tester,
-      totalBalanceKobo: -40050000,
-      tripOutstandingKobo: 40050000,
-    );
-    expect(find.text(formatCurrency(0)), findsOneWidget);
-    expect(find.text(formatCurrency(400500)), findsNWidgets(2));
+  testWidgets('a trip paid past its value reads as credit', (tester) async {
+    await _pump(tester, totalBalanceKobo: 500000, tripOutstandingKobo: -500000);
+    expect(find.text('In credit ${formatCurrency(5000)}'), findsOneWidget);
   });
 }
