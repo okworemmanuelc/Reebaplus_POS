@@ -36,7 +36,7 @@ class AgeConfirmationDialog extends StatelessWidget {
   static const title = 'Are you 18 or older?';
   static const body =
       'This item contains alcohol. Only people aged 18 or older may buy it. '
-      'We ask once on this phone.';
+      'We ask once on this device.';
   static const confirmLabel = 'I am 18 or older';
   static const declineLabel = 'Not now';
 

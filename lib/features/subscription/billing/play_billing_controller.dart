@@ -66,7 +66,7 @@ class CurrentPlan {
 }
 
 const String kManageInPlayMessage =
-    'Manage your subscription in Google Play on the phone you bought it with.';
+    'Manage your subscription in Google Play on the device you bought it with.';
 
 enum BillingPhase { loading, unavailable, ready, purchasing, verifying, success, error }
 

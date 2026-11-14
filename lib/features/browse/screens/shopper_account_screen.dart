@@ -59,7 +59,7 @@ class ShopperAccountScreen extends ConsumerWidget {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Sign out?'),
-        content: const Text('Your cart stays on this phone.'),
+        content: const Text('Your cart stays on this device.'),
         actions: [
           AppButton(
             text: 'Stay signed in',

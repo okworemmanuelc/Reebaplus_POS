@@ -92,7 +92,7 @@ class PhotoSourceSheet extends StatelessWidget {
               icon: AppIcons.image,
               tone: IconTileTone.green,
               title: 'Choose from gallery',
-              subtitle: 'A photo already on this phone',
+              subtitle: 'A photo already on this device',
               onTap: () => Navigator.of(context).pop(ImageSource.gallery),
             ),
           ],
