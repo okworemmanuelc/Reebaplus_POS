@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
@@ -16,10 +17,17 @@ const String _kSoftAskShownKey = 'push_soft_ask_shown_v1';
 /// (on sign-in); denied devices are respected (the Settings → Notifications
 /// toggle re-enables them) — neither is nagged. On "Turn on" it triggers the OS
 /// prompt and registers the token (#138 Slice 2).
+///
+/// Never offered in the browser (#823): it has no working push, so the ask
+/// would only be a dead end. [isWeb] exists so tests can drive that branch.
+/// The "asked" flag is written before the sheet opens, so neither "Turn on"
+/// nor "Not now" nor a failed permission step can bring the sheet back.
 Future<void> maybePromptForPushPermission(
   BuildContext context,
-  WidgetRef ref,
-) async {
+  WidgetRef ref, {
+  bool isWeb = kIsWeb,
+}) async {
+  if (isWeb) return;
   final push = ref.read(pushNotificationServiceProvider);
   final status = await push.currentPermission();
   if (status != PushPermissionStatus.notDetermined) return;
@@ -36,7 +44,13 @@ Future<void> maybePromptForPushPermission(
     builder: (_) => const PushPermissionSheet(),
   );
   if (accepted == true) {
-    await push.requestPermissionAndRegister();
+    try {
+      await push.requestPermissionAndRegister();
+    } catch (e) {
+      // The ask is already recorded; a failed permission/token step must
+      // never surface or re-open the sheet.
+      debugPrint('[Push] requestPermissionAndRegister failed: $e');
+    }
   }
 }
 

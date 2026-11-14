@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/features/settings/screens/settings_page_parts.dart';
@@ -210,8 +211,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           SizedBox(height: gap),
           // Per-device push permission for console broadcasts (#138 Slice 2) —
           // ungated so every staff member can manage their own notifications.
-          const NotificationSettingsTile(),
-          SizedBox(height: gap),
+          // The browser has no push (#823), so the tile is hidden there.
+          if (!kIsWeb) ...[
+            const NotificationSettingsTile(),
+            SizedBox(height: gap),
+          ],
           AppButton(
             text: 'Edit Profile',
             variant: AppButtonVariant.outline,
