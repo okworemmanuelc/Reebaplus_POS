@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:reebaplus_pos/shared/services/active_store_memory.dart';
+import 'package:reebaplus_pos/shared/services/tab_url_memory.dart';
 
 /// Where the remembered-store restore is (#653). `idle` = nothing to wait for;
 /// `reading` = the saved pick is being read; `pickReady` = a saved pick waits
@@ -15,7 +17,26 @@ class NavigationService {
     return _instance;
   }
 
-  NavigationService._internal();
+  NavigationService._internal() {
+    if (kIsWeb) {
+      // #828: read the URL tab once, before anything can overwrite it, then
+      // mirror later tab changes into the fragment.
+      _urlTabAtStart = tabIndexFromFragment(startRoute);
+      currentIndex.addListener(_mirrorTabToUrl);
+    }
+  }
+
+  /// Browser only (#828): the tab named in the URL when the app started, used
+  /// once by [applyRoleLanding] and then dropped.
+  int? _urlTabAtStart;
+
+  void _mirrorTabToUrl() {
+    // Not before the landing is applied: the neutral Home default must not
+    // overwrite the remembered tab in the address bar.
+    if (!kIsWeb || !_landingApplied) return;
+    final f = fragmentForTab(currentIndex.value);
+    if (f != null) replaceUrlRoute(f);
+  }
 
   /// Tab indexes into MainLayout's `_tabWidgets` list. Only the two that the
   /// landing rule below needs are named here; the rest are mapped by
@@ -314,11 +335,24 @@ class NavigationService {
   /// never yanked back. The move itself is also skipped when the session is no
   /// longer sitting on the untouched neutral default, so someone who picked a
   /// tab inside the resolve window keeps their pick.
-  void applyRoleLanding(int index) {
+  ///
+  /// Browser only (#828): when the URL named a tab at start and [isTabAllowed]
+  /// says this user may see it, open that tab instead of [index]. Used once.
+  void applyRoleLanding(int index, {bool Function(int tab)? isTabAllowed}) {
     if (_landingApplied) return;
     _landingApplied = true;
     _landingIndex = index;
-    if (currentIndex.value == homeTab) setIndex(index);
+    var target = index;
+    if (kIsWeb && isTabAllowed != null) {
+      target = resolveStartTab(
+        saved: _urlTabAtStart,
+        roleLanding: index,
+        isAllowed: isTabAllowed,
+      );
+    }
+    _urlTabAtStart = null;
+    if (currentIndex.value == homeTab) setIndex(target);
+    _mirrorTabToUrl();
   }
 
   bool popIndex() {

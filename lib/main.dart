@@ -20,6 +20,7 @@ import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/core/services/db_worker_switch_watcher.dart';
 import 'package:reebaplus_pos/core/diagnostics/overflow_route_reporter.dart';
 import 'package:reebaplus_pos/shared/widgets/error_fallback.dart';
+import 'package:reebaplus_pos/shared/services/tab_url_memory.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/storefront/browse_switch.dart';
@@ -77,6 +78,9 @@ void main() {
 
 Future<void> _bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // #828: remember the tab named in the browser address before the root
+  // Navigator rewrites it to `#/`.
+  if (kIsWeb) captureStartRoute();
 
   // §33.2: install the global Flutter/platform error handlers and the friendly
   // fallback widget (replaces Flutter's red error box) before anything else can
@@ -573,6 +577,9 @@ class _ReebaplusPosAppState extends ConsumerState<ReebaplusPosApp>
               DesignSystem.blue => AppTheme.dark(),
             },
             navigatorKey: _navigatorKey,
+            // #828: the address names a tab (e.g. `#/orders`), not a route —
+            // start the root Navigator at '/' so it doesn't try to open it.
+            initialRoute: kIsWeb ? '/' : null,
             home: _HomeRouter(hasDeviceUser: _hasDeviceUser),
           ),
         ),
