@@ -21,7 +21,7 @@ class NavigationService {
     if (kIsWeb) {
       // #828: read the URL tab once, before anything can overwrite it, then
       // mirror later tab changes into the fragment.
-      _urlTabAtStart = tabIndexFromFragment(readUrlFragment());
+      _urlTabAtStart = tabIndexFromFragment(startRoute);
       currentIndex.addListener(_mirrorTabToUrl);
     }
   }
@@ -35,7 +35,7 @@ class NavigationService {
     // overwrite the remembered tab in the address bar.
     if (!_landingApplied) return;
     final f = fragmentForTab(currentIndex.value);
-    if (f != null) replaceUrlFragment(f);
+    if (f != null) replaceUrlRoute(f);
   }
 
   /// Tab indexes into MainLayout's `_tabWidgets` list. Only the two that the

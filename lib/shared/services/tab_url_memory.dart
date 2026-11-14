@@ -1,7 +1,7 @@
+import 'dart:ui' show PlatformDispatcher;
+
+import 'package:flutter/services.dart' show SystemNavigator;
 import 'package:reebaplus_pos/shared/services/navigation_service.dart';
-import 'package:reebaplus_pos/shared/services/tab_url_memory_stub.dart'
-    if (dart.library.js_interop) 'package:reebaplus_pos/shared/services/tab_url_memory_web.dart'
-    as impl;
 
 /// Browser reload keeps the tab (#828). Pure rules first, URL glue below.
 
@@ -21,10 +21,11 @@ int? tabIndexFromFragment(String? fragment) {
   return null;
 }
 
-/// Fragment for [tab], e.g. `#/orders`; null for an index with no name.
+/// Route for [tab], e.g. `/orders` (shown as `#/orders` in the browser's
+/// address bar); null for an index with no name.
 String? fragmentForTab(int tab) {
   final name = NavigationService.indexToRoute[tab];
-  return name == null ? null : '#/$name';
+  return name == null ? null : '/$name';
 }
 
 /// The tab a fresh session opens on: the remembered [saved] tab when this user
@@ -38,8 +39,21 @@ int resolveStartTab({
   return roleLanding;
 }
 
-/// Current URL fragment in the browser; '' on every other platform.
-String readUrlFragment() => impl.readUrlFragment();
+/// The route the browser opened on (e.g. `/orders` from `#/orders`).
+///
+/// Captured by [captureStartRoute] in `main()` before `runApp`, because the
+/// root Navigator rewrites the address bar to `#/` on its first frame.
+String? _startRoute;
+String? get startRoute => _startRoute;
 
-/// Replaces (never pushes) the URL fragment. No-op off the browser.
-void replaceUrlFragment(String fragment) => impl.replaceUrlFragment(fragment);
+/// Call once in `main()`, before `runApp`. Browser only.
+void captureStartRoute() {
+  _startRoute = PlatformDispatcher.instance.defaultRouteName;
+}
+
+/// Shows [route] in the address bar, replacing (never pushing) the history
+/// entry. Goes through the engine so its own back-button bookkeeping stays
+/// intact. Browser only.
+void replaceUrlRoute(String route) {
+  SystemNavigator.routeInformationUpdated(uri: Uri.parse(route), replace: true);
+}

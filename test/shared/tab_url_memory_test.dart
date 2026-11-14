@@ -4,6 +4,9 @@ import 'package:reebaplus_pos/shared/services/tab_url_memory.dart';
 
 void main() {
   group('tab name <-> index', () {
+    test('fragmentForTab gives a route path', () {
+      expect(fragmentForTab(3), '/orders');
+    });
     test('every tab round-trips through its fragment', () {
       for (final e in NavigationService.indexToRoute.entries) {
         expect(tabIndexFromFragment(fragmentForTab(e.key)), e.key);
