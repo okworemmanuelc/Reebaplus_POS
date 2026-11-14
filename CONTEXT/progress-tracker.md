@@ -7,6 +7,10 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Release 2.0.7+17 and issue #823: browser never shows the announcements ask (2026-11-14, branch `fix/web-push-sheet`)
+- `maybePromptForPushPermission` returns early on web (`isWeb = kIsWeb`); the Profile screen's announcements tile is hidden on web; a failed register step after "Turn on" is swallowed. The flag was already written before the sheet opens, so why the browser repeated it is NOT confirmed (the browser losing its saved data is the guess).
+- Version bumped to 2.0.7+17 (pubspec + `kAppVersion`). No Drift or cloud migration since build 16, so the minimum build stays 16.
+- Tests: `test/shared/push_permission_sheet_test.dart`. Not checked in a browser or on a phone.
 ### Issue #821: driver page shows empty crates from the old customer account (2026-11-14, branch `feat/driver-crates`)
 - Owner: the old customer accounts' empty-crate history shows under the driver. Read-only through `van_drivers.customer_id`; nothing rewritten, no schema or money change.
 - Driver page gets a "Crates owed" tab (linked driver + crate-tracking shop only): "Empty crates owed" per manufacturer with a total, then "Crate history". New `VanDriversDao.watchOldAccountCrateHistory`, `oldAccountCrateBalancesProvider`, `oldAccountCrateHistoryProvider`.
