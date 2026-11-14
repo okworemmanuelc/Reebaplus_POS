@@ -470,7 +470,7 @@ class _MainLayoutState extends ConsumerState<MainLayout>
           : NavigationService.homeTab;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        nav.applyRoleLanding(landing);
+        nav.applyRoleLanding(landing, isTabAllowed: _isTabAllowed);
       });
     }
 
@@ -804,6 +804,20 @@ class _MainLayoutState extends ConsumerState<MainLayout>
       ),
     );
   }
+
+  /// Whether this user may be on [tab] (#828: a remembered browser tab is only
+  /// restored when it passes). Same gates as the nav bar and the drawer.
+  bool _isTabAllowed(int tab) => switch (tab) {
+    0 || 3 => true,
+    1 || 8 => Gates.makeSale.allows(ref),
+    2 => Gates.viewInventory.allows(ref),
+    4 => Gates.viewCustomers.allows(ref),
+    5 => Gates.manageSuppliers.allows(ref),
+    6 => Gates.viewExpenses.allows(ref),
+    7 => Gates.viewStores.allows(ref),
+    9 => Gates.viewActivityLogs.allows(ref),
+    _ => false,
+  };
 
   /// Nav tabs in bar order. Stock (Inventory, tab 2) is gated on
   /// Gates.viewInventory (§16.7); POS (tab 1) and Cart (tab 8) are gated on
