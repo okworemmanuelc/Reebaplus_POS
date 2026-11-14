@@ -88,23 +88,25 @@ class VanSalesHubScreen extends ConsumerWidget {
                   'Add your first van, then load it for a driver from here.',
               action: _AddVanButton(),
             )
-          : ListView.separated(
-              padding: EdgeInsets.fromLTRB(
-                context.getRSize(20),
-                context.getRSize(20),
-                context.getRSize(20),
-                context.getRSize(20) + context.deviceBottomPadding,
-              ),
-              // +1 for the Drivers link, which sits above the vans: the hub's
-              // axis is the fleet, but the money's axis is the PERSON — a
-              // residual follows the driver, not the van (spec §9.4 #14) — so
-              // the way to a driver's account cannot live behind a van card
-              // that may not even be out.
-              itemCount: vans.length + 1,
-              separatorBuilder: (_, _) =>
-                  SizedBox(height: context.getRSize(12)),
-              itemBuilder: (context, index) {
-                if (index == 0) {
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                final width = constraints.maxWidth;
+                final columns = cardGridColumns(width, itemCount: vans.length);
+                final gutter = contentGutter(
+                  context,
+                  width,
+                  maxWidth: columns == 1
+                      ? kContentMaxWidth
+                      : cardGridMaxWidth(columns, gap: context.getRSize(12)),
+                );
+                final padding = EdgeInsets.fromLTRB(
+                  gutter,
+                  context.getRSize(20),
+                  gutter,
+                  context.getRSize(20) + context.deviceBottomPadding,
+                );
+
+                Widget driversLink() {
                   return _DriversLink(
                     driverCount: ref.watch(vanDriverEntriesProvider).length,
                     owingCount:
@@ -121,77 +123,132 @@ class VanSalesHubScreen extends ConsumerWidget {
                     ),
                   );
                 }
-                final i = index - 1;
-                final van = vans[i];
-                final trip = tripByVan[van.id];
-                return _VanCard(
-                  van: van,
-                  trip: trip,
-                  driverName: trip == null ? null : nameOf(trip),
-                  onLoad: trip != null
-                      ? null
-                      : () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => LoadVanScreen(vanStoreId: van.id),
-                          ),
-                        ),
-                  onRecordPayment: trip == null
-                      ? null
-                      : () => RecordDriverPaymentSheet.show(
-                          context,
-                          trip: trip,
-                          driverName: nameOf(trip),
-                        ),
-                  onPayments: trip == null
-                      ? null
-                      : () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => DriverPaymentsScreen(
-                              tripId: trip.id,
-                              driverName: nameOf(trip),
-                              vanName: van.name,
+
+                Widget vanCard(int i) {
+                  final van = vans[i];
+                  final trip = tripByVan[van.id];
+                  return _VanCard(
+                    van: van,
+                    trip: trip,
+                    driverName: trip == null ? null : nameOf(trip),
+                    onLoad: trip != null
+                        ? null
+                        : () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => LoadVanScreen(vanStoreId: van.id),
                             ),
                           ),
-                        ),
-                  // #143 — the two mid-run events. Both only exist while the
-                  // van is out: a restock loads onto an OPEN trip, and there is
-                  // nothing to return against a van at the yard.
-                  onRestock: trip == null
-                      ? null
-                      : () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                LoadVanScreen(vanStoreId: van.id, trip: trip),
+                    onRecordPayment: trip == null
+                        ? null
+                        : () => RecordDriverPaymentSheet.show(
+                            context,
+                            trip: trip,
+                            driverName: nameOf(trip),
                           ),
-                        ),
-                  onReturn: trip == null
-                      ? null
-                      : () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => VanReturnScreen(
-                              trip: trip,
-                              driverName: nameOf(trip),
-                              vanName: van.name,
+                    onPayments: trip == null
+                        ? null
+                        : () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => DriverPaymentsScreen(
+                                tripId: trip.id,
+                                driverName: nameOf(trip),
+                                vanName: van.name,
+                              ),
                             ),
                           ),
-                        ),
-                  // #145 — the way in to reconcile and close.
-                  onReconcile: trip == null
-                      ? null
-                      : () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => VanReconcileScreen(
-                              tripId: trip.id,
-                              driverName: nameOf(trip),
-                              vanName: van.name,
+                    // #143 — the two mid-run events. Both only exist while the
+                    // van is out: a restock loads onto an OPEN trip, and there is
+                    // nothing to return against a van at the yard.
+                    onRestock: trip == null
+                        ? null
+                        : () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  LoadVanScreen(vanStoreId: van.id, trip: trip),
                             ),
                           ),
-                        ),
+                    onReturn: trip == null
+                        ? null
+                        : () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => VanReturnScreen(
+                                trip: trip,
+                                driverName: nameOf(trip),
+                                vanName: van.name,
+                              ),
+                            ),
+                          ),
+                    // #145 — the way in to reconcile and close.
+                    onReconcile: trip == null
+                        ? null
+                        : () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => VanReconcileScreen(
+                                tripId: trip.id,
+                                driverName: nameOf(trip),
+                                vanName: van.name,
+                              ),
+                            ),
+                          ),
+                  );
+                }
+
+                // +1 for the Drivers link, which sits above the vans: the
+                // hub's axis is the fleet, but the money's axis is the PERSON
+                // (spec §9.4 #14), so the way to a driver's account cannot
+                // live behind a van card that may not even be out.
+                if (columns == 1) {
+                  return ListView.separated(
+                    padding: padding,
+                    itemCount: vans.length + 1,
+                    separatorBuilder: (_, _) =>
+                        SizedBox(height: context.getRSize(12)),
+                    itemBuilder: (context, index) =>
+                        index == 0 ? driversLink() : vanCard(index - 1),
+                  );
+                }
+
+                // Wide: van cards in rows of [columns]; the Drivers link is one
+                // column wide, at the start. Short last row is padded with
+                // empty Expandeds so every card keeps the same width.
+                final rowCount = (vans.length / columns).ceil();
+                final gap = context.getRSize(12);
+                return ListView.separated(
+                  padding: padding,
+                  itemCount: rowCount + 1,
+                  separatorBuilder: (_, _) => SizedBox(height: gap),
+                  itemBuilder: (context, index) {
+                    if (index == 0) {
+                      return Row(
+                        children: [
+                          Expanded(child: driversLink()),
+                          for (var c = 1; c < columns; c++) ...[
+                            SizedBox(width: gap),
+                            const Expanded(child: SizedBox.shrink()),
+                          ],
+                        ],
+                      );
+                    }
+                    final start = (index - 1) * columns;
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        for (var c = 0; c < columns; c++) ...[
+                          if (c > 0) SizedBox(width: gap),
+                          Expanded(
+                            child: start + c < vans.length
+                                ? vanCard(start + c)
+                                : const SizedBox.shrink(),
+                          ),
+                        ],
+                      ],
+                    );
+                  },
                 );
               },
             ),
@@ -455,7 +512,7 @@ class _VanCard extends StatelessWidget {
             SizedBox(height: context.getRSize(12)),
             SizedBox(
               width: double.infinity,
-              child: FilledButton.tonalIcon(
+              child: FilledButton.icon(
                 onPressed: onLoad,
                 icon: Icon(
                   AppIcons.stockAdjustment,

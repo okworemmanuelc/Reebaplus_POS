@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 /// Baseline shortest side for form-factor calculations (iPhone SE / standard Android).
@@ -326,3 +328,42 @@ class BottomBarInsetScope extends InheritedWidget {
   bool updateShouldNotify(BottomBarInsetScope oldWidget) =>
       oldWidget.clearsInset != clearsInset;
 }
+
+/// Lists and forms never grow wider than this (same 720 as
+/// kSettingsMaxContentWidth).
+const double kContentMaxWidth = 720;
+
+/// A single card in a card grid never grows wider than this.
+const double kCardMaxWidth = 540;
+
+/// Side gutter that centres a [maxWidth] column inside [measuredWidth];
+/// never less than getRSize(16). Pass the MEASURED width (LayoutBuilder),
+/// never the screen width.
+double contentGutter(
+  BuildContext context,
+  double measuredWidth, {
+  double maxWidth = kContentMaxWidth,
+}) {
+  final minGutter = context.getRSize(16);
+  return math.max(minGutter, (measuredWidth - maxWidth) / 2);
+}
+
+/// How many columns a card grid gets: as many as fit at [minCardWidth] each
+/// (after a 16dp gutter each side), at most [maxColumns], never more than
+/// [itemCount], at least 1. [gap] is the raw gap between cards.
+int cardGridColumns(
+  double measuredWidth, {
+  required int itemCount,
+  double minCardWidth = 340,
+  int maxColumns = 3,
+  double gap = 16,
+}) {
+  final usable = measuredWidth - 32;
+  final fit = ((usable + gap) / (minCardWidth + gap)).floor();
+  return math.max(1, math.min(fit, math.min(maxColumns, itemCount)));
+}
+
+/// The widest a grid of [columns] cards may be: columns * [kCardMaxWidth]
+/// plus the gaps between them.
+double cardGridMaxWidth(int columns, {double gap = 16}) =>
+    columns * kCardMaxWidth + (columns - 1) * gap;

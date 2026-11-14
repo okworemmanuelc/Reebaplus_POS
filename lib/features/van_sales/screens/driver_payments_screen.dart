@@ -62,68 +62,70 @@ class DriverPaymentsScreen extends ConsumerWidget {
     return GlassyScaffold(
       title: 'Driver Payments',
       subtitle: '$driverName • $vanName',
-      body: ListView(
-        padding: EdgeInsets.fromLTRB(
-          context.getRSize(20),
-          context.getRSize(20),
-          context.getRSize(20),
-          context.getRSize(20) + context.deviceBottomPadding,
-        ),
-        children: [
-          _BalanceCard(balanceKobo: balanceKobo),
-          SizedBox(height: context.getRSize(16)),
-          if (trip != null && trip.status == kVanTripStatusOpen)
-            Guarded(
-              gate: Gates.vanManage,
-              builder: (context, allow) => SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: allow(
-                    () => RecordDriverPaymentSheet.show(
-                      context,
-                      trip: trip,
-                      driverName: driverName,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final gutter = contentGutter(context, constraints.maxWidth);
+          return ListView(
+            padding: EdgeInsets.fromLTRB(
+              gutter,
+              context.getRSize(20),
+              gutter,
+              context.getRSize(20) + context.deviceBottomPadding,
+            ),
+            children: [
+              _BalanceCard(balanceKobo: balanceKobo),
+              SizedBox(height: context.getRSize(16)),
+              if (trip != null && trip.status == kVanTripStatusOpen)
+                Guarded(
+                  gate: Gates.vanManage,
+                  builder: (context, allow) => SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: allow(
+                        () => RecordDriverPaymentSheet.show(
+                          context,
+                          trip: trip,
+                          driverName: driverName,
+                        ),
+                      ),
+                      icon: Icon(AppIcons.transfer, size: context.getRSize(14)),
+                      label: const Text('Record payment'),
                     ),
                   ),
-                  icon: Icon(
-                    AppIcons.transfer,
-                    size: context.getRSize(14),
+                )
+              else if (trip != null)
+                Text(
+                  // Honest about the boundary: a closed trip is never edited in
+                  // place, and the residual has moved to the driver's cross-trip
+                  // balance (spec §9.4 #14/#16).
+                  'This trip is closed. Anything still owed sits on '
+                  '$driverName\'s balance and is settled on their next trip.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).textTheme.bodySmall?.color,
                   ),
-                  label: const Text('Record payment'),
                 ),
+              SizedBox(height: context.getRSize(24)),
+              Text(
+                'Trip activity',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
               ),
-            )
-          else if (trip != null)
-            Text(
-              // Honest about the boundary: a closed trip is never edited in
-              // place, and the residual has moved to the driver's cross-trip
-              // balance (spec §9.4 #14/#16).
-              'This trip is closed. Anything still owed sits on '
-              '$driverName\'s balance and is settled on their next trip.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).textTheme.bodySmall?.color,
-              ),
-            ),
-          SizedBox(height: context.getRSize(24)),
-          Text(
-            'Trip activity',
-            style: Theme.of(
-              context,
-            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
-          ),
-          SizedBox(height: context.getRSize(12)),
-          if (entries.isEmpty)
-            const _Empty(
-              icon: AppIcons.receipt,
-              title: 'Nothing recorded yet',
-              message: 'Loads and payments on this trip will show here.',
-            )
-          else
-            for (final e in entries) ...[
-              _LedgerRow(entry: e),
-              SizedBox(height: context.getRSize(10)),
+              SizedBox(height: context.getRSize(12)),
+              if (entries.isEmpty)
+                const _Empty(
+                  icon: AppIcons.receipt,
+                  title: 'Nothing recorded yet',
+                  message: 'Loads and payments on this trip will show here.',
+                )
+              else
+                for (final e in entries) ...[
+                  _LedgerRow(entry: e),
+                  SizedBox(height: context.getRSize(10)),
+                ],
             ],
-        ],
+          );
+        },
       ),
     );
   }

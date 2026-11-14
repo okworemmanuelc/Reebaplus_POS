@@ -54,9 +54,7 @@ class _DriversListBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final drivers = ref.watch(vanDriverEntriesProvider);
     final noDriver = ref.watch(noDriverGroupsProvider);
-    final vanNames = {
-      for (final v in ref.watch(vansProvider)) v.id: v.name,
-    };
+    final vanNames = {for (final v in ref.watch(vansProvider)) v.id: v.name};
     final owing = drivers.where((d) => d.owes).length + noDriver.length;
     final isEmpty = drivers.isEmpty && noDriver.isEmpty;
 
@@ -88,40 +86,46 @@ class _DriversListBody extends ConsumerWidget {
                   ),
                 ],
               )
-            : ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: EdgeInsets.fromLTRB(
-                  context.getRSize(16),
-                  context.getRSize(12),
-                  context.getRSize(16),
-                  context.getRSize(24) + context.deviceBottomPadding,
-                ),
-                children: [
-                  for (final entry in drivers)
-                    _DriverRow(
-                      entry: entry,
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              DriverProfileScreen(vanDriverId: entry.driverId),
-                        ),
-                      ),
+            : LayoutBuilder(
+                builder: (context, constraints) {
+                  final gutter = contentGutter(context, constraints.maxWidth);
+                  return ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: EdgeInsets.fromLTRB(
+                      gutter,
+                      context.getRSize(12),
+                      gutter,
+                      context.getRSize(24) + context.deviceBottomPadding,
                     ),
-                  for (final g in noDriver)
-                    _NoDriverRow(
-                      vanName: vanNames[g.vanStoreId] ?? 'Van',
-                      balanceKobo: g.balanceKobo,
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => DriverProfileScreen(
-                            noDriverVanStoreId: g.vanStoreId,
+                    children: [
+                      for (final entry in drivers)
+                        _DriverRow(
+                          entry: entry,
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => DriverProfileScreen(
+                                vanDriverId: entry.driverId,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ),
-                ],
+                      for (final g in noDriver)
+                        _NoDriverRow(
+                          vanName: vanNames[g.vanStoreId] ?? 'Van',
+                          balanceKobo: g.balanceKobo,
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => DriverProfileScreen(
+                                noDriverVanStoreId: g.vanStoreId,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
               ),
       ),
     );
@@ -182,9 +186,7 @@ class _NoDriverRow extends StatelessWidget {
                         ? 'Owes ${formatCurrency(-balanceKobo / 100)}'
                         : 'In credit ${formatCurrency(balanceKobo / 100)}',
                     style: TextStyle(
-                      color: balanceKobo < 0
-                          ? t.colorScheme.error
-                          : subtext,
+                      color: balanceKobo < 0 ? t.colorScheme.error : subtext,
                       fontSize: context.getRFontSize(13),
                       fontWeight: FontWeight.w700,
                     ),
@@ -302,7 +304,11 @@ class _DriverRow extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(AppIcons.chevronRight, color: subtext, size: context.getRSize(20)),
+            Icon(
+              AppIcons.chevronRight,
+              color: subtext,
+              size: context.getRSize(20),
+            ),
           ],
         ),
       ),
