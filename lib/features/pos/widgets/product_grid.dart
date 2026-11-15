@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:reebaplus_pos/shared/widgets/product_photo_builder.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -355,20 +356,29 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
         final inCartQty = cartQty > 0 ? cartQty.ceil() : 0;
 
         if (widget.isListView) {
-          return _PosProductListRow(
+          return ProductPhotoBuilder(
+            productId: product.id,
+            imageUrl: product.imageUrl,
+            imagePath: product.imagePath,
+            builder: (context, photo) => _PosProductListRow(
             name: product.name,
             subtitle: subtitle,
             priceLabel: formatCurrency(price),
             stockLabel: formatQty(stock),
             stockLevel: level,
             categoryName: widget.categoryName,
-            photoPath: productPhotoRef(imagePath: product.imagePath, imageUrl: product.imageUrl),
+            photoPath: photo,
             inCartLabel: inCartQty > 0 ? posCartQtyLabel(cartQty) : null,
             onTap: onTap,
             onLongPress: onLongPress,
+            ),
           );
         }
-        return ProductTile(
+        return ProductPhotoBuilder(
+          productId: product.id,
+          imageUrl: product.imageUrl,
+          imagePath: product.imagePath,
+          builder: (context, photo) => ProductTile(
           name: product.name,
           subtitle: subtitle,
           subtitleMaxLines: posTileSubtitleLines(context),
@@ -377,11 +387,12 @@ class _ProductCardState extends ConsumerState<_ProductCard> {
           stockLabel: formatQty(stock),
           stockLevel: level,
           categoryName: widget.categoryName,
-          photoPath: productPhotoRef(imagePath: product.imagePath, imageUrl: product.imageUrl),
+          photoPath: photo,
           inCartQty: inCartQty,
           inCartLabel: posCartQtyLabel(cartQty),
           onTap: onTap,
           onLongPress: onLongPress,
+          ),
         );
       },
     );

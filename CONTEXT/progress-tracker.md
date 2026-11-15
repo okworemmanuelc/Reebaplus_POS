@@ -7,6 +7,9 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #832: product photos show on every product picture (2026-11-15, branch `fix/832-product-photos-everywhere`)
+- Cause: lists drew `product.imagePath`, which #78 never sets. Owner reversed #78's rule: new `productPhotoPathProvider` + `ProductPhotoBuilder` feed POS grid/list, Inventory, Receive Stock, Request Stock and the Van load picker; saves invalidate it. No schema or money change; receipts unchanged.
+- Tests: `test/pos/product_photo_everywhere_test.dart` (3 failed on main, pass now); existing POS/Inventory/Receive/Request/Add/Edit/Detail tests and goldens pass unchanged. Not checked on a phone.
 ### Release 2.0.7+17 and issue #823: browser never shows the announcements ask (2026-11-14, branch `fix/web-push-sheet`)
 - `maybePromptForPushPermission` returns early on web (`isWeb = kIsWeb`); the Profile screen's announcements tile is hidden on web; a failed register step after "Turn on" is swallowed. The flag was already written before the sheet opens, so why the browser repeated it is NOT confirmed (the browser losing its saved data is the guess).
 - Version bumped to 2.0.7+17 (pubspec + `kAppVersion`). No Drift or cloud migration since build 16, so the minimum build stays 16.

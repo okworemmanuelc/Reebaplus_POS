@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/shared/widgets/product_photo_builder.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
-import 'package:reebaplus_pos/shared/widgets/local_photo_image.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/permissions/permissions.dart';
@@ -1169,7 +1169,11 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
 
     final expiry = product.expiryDate;
 
-    return InventoryProductRow(
+    return ProductPhotoBuilder(
+      productId: product.id,
+      imageUrl: product.imageUrl,
+      imagePath: product.imagePath,
+      builder: (context, photo) => InventoryProductRow(
       // One complete product row is the unit the viewport tests assert on
       // (PRD #239): a starved list renders at zero height, shows nothing, and
       // reports no overflow, so "no red band" alone cannot catch it.
@@ -1177,7 +1181,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
       name: productDisplayName(product.name),
       subtitle: product.subtitle,
       categoryName: categoryName,
-      photoPath: productPhotoRef(imagePath: product.imagePath, imageUrl: product.imageUrl),
+      photoPath: photo,
       stockLabel: formatQty(currentStock),
       unit: unitLabel(product.unit),
       state: isOut
@@ -1195,6 +1199,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen>
         totalStock: item.totalStock.toDouble(),
         storeId: _selectedStoreId == 'all' ? null : _selectedStoreId,
         onUpdateStock: () => setState(() {}),
+      ),
       ),
     );
   }
