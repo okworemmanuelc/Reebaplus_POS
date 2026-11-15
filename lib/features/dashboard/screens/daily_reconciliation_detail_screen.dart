@@ -11,6 +11,7 @@ import 'package:reebaplus_pos/core/theme/app_decorations.dart';
 import 'package:reebaplus_pos/core/theme/app_theme.dart';
 import 'package:reebaplus_pos/core/theme/fixed_colors.dart';
 import 'package:reebaplus_pos/features/dashboard/widgets/report_parts.dart';
+import 'package:reebaplus_pos/features/dashboard/widgets/report_summary_parts.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/redesign.dart';
 import 'package:reebaplus_pos/core/utils/csv_export.dart';
 import 'package:reebaplus_pos/core/utils/number_format.dart';
@@ -30,7 +31,7 @@ import 'package:reebaplus_pos/shared/utils/quantity.dart';
 /// selling price (an accountability figure). A non-Day bucket lists the
 /// next-finer buckets inside it as a drill-down breakdown.
 /// The detail screen's raw content width (batch rule: details 960).
-const double kReconDetailMaxWidth = 960;
+const double kReconDetailMaxWidth = 1080;
 
 AppFixedColors _fx(ThemeData t) =>
     t.extension<AppFixedColors>() ?? AppFixedColors.light;
@@ -119,6 +120,8 @@ class _DailyReconciliationDetailScreenState
         // per-manufacturer rates are subtracted from the frozen net profit.
         ready(allManufacturersProvider);
   }
+
+  bool get _isDay => widget.grouping == ReconGrouping.day;
 
   /// This screen's period — the [reconPeriodRowsProvider] key (#683).
   ReconPeriod get _period =>
@@ -268,7 +271,7 @@ class _DailyReconciliationDetailScreenState
     // refunds, expenses) and unit deltas anywhere; the cost-basis stock figures
     // are flagged for them WITHOUT a naira amount rather than not at all.
     final salesBadges = _deltaChips([
-      _CardFigure(label: 'Total sales', delta: comparison?.totalSales),
+      _CardFigure(label: 'Total sold', delta: comparison?.totalSales),
       _CardFigure(label: 'Refunds', delta: comparison?.refunds),
       _CardFigure(
         label: 'Items sold',
@@ -279,36 +282,42 @@ class _DailyReconciliationDetailScreenState
     final plBadges = !isCeo
         ? const <Widget>[]
         : _deltaChips([
-            _CardFigure(label: 'Net profit', delta: comparison?.netProfit),
-            _CardFigure(label: 'Gross profit', delta: comparison?.grossProfit),
-            _CardFigure(label: 'Discounts', delta: comparison?.discounts),
-            _CardFigure(label: 'Cost of goods sold', delta: comparison?.cogs),
+            _CardFigure(label: 'Profit', delta: comparison?.netProfit),
+            _CardFigure(
+              label: 'Profit before expenses',
+              delta: comparison?.grossProfit,
+            ),
+            _CardFigure(label: 'Discounts given', delta: comparison?.discounts),
+            _CardFigure(
+              label: 'What those goods cost you',
+              delta: comparison?.cogs,
+            ),
             _CardFigure(label: 'Expenses', delta: comparison?.expenses),
-            _CardFigure(label: 'Damages', delta: comparison?.damagesCost),
+            _CardFigure(
+              label: 'Broken or spoilt goods',
+              delta: comparison?.damagesCost,
+            ),
           ]);
     final cashBadges = !isCeo
         ? const <Widget>[]
         : _deltaChips([
             _CardFigure(
-              label: 'Net cash movement',
+              label: 'Cash you should have',
               delta: comparison?.netCashMovement,
             ),
-            _CardFigure(label: 'Cash sales', delta: comparison?.cashSales),
+            _CardFigure(label: 'Cash from sales', delta: comparison?.cashSales),
             _CardFigure(label: 'Cash in', delta: comparison?.cashIn),
-            _CardFigure(label: 'Cash out', delta: comparison?.cashOut),
+            _CardFigure(label: 'Money paid out', delta: comparison?.cashOut),
           ]);
     final stockBadges = isCeo
         ? _deltaChips([
             _CardFigure(
-              label: 'Expected closing',
+              label: 'Stock now',
               delta: comparison?.stockExpectedClosing,
             ),
+            _CardFigure(label: 'Goods sold', delta: comparison?.stockCogs),
             _CardFigure(
-              label: 'Cost of goods sold',
-              delta: comparison?.stockCogs,
-            ),
-            _CardFigure(
-              label: 'Short',
+              label: 'Products short',
               delta: comparison?.shortageUnits,
               isUnits: true,
             ),
@@ -316,7 +325,7 @@ class _DailyReconciliationDetailScreenState
         : [
             ..._deltaChips([
               _CardFigure(
-                label: 'Short',
+                label: 'Products short',
                 delta: comparison?.shortageUnits,
                 isUnits: true,
               ),
@@ -344,148 +353,283 @@ class _DailyReconciliationDetailScreenState
       debtsBadges,
     ].any((b) => b.isNotEmpty);
 
-    // The cards, in their fixed order (ADR 0014; Hard Rule #8: no cash
-    // balance). Gaps are added by the layout below, not by each card.
-    final cards = <Widget>[
-      _salesCard(
-        context,
-        theme,
-        d,
-        badges: salesBadges,
-        // Keep the line whose badge is on this card (#192): a refund VOIDED
-        // after the review takes `refundsKobo` to 0, which would otherwise
-        // badge a line the card no longer renders.
-        showRefunds:
-            d.refundsKobo > 0 || (comparison?.refunds.changed ?? false),
+    // Each card is built once and placed by the layout below: phone and
+    // tablet stack them in one column; wide screens split them in two.
+    final salesCard = _salesCard(
+      context,
+      theme,
+      d,
+      badges: salesBadges,
+      // Keep the line whose badge is on this card (#192): a refund VOIDED
+      // after the review takes `refundsKobo` to 0, which would otherwise
+      // badge a line the card no longer renders.
+      showRefunds: d.refundsKobo > 0 || (comparison?.refunds.changed ?? false),
+    );
+    final bestSellersCard = _bestSellersCard(context, theme, d);
+    final plCard = isCeo ? _plCard(context, theme, d, badges: plBadges) : null;
+    final cashCard = isCeo
+        ? _cashFlowCard(context, theme, d, badges: cashBadges)
+        : null;
+    // #147 - the van channel, only when the period saw van activity.
+    final vanCard = d.van.hasActivity
+        ? _vanSalesCard(context, theme, d, isCeo: isCeo)
+        : null;
+    final stockCard = _stockReconciliationCard(
+      context,
+      theme,
+      d,
+      isCeo: isCeo,
+      badges: stockBadges,
+    );
+    final debtsCard = isCeo
+        ? null
+        : _debtsExpensesCard(context, theme, d, badges: debtsBadges);
+    // The crate cards (#296, #215 / ADR 0023) appear only when they did
+    // before: crates tracked, and the money card only when a brand moves
+    // crate money.
+    final cratesCard = d.showCrates ? _cratesCard(context, theme, d) : null;
+    final crateMoneyCard = d.showCrates && d.crateDeposits.hasMoney
+        ? _crateMoneyCard(context, theme, d)
+        : null;
+
+    // Header figures (CEO sees profit and cash; a Manager only total sold).
+    final returnsNote = d.returnsKobo != 0
+        ? 'After ${formatCurrency(-d.returnsKobo / 100.0)} in returns'
+        : 'No returns';
+    final profitKobo = d.netProfitKobo;
+    final keptPer100 = d.totalSalesKobo > 0
+        ? (profitKobo * 100 / d.totalSalesKobo).round()
+        : null;
+    final summary = <ReportSummaryItem>[
+      ReportSummaryItem(
+        label: _isDay ? 'Total sold today' : 'Total sold',
+        value: formatCurrency(d.totalSalesKobo / 100.0),
+        note: returnsNote,
       ),
-      // #147 — the van channel, as one aggregated block. Rendered only when
-      // the period actually saw van activity, so a business with no vans
-      // reads exactly as it did before.
-      if (d.van.hasActivity) _vanSalesCard(context, theme, d, isCeo: isCeo),
       if (isCeo) ...[
-        _plCard(context, theme, d, badges: plBadges),
-        _cashFlowCard(context, theme, d, badges: cashBadges),
+        ReportSummaryItem(
+          label: 'Profit',
+          value: formatCurrency(profitKobo / 100.0),
+          valueColor: profitKobo >= 0 ? _fx(theme).green : _fx(theme).danger,
+          note: keptPer100 == null
+              ? null
+              : (keptPer100 >= 0
+                    ? 'You kept about ${formatCurrency(keptPer100)} from every ${formatCurrency(100)} sold'
+                    : 'You lost about ${formatCurrency(-keptPer100)} on every ${formatCurrency(100)} sold'),
+        ),
+        ReportSummaryItem(
+          label: 'Cash received',
+          value: formatCurrency(d.cashInKobo / 100.0),
+          note: 'From sales and old debts paid',
+        ),
       ],
-      _stockReconciliationCard(
-        context,
-        theme,
-        d,
-        isCeo: isCeo,
-        badges: stockBadges,
-      ),
-      if (isCeo) _businessWorthCard(context, theme, d),
-      if (!isCeo) _debtsExpensesCard(context, theme, d, badges: debtsBadges),
-      if (d.showCrates) _cratesCard(context, theme, d),
-      // #215 / ADR 0023 — THE SIXTH CARD, and it amends ADR 0014's
-      // deliberate nine-to-five cut. See `_crateMoneyCard` for why the
-      // exception was taken, and ADR 0014's "Amended 2026-07-30" note
-      // before you re-tighten the count.
-      //
-      // Rendered only when a brand actually moves crate money, so every
-      // business on the default `none` arrangement — which is every live
-      // tenant until an owner switches one on — still reads exactly five.
-      //
-      // Crates missing and crate write-offs moved to the crates card with
-      // the count-based Crate Shortage (#296): they are about the business's
-      // own crates, whatever the brand's arrangement.
-      if (d.showCrates && d.crateDeposits.hasMoney)
-        _crateMoneyCard(context, theme, d),
     ];
+    // Most sales on credit: a warning bar (phone words are shorter).
+    final creditShare = d.totalSalesKobo > 0
+        ? (d.salesOnCreditKobo * 100 / d.totalSalesKobo).round()
+        : 0;
+    final mostlyCredit =
+        d.totalSalesKobo > 0 && d.salesOnCreditKobo * 2 > d.totalSalesKobo;
+
+    final dateText = _isDay
+        ? DateFormat('EEEE, d MMM yyyy').format(start)
+        : null;
+    final shortDateText = _isDay
+        ? DateFormat('EEE, d MMM yyyy').format(start)
+        : null;
+    final today = DateTime.now();
+    final isToday =
+        _isDay &&
+        start.year == today.year &&
+        start.month == today.month &&
+        start.day == today.day;
+    final headerTitle = _isDay
+        ? (isToday ? "Today's report" : 'Daily report')
+        : title;
 
     return Container(
       decoration: AppDecorations.pageBackground(context),
-      child: SharedScaffold(
-        activeRoute: 'dashboard',
-        backgroundColor: Colors.transparent,
-        appBar: ReportTopBar(
-          key: ReportKeys.topBar,
-          height: reportTopBarHeight(context),
-          header: ScreenHeader(
-            leading: const ReportBackButton(),
-            icon: AppIcons.auditCheck,
-            title: title,
-            subtitle: scopeLabel,
-            actions: [
-              ReportBarAction(
-                key: ReportKeys.export,
-                icon: AppIcons.fileCsv,
-                tooltip: 'Export CSV',
-                onPressed: () => _exportCsv(context, d, isCeo, scopeLabel),
-              ),
-            ],
-          ),
-        ),
-        body: LayoutBuilder(
-          builder: (context, constraints) {
-            // A detail screen: a raw 960 column, centred (batch rule), with
-            // the cards side by side once the measured width reaches 900.
-            final gutter = reportGutter(
-              context,
-              constraints.maxWidth,
-              maxWidth: kReconDetailMaxWidth,
-            );
-            final sideBySide = constraints.maxWidth >= 900;
-            final gap = context.getRSize(12);
-            return ListView(
-              padding: EdgeInsets.fromLTRB(
-                gutter,
-                context.getRSize(12),
-                gutter,
-                context.getRSize(16) + context.deviceBottomPadding,
-              ),
-              children: [
-                if (comparison != null) ...[
-                  _reviewedBanner(
-                    context,
-                    theme,
-                    comparison,
-                    reviewerName,
-                    hasFlaggedCard: hasFlaggedCard,
-                    isCeo: isCeo,
-                  ),
-                  SizedBox(height: gap),
+      child: LayoutBuilder(
+        builder: (context, outer) {
+          final roomy = outer.maxWidth >= 600;
+          final subtitleParts = [
+            if (scopeLabel.isNotEmpty) scopeLabel,
+            if (dateText != null) roomy ? dateText : shortDateText!,
+          ];
+          return SharedScaffold(
+            activeRoute: 'dashboard',
+            backgroundColor: Colors.transparent,
+            appBar: ReportTopBar(
+              key: ReportKeys.topBar,
+              height: reportTopBarHeight(context),
+              header: ScreenHeader(
+                leading: const ReportBackButton(),
+                icon: AppIcons.auditCheck,
+                title: headerTitle,
+                subtitle: subtitleParts.isEmpty
+                    ? null
+                    : subtitleParts.join(' · '),
+                actions: [
+                  if (roomy)
+                    OutlinedButton.icon(
+                      key: ReportKeys.export,
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(
+                          kMinInteractiveDimension,
+                          kMinInteractiveDimension,
+                        ),
+                      ),
+                      icon: AppIcon(
+                        AppIcons.fileCsv,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                      label: Text(
+                        'Download',
+                        style: TextStyle(color: theme.colorScheme.onSurface),
+                      ),
+                      onPressed: () =>
+                          _exportCsv(context, d, isCeo, scopeLabel),
+                    )
+                  else
+                    ReportBarAction(
+                      key: ReportKeys.export,
+                      icon: AppIcons.fileCsv,
+                      tooltip: 'Download',
+                      onPressed: () =>
+                          _exportCsv(context, d, isCeo, scopeLabel),
+                    ),
                 ],
-                if (sideBySide)
-                  _twoColumns(cards, gap)
-                else
-                  for (var i = 0; i < cards.length; i++) ...[
-                    if (i > 0) SizedBox(height: gap),
-                    cards[i],
+              ),
+            ),
+            body: LayoutBuilder(
+              builder: (context, constraints) {
+                final width = constraints.maxWidth;
+                // Measured width decides: under 600 a phone hero card; 600-899
+                // three tiles over one 720 column; 900+ three tiles over two
+                // card columns, capped at 1080 (#831, screen-size rule #820).
+                final wide = width >= 900;
+                final tablet = width >= 600 && !wide;
+                final gutter = reportGutter(
+                  context,
+                  width,
+                  maxWidth: wide ? kReconDetailMaxWidth : kContentMaxWidth,
+                );
+                final gap = context.getRSize(12);
+                final creditBar = mostlyCredit
+                    ? ReportCreditWarning(
+                        lead: wide
+                            ? "Most of today's sales were on credit."
+                            : 'Most sales were on credit.',
+                        rest: wide
+                            ? 'Customers took '
+                                  '${formatCurrency(d.salesOnCreditKobo / 100.0)} '
+                                  'worth of goods without paying yet \u2014 that '
+                                  'is $creditShare out of every 100 naira sold.'
+                            : '${formatCurrency(d.salesOnCreditKobo / 100.0)} '
+                                  'is still owed by customers \u2014 $creditShare '
+                                  'of every 100 naira sold.',
+                      )
+                    : null;
+                final worthCard = isCeo
+                    ? _businessWorthCard(context, theme, d, wide: wide)
+                    : null;
+                List<Widget> nonNull(List<Widget?> l) => [
+                  for (final w in l)
+                    if (w != null) w,
+                ];
+                Widget column(List<Widget> items) => Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (var i = 0; i < items.length; i++) ...[
+                      if (i > 0) SizedBox(height: gap),
+                      items[i],
+                    ],
                   ],
-                if (children.isNotEmpty) ...[
-                  SizedBox(height: gap),
-                  _breakdown(context, theme, children),
-                ],
-              ],
-            );
-          },
-        ),
+                );
+                final List<Widget> body;
+                if (wide) {
+                  body = [
+                    ReportSummaryTiles(items: summary),
+                    if (creditBar != null) creditBar,
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: column(
+                            nonNull([salesCard, bestSellersCard, plCard]),
+                          ),
+                        ),
+                        SizedBox(width: gap),
+                        Expanded(
+                          child: column(
+                            nonNull([
+                              cashCard,
+                              vanCard,
+                              debtsCard,
+                              stockCard,
+                              cratesCard,
+                              crateMoneyCard,
+                            ]),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (worthCard != null) worthCard,
+                  ];
+                } else {
+                  body = [
+                    tablet
+                        ? ReportSummaryTiles(items: summary)
+                        : ReportHeroCard(items: summary),
+                    if (creditBar != null) creditBar,
+                    ...nonNull([
+                      salesCard,
+                      bestSellersCard,
+                      plCard,
+                      cashCard,
+                      vanCard,
+                      stockCard,
+                      worthCard,
+                      debtsCard,
+                      cratesCard,
+                      crateMoneyCard,
+                    ]),
+                  ];
+                }
+                return ListView(
+                  padding: EdgeInsets.fromLTRB(
+                    gutter,
+                    context.getRSize(12),
+                    gutter,
+                    context.getRSize(16) + context.deviceBottomPadding,
+                  ),
+                  children: [
+                    if (comparison != null) ...[
+                      _reviewedBanner(
+                        context,
+                        theme,
+                        comparison,
+                        reviewerName,
+                        hasFlaggedCard: hasFlaggedCard,
+                        isCeo: isCeo,
+                      ),
+                      SizedBox(height: gap),
+                    ],
+                    for (var i = 0; i < body.length; i++) ...[
+                      if (i > 0) SizedBox(height: gap),
+                      body[i],
+                    ],
+                    if (children.isNotEmpty) ...[
+                      SizedBox(height: gap),
+                      _breakdown(context, theme, children),
+                    ],
+                  ],
+                );
+              },
+            ),
+          );
+        },
       ),
-    );
-  }
-
-  /// The cards in two columns, reading order kept: the first half down the
-  /// left, the rest down the right.
-  Widget _twoColumns(List<Widget> cards, double gap) {
-    final split = (cards.length + 1) ~/ 2;
-    Widget column(List<Widget> items) => Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (var i = 0; i < items.length; i++) ...[
-            if (i > 0) SizedBox(height: gap),
-            items[i],
-          ],
-        ],
-      ),
-    );
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        column(cards.sublist(0, split)),
-        SizedBox(width: gap),
-        column(cards.sublist(split)),
-      ],
     );
   }
 
@@ -498,95 +642,138 @@ class _DailyReconciliationDetailScreenState
     List<Widget> badges = const [],
     bool showRefunds = false,
   }) {
+    final itemsLabel = d.itemsSold == 1 ? 'item' : 'items';
+    final productsLabel = d.skus == 1 ? 'product' : 'different products';
     return _card(
       context,
       theme,
-      'Sales summary',
+      'Sales',
       AppIcons.analytics,
       context.primaryColor,
+      subtitle:
+          '${formatQtyGrouped(d.itemsSold)} $itemsLabel sold across '
+          '${fmtNumber(d.skus)} $productsLabel',
       [
-        _line(context, theme, 'Items sold', formatQtyGrouped(d.itemsSold)),
-        _line(context, theme, 'Products (SKUs) sold', fmtNumber(d.skus)),
+        // #176 — paid-now vs on-credit split. Shown only when some sale was on
+        // credit, as before.
+        if (d.salesOnCreditKobo != 0) ...[
+          SizedBox(height: context.getRSize(4)),
+          ReportPaidBar(
+            paidNowKobo: d.salesPaidNowKobo,
+            onCreditKobo: d.salesOnCreditKobo,
+            paidNowText: formatCurrency(d.salesPaidNowKobo / 100.0),
+            onCreditText: formatCurrency(d.salesOnCreditKobo / 100.0),
+          ),
+          SizedBox(height: context.getRSize(10)),
+        ],
         // #708 — returns on their own line when the day has cancel entries.
-        // Net sales is the same figure Total sales shows without returns.
         if (d.returnsKobo != 0) ...[
           _line(
             context,
             theme,
-            'Sales',
+            'Sold before returns',
             formatCurrency((d.totalSalesKobo - d.returnsKobo) / 100.0),
           ),
           _line(
             context,
             theme,
-            'Returns',
+            'Goods brought back',
             '− ${formatCurrency(-d.returnsKobo / 100.0)}',
           ),
-          _line(
-            context,
-            theme,
-            'Net sales',
-            formatCurrency(d.totalSalesKobo / 100.0),
-            strong: true,
-          ),
-        ] else
-          _line(
-            context,
-            theme,
-            'Total sales',
-            formatCurrency(d.totalSalesKobo / 100.0),
-            strong: true,
-          ),
-        // #176 — paid-now vs on-credit split so the drawer isn't over-expected
-        // by the credit amount. Shown only when some sale was on credit.
-        if (d.salesOnCreditKobo != 0) ...[
-          _line(
-            context,
-            theme,
-            'Paid now',
-            formatCurrency(d.salesPaidNowKobo / 100.0),
-          ),
-          _line(
-            context,
-            theme,
-            'On credit',
-            formatCurrency(d.salesOnCreditKobo / 100.0),
-          ),
+          _divider(theme),
         ],
+        _line(
+          context,
+          theme,
+          'Total sold',
+          formatCurrency(d.totalSalesKobo / 100.0),
+          strong: true,
+        ),
         if (showRefunds)
           _line(
             context,
             theme,
-            'Refunds',
+            'Refunds paid to customers',
             '− ${formatCurrency(d.refundsKobo / 100.0)}',
           ),
         if (d.vatEnabled)
           _line(
             context,
             theme,
-            'VAT due (${d.vatRateLabel}%, ${d.vatBasisLabel})',
+            'VAT to pay (${d.vatRateLabel}%, ${d.vatBasisLabel})',
             formatCurrency(d.vatKobo / 100.0),
           ),
-        _line(
-          context,
-          theme,
-          'Best staff',
-          d.bestStaff == null
-              ? '—'
-              : '${d.bestStaff} (${formatCurrency(d.bestStaffKobo / 100.0)})',
-        ),
-        _line(
-          context,
-          theme,
-          'Top items',
-          d.topItems.isEmpty
-              ? '—'
-              : d.topItems
-                    .map((e) => '${e.name} (×${formatQty(e.qty)})')
-                    .join('\n'),
-        ),
       ],
       badges: badges,
+    );
+  }
+
+  /// Best sellers and top staff (look-only split of the old Sales summary).
+  Widget _bestSellersCard(BuildContext context, ThemeData theme, ReconData d) {
+    final fx = _fx(theme);
+    return _card(
+      context,
+      theme,
+      'Best sellers',
+      AppIcons.analytics,
+      context.primaryColor,
+      [
+        SizedBox(height: context.getRSize(4)),
+        if (d.topItems.isEmpty)
+          _line(context, theme, 'Nothing sold yet', '—')
+        else
+          for (var i = 0; i < d.topItems.length; i++)
+            Padding(
+              padding: EdgeInsets.symmetric(vertical: context.getRSize(4)),
+              child: Row(
+                children: [
+                  Container(
+                    width: context.getRSize(26),
+                    height: context.getRSize(26),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: fx.infoTint,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '${i + 1}',
+                      style: context.boldStyle(12).copyWith(color: fx.info),
+                    ),
+                  ),
+                  SizedBox(width: context.getRSize(10)),
+                  Expanded(
+                    child: Text(
+                      d.topItems[i].name,
+                      style: context.mediumStyle(13),
+                    ),
+                  ),
+                  SizedBox(width: context.getRSize(8)),
+                  Text(
+                    '${formatQty(d.topItems[i].qty)} sold',
+                    style: context.boldStyle(13),
+                  ),
+                ],
+              ),
+            ),
+        SizedBox(height: context.getRSize(8)),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: fx.neutralTile,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(context.getRSize(12)),
+            child: _line(
+              context,
+              theme,
+              _isDay ? 'Top staff today' : 'Top staff',
+              d.bestStaff == null
+                  ? '—'
+                  : '${d.bestStaff} · sold ${formatCurrency(d.bestStaffKobo / 100.0)}',
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -601,189 +788,199 @@ class _DailyReconciliationDetailScreenState
     // #198 — only disclose the two expense date bases when there is expense
     // money in the period on either basis; an expense-free day needs no note.
     final hasExpenseFigures = d.expensesKobo != 0 || d.cashExpensesKobo != 0;
-    return _card(context, theme, 'Profit & Loss', AppIcons.chartPie, netColor, [
-      _line(
-        context,
-        theme,
-        'Revenue',
-        formatCurrency(d.costedRevenueKobo / 100.0),
-      ),
-      if (d.discountsKobo > 0) ...[
+    return _card(
+      context,
+      theme,
+      'How we got your profit',
+      AppIcons.chartPie,
+      netColor,
+      subtitle: 'What you sold for, minus what those goods cost you',
+      [
         _line(
           context,
           theme,
-          'Discounts',
-          '− ${formatCurrency(d.discountsKobo / 100.0)}',
+          d.uncostedTakingsKobo != 0
+              ? 'Sales with a buying price'
+              : 'Total sold',
+          formatCurrency(d.costedRevenueKobo / 100.0),
         ),
+        if (d.discountsKobo > 0) ...[
+          _line(
+            context,
+            theme,
+            'Discounts given',
+            '− ${formatCurrency(d.discountsKobo / 100.0)}',
+          ),
+          _line(
+            context,
+            theme,
+            'Sold after discounts',
+            formatCurrency(d.netRevenueKobo / 100.0),
+          ),
+        ],
         _line(
           context,
           theme,
-          'Net revenue',
-          formatCurrency(d.netRevenueKobo / 100.0),
+          'What those goods cost you',
+          '− ${formatCurrency(d.cogsKobo / 100.0)}',
         ),
+        _divider(theme),
+        _line(
+          context,
+          theme,
+          'Profit before expenses',
+          formatCurrency(d.grossProfitKobo / 100.0),
+          strong: true,
+        ),
+        // #176 — earnings the P&L used to hide: quick-sale takings (no recorded
+        // cost, so pure margin — see the footnote) and kept crate deposits.
+        if (d.uncostedTakingsKobo != 0)
+          _line(
+            context,
+            theme,
+            'Sold without a buying price',
+            '+ ${formatCurrency(d.uncostedTakingsKobo / 100.0)}',
+          ),
+        if (d.forfeitIncomeKobo != 0)
+          _line(
+            context,
+            theme,
+            'Crate deposits you kept',
+            '+ ${formatCurrency(d.forfeitIncomeKobo / 100.0)}',
+          ),
+        // #217 — and, right underneath it, the crate that money paid for.
+        //
+        // This line exists so the owner is never shown a gain with an invisible
+        // offset. Without it the deposit reads as +₦3,500 of pure profit while
+        // net profit quietly fails to rise, which is how a correct figure gets
+        // reported as a bug.
+        if (d.crateForfeitNettedKobo != 0)
+          _line(
+            context,
+            theme,
+            'Crates those customers kept (you owe the depot)',
+            '− ${formatCurrency(d.crateForfeitNettedKobo / 100.0)}',
+          ),
+        _line(
+          context,
+          theme,
+          'Expenses',
+          '− ${formatCurrency(d.expensesKobo / 100.0)}',
+        ),
+        // #669 — one combined line, no worker named (ADR 0034).
+        if (d.dailyAllowancesKobo != 0)
+          _line(
+            context,
+            theme,
+            'Daily staff allowances',
+            '− ${formatCurrency(d.dailyAllowancesKobo / 100.0)}',
+          ),
+        // #671 — one combined line per payday, no worker named (ADR 0034).
+        if (d.salariesKobo != 0)
+          _line(
+            context,
+            theme,
+            'Staff salaries',
+            '− ${formatCurrency(d.salariesKobo / 100.0)}',
+          ),
+        // #696 — approved bonuses are a cost (advances and loans are not).
+        if (d.bonusesKobo != 0)
+          _line(
+            context,
+            theme,
+            'Staff bonuses',
+            '− ${formatCurrency(d.bonusesKobo / 100.0)}',
+          ),
+        _line(
+          context,
+          theme,
+          'Broken or spoilt goods',
+          '− ${formatCurrency(d.damageCostKobo / 100.0)}',
+        ),
+        if (d.crateDamageDepositKobo > 0)
+          _line(
+            context,
+            theme,
+            'Crate deposits lost on broken crates',
+            '− ${formatCurrency(d.crateDamageDepositKobo / 100.0)}',
+          ),
+        // #193 — stock written off because its product was deleted. One family
+        // with Damages: value the business paid for and no longer has, so it is
+        // netted out of the result rather than only noted on the stock card.
+        if (d.deletionCostKobo > 0)
+          _line(
+            context,
+            theme,
+            'Goods lost when products were deleted',
+            '− ${formatCurrency(d.deletionCostKobo / 100.0)}',
+          ),
+        _divider(theme),
+        _line(
+          context,
+          theme,
+          'Profit',
+          formatCurrency(net / 100.0),
+          strong: true,
+          color: netColor,
+        ),
+        // #217 — the sentence that stops this reading as a bug. Shop-owner
+        // words, no accounting terms: you kept their money, but the crate they
+        // kept is one you still owe the depot, and it costs the same.
+        if (d.crateForfeitNettedKobo != 0) ...[
+          const SizedBox(height: 6),
+          Text(
+            'You kept ${formatCurrency(d.forfeitIncomeKobo / 100.0)} of crate '
+            'deposits from customers who never brought the crates back. Those '
+            'crates are not yours — you paid your depot a deposit for them, at '
+            'the same price you charged the customer — so they cost you '
+            '${formatCurrency(d.crateForfeitNettedKobo / 100.0)} and the two '
+            'cancel out. You are not worse off, and you did not really gain: '
+            'this is why kept deposits no longer add to your profit on brands '
+            'where you pay your depot a crate deposit. On brands where you do '
+            'not, they still do.',
+            style: context.bodySmall.copyWith(color: theme.hintColor),
+          ),
+        ],
+        if (d.uncostedItems > 0) ...[
+          const SizedBox(height: 6),
+          Text(
+            '${formatQtyGrouped(d.uncostedItems)} item(s) were sold without a '
+            'buying price, so their full '
+            '${formatCurrency(d.uncostedTakingsKobo / 100.0)} is counted as '
+            'profit.',
+            style: context.bodySmall.copyWith(color: theme.hintColor),
+          ),
+        ],
+        // #200 / US 20 — label the current-cost fallback. Newer damages are held
+        // at the cost they actually drew, so editing a buying price today cannot
+        // move them; older records kept only a quantity, so they DO move. Saying
+        // so is the difference between a frozen figure and one that looks frozen.
+        if (d.legacyValuedDamageRows > 0) ...[
+          const SizedBox(height: 6),
+          Text(
+            '${fmtNumber(d.legacyValuedDamageRows)} older broken-goods '
+            'record(s) are counted at today\'s buying price, because the price '
+            'was not saved when they happened. Changing a buying price changes '
+            'this figure.',
+            style: context.bodySmall.copyWith(color: theme.hintColor),
+          ),
+        ],
+        // #198 (#155 US 34) — the two expense date bases, said out loud. Profit
+        // uses the date the owner picked; the cash card uses the day the drawer
+        // actually moved. Without this note a CEO reads two different expense
+        // figures on one screen and assumes one of them is broken.
+        if (hasExpenseFigures) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Expenses count on the date you picked when you recorded them. The '
+            'Cash card counts the same money on the day it left the drawer, so '
+            'the two can differ.',
+            style: context.bodySmall.copyWith(color: theme.hintColor),
+          ),
+        ],
       ],
-      _line(
-        context,
-        theme,
-        'Cost of goods sold',
-        '− ${formatCurrency(d.cogsKobo / 100.0)}',
-      ),
-      _divider(theme),
-      _line(
-        context,
-        theme,
-        'Gross profit',
-        formatCurrency(d.grossProfitKobo / 100.0),
-        strong: true,
-      ),
-      // #176 — earnings the P&L used to hide: quick-sale takings (no recorded
-      // cost, so pure margin — see the footnote) and kept crate deposits.
-      if (d.uncostedTakingsKobo != 0)
-        _line(
-          context,
-          theme,
-          'Quick-sale takings (no recorded cost)',
-          '+ ${formatCurrency(d.uncostedTakingsKobo / 100.0)}',
-        ),
-      if (d.forfeitIncomeKobo != 0)
-        _line(
-          context,
-          theme,
-          'Forfeit income (kept crate deposits)',
-          '+ ${formatCurrency(d.forfeitIncomeKobo / 100.0)}',
-        ),
-      // #217 — and, right underneath it, the crate that money paid for.
-      //
-      // This line exists so the owner is never shown a gain with an invisible
-      // offset. Without it the deposit reads as +₦3,500 of pure profit while
-      // net profit quietly fails to rise, which is how a correct figure gets
-      // reported as a bug.
-      if (d.crateForfeitNettedKobo != 0)
-        _line(
-          context,
-          theme,
-          'Crates those customers kept (you owe the depot)',
-          '− ${formatCurrency(d.crateForfeitNettedKobo / 100.0)}',
-        ),
-      _line(
-        context,
-        theme,
-        'Expenses (${d.expensesCount})',
-        '− ${formatCurrency(d.expensesKobo / 100.0)}',
-      ),
-      // #669 — one combined line, no worker named (ADR 0034).
-      if (d.dailyAllowancesKobo != 0)
-        _line(
-          context,
-          theme,
-          'Daily allowances',
-          '− ${formatCurrency(d.dailyAllowancesKobo / 100.0)}',
-        ),
-      // #671 — one combined line per payday, no worker named (ADR 0034).
-      if (d.salariesKobo != 0)
-        _line(
-          context,
-          theme,
-          'Salaries',
-          '− ${formatCurrency(d.salariesKobo / 100.0)}',
-        ),
-      // #696 — approved bonuses are a cost (advances and loans are not).
-      if (d.bonusesKobo != 0)
-        _line(
-          context,
-          theme,
-          'Bonuses',
-          '− ${formatCurrency(d.bonusesKobo / 100.0)}',
-        ),
-      _line(
-        context,
-        theme,
-        'Damages (at cost)',
-        '− ${formatCurrency(d.damageCostKobo / 100.0)}',
-      ),
-      if (d.crateDamageDepositKobo > 0)
-        _line(
-          context,
-          theme,
-          'Crate deposit loss',
-          '− ${formatCurrency(d.crateDamageDepositKobo / 100.0)}',
-        ),
-      // #193 — stock written off because its product was deleted. One family
-      // with Damages: value the business paid for and no longer has, so it is
-      // netted out of the result rather than only noted on the stock card.
-      if (d.deletionCostKobo > 0)
-        _line(
-          context,
-          theme,
-          'Product deletions (at cost)',
-          '− ${formatCurrency(d.deletionCostKobo / 100.0)}',
-        ),
-      _divider(theme),
-      _line(
-        context,
-        theme,
-        'Net profit',
-        formatCurrency(net / 100.0),
-        strong: true,
-        color: netColor,
-      ),
-      // #217 — the sentence that stops this reading as a bug. Shop-owner
-      // words, no accounting terms: you kept their money, but the crate they
-      // kept is one you still owe the depot, and it costs the same.
-      if (d.crateForfeitNettedKobo != 0) ...[
-        const SizedBox(height: 6),
-        Text(
-          'You kept ${formatCurrency(d.forfeitIncomeKobo / 100.0)} of crate '
-          'deposits from customers who never brought the crates back. Those '
-          'crates are not yours — you paid your depot a deposit for them, at '
-          'the same price you charged the customer — so they cost you '
-          '${formatCurrency(d.crateForfeitNettedKobo / 100.0)} and the two '
-          'cancel out. You are not worse off, and you did not really gain: '
-          'this is why kept deposits no longer add to your profit on brands '
-          'where you pay your depot a crate deposit. On brands where you do '
-          'not, they still do.',
-          style: context.bodySmall.copyWith(color: theme.hintColor),
-        ),
-      ],
-      if (d.uncostedItems > 0) ...[
-        const SizedBox(height: 6),
-        Text(
-          'Includes ${formatQtyGrouped(d.uncostedItems)} item(s) sold with no recorded '
-          'buying price (e.g. quick sales) as takings — counted in full above '
-          'because no cost was recorded to deduct, so they carry no COGS or '
-          'gross margin.',
-          style: context.bodySmall.copyWith(color: theme.hintColor),
-        ),
-      ],
-      // #200 / US 20 — label the current-cost fallback. Newer damages are held
-      // at the cost they actually drew, so editing a buying price today cannot
-      // move them; older records kept only a quantity, so they DO move. Saying
-      // so is the difference between a frozen figure and one that looks frozen.
-      if (d.legacyValuedDamageRows > 0) ...[
-        const SizedBox(height: 6),
-        Text(
-          '${fmtNumber(d.legacyValuedDamageRows)} older damage record(s) are '
-          'valued at today\'s cost — they were saved before the cost of each '
-          'loss was recorded, so changing a buying price also changes this '
-          'figure.',
-          style: context.bodySmall.copyWith(color: theme.hintColor),
-        ),
-      ],
-      // #198 (#155 US 34) — the two expense date bases, said out loud. Profit
-      // uses the date the owner picked; the cash card uses the day the drawer
-      // actually moved. Without this note a CEO reads two different expense
-      // figures on one screen and assumes one of them is broken.
-      if (hasExpenseFigures) ...[
-        const SizedBox(height: 6),
-        Text(
-          'Expenses are counted on the date you picked when you recorded them, '
-          'so a bill entered late still lands in the period it was spent. Cash '
-          'flow counts that same money on the day it left the drawer, so the '
-          'two expense figures can differ.',
-          style: context.bodySmall.copyWith(color: theme.hintColor),
-        ),
-      ],
-    ], badges: badges);
+      badges: badges,
+    );
   }
 
   /// Derived cash-flow summary (ADR 0014): the period's expected cash MOVEMENT
@@ -814,18 +1011,19 @@ class _DailyReconciliationDetailScreenState
       'Van sales',
       AppIcons.supplier,
       semantic.info,
+      subtitle: 'Sales made from vans',
       [
         _line(
           context,
           theme,
-          'Van sales (all trips)',
+          'Sold from vans',
           formatCurrency(van.salesKobo / 100.0),
           strong: true,
         ),
         _line(
           context,
           theme,
-          'Cash from drivers',
+          'Cash handed in by drivers',
           formatCurrency(van.remittedKobo / 100.0),
         ),
         if (isCeo) ...[
@@ -833,7 +1031,7 @@ class _DailyReconciliationDetailScreenState
           _line(
             context,
             theme,
-            'Cost of goods gone (closed trips)',
+            'What those goods cost you (closed trips)',
             formatCurrency(van.cogsKobo / 100.0),
           ),
           _line(
@@ -854,9 +1052,9 @@ class _DailyReconciliationDetailScreenState
         ],
         const SizedBox(height: 6),
         Text(
-          'Road sales are counted through the warehouse each van loaded from, '
-          'and are kept out of every per-store figure. Profit is booked when '
-          'the trip is reconciled and closed.',
+          'Van sales are counted under the warehouse each van loaded from, not '
+          'under a shop. Van profit shows up once a trip is checked and '
+          'closed.',
           style: context.bodySmall.copyWith(color: theme.hintColor),
         ),
       ],
@@ -878,20 +1076,23 @@ class _DailyReconciliationDetailScreenState
     return _card(
       context,
       theme,
-      'Cash flow (business-wide)',
+      'Cash',
       AppIcons.payments,
       netColor,
+      subtitle: _isDay
+          ? 'Money recorded as coming in and going out today'
+          : 'Money recorded as coming in and going out',
       [
         _line(
           context,
           theme,
-          'Cash sales',
+          'Cash from sales',
           '+ ${formatCurrency(d.cashSalesKobo / 100.0)}',
         ),
         _line(
           context,
           theme,
-          'Debts collected (cash)',
+          'Old debts paid by customers',
           '+ ${formatCurrency(d.cashDebtsCollectedKobo / 100.0)}',
         ),
         // #147 — "Cash from drivers": remittances, on the day the money
@@ -903,7 +1104,7 @@ class _DailyReconciliationDetailScreenState
           _line(
             context,
             theme,
-            'Cash from drivers',
+            'Cash handed in by drivers',
             '+ ${formatCurrency(d.cashFromDriversKobo / 100.0)}',
           ),
         // #696 — staff loans repaid in cash at the till (outside payday).
@@ -911,13 +1112,13 @@ class _DailyReconciliationDetailScreenState
           _line(
             context,
             theme,
-            'Staff loans repaid (cash)',
+            'Staff loans repaid in cash',
             '+ ${formatCurrency(d.cashLoansRepaidKobo / 100.0)}',
           ),
         _line(
           context,
           theme,
-          'Cash in',
+          'Total cash in',
           formatCurrency(d.cashInKobo / 100.0),
           strong: true,
         ),
@@ -925,13 +1126,13 @@ class _DailyReconciliationDetailScreenState
         _line(
           context,
           theme,
-          'Refunds paid (cash)',
+          'Refunds paid to customers',
           '− ${formatCurrency(d.cashRefundsKobo / 100.0)}',
         ),
         _line(
           context,
           theme,
-          'Expenses paid (cash)',
+          'Expenses paid',
           '− ${formatCurrency(d.cashExpensesKobo / 100.0)}',
         ),
         // #669 — Daily allowances are till cash, inside Cash out below.
@@ -939,7 +1140,7 @@ class _DailyReconciliationDetailScreenState
           _line(
             context,
             theme,
-            'Daily allowances (cash)',
+            'Daily allowances paid',
             '− ${formatCurrency(d.dailyAllowancesKobo / 100.0)}',
           ),
         // #671 — only the till-cash part of the salaries paid.
@@ -947,7 +1148,7 @@ class _DailyReconciliationDetailScreenState
           _line(
             context,
             theme,
-            'Salaries (cash)',
+            'Salaries paid',
             '− ${formatCurrency(d.cashSalariesKobo / 100.0)}',
           ),
         // #696 — bonuses, advances and staff loans handed over in till cash.
@@ -955,33 +1156,33 @@ class _DailyReconciliationDetailScreenState
           _line(
             context,
             theme,
-            'Bonuses (cash)',
+            'Bonuses paid',
             '− ${formatCurrency(d.cashBonusesKobo / 100.0)}',
           ),
         if (d.cashAdvancesKobo != 0)
           _line(
             context,
             theme,
-            'Salary advances (cash)',
+            'Salary advances paid',
             '− ${formatCurrency(d.cashAdvancesKobo / 100.0)}',
           ),
         if (d.cashLoansGivenKobo != 0)
           _line(
             context,
             theme,
-            'Staff loans given (cash)',
+            'Staff loans given',
             '− ${formatCurrency(d.cashLoansGivenKobo / 100.0)}',
           ),
         _line(
           context,
           theme,
-          'Paid to suppliers (cash)',
+          'Paid to suppliers',
           '− ${formatCurrency(d.cashSupplierPaidKobo / 100.0)}',
         ),
         _line(
           context,
           theme,
-          'Cash out',
+          'Total money paid out',
           formatCurrency(d.cashOutKobo / 100.0),
           strong: true,
         ),
@@ -989,7 +1190,7 @@ class _DailyReconciliationDetailScreenState
         _line(
           context,
           theme,
-          'Net cash movement',
+          'Cash you should have',
           formatCurrency(d.netCashMovementKobo / 100.0),
           strong: true,
           color: netColor,
@@ -1002,7 +1203,7 @@ class _DailyReconciliationDetailScreenState
           _line(
             context,
             theme,
-            'Crate deposits held (cash)',
+            'Crate deposits taken from customers (not yours)',
             formatCurrency(d.cashCrateDepositsKobo / 100.0),
           ),
         ],
@@ -1016,24 +1217,22 @@ class _DailyReconciliationDetailScreenState
           _line(
             context,
             theme,
-            'Crate deposits placed with suppliers (cash)',
+            'Crate deposits paid to suppliers (still yours)',
             formatCurrency(d.cashCrateDepositsPlacedKobo / 100.0),
           ),
         ],
         const SizedBox(height: 6),
         Text(
-          'Expected cash movement from recorded cash tenders — business-wide, '
-          'not a counted drawer. Crate deposits are refundable money — held for '
-          'customers, or placed with suppliers — and both are kept out of the '
-          'net.',
+          'Count the cash drawer to confirm this. Covers all branches. Crate '
+          'deposits are refundable money, so they are kept out of the total.',
           style: context.bodySmall.copyWith(color: theme.hintColor),
         ),
         if (hasExpenseFigures) ...[
           const SizedBox(height: 6),
           Text(
-            'Expenses here are counted on the day the money left the drawer, not '
-            'the date picked on the expense — so this can differ from Expenses '
-            'in Profit & Loss. Both are right: this card follows the cash.',
+            'Expenses here count on the day the money left the drawer, so they '
+            'can differ from the Expenses in "How we got your profit". Both are '
+            'right: this card follows the cash.',
             style: context.bodySmall.copyWith(color: theme.hintColor),
           ),
         ],
@@ -1066,20 +1265,20 @@ class _DailyReconciliationDetailScreenState
       _line(
         context,
         theme,
-        'Short',
+        'Products short',
         '${fmtNumber(d.shortageCount)} products · ${formatQty(d.shortageUnits)} units',
         danger: hasShortage,
       ),
       _line(
         context,
         theme,
-        'Surplus',
+        'Products extra',
         '${fmtNumber(d.surplusCount)} products · ${formatQty(d.surplusUnits)} units',
       ),
       if (d.shortages.isNotEmpty) ...[
         const SizedBox(height: 6),
         Text(
-          'Shortages',
+          'Products that came up short',
           style: context.bodySmall.copyWith(fontWeight: FontWeight.w700),
         ),
         for (final s in d.shortages)
@@ -1099,35 +1298,36 @@ class _DailyReconciliationDetailScreenState
       return _card(
         context,
         theme,
-        'Stock & shrinkage',
+        'Stock',
         AppIcons.inventory,
         _fx(theme).info,
+        subtitle: 'Valued at selling price',
         [
           _line(
             context,
             theme,
-            'Stock shortages',
+            'Missing stock',
             '${formatQty(d.shortageUnits)} unit(s) · ${formatCurrency(d.shortageRetailKobo / 100.0)}',
             danger: hasShortage,
           ),
           _line(
             context,
             theme,
-            'Damages recorded',
+            'Broken or spoilt goods',
             '${formatQtyGrouped(d.damageUnits)} unit(s) · ${formatCurrency(d.damageRetailKobo / 100.0)}',
           ),
           _divider(theme),
           _line(
             context,
             theme,
-            'Sellable value unaccounted',
+            'Selling value of what is missing',
             formatCurrency(shrinkVal / 100.0),
             strong: true,
           ),
           const SizedBox(height: 6),
           Text(
-            'Valued at selling price — an accountability figure, not the '
-            'company\'s cost of the loss.',
+            'Valued at selling price, so this shows what is missing, not what '
+            'the loss cost you.',
             style: context.bodySmall.copyWith(color: theme.hintColor),
           ),
           if (d.hasStockCount) ...[_divider(theme), ...countSection()],
@@ -1143,39 +1343,40 @@ class _DailyReconciliationDetailScreenState
     return _card(
       context,
       theme,
-      'Stock reconciliation (at cost)',
+      'Stock',
       AppIcons.balance,
       _fx(theme).info,
+      subtitle: 'Valued at what you paid for it',
       [
         if (d.hasStockFlow) ...[
           _line(
             context,
             theme,
-            'Opening stock',
+            _isDay ? 'Stock this morning' : 'Stock at the start',
             formatCurrency(d.stockOpeningKobo / 100.0),
           ),
           _line(
             context,
             theme,
-            'Goods received',
+            'New goods received',
             '+ ${formatCurrency(d.stockReceivedKobo / 100.0)}',
           ),
           _line(
             context,
             theme,
-            'Cost of goods sold',
+            'Goods sold',
             '− ${formatCurrency(d.stockCogsKobo / 100.0)}',
           ),
           _line(
             context,
             theme,
-            'Damages',
+            'Broken goods',
             '− ${formatCurrency(d.stockDamagesKobo / 100.0)}',
           ),
           _line(
             context,
             theme,
-            'Expired',
+            'Expired goods',
             '− ${formatCurrency(d.stockExpiredKobo / 100.0)}',
           ),
           // #176 — the former single "Other movements" residual, broken out by
@@ -1184,35 +1385,35 @@ class _DailyReconciliationDetailScreenState
             _signedLine(
               context,
               theme,
-              'Store transfers',
+              'Moved between stores',
               d.stockTransfersKobo,
             ),
           if (d.stockCountAdjustmentsKobo != 0)
             _signedLine(
               context,
               theme,
-              'Count corrections',
+              'Stock count corrections',
               d.stockCountAdjustmentsKobo,
             ),
           if (d.stockDeletionsKobo != 0)
             _signedLine(
               context,
               theme,
-              'Product deletions',
+              'Goods lost when products were deleted',
               d.stockDeletionsKobo,
             ),
           if (d.stockOtherMovementsKobo != 0)
             _signedLine(
               context,
               theme,
-              'Other movements',
+              'Other stock changes',
               d.stockOtherMovementsKobo,
             ),
           _divider(theme),
           _line(
             context,
             theme,
-            'Expected closing',
+            'Stock now',
             formatCurrency(d.stockExpectedClosingKobo / 100.0),
             strong: true,
           ),
@@ -1220,7 +1421,7 @@ class _DailyReconciliationDetailScreenState
             _line(
               context,
               theme,
-              'Variance (counted − expected)',
+              'Difference found when counted',
               '${variance >= 0 ? '+ ' : '− '}'
                   '${formatCurrency(variance.abs() / 100.0)}',
               strong: true,
@@ -1234,7 +1435,7 @@ class _DailyReconciliationDetailScreenState
           _line(
             context,
             theme,
-            'Count-reconciled profit',
+            'Profit after the stock count',
             formatCurrency(d.integrityAdjustedProfitKobo / 100.0),
             strong: true,
             color: hasVariance ? dangerColor : successColor,
@@ -1242,11 +1443,12 @@ class _DailyReconciliationDetailScreenState
           const SizedBox(height: 6),
           Text(
             hasVariance
-                ? 'The physical count is off the recorded flows by '
-                      '${formatCurrency(variance.abs() / 100.0)} — an unbooked '
-                      'shrinkage or miscount, not reflected in reported profit.'
-                : 'The physical count matches recorded sales, receipts, damages '
-                      'and expiries — reported profit reconciles.',
+                ? 'The stock count is off by '
+                      '${formatCurrency(variance.abs() / 100.0)} compared with '
+                      'what your records say. This is either goods that went '
+                      'missing or a miscount, and it is not in your profit.'
+                : 'The stock count matches your sales, goods received, broken '
+                      'and expired goods, so your profit adds up.',
             style: context.bodySmall.copyWith(color: theme.hintColor),
           ),
         ],
@@ -1259,12 +1461,14 @@ class _DailyReconciliationDetailScreenState
         const SizedBox(height: 6),
         Text(
           d.hasStockCount
-              ? 'The lines above value the units that moved at today\'s cost, so '
-                    'the column adds up to Expected closing. What those losses '
-                    'actually cost you is on the Profit & Loss card.'
-              : 'The lines above value the units that moved at today\'s cost. No '
-                    'stock count in this period, so there is no variance to '
-                    'reconcile against.',
+              ? 'The lines above use today\'s buying prices so they add up to '
+                    'Stock now. What those losses really cost you is in "How we '
+                    'got your profit".'
+              : (_isDay
+                    ? 'No stock count was done today, so there is nothing to '
+                          'compare against.'
+                    : 'No stock count was done in this period, so there is '
+                          'nothing to compare against.'),
           style: context.bodySmall.copyWith(color: theme.hintColor),
         ),
         // #186 — the count figures' own basis, said in the owner's words. Count
@@ -1275,9 +1479,7 @@ class _DailyReconciliationDetailScreenState
         if (d.hasStockCount) ...[
           const SizedBox(height: 6),
           Text(
-            'Shortages, surpluses and the variance follow each day\'s LATEST '
-            'count — recounting a day replaces the earlier count, in units and '
-            'in money together.',
+            'If a day was counted twice, only the latest count is used.',
             style: context.bodySmall.copyWith(color: theme.hintColor),
           ),
         ],
@@ -1286,10 +1488,10 @@ class _DailyReconciliationDetailScreenState
         if (d.legacyValuedShortageRows > 0) ...[
           const SizedBox(height: 6),
           Text(
-            '${fmtNumber(d.legacyValuedShortageRows)} older shortage record(s) '
-            'are valued at today\'s cost — they were saved before the cost of '
-            'each shortage was recorded, so changing a buying price also changes '
-            'the variance.',
+            '${fmtNumber(d.legacyValuedShortageRows)} older shortage '
+            'record(s) are counted at today\'s buying price, because the price '
+            'was not saved when they happened. Changing a buying price changes '
+            'the difference above.',
             style: context.bodySmall.copyWith(color: theme.hintColor),
           ),
         ],
@@ -1304,125 +1506,185 @@ class _DailyReconciliationDetailScreenState
   Widget _businessWorthCard(
     BuildContext context,
     ThemeData theme,
-    ReconData d,
-  ) {
-    final successColor = _fx(theme).green;
-    final dangerColor = _fx(theme).danger;
+    ReconData d, {
+    required bool wide,
+  }) {
+    final fx = _fx(theme);
+    final successColor = fx.green;
+    final dangerColor = fx.danger;
     final positionColor = d.businessNetPositionKobo >= 0
         ? successColor
         : dangerColor;
 
-    return _card(
-      context,
-      theme,
-      'Business worth right now (point-in-time)',
-      AppIcons.lock,
-      positionColor,
-      [
+    final have = ReportWorthBox(
+      title: 'What you have',
+      tint: fx.greenTint,
+      titleColor: successColor,
+      children: [
         _line(
           context,
           theme,
-          'Inventory on hand (at cost)',
-          '+ ${formatCurrency(d.inventoryOnHandKobo / 100.0)}',
+          'Stock',
+          formatCurrency(d.inventoryOnHandKobo / 100.0),
         ),
-        // #176 / #170 #7b — stock dispatched between stores but not yet received.
-        // Value that used to vanish between dispatch and receipt; now its own
-        // line in worth. Shown only when something is in transit.
+        // #176 / #170 #7b - stock dispatched between stores but not yet received.
         if (d.inTransitValueKobo != 0)
           _line(
             context,
             theme,
-            'In-transit stock (dispatched, not received)',
-            '+ ${formatCurrency(d.inTransitValueKobo / 100.0)}',
+            'Stock on the way between stores',
+            formatCurrency(d.inTransitValueKobo / 100.0),
           ),
         if (d.showCrates)
           _line(
             context,
             theme,
-            'Empty crates held (now)',
-            '+ ${formatCurrency(d.crateDepositKobo / 100.0)}',
+            'Empty crates',
+            formatCurrency(d.crateDepositKobo / 100.0),
           ),
-        // #215 / ADR 0023 rule 1 — deposits we PAID suppliers are still our
-        // money, merely held elsewhere. An asset, never an expense; before this
-        // slice it left the drawer and vanished from worth altogether.
+        // #215 / ADR 0023 rule 1 - deposits paid to suppliers are still ours.
         if (d.showCrates && d.placedCrateDepositsKobo != 0)
           _line(
             context,
             theme,
-            'Crate deposits held by suppliers (now)',
-            '+ ${formatCurrency(d.placedCrateDepositsKobo / 100.0)}',
+            'Crate deposits held by your suppliers',
+            formatCurrency(d.placedCrateDepositsKobo / 100.0),
           ),
         _line(
           context,
           theme,
-          'Outstanding customer debt (at risk)',
-          '+ ${formatCurrency(d.totalOwedKobo / 100.0)}',
+          'Money customers owe you',
+          formatCurrency(d.totalOwedKobo / 100.0),
           color: d.totalOwedKobo > 0 ? dangerColor : null,
         ),
         if (d.payOnDeliveryUncollectedKobo != 0)
           _payOnDeliveryLine(context, theme, d),
-        // #163 — crate liabilities netted against the empties asset above: the
-        // deposits we still hold for customers (owed back on return) and the
-        // crate debt we owe suppliers for full crates delivered. Only shown when
-        // there is something to owe, so the card stays clean for a settled shop.
+        // Money paid to suppliers ahead of goods (an asset).
+        if (d.supplierAccountBalanceKobo > 0)
+          _line(
+            context,
+            theme,
+            'Paid to suppliers in advance',
+            formatCurrency(d.supplierAccountBalanceKobo / 100.0),
+            color: successColor,
+          ),
+      ],
+    );
+    final owe = ReportWorthBox(
+      title: 'What you owe',
+      tint: fx.dangerTint,
+      titleColor: dangerColor,
+      children: [
+        _line(
+          context,
+          theme,
+          'Suppliers',
+          formatCurrency(
+            (d.supplierAccountBalanceKobo < 0
+                    ? d.supplierAccountBalanceKobo.abs()
+                    : 0) /
+                100.0,
+          ),
+        ),
         if (d.showCrates && d.heldCrateDepositsKobo != 0)
           _line(
             context,
             theme,
-            'Crate deposits held for customers (now)',
-            '− ${formatCurrency(d.heldCrateDepositsKobo / 100.0)}',
-            color: dangerColor,
+            'Crate deposits to return to customers',
+            formatCurrency(d.heldCrateDepositsKobo / 100.0),
           ),
         if (d.showCrates && d.supplierCrateDebtKobo != 0)
           _line(
             context,
             theme,
-            'Crate debt owed to suppliers (now)',
-            '− ${formatCurrency(d.supplierCrateDebtKobo / 100.0)}',
-            color: dangerColor,
+            'Crates you owe suppliers',
+            formatCurrency(d.supplierCrateDebtKobo / 100.0),
           ),
-        // Supplier account position — tracks payments made to suppliers vs
-        // goods received. Negative (red) = a debt we owe them for unpaid goods;
-        // positive (green) = money we paid them in advance (a prepayment), not
-        // money we hold on their behalf.
-        if (d.supplierAccountBalanceKobo < 0)
-          _line(
-            context,
-            theme,
-            'Owed to suppliers (now)',
-            '− ${formatCurrency(d.supplierAccountBalanceKobo.abs() / 100.0)}',
-            color: dangerColor,
-          )
-        else
-          _line(
-            context,
-            theme,
-            'Paid in advance to suppliers (now)',
-            '+ ${formatCurrency(d.supplierAccountBalanceKobo / 100.0)}',
-            color: d.supplierAccountBalanceKobo > 0 ? successColor : null,
-          ),
-        _divider(theme),
-        _line(
-          context,
-          theme,
-          'Business net position (now)',
-          formatCurrency(d.businessNetPositionKobo / 100.0),
-          strong: true,
-          color: positionColor,
-        ),
-        if (d.uncostedInventoryItems > 0) ...[
-          const SizedBox(height: 6),
-          Text(
-            'Excludes ${formatQtyGrouped(d.uncostedInventoryItems)} inventory item(s) with no recorded buying price.',
-            style: context.bodySmall.copyWith(color: theme.hintColor),
-          ),
-        ],
-        const SizedBox(height: 6),
+      ],
+    );
+
+    final title = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
         Text(
-          'Point-in-time net position. Not a cash balance.',
+          'What your business is worth right now',
+          style: context
+              .boldStyle(17)
+              .copyWith(color: theme.colorScheme.onSurface),
+        ),
+        Text(
+          'What you have, minus what you owe. This is not cash in hand.',
           style: context.bodySmall.copyWith(color: theme.hintColor),
         ),
       ],
+    );
+    final total = FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: wide ? Alignment.centerRight : Alignment.centerLeft,
+      child: Text(
+        formatCurrency(d.businessNetPositionKobo / 100.0),
+        style: context.extraBoldStyle(28).copyWith(color: positionColor),
+      ),
+    );
+    final gap = context.getRSize(12);
+    return DecoratedBox(
+      decoration: AppDecorations.card(context),
+      child: Padding(
+        padding: EdgeInsets.all(context.getRSize(16)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (wide)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: title),
+                  SizedBox(width: gap),
+                  Flexible(child: total),
+                ],
+              )
+            else ...[
+              title,
+              SizedBox(height: context.getRSize(8)),
+              total,
+            ],
+            SizedBox(height: gap),
+            if (wide)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: have),
+                  SizedBox(width: gap),
+                  Expanded(child: owe),
+                ],
+              )
+            else ...[
+              have,
+              SizedBox(height: gap),
+              owe,
+            ],
+            if (d.uncostedInventoryItems > 0) ...[
+              SizedBox(height: gap),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: fx.warningTint,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: fx.warningOutline),
+                ),
+                child: Padding(
+                  padding: EdgeInsets.all(context.getRSize(12)),
+                  child: Text(
+                    '${formatQtyGrouped(d.uncostedInventoryItems)} item(s) '
+                    'have no buying price, so they are left out of this '
+                    'total.',
+                    style: context.mediumStyle(13).copyWith(color: fx.warning),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -1435,14 +1697,14 @@ class _DailyReconciliationDetailScreenState
     return _card(
       context,
       theme,
-      'Debts & expenses',
+      'Debts and expenses',
       AppIcons.payments,
       _fx(theme).danger,
       [
         _line(
           context,
           theme,
-          'Outstanding customer debt (business-wide)',
+          'Money customers owe you (all branches)',
           formatCurrency(d.totalOwedKobo / 100.0),
           danger: d.totalOwedKobo > 0,
         ),
@@ -1451,28 +1713,28 @@ class _DailyReconciliationDetailScreenState
         _line(
           context,
           theme,
-          'Expenses recorded (${d.expensesCount})',
+          'Expenses',
           formatCurrency(d.expensesKobo / 100.0),
         ),
         if (d.dailyAllowancesKobo != 0)
           _line(
             context,
             theme,
-            'Daily allowances',
+            'Daily staff allowances',
             formatCurrency(d.dailyAllowancesKobo / 100.0),
           ),
         if (d.salariesKobo != 0)
           _line(
             context,
             theme,
-            'Salaries',
+            'Staff salaries',
             formatCurrency(d.salariesKobo / 100.0),
           ),
         if (d.bonusesKobo != 0)
           _line(
             context,
             theme,
-            'Bonuses',
+            'Staff bonuses',
             formatCurrency(d.bonusesKobo / 100.0),
           ),
       ],
@@ -1501,7 +1763,7 @@ class _DailyReconciliationDetailScreenState
     return _card(
       context,
       theme,
-      'Empty crates (held now)',
+      'Empty crates you hold',
       AppIcons.box,
       theme.colorScheme.primary,
       [
@@ -1519,7 +1781,7 @@ class _DailyReconciliationDetailScreenState
           _line(
             context,
             theme,
-            'Total empty-crate value (now)',
+            'Value of empty crates',
             formatCurrency(d.crateDepositKobo / 100.0),
             strong: true,
           ),
@@ -1861,6 +2123,7 @@ class _DailyReconciliationDetailScreenState
     Color color,
     List<Widget> children, {
     bool danger = false,
+    String? subtitle,
     List<Widget> badges = const [],
   }) {
     return DecoratedBox(
@@ -1872,20 +2135,20 @@ class _DailyReconciliationDetailScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Icon(icon, size: context.getRSize(18), color: color),
-                SizedBox(width: context.getRSize(10)),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: context
-                        .boldStyle(16)
-                        .copyWith(color: theme.colorScheme.onSurface),
-                  ),
-                ),
-              ],
+            Text(
+              title,
+              style: context
+                  .boldStyle(17)
+                  .copyWith(color: theme.colorScheme.onSurface),
             ),
+            if (subtitle != null)
+              Padding(
+                padding: EdgeInsets.only(top: context.getRSize(2)),
+                child: Text(
+                  subtitle,
+                  style: context.bodySmall.copyWith(color: theme.hintColor),
+                ),
+              ),
             // #192 — a card can now flag SEVERAL frozen figures (expenses and
             // damages move independently of net profit), so the badges wrap onto
             // their own line under the title instead of competing with it for the
