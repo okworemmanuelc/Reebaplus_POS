@@ -88,7 +88,7 @@ Future<bool> ensureCameraAccess(
   if (!opened && context.mounted) {
     AppNotification.showError(
       context,
-      "Couldn't open settings. Open your phone's Settings, find Reebaplus "
+      "Couldn't open settings. Open your device's Settings, find Reebaplus "
       'POS, and allow Camera.',
     );
   }

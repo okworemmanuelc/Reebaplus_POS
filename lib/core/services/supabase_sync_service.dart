@@ -643,7 +643,7 @@ class SupabaseSyncService {
   }
 
   /// The 0208 one-live-Customer-per-Shopper index refused a `customers` push
-  /// (23505 on `customers_business_shopper_account`): another phone linked the
+  /// (23505 on `customers_business_shopper_account`): another device linked the
   /// same Shopper to a different Customer first (#528).
   static bool _isShopperLinkCollision(Object e) =>
       e is PostgrestException &&
@@ -730,7 +730,7 @@ class SupabaseSyncService {
     final winnerId = winner['id'] as String;
     debugPrint(
       '[SyncService] customers $localId: Shopper already linked to '
-      '$winnerId on another phone — adopting it (#528)',
+      '$winnerId on another device — adopting it (#528)',
     );
     final dao = _db.onlineOrdersDao;
     // One local transaction: a failure leaves the link exactly as it was and
@@ -1575,7 +1575,7 @@ class SupabaseSyncService {
           '(code=$code, permanent=$isPermanent, fk_deferred=$isFkViolation): '
           '${e.message}',
         );
-        // #550 — another phone's reversal of this order landed first. Undo
+        // #550 — another device's reversal of this order landed first. Undo
         // this phone's reversal BEFORE the orphan move, so a crash in between
         // just replays the (idempotent) undo on the next drain.
         final reversalLost =
@@ -1596,12 +1596,12 @@ class SupabaseSyncService {
           item.id,
           reversalLost
               ? 'pg_$code: ${e.message} — this sale was already refunded on '
-                    'another phone; the refund made here was undone'
+                    'another device; the refund made here was undone'
               : editLost
               ? 'pg_$code: ${e.message} — $kEditRejectedMessage'
               : adjustmentLost
               ? 'pg_$code: ${e.message} — this return no longer fits the sale '
-                    '(returned on another phone first); it was undone here'
+                    '(returned on another device first); it was undone here'
               : 'pg_$code: ${e.message}',
           permanent: isPermanent,
           fkDeferred: isFkViolation,

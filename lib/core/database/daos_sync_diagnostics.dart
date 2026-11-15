@@ -45,7 +45,7 @@ const String kLocalEnvelopeKey = '_local';
 
 /// The plain message a phone shows when the cloud refuses a sale edit.
 const String kEditRejectedMessage =
-    "This edit wasn't saved — another phone changed this sale first. "
+    "This edit wasn't saved — another device changed this sale first. "
     'Nothing was changed.';
 
 /// Both claim envelopes, for the "is a claim still queued" checks.

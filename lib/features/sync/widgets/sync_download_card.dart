@@ -92,7 +92,7 @@ DownloadCardInfo describeDownload(
       double? progress;
       if (status.rowsTotal > 0) {
         lines.add(
-          'Saving ${status.rowsDone} of ${status.rowsTotal} rows to this phone',
+          'Saving ${status.rowsDone} of ${status.rowsTotal} rows to this device',
         );
         progress = (status.rowsDone / status.rowsTotal).clamp(0.0, 1.0);
         if (status.tablesTotal > 0) {
@@ -128,7 +128,7 @@ DownloadCardInfo describeDownload(
         return const DownloadCardInfo(
           title: 'Not fully downloaded',
           lines: [
-            "This phone hasn't finished its first full download yet. Some "
+            "This device hasn't finished its first full download yet. Some "
                 'products, customers or history may be missing until it does.',
           ],
           tone: SyncFactTone.bad,
@@ -136,7 +136,7 @@ DownloadCardInfo describeDownload(
       }
       return const DownloadCardInfo(
         title: 'Downloaded',
-        lines: ['The first full download to this phone has finished.'],
+        lines: ['The first full download to this device has finished.'],
         tone: SyncFactTone.ok,
       );
   }

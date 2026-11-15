@@ -27,7 +27,7 @@ StaleBusinessConfirm staleBusinessClearPrompt(BuildContext context) {
             Theme.of(ctx).extension<AppFixedColors>() ?? AppFixedColors.light;
         return AlertDialog(
           title: Text(
-            'Clear the old business from this phone?',
+            'Clear the old business from this device?',
             style: ctx.extraBoldStyle(18).copyWith(color: authTextPrimary(ctx)),
           ),
           // "changes", not "sales": the count is every un-uploaded outbox row
@@ -37,7 +37,7 @@ StaleBusinessConfirm staleBusinessClearPrompt(BuildContext context) {
           content: Text(
             '${warning.unsentCount} unsaved '
             '${warning.unsentCount == 1 ? 'change' : 'changes'} from '
-            '${warning.businessName} will be deleted from this phone.',
+            '${warning.businessName} will be deleted from this device.',
             style: ctx
                 .regularStyle(14)
                 .copyWith(color: authTextPrimary(ctx), height: 1.4),

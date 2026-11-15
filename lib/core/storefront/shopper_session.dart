@@ -158,7 +158,7 @@ class ShopperSessionNotifier extends Notifier<ShopperSessionState> {
   }
 
   static const _businessPhoneMessage =
-      'This phone is signed in to a business. Shop with that sign-in.';
+      'This device is signed in to a business. Shop with that sign-in.';
 
   static String _message(Object e, {required String fallback}) {
     if (isNetworkFailure(e)) {
