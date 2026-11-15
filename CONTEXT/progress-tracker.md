@@ -7,6 +7,11 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #831: daily report redesign for phone, tablet and desktop (2026-11-15, branch `feat/daily-report-redesign-831`)
+- Layout and wording only: no figure, sum, gate, provider or write path changed. `DailyReconciliationDetailScreen` now decides by measured width: under 600 a hero card (`ReportHeroCard`), 600-899 three tiles over one 720 column, 900+ three tiles over two card columns (left Sales / Best sellers / How we got your profit, right Cash / Van sales / Stock), capped at 1080 (`kReconDetailMaxWidth`), "What your business is worth right now" spanning both. Download is a labelled button from 600, an icon below.
+- Every row still shows when non-zero, renamed in plain words (Profit & Loss -> How we got your profit, Net profit -> Profit, Cash flow -> Cash, Net cash movement -> Cash you should have, Expected closing -> Stock now, etc.). Sales summary split into Sales and Best sellers. New look-only widgets in `lib/features/dashboard/widgets/report_summary_parts.dart`. Header figures: Total sold, Profit, Cash received (CEO); a Manager sees Total sold only.
+- Not built: the "Add buying prices" button (no agreed destination); the "(136.5 Guinness)" crate detail on the Empty crates row.
+- Tests: new `test/dashboard/daily_report_layout_test.dart` (five sizes, text scale 1.3 at 360), updated `daily_reconciliation_detail_screen_test.dart`, `recon_screens_redesign_test.dart`; `recon_golden_test.dart` goldens regenerated. Not checked on a device.
 ### Release 2.0.7+17 and issue #823: browser never shows the announcements ask (2026-11-14, branch `fix/web-push-sheet`)
 - `maybePromptForPushPermission` returns early on web (`isWeb = kIsWeb`); the Profile screen's announcements tile is hidden on web; a failed register step after "Turn on" is swallowed. The flag was already written before the sheet opens, so why the browser repeated it is NOT confirmed (the browser losing its saved data is the guess).
 - Version bumped to 2.0.7+17 (pubspec + `kAppVersion`). No Drift or cloud migration since build 16, so the minimum build stays 16.

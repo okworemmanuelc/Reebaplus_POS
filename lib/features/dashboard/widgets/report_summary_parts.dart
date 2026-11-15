@@ -132,56 +132,58 @@ class ReportSummaryTiles extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final gap = context.getRSize(12);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (var i = 0; i < items.length; i++) ...[
-          if (i > 0) SizedBox(width: gap),
-          Expanded(
-            child: DecoratedBox(
-              decoration: AppDecorations.card(context),
-              child: Padding(
-                padding: EdgeInsets.all(context.getRSize(14)),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      items[i].label,
-                      style: context
-                          .mediumStyle(13)
-                          .copyWith(color: theme.hintColor),
-                    ),
-                    SizedBox(height: context.getRSize(4)),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        items[i].value,
-                        style: context
-                            .extraBoldStyle(24)
-                            .copyWith(
-                              color:
-                                  items[i].valueColor ??
-                                  theme.colorScheme.onSurface,
-                            ),
-                      ),
-                    ),
-                    if (items[i].note != null) ...[
-                      SizedBox(height: context.getRSize(2)),
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < items.length; i++) ...[
+            if (i > 0) SizedBox(width: gap),
+            Expanded(
+              child: DecoratedBox(
+                decoration: AppDecorations.card(context),
+                child: Padding(
+                  padding: EdgeInsets.all(context.getRSize(14)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        items[i].note!,
-                        style: context.bodySmall.copyWith(
-                          color: theme.hintColor,
+                        items[i].label,
+                        style: context
+                            .mediumStyle(13)
+                            .copyWith(color: theme.hintColor),
+                      ),
+                      SizedBox(height: context.getRSize(4)),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          items[i].value,
+                          style: context
+                              .extraBoldStyle(24)
+                              .copyWith(
+                                color:
+                                    items[i].valueColor ??
+                                    theme.colorScheme.onSurface,
+                              ),
                         ),
                       ),
+                      if (items[i].note != null) ...[
+                        SizedBox(height: context.getRSize(2)),
+                        Text(
+                          items[i].note!,
+                          style: context.bodySmall.copyWith(
+                            color: theme.hintColor,
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),
-          ),
+          ],
         ],
-      ],
+      ),
     );
   }
 }
