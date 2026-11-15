@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/shared/widgets/product_photo_builder.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
-import 'package:reebaplus_pos/shared/widgets/local_photo_image.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
 import 'package:reebaplus_pos/shared/widgets/redesign/fly_to_cart.dart';
@@ -126,7 +126,11 @@ class _RequestProductTileState extends ConsumerState<_RequestProductTile> {
       product.subtitle,
       unitLabel(product.unit),
     ].where((s) => s != null && s.trim().isNotEmpty).join(' · ');
-    return ProductTile(
+    return ProductPhotoBuilder(
+      productId: product.id,
+      imageUrl: product.imageUrl,
+      imagePath: product.imagePath,
+      builder: (context, photo) => ProductTile(
       name: product.name,
       subtitle: subtitle.isEmpty ? null : subtitle,
       stockLabel: '${formatQty(stock)} in stock',
@@ -134,11 +138,12 @@ class _RequestProductTileState extends ConsumerState<_RequestProductTile> {
           ? StockLevel.low
           : StockLevel.ok,
       categoryName: widget.categoryName,
-      photoPath: productPhotoRef(imagePath: product.imagePath, imageUrl: product.imageUrl),
+      photoPath: photo,
       inCartQty: widget.quantity.ceil(),
       inCartLabel: widget.quantity > 0 ? formatQty(widget.quantity) : null,
       onTap: _add,
       onLongPress: widget.onChooseQuantity,
+      ),
     );
   }
 }

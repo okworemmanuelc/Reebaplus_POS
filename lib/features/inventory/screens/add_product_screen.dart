@@ -1066,6 +1066,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         if (res case Ok(:final value)) {
           await db.catalogDao.setProductImageUrl(productId, value);
         }
+        ref.invalidate(productPhotoPathProvider); // #832
       }
 
       await _saveListing(productId, const ListingContent());
@@ -1172,6 +1173,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
             bytes: _pendingImageBytes!,
           );
           _existingImagePath = await imgSvc.localPathFor(old.id);
+          ref.invalidate(productPhotoPathProvider); // #832
           if (res case Ok(:final value)) newImageUrl = value;
         }
       }
