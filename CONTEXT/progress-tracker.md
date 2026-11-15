@@ -7,6 +7,11 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #831: daily report redesign for phone, tablet and desktop (2026-11-15, branch `feat/daily-report-redesign-831`)
+- Layout and wording only: no figure, sum, gate, provider or write path changed. `DailyReconciliationDetailScreen` now decides by measured width: under 600 a hero card (`ReportHeroCard`), 600-899 three tiles over one 720 column, 900+ three tiles over two card columns (left Sales / Best sellers / How we got your profit, right Cash / Van sales / Stock), capped at 1080 (`kReconDetailMaxWidth`), "What your business is worth right now" spanning both. Download is a labelled button from 600, an icon below.
+- Every row still shows when non-zero, renamed in plain words (Profit & Loss -> How we got your profit, Net profit -> Profit, Cash flow -> Cash, Net cash movement -> Cash you should have, Expected closing -> Stock now, etc.). Sales summary split into Sales and Best sellers. New look-only widgets in `lib/features/dashboard/widgets/report_summary_parts.dart`. Header figures: Total sold, Profit, Cash received (CEO); a Manager sees Total sold only.
+- Not built: the "Add buying prices" button (no agreed destination); the "(136.5 Guinness)" crate detail on the Empty crates row.
+- Tests: new `test/dashboard/daily_report_layout_test.dart` (five sizes, text scale 1.3 at 360), updated `daily_reconciliation_detail_screen_test.dart`, `recon_screens_redesign_test.dart`; `recon_golden_test.dart` goldens regenerated. Not checked on a device.
 ### Issue #832: product photos show on every product picture (2026-11-15, branch `fix/832-product-photos-everywhere`)
 - Cause: lists drew `product.imagePath`, which #78 never sets. Owner reversed #78's rule: new `productPhotoPathProvider` + `ProductPhotoBuilder` feed POS grid/list, Inventory, Receive Stock, Request Stock and the Van load picker; saves invalidate it. No schema or money change; receipts unchanged.
 - Tests: `test/pos/product_photo_everywhere_test.dart` (3 failed on main, pass now); existing POS/Inventory/Receive/Request/Add/Edit/Detail tests and goldens pass unchanged. Not checked on a phone.

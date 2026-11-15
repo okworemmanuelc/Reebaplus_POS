@@ -145,8 +145,8 @@ void main() {
       tester,
     ) async {
       await pump(tester, _detail());
-      expect(find.text('Sales summary'), findsOneWidget);
-      expect(find.text('Profit & Loss'), findsOneWidget);
+      expect(find.text('Sales'), findsOneWidget);
+      expect(find.text('How we got your profit'), findsOneWidget);
       expect(find.byKey(ReportKeys.export), findsOneWidget);
       await disposeScreen(tester);
     });
@@ -158,9 +158,9 @@ void main() {
         roleRank: GateTier.manager,
         roleSlug: 'manager',
       );
-      expect(find.text('Sales summary'), findsOneWidget);
-      expect(find.text('Profit & Loss'), findsNothing);
-      expect(find.text('Debts & expenses'), findsOneWidget);
+      expect(find.text('Sales'), findsOneWidget);
+      expect(find.text('How we got your profit'), findsNothing);
+      expect(find.text('Debts and expenses'), findsOneWidget);
       await disposeScreen(tester);
     });
 
@@ -179,16 +179,14 @@ void main() {
         size: const Size(1280, 800),
         padding: EdgeInsets.zero,
       );
-      final sales = tester.getTopLeft(find.text('Sales summary'));
-      final pl = tester.getTopLeft(find.text('Stock reconciliation (at cost)'));
+      final sales = tester.getTopLeft(find.text('Sales'));
+      final pl = tester.getTopLeft(find.text('Valued at what you paid for it'));
       expect(pl.dx, isNot(equals(sales.dx)), reason: 'two columns');
       await disposeScreen(tester);
 
       await pump(tester, _detail(), size: const Size(800, 1280));
-      final sales2 = tester.getTopLeft(find.text('Sales summary'));
-      final pl2 = tester.getTopLeft(
-        find.text('Stock reconciliation (at cost)'),
-      );
+      final sales2 = tester.getTopLeft(find.text('Sales'));
+      final pl2 = tester.getTopLeft(find.text('Best sellers'));
       expect(pl2.dx, equals(sales2.dx), reason: 'one column under 900');
       await disposeScreen(tester);
     });

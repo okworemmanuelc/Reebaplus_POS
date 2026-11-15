@@ -453,8 +453,8 @@ void main() {
         snapshot: cashOnlyMove(),
       );
 
-      expect(find.textContaining('Net cash movement +'), findsOneWidget);
-      expect(find.textContaining('Cash out −'), findsOneWidget);
+      expect(find.textContaining('Cash you should have +'), findsOneWidget);
+      expect(find.textContaining('Money paid out −'), findsOneWidget);
       expect(
         find.textContaining('the flagged cards show what moved'),
         findsOneWidget,
@@ -472,7 +472,7 @@ void main() {
       );
 
       expect(
-        find.textContaining('Cash flow'),
+        find.text('Cash'),
         findsNothing,
         reason: 'the cash card is CEO-only (§25.3) — this is the premise',
       );
@@ -498,7 +498,7 @@ void main() {
         snapshot: _snapshot(expensesKobo: 750000),
       );
 
-      expect(find.textContaining('Debts & expenses'), findsOneWidget);
+      expect(find.textContaining('Debts and expenses'), findsOneWidget);
       expect(
         find.textContaining('Expenses −'),
         findsOneWidget,
@@ -529,7 +529,7 @@ void main() {
       expect(find.textContaining('Refunds −'), findsOneWidget,
           reason: 'the badge names the figure that moved');
       expect(
-        find.text('Refunds'),
+        find.text('Refunds paid to customers'),
         findsOneWidget,
         reason: 'a badge must never point at a line the card stopped rendering',
       );
