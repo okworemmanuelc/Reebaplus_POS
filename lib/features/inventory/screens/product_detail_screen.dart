@@ -1357,8 +1357,9 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     try {
       // Upload (keyed by product id) + local cache; offline it caches locally
       // and queues for the reconnect flush. The photo lives in image_url + the
-      // ProductImageService cache (never products.image_path, so it stays off
-      // the POS grid); the cache path drives the local preview. #78.
+      // ProductImageService cache (never products.image_path, a device path
+      // would be wrong on another phone); the cache path drives the local
+      // preview and every product picture shows it (#832, reverses #78).
       final res = await imgSvc.save(
         businessId: businessId,
         productId: productId,
@@ -1367,6 +1368,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       final localPath = await imgSvc.localPathFor(productId);
       if (!mounted) return;
       setState(() => _imagePath = localPath);
+      // Every tile/row re-resolves the fresh copy (offline: no url yet).
+      ref.invalidate(productPhotoPathProvider);
 
       final db = ref.read(databaseProvider);
       if (res case Ok(:final value)) {

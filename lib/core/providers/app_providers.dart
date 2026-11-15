@@ -638,6 +638,19 @@ final galleryPhotoPathProvider =
   (ref, url) => ref.read(productGalleryImagesProvider).ensureCached(url),
 );
 
+/// A path (or, in the browser, a url) that shows one product's cover photo on
+/// every product picture (#832): its device copy, downloaded once when
+/// missing, or the local file of a photo saved offline before `image_url`
+/// exists. Null = nothing to show (category art). Keyed by (productId,
+/// imageUrl) so a replaced photo (new `?v=` url) reloads; after a save,
+/// `ref.invalidate(productPhotoPathProvider)` refreshes every tile at once.
+final productPhotoPathProvider = FutureProvider.autoDispose
+    .family<String?, (String, String?)>(
+  (ref, key) => ref
+      .read(productImageServiceProvider)
+      .ensureCached(productId: key.$1, imageUrl: key.$2),
+);
+
 /// Live gallery photos (positions 2–5) of one product (#474).
 final productPhotosProvider =
     businessScopedStreamAutoDisposeFamily<List<ProductPhotoData>, String>(

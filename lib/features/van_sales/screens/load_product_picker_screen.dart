@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/shared/widgets/product_photo_builder.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
-import 'package:reebaplus_pos/shared/widgets/local_photo_image.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/providers/stream_providers.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
@@ -297,7 +297,11 @@ class _LoadProductPickerScreenState
                             itemBuilder: (context, i) {
                               final p = shown[i];
                               final onLoad = _qty[p.product.id] ?? 0;
-                              final tile = ProductTile(
+                              final tile = ProductPhotoBuilder(
+                                productId: p.product.id,
+                                imageUrl: p.product.imageUrl,
+                                imagePath: p.product.imagePath,
+                                builder: (context, photo) => ProductTile(
                                 name: p.product.name,
                                 subtitle: posTileSubtitle(p.product),
                                 subtitleMaxLines: posTileSubtitleLines(context),
@@ -311,10 +315,11 @@ class _LoadProductPickerScreenState
                                     : StockLevel.ok,
                                 categoryName:
                                     categoryNames[p.product.categoryId],
-                                photoPath: productPhotoRef(imagePath: p.product.imagePath, imageUrl: p.product.imageUrl),
+                                photoPath: photo,
                                 inCartQty: onLoad,
                                 onTap: () => _addOne(p),
                                 onLongPress: () => _typeQuantity(p),
+                              ),
                               );
                               return KeyedSubtree(
                                 key: loadPickerTileKey(p.product.id),

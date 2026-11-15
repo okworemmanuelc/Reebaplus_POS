@@ -93,6 +93,18 @@ path):
   in the `pending_product_image_uploads` list (not the outbox) until
   `PendingPhotoUploads.upload` flushes it; the logout wipe gate counts these
   (see invariant #12).
+  **Photos show on every product picture (#832, owner 2026-11-15; reverses
+  #78's "not on the POS grid" rule).** POS grid and list, Inventory rows,
+  Receive Stock, Request Stock and the Van Sales load picker draw the cover
+  photo through `ProductPhotoBuilder` (`lib/shared/widgets/product_photo_builder.dart`),
+  which watches `productPhotoPathProvider` (keyed by productId + image_url;
+  calls `ensureCached`, so it returns the device copy, downloads once when
+  missing, and gives the url in the browser). `BoxFit.cover` inside the
+  rounded slot; the category tint and icon show while loading or with no
+  photo. The device path is never written to `products.image_path`. A save
+  (Product Details, Add/Edit Product) calls
+  `ref.invalidate(productPhotoPathProvider)` so tiles refresh at once, even
+  offline before `image_url` exists. Receipts are unchanged.
   **Gallery photos (#474)** — positions 2–5 after the cover — go through
   `ProductGalleryImages` (`lib/core/services/product_gallery_images.dart`):
   objects `<businessId>/<productId>/<photoId>.jpg` (fresh photoId, never
