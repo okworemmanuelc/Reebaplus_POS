@@ -47,8 +47,12 @@ Future<void> printPayrollLines(
     }
     _showPicker(context, printer, buildBytes, onBusy);
   } catch (e) {
+    debugPrint('[PayrollPrint] print failed: $e');
     if (context.mounted) {
-      AppNotification.showError(context, 'Print error: $e');
+      AppNotification.showError(
+        context,
+        "Couldn't print. Check the printer is on and connected, then try again.",
+      );
     }
   } finally {
     onBusy?.call(false);
@@ -90,8 +94,12 @@ void _showPicker(
             AppNotification.showError(context, 'Could not connect');
           }
         } catch (e) {
+          debugPrint('[PayrollPrint] print failed: $e');
           if (context.mounted) {
-            AppNotification.showError(context, 'Print error: $e');
+            AppNotification.showError(
+              context,
+              "Couldn't print. Check the printer is on and connected, then try again.",
+            );
           }
         } finally {
           onBusy?.call(false);

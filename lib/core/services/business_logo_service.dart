@@ -56,7 +56,7 @@ class BusinessLogoService {
 
       return Result.ok(encodePhotoJpeg(decoded, maxDimension: _maxDimension));
     } catch (e) {
-      return Result.err(AppError.unknown(e));
+      return Result.err(AppError.unknown(e, action: 'choosing the picture'));
     }
   }
 
@@ -78,7 +78,9 @@ class BusinessLogoService {
 
       // (b) Upload to Storage.
       final objectPath = '$businessId.jpg';
-      await _client.storage.from(_bucket).uploadBinary(
+      await _client.storage
+          .from(_bucket)
+          .uploadBinary(
             objectPath,
             bytes,
             fileOptions: const FileOptions(
@@ -95,9 +97,9 @@ class BusinessLogoService {
       if (kIsWeb) _webUrls[businessId] = url;
       return Result.ok(url);
     } on StorageException catch (e) {
-      return Result.err(AppError.network('Storage upload failed: ${e.message}'));
+      return Result.err(AppError.network(plainStorageFailure(e)));
     } catch (e) {
-      return Result.err(AppError.unknown(e));
+      return Result.err(AppError.unknown(e, action: 'saving the picture'));
     }
   }
 
@@ -132,8 +134,7 @@ class BusinessLogoService {
       await File(path).parent.create(recursive: true);
       // The object behind the url: `.jpg` from #340, `.png` before it.
       final objectPath =
-          storageObjectPathFromPublicUrl(logoUrl, _bucket) ??
-              '$businessId.jpg';
+          storageObjectPathFromPublicUrl(logoUrl, _bucket) ?? '$businessId.jpg';
       final bytes = await _client.storage.from(_bucket).download(objectPath);
       await File(path).writeAsBytes(bytes, flush: true);
       return path;
@@ -153,14 +154,17 @@ class BusinessLogoService {
         if (file.existsSync()) await file.delete();
       }
 
-      await _client.storage
-          .from(_bucket)
-          .remove(['$businessId.jpg', '$businessId.png']);
+      await _client.storage.from(_bucket).remove([
+        '$businessId.jpg',
+        '$businessId.png',
+      ]);
       return Result.ok(null);
     } on StorageException catch (e) {
-      return Result.err(AppError.network('Storage delete failed: ${e.message}'));
+      return Result.err(
+        AppError.network(plainStorageFailure(e, deleting: true)),
+      );
     } catch (e) {
-      return Result.err(AppError.unknown(e));
+      return Result.err(AppError.unknown(e, action: 'removing the picture'));
     }
   }
 

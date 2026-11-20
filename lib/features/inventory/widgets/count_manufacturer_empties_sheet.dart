@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/core/errors/user_error_message.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/shared/utils/quantity_input.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
@@ -129,7 +130,11 @@ class _CountManufacturerEmptiesSheetState
       if (mounted && storeId == _selectedStoreId) {
         setState(() {
           _isLoadingExpected = false;
-          _errorMessage = 'Could not load expected empties: $e';
+          debugPrint('[CountEmpties] loading expected empties failed: $e');
+          _errorMessage = userErrorMessage(
+            e,
+            action: 'loading the expected empties',
+          );
         });
       }
     }
@@ -186,7 +191,13 @@ class _CountManufacturerEmptiesSheetState
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _errorMessage = 'Failed to record count: $e');
+        debugPrint('[CountEmpties] recording count failed: $e');
+        setState(
+          () => _errorMessage = userErrorMessage(
+            e,
+            action: 'recording the count',
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);

@@ -2566,10 +2566,13 @@ class _DailyReconciliationDetailScreenState
         subject: 'Reconciliation — $scope — ${widget.title}',
       );
     } catch (e) {
+      debugPrint('[ReconciliationDetail] export failed: $e');
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Could not export: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Couldn't export the report. Please try again."),
+          ),
+        );
       }
     }
   }

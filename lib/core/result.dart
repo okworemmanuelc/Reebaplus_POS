@@ -1,3 +1,6 @@
+import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:reebaplus_pos/core/errors/user_error_message.dart';
+
 /// Typed result carrier — avoids throwing across layer boundaries.
 ///
 /// Usage:
@@ -42,7 +45,7 @@ sealed class AppError {
   factory AppError.network(String message) = _NetworkError;
   factory AppError.permission(String message) = _PermissionError;
   factory AppError.cancelled() = _CancelledError;
-  factory AppError.unknown(Object error) = _UnknownError;
+  factory AppError.unknown(Object error, {String action}) = _UnknownError;
 
   bool get isCancelled => this is _CancelledError;
 
@@ -67,5 +70,22 @@ final class _CancelledError extends AppError {
 }
 
 final class _UnknownError extends AppError {
-  _UnknownError(Object error) : super._('$error');
+  /// #836 — the message is a plain sentence for shop staff; the raw error
+  /// goes to the debug log only so support keeps the detail.
+  _UnknownError(Object error, {String action = 'doing that'})
+    : super._(_plainUnknownMessage(error, action));
+
+  static String _plainUnknownMessage(Object error, String action) {
+    debugPrint('[AppError] $action failed: $error');
+    return userErrorMessage(error, action: action);
+  }
+}
+
+/// #836 — plain sentence for a failed picture upload/removal. The raw storage
+/// error is logged for support but never shown to staff.
+String plainStorageFailure(Object error, {bool deleting = false}) {
+  debugPrint('[Storage] ${deleting ? 'delete' : 'upload'} failed: $error');
+  return deleting
+      ? "Couldn't remove the picture. Check your internet connection and try again."
+      : "Couldn't upload the picture. Check your internet connection and try again.";
 }

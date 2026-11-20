@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/core/errors/user_error_message.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/core/database/daos.dart' show CrateDepositSummary;
@@ -52,10 +53,13 @@ class CrateDepositsReportScreen extends ConsumerWidget {
         subject: 'Crate Deposits',
       );
     } catch (e) {
+      debugPrint('[CrateDeposits] export failed: $e');
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Could not export: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Couldn't export the report. Please try again."),
+          ),
+        );
       }
     }
   }
@@ -108,7 +112,9 @@ class CrateDepositsReportScreen extends ConsumerWidget {
         ),
         body: summaryAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text('Could not load: $e')),
+          error: (e, _) => Center(
+            child: Text(userErrorMessage(e, action: 'loading this report')),
+          ),
           data: (s) => LayoutBuilder(
             builder: (context, constraints) {
               final gutter = reportGutter(context, constraints.maxWidth);

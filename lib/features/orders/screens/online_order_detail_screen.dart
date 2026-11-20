@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
+import 'package:reebaplus_pos/core/errors/user_error_message.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/online_orders/online_order_answer.dart';
 import 'package:reebaplus_pos/core/online_orders/online_order_slip.dart';
@@ -145,7 +146,10 @@ class _OnlineOrderDetailScreenState
     final cart = ref.read(cartProvider);
     OnlineOrderTillLoad? load;
     await _run(() async {
-      load = await ref.read(databaseProvider).onlineOrdersDao.tillLoad(order.id);
+      load = await ref
+          .read(databaseProvider)
+          .onlineOrdersDao
+          .tillLoad(order.id);
     }, 'orders.online.sendToTill');
     if (!mounted) return;
     final l = load;
@@ -168,7 +172,10 @@ class _OnlineOrderDetailScreenState
     Navigator.of(context).popUntil((r) => r.isFirst);
     ref.read(navigationProvider).setIndex(8);
     if (short.isEmpty) {
-      AppNotification.showSuccess(context, 'Order ${order.reference} is in the cart');
+      AppNotification.showSuccess(
+        context,
+        'Order ${order.reference} is in the cart',
+      );
     } else {
       AppNotification.showInfo(
         context,
@@ -234,7 +241,9 @@ class _OnlineOrderDetailScreenState
         decoration: AppDecorations.pageBackground(context),
         child: order.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text('Error: $e')),
+          error: (e, _) => Center(
+            child: Text(userErrorMessage(e, action: 'loading this order')),
+          ),
           data: (o) => o == null
               ? const Center(
                   child: OrdersEmptyState(

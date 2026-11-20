@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/core/errors/user_error_message.dart';
 import 'package:reebaplus_pos/core/utils/perf_log.dart';
 import 'package:reebaplus_pos/core/utils/share_file.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
@@ -1205,7 +1206,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       // existing recoverable message — the sale flow must never blank-crash.
       CrashReporter.record(e, st, context: 'pos.checkout.verify_prices');
       if (mounted) {
-        AppNotification.showError(context, 'Could not verify cart prices: $e');
+        AppNotification.showError(
+          context,
+          userErrorMessage(e, action: 'checking the cart prices'),
+        );
       }
       return;
     }
@@ -1361,7 +1365,19 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       // _compensateRejectedSale — nothing to undo locally here.)
       CrashReporter.record(e, st, context: 'pos.checkout.confirm');
       if (mounted) {
-        AppNotification.showError(context, 'Checkout failed: ${e.toString()}');
+        AppNotification.showError(
+          context,
+          userErrorMessage(
+            e,
+            action: 'completing the sale',
+            productName: (id) {
+              for (final item in widget.cart) {
+                if (item['id'] == id) return item['name'] as String?;
+              }
+              return null;
+            },
+          ),
+        );
       }
     } finally {
       if (mounted) {
@@ -1637,7 +1653,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       );
     } catch (e) {
       if (!mounted) return;
-      AppNotification.showError(context, 'Error sharing receipt: $e');
+      debugPrint('[Checkout] sharing receipt failed: $e');
+      AppNotification.showError(
+        context,
+        "Couldn't share the receipt. Please try again.",
+      );
     }
   }
 
@@ -1748,7 +1768,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         if (auto) {
           _showPrintFailed();
         } else {
-          AppNotification.showError(context, 'Print error: $e');
+          debugPrint('[Checkout] printing failed: $e');
+          AppNotification.showError(
+            context,
+            "Couldn't print. Check the printer is on and connected, then try again.",
+          );
         }
       }
     } finally {
@@ -1822,7 +1846,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             }
           } catch (e) {
             if (mounted) {
-              AppNotification.showError(context, 'Print error: $e');
+              debugPrint('[Checkout] printing failed: $e');
+              AppNotification.showError(
+                context,
+                "Couldn't print. Check the printer is on and connected, then try again.",
+              );
             }
           } finally {
             _printInFlight = false;

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:reebaplus_pos/core/errors/user_error_message.dart';
+import 'package:reebaplus_pos/shared/services/auth_service.dart'
+    show LogoutWipeException, StaffResignException;
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/utils/csv_export.dart';
@@ -148,8 +151,12 @@ class _ResolveUnsyncedDataDialogState
       );
       if (mounted) setState(() => _hasExported = true);
     } catch (e) {
+      debugPrint('[ResolveUnsynced] export failed: $e');
       if (mounted) {
-        AppNotification.showError(context, 'Could not export records: $e');
+        AppNotification.showError(
+          context,
+          "Couldn't export the records. Please try again.",
+        );
       }
     } finally {
       if (mounted) setState(() => _exporting = false);
@@ -167,13 +174,19 @@ class _ResolveUnsyncedDataDialogState
       }
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
+      debugPrint('[ResolveUnsynced] discard failed: $e');
       if (mounted) {
         setState(() => _discarding = false);
         AppNotification.showError(
           context,
-          widget.isResign
-              ? 'Could not leave your account: $e'
-              : 'Could not complete logout: $e',
+          (e is StaffResignException || e is LogoutWipeException)
+              ? e.toString()
+              : userErrorMessage(
+                  e,
+                  action: widget.isResign
+                      ? 'leaving your account'
+                      : 'signing you out',
+                ),
         );
       }
     }

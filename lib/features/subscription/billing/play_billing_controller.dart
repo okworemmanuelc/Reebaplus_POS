@@ -35,6 +35,7 @@ PurchaseVerifier supabasePurchaseVerifier(SupabaseClient client) =>
         final ok = data is Map && data['ok'] == true;
         return VerifyOutcome(ok, ok ? null : (data is Map ? '${data['error']}' : 'internal'));
       } catch (e) {
+        debugPrint('[PlayBilling] verify call failed: $e');
         return VerifyOutcome(false, e.toString());
       }
     };
@@ -261,7 +262,10 @@ class PlayBillingController extends ChangeNotifier {
     } catch (e) {
       _pendingSuccessMessage = null;
       _clearUserStarted();
-      _set(BillingState(BillingPhase.error, offers: offers, message: '$e'));
+      debugPrint('[PlayBilling] purchase start failed: $e');
+      _set(BillingState(BillingPhase.error, offers: offers,
+          message: "The payment didn't go through. You were not charged. "
+              'Please try again.'));
     }
   }
 
@@ -291,7 +295,10 @@ class PlayBillingController extends ChangeNotifier {
         }
       });
     } catch (e) {
-      _set(BillingState(BillingPhase.error, offers: _state.offers, message: '$e'));
+      debugPrint('[PlayBilling] restore failed: $e');
+      _set(BillingState(BillingPhase.error, offers: _state.offers,
+          message: "We couldn't restore your purchases. "
+              'Check your internet connection and try again.'));
     }
   }
 
@@ -307,8 +314,10 @@ class PlayBillingController extends ChangeNotifier {
         _set(BillingState(BillingPhase.ready, offers: offers));
       case PurchaseEventStatus.error:
         _clearUserStarted();
+        debugPrint('[PlayBilling] purchase event error: ${e.message}');
         _set(BillingState(BillingPhase.error, offers: offers,
-            message: e.message ?? 'The purchase failed.'));
+            message: "The payment didn't go through. You were not charged. "
+                'Please try again.'));
       case PurchaseEventStatus.purchased:
       case PurchaseEventStatus.restored:
         final token = e.purchaseToken;

@@ -7,10 +7,16 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #836: plain-language error messages everywhere (2026-11-20, branch `fix/836-plain-error-messages`)
+- Owner: checkout showed `SaleSyncException(orderId=…); pg_P0001: insufficient_stock`. New `lib/core/errors/user_error_message.dart`: `userErrorMessage(e, action:, productName:)` (server codes, network, permission, session, fallback "Something went wrong while <action>…") and `authErrorMessage(e)` (OTP / rate limit / email errors). Never shows class names, ids or `pg_` codes.
+- Stock rejections name the product: the sync engine now keeps the server HINT (` hint=<json>`) in the stored queue error, and checkout resolves the product name from the cart.
+- About 60 user-facing sites swept (checkout, cart, orders, crate returns, inventory, photo uploads via `AppError.unknown(e, action:)`, stock approvals, report exports, van terminal/receipts, payroll print, invite, auth OTP, shopper sign-in, Play billing, logout dialog). Authored domain messages (Van*, ReturnRefused, StaffResign, LogoutWipe, GateDenied) are still shown as written. Raw text still goes to logs / error_logs.
+- Left technical on purpose: Sync Issues and diagnostics screens (support tools).
+- Tests: `test/core/errors/user_error_message_test.dart` + 11 existing files covering the changed screens (259 pass). Not checked on a device.
 ### Issue #835: long-cart checkout falsely failed (same sale sent twice at once) (2026-11-20, branch `fix/835-double-push-sale`)
 - ccokwor 2026-11-20: checkout's `flushSale` and the background drain both sent ORD-002194's `pos_record_sale_v2` at the same instant. The first saved it; the second hit 23505 on `orders_business_id_order_number_key` (ON CONFLICT covers only `id`), the till treated that as a rejection, cancelled locally and discarded the held wallet legs; every retry then hit `insufficient_stock`.
 - Client: `SyncDao.claimForPush` (pending -> syncing only if still pending); `_pushDomainItems` skips rows another pusher claimed. `flushSale` also finds a `syncing` envelope and waits for the background drain holding it (`_pushRunDone`), so a real rejection still reaches the cashier. `findPendingDomainItem` replaced by `findLiveDomainItem`.
-- Cloud: migration 0259 adds `pg_advisory_xact_lock` on `p_order_id` at the top of `pos_record_sale_v2` (body otherwise identical to 0239; protects phones already on 2.0.7). Applied to dev 2026-11-20. No table, column, status or money-rule change, so no pos-parity issue.
+- Cloud: migration 0259 adds `pg_advisory_xact_lock` on `p_order_id` at the top of `pos_record_sale_v2` (body otherwise identical to 0239; protects phones already on 2.0.7). Applied to dev and DEPLOYED to prod 2026-11-20 (0193 still held back). No table, column, status or money-rule change, so no pos-parity issue.
 - Live data: ORD-002194 cancelled in the cloud at the owner's request (stock returned; it had no money rows). The saved cart was then rung up as ORD-002190-GM8CAN.
 - Tests: `test/sync/sale_double_push_test.dart` (fails without the claim). Not checked on a device.
 ### Issue #831: daily report redesign for phone, tablet and desktop (2026-11-15, branch `feat/daily-report-redesign-831`)

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/core/errors/user_error_message.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:intl/intl.dart';
@@ -48,7 +49,12 @@ class _CrateReturnApprovalScreenState
       if (mounted) AppNotification.showSuccess(context, 'Return approved');
     } catch (e, st) {
       CrashReporter.record(e, st, context: 'orders.crate_return.approve');
-      if (mounted) AppNotification.showError(context, e.toString());
+      if (mounted) {
+        AppNotification.showError(
+          context,
+          userErrorMessage(e, action: 'approving this return'),
+        );
+      }
     } finally {
       if (mounted) setState(() => _processing = false);
     }
@@ -70,7 +76,12 @@ class _CrateReturnApprovalScreenState
       if (mounted) AppNotification.showSuccess(context, 'Return rejected');
     } catch (e, st) {
       CrashReporter.record(e, st, context: 'orders.crate_return.reject');
-      if (mounted) AppNotification.showError(context, e.toString());
+      if (mounted) {
+        AppNotification.showError(
+          context,
+          userErrorMessage(e, action: 'rejecting this return'),
+        );
+      }
     } finally {
       if (mounted) setState(() => _processing = false);
     }
@@ -133,7 +144,9 @@ class _CrateReturnApprovalScreenState
         child: AppRefreshWrapper(
           child: pendingAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, s) => Center(child: Text('Error: $e')),
+            error: (e, s) => Center(
+              child: Text(userErrorMessage(e, action: 'loading returns')),
+            ),
             data: (returns) {
               if (returns.isEmpty) {
                 return const Center(

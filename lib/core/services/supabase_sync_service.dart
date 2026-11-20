@@ -1612,7 +1612,10 @@ class SupabaseSyncService {
               : adjustmentLost
               ? 'pg_$code: ${e.message} — this return no longer fits the sale '
                     '(returned on another device first); it was undone here'
-              : 'pg_$code: ${e.message}',
+              : 'pg_$code: ${e.message}'
+                    // #836: keep the server HINT (product, qty asked, qty left)
+                    // so the UI can name the product in plain words.
+                    '${e.hint != null ? ' hint=${e.hint}' : ''}',
           permanent: isPermanent,
           fkDeferred: isFkViolation,
         );

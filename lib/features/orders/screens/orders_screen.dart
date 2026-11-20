@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/core/errors/user_error_message.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'package:reebaplus_pos/core/utils/share_file.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
@@ -504,7 +505,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       error: (e, _) => [
         SliverFillRemaining(
           hasScrollBody: false,
-          child: Center(child: Text('Error: $e')),
+          child: Center(
+            child: Text(userErrorMessage(e, action: 'loading orders')),
+          ),
         ),
       ],
       data: (allPending) {
@@ -573,7 +576,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       error: (e, _) => [
         SliverFillRemaining(
           hasScrollBody: false,
-          child: Center(child: Text('Error: $e')),
+          child: Center(
+            child: Text(userErrorMessage(e, action: 'loading orders')),
+          ),
         ),
       ],
       data: (stats) {
@@ -661,7 +666,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       error: (e, _) => [
         SliverFillRemaining(
           hasScrollBody: false,
-          child: Center(child: Text('Error: $e')),
+          child: Center(
+            child: Text(userErrorMessage(e, action: 'loading orders')),
+          ),
         ),
       ],
       data: (stats) {
@@ -1039,7 +1046,10 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       }
     } catch (e) {
       if (mounted) {
-        AppNotification.showError(context, 'Could not complete order: $e');
+        AppNotification.showError(
+          context,
+          userErrorMessage(e, action: 'completing the order'),
+        );
       }
       return;
     }
@@ -1117,8 +1127,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     if (reason == null || !mounted) return;
     // #710 — money was paid: ask where it goes (skipped for a pure credit sale).
     RefundChoice? choice;
-    final paidKobo =
-        await ref.read(orderServiceProvider).refundablePaidKobo(order.id);
+    final paidKobo = await ref
+        .read(orderServiceProvider)
+        .refundablePaidKobo(order.id);
     if (!mounted) return;
     if (paidKobo > 0) {
       choice = await showRefundDestinationDialog(
@@ -1146,11 +1157,15 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
     try {
       await ref
           .read(orderServiceProvider)
-          .markAsCancelled(order.id, reason, staffId,
+          .markAsCancelled(
+            order.id,
+            reason,
+            staffId,
             gateContext: ref.read(gateContextProvider),
             destination:
                 choice?.destination ?? RefundDestination.cashOrTransfer,
-            refundMethod: choice?.method);
+            refundMethod: choice?.method,
+          );
       if (mounted) {
         AppNotification.showSuccess(
           context,
@@ -1163,7 +1178,10 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       if (mounted) AppNotification.showError(context, e.message);
     } catch (e) {
       if (mounted) {
-        AppNotification.showError(context, 'Could not issue refund: $e');
+        AppNotification.showError(
+          context,
+          userErrorMessage(e, action: 'issuing the refund'),
+        );
       }
     }
   }
@@ -1270,11 +1288,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
           final empties = partPlan!.emptiesToHandBack;
           final note = empties.isEmpty
               ? ''
-              : ' Give the customer back: ${[
-                  for (final e in empties)
-                    '${formatQty(e.crates)} ${e.brandName} '
-                        '${e.crates == 1 ? 'crate' : 'crates'}',
-                ].join(', ')}.';
+              : ' Give the customer back: ${[for (final e in empties) '${formatQty(e.crates)} ${e.brandName} '
+                      '${e.crates == 1 ? 'crate' : 'crates'}'].join(', ')}.';
           AppNotification.showSuccess(
             context,
             'Items returned from ${order.orderNumber}.$note',
@@ -1304,11 +1319,13 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       if (mounted) AppNotification.showError(context, e.message);
     } catch (e) {
       if (mounted) {
-        AppNotification.showError(context, 'Could not return the sale: $e');
+        AppNotification.showError(
+          context,
+          userErrorMessage(e, action: 'returning the sale'),
+        );
       }
     }
   }
-
 
   /// #713: Edit a completed sale (CEO / Manager). The editor and pop-ups only
   /// collect input; the Order Module's command does every write and re-checks
@@ -1425,11 +1442,17 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       if (mounted) AppNotification.showError(context, e.message);
     } on InsufficientStockException {
       if (mounted) {
-        AppNotification.showError(context, 'Not enough stock for an added item.');
+        AppNotification.showError(
+          context,
+          'Not enough stock for an added item.',
+        );
       }
     } catch (e) {
       if (mounted) {
-        AppNotification.showError(context, 'Could not change the sale: $e');
+        AppNotification.showError(
+          context,
+          userErrorMessage(e, action: 'changing the sale'),
+        );
       }
     }
   }
@@ -1594,8 +1617,9 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                             // #432 — a Pay on delivery order says so.
                             paymentMethod:
                                 receiptRef
-                                    .watch(payOnDeliveryByOrderProvider)[
-                                        currentOrder.id]
+                                    .watch(
+                                      payOnDeliveryByOrderProvider,
+                                    )[currentOrder.id]
                                     ?.label ??
                                 currentOrder.paymentType,
                             customerName:
@@ -1616,7 +1640,8 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
                             saleDate: extras.saleDate,
                             vatRateBps: extras.vatRateBps,
                             vatIncluded: extras.vatIncluded,
-                            cratesReturnedByManufacturer: extras.cratesReturnedByManufacturer,
+                            cratesReturnedByManufacturer:
+                                extras.cratesReturnedByManufacturer,
                             cratesSettledBrands: extras.cratesSettledBrands,
                             cratesTotalOwedByManufacturer:
                                 extras.cratesTotalOwedByManufacturer,
@@ -1795,8 +1820,7 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
             vatIncluded: extras.vatIncluded,
             cratesReturnedByManufacturer: extras.cratesReturnedByManufacturer,
             cratesSettledBrands: extras.cratesSettledBrands,
-            cratesTotalOwedByManufacturer:
-                extras.cratesTotalOwedByManufacturer,
+            cratesTotalOwedByManufacturer: extras.cratesTotalOwedByManufacturer,
             crateDepositFull: extras.crateDepositFull,
             tracksCrates: businessTracksCrates(
               ref.read(currentBusinessProvider),
@@ -1865,8 +1889,12 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
         }
       }
     } catch (e) {
+      debugPrint('[Orders] printing failed: $e');
       if (context.mounted) {
-        AppNotification.showError(context, 'Error printing: $e');
+        AppNotification.showError(
+          context,
+          "Couldn't print. Check the printer is on and connected, then try again.",
+        );
       }
     }
   }
@@ -1903,8 +1931,12 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen>
       );
       _logReprint(order.id.toString());
     } catch (e) {
+      debugPrint('[Orders] sharing receipt failed: $e');
       if (context.mounted) {
-        AppNotification.showError(context, 'Error sharing: $e');
+        AppNotification.showError(
+          context,
+          "Couldn't share the receipt. Please try again.",
+        );
       }
     }
   }
@@ -2118,10 +2150,7 @@ class _OrderItemRows extends ConsumerWidget {
               );
             }),
             if (isSale)
-              _ReturnedLines(
-                adjustments: adjustments,
-                showMoney: canSeeMoney,
-              ),
+              _ReturnedLines(adjustments: adjustments, showMoney: canSeeMoney),
             if (extraCount > 0)
               Align(
                 alignment: Alignment.centerLeft,
@@ -2516,7 +2545,9 @@ class _OrderCard extends ConsumerWidget {
                                   // the money below.
                                   label: pod == null
                                       ? _paymentLabel(order.paymentType)
-                                      : (pod.isPaid ? 'Paid' : 'Pay on delivery'),
+                                      : (pod.isPaid
+                                            ? 'Paid'
+                                            : 'Pay on delivery'),
                                   tone: pod == null
                                       ? _paymentTone(order.paymentType)
                                       : (pod.isPaid

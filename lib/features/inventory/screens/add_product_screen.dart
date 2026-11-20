@@ -1,3 +1,4 @@
+import 'package:reebaplus_pos/core/errors/user_error_message.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
 import 'dart:async';
 
@@ -739,7 +740,10 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     if (match != null) return match;
 
     final id = await db.inventoryDao.insertManufacturer(
-      ManufacturersCompanion.insert(name: toNameCase(name), businessId: businessId),
+      ManufacturersCompanion.insert(
+        name: toNameCase(name),
+        businessId: businessId,
+      ),
     );
     final manufacturers = await db.inventoryDao.getAllManufacturers();
     return manufacturers.firstWhere((m) => m.id == id);
@@ -756,7 +760,10 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     if (match != null) return match;
 
     final id = await db.catalogDao.insertCategory(
-      CategoriesCompanion.insert(name: toNameCase(name), businessId: businessId),
+      CategoriesCompanion.insert(
+        name: toNameCase(name),
+        businessId: businessId,
+      ),
     );
     final categories = await db.inventoryDao.getAllCategories();
     return categories.firstWhere((c) => c.id == id);
@@ -870,13 +877,14 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
     if (!Gates.manageListing.allowsNow(ref)) return;
     final content = _listing.parse().content;
     if (content == null || content == before) return;
-    final result = await ProductListingService(
-      ref.read(databaseProvider).catalogDao,
-    ).saveContent(
-      productId: productId,
-      content: content,
-      gateContext: ref.read(gateContextProvider),
-    );
+    final result =
+        await ProductListingService(
+          ref.read(databaseProvider).catalogDao,
+        ).saveContent(
+          productId: productId,
+          content: content,
+          gateContext: ref.read(gateContextProvider),
+        );
     if (result case Err(:final error) when mounted) {
       AppNotification.showError(context, error.message);
     }
@@ -1038,7 +1046,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         ),
         // Receive Stock routes the opening quantity to its delivery list
         // below instead of into a store.
-        initialStock: widget.receiveMode ? null : intent.initialStock.toDouble(),
+        initialStock: widget.receiveMode
+            ? null
+            : intent.initialStock.toDouble(),
         storeId: intent.storeId,
         performedBy: auth.currentUser?.id,
       );
@@ -1121,7 +1131,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       if (mounted) {
         AppNotification.showError(
           context,
-          'Could not save ${_lexicon.itemLower}: $e',
+          userErrorMessage(e, action: 'saving this'),
         );
       }
     } finally {
@@ -1268,7 +1278,7 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
       if (mounted) {
         AppNotification.showError(
           context,
-          'Could not update ${_lexicon.itemLower}: $e',
+          userErrorMessage(e, action: 'updating this'),
         );
       }
     } finally {
@@ -1856,9 +1866,9 @@ class _AddProductScreenState extends ConsumerState<AddProductScreen> {
         SizedBox(height: context.getRSize(8)),
         Text(
           'Leave the order boxes blank to let shoppers order any amount.',
-          style: context.regularStyle(13).copyWith(
-            color: Theme.of(context).textTheme.bodySmall?.color,
-          ),
+          style: context
+              .regularStyle(13)
+              .copyWith(color: Theme.of(context).textTheme.bodySmall?.color),
         ),
       ],
     );
