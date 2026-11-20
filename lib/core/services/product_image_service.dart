@@ -99,7 +99,7 @@ class ProductImageService {
 
       return shrinkPicked(await picked.readAsBytes());
     } catch (e) {
-      return Result.err(AppError.unknown(e));
+      return Result.err(AppError.unknown(e, action: 'choosing the picture'));
     }
   }
 
@@ -143,9 +143,7 @@ class ProductImageService {
       image = (await codec.getNextFrame()).image;
       final width = image.width;
       final height = image.height;
-      final pixels = await image.toByteData(
-        format: ui.ImageByteFormat.rawRgba,
-      );
+      final pixels = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
       if (pixels == null) {
         return Result.err(AppError.io('Could not decode image.'));
       }
@@ -177,7 +175,7 @@ class ProductImageService {
       }
       return Result.ok(_encode(decoded));
     } catch (e) {
-      return Result.err(AppError.unknown(e));
+      return Result.err(AppError.unknown(e, action: 'preparing the picture'));
     }
   }
 
@@ -206,11 +204,9 @@ class ProductImageService {
         _webUrls[productId] = url;
         return Result.ok(url);
       } on StorageException catch (e) {
-        return Result.err(
-          AppError.network('Storage upload failed: ${e.message}'),
-        );
+        return Result.err(AppError.network(plainStorageFailure(e)));
       } catch (e) {
-        return Result.err(AppError.unknown(e));
+        return Result.err(AppError.unknown(e, action: 'saving the picture'));
       }
     }
     // (a) Device copy first — gives instant + offline render.
@@ -228,9 +224,9 @@ class ProductImageService {
       await _unmarkPending(productId);
       return Result.ok(url);
     } on StorageException catch (e) {
-      return Result.err(AppError.network('Storage upload failed: ${e.message}'));
+      return Result.err(AppError.network(plainStorageFailure(e)));
     } catch (e) {
-      return Result.err(AppError.unknown(e));
+      return Result.err(AppError.unknown(e, action: 'saving the picture'));
     }
   }
 
@@ -246,10 +242,15 @@ class ProductImageService {
     Uint8List bytes,
   ) async {
     final objectPath = _objectPath(businessId, productId);
-    await _client.storage.from(_bucket).uploadBinary(
+    await _client.storage
+        .from(_bucket)
+        .uploadBinary(
           objectPath,
           bytes,
-          fileOptions: const FileOptions(upsert: true, contentType: 'image/jpeg'),
+          fileOptions: const FileOptions(
+            upsert: true,
+            contentType: 'image/jpeg',
+          ),
         );
     return versionedUrl(
       _client.storage.from(_bucket).getPublicUrl(objectPath),
@@ -327,10 +328,11 @@ class ProductImageService {
 
   Future<void> _markPending(String businessId, String productId) async {
     final prefs = await SharedPreferences.getInstance();
-    final entries = (prefs.getStringList(_pendingKey) ?? const <String>[])
-        .where((e) => !e.endsWith('|$productId'))
-        .toList()
-      ..add('$businessId|$productId');
+    final entries =
+        (prefs.getStringList(_pendingKey) ?? const <String>[])
+            .where((e) => !e.endsWith('|$productId'))
+            .toList()
+          ..add('$businessId|$productId');
     await prefs.setStringList(_pendingKey, entries);
   }
 
@@ -405,9 +407,11 @@ class ProductImageService {
       ]);
       return Result.ok(null);
     } on StorageException catch (e) {
-      return Result.err(AppError.network('Storage delete failed: ${e.message}'));
+      return Result.err(
+        AppError.network(plainStorageFailure(e, deleting: true)),
+      );
     } catch (e) {
-      return Result.err(AppError.unknown(e));
+      return Result.err(AppError.unknown(e, action: 'removing the picture'));
     }
   }
 
@@ -423,9 +427,9 @@ class ProductImageService {
   @visibleForTesting
   static String versionedUrl(String publicUrl, int version) {
     final uri = Uri.parse(publicUrl);
-    return uri.replace(
-      queryParameters: {...uri.queryParameters, 'v': '$version'},
-    ).toString();
+    return uri
+        .replace(queryParameters: {...uri.queryParameters, 'v': '$version'})
+        .toString();
   }
 
   /// Bytes ready to upload as `.jpg`: JPEG passes through; a pre-#340 PNG is

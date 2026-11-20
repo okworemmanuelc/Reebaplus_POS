@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart' as drift;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/core/errors/user_error_message.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 
 import 'package:reebaplus_pos/core/utils/number_format.dart';
@@ -321,7 +322,10 @@ class _CartScreenState extends ConsumerState<CartScreen>
       } catch (e, st) {
         CrashReporter.record(e, st, context: 'pos.cart.save');
         if (mounted) {
-          AppNotification.showError(context, 'Could not save cart: $e');
+          AppNotification.showError(
+            context,
+            userErrorMessage(e, action: 'saving the cart'),
+          );
         }
       }
     }
@@ -494,7 +498,10 @@ class _CartScreenState extends ConsumerState<CartScreen>
                                           if (!mounted) return;
                                           AppNotification.showError(
                                             this.context,
-                                            'Could not delete saved cart: $e',
+                                            userErrorMessage(
+                                              e,
+                                              action: 'deleting the saved cart',
+                                            ),
                                           );
                                         }
                                       },

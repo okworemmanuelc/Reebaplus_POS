@@ -704,8 +704,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                     if (id == null) return;
                     final messenger = ScaffoldMessenger.of(context);
                     try {
-                      await _customerService
-                          .updateWalletLimit(id, amount);
+                      await _customerService.updateWalletLimit(id, amount);
                       // Close only after the save, and only if this sheet is
                       // still the top route.
                       if (ctx.mounted &&
@@ -844,12 +843,11 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
     final messenger = ScaffoldMessenger.of(context);
     final reason = reasonCtrl.text.trim();
     try {
-      final voided = await _customerService
-          .voidTopup(
-            walletTxnId: txn.id,
-            staffId: staffId,
-            reason: reason.isEmpty ? null : reason,
-          );
+      final voided = await _customerService.voidTopup(
+        walletTxnId: txn.id,
+        staffId: staffId,
+        reason: reason.isEmpty ? null : reason,
+      );
       if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(
@@ -1010,7 +1008,8 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
                             saleDate: extras.saleDate,
                             vatRateBps: extras.vatRateBps,
                             vatIncluded: extras.vatIncluded,
-                            cratesReturnedByManufacturer: extras.cratesReturnedByManufacturer,
+                            cratesReturnedByManufacturer:
+                                extras.cratesReturnedByManufacturer,
                             cratesSettledBrands: extras.cratesSettledBrands,
                             cratesTotalOwedByManufacturer:
                                 extras.cratesTotalOwedByManufacturer,
@@ -1129,9 +1128,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
             discount: totals.discountKobo / 100.0,
             crateDeposit: totals.depositKobo / 100.0,
             total: totals.totalKobo / 100.0,
-            paymentMethod:
-                payLabel ??
-                paymentMethodLabel(order.paymentType),
+            paymentMethod: payLabel ?? paymentMethodLabel(order.paymentType),
             customerName: _name,
             cashReceived: order.amountPaidKobo / 100.0,
             reprintDate: DateTime.now(),
@@ -1147,8 +1144,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
             vatIncluded: extras.vatIncluded,
             cratesReturnedByManufacturer: extras.cratesReturnedByManufacturer,
             cratesSettledBrands: extras.cratesSettledBrands,
-            cratesTotalOwedByManufacturer:
-                extras.cratesTotalOwedByManufacturer,
+            cratesTotalOwedByManufacturer: extras.cratesTotalOwedByManufacturer,
             crateDepositFull: extras.crateDepositFull,
             tracksCrates: businessTracksCrates(business),
             manufacturerNames: manufacturerNames,
@@ -1213,7 +1209,13 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
         );
       }
     } catch (e) {
-      if (ctx.mounted) AppNotification.showError(ctx, 'Error printing: $e');
+      debugPrint('[CustomerDetail] printing failed: $e');
+      if (ctx.mounted) {
+        AppNotification.showError(
+          ctx,
+          "Couldn't print. Check the printer is on and connected, then try again.",
+        );
+      }
     }
   }
 
@@ -1236,7 +1238,13 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen>
         subject: 'Receipt #$orderNumber',
       );
     } catch (e) {
-      if (ctx.mounted) AppNotification.showError(ctx, 'Error sharing: $e');
+      debugPrint('[CustomerDetail] sharing receipt failed: $e');
+      if (ctx.mounted) {
+        AppNotification.showError(
+          ctx,
+          "Couldn't share the receipt. Please try again.",
+        );
+      }
     }
   }
 

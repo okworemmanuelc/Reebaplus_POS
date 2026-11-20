@@ -86,10 +86,7 @@ ProfitData computeProfit(
         uncostedItems += sign * i.item.quantity;
         continue;
       }
-      final lineRevenue = lineTotalKobo(
-        i.item.unitPriceKobo,
-        i.item.quantity,
-      );
+      final lineRevenue = lineTotalKobo(i.item.unitPriceKobo, i.item.quantity);
       final lineCogs = lineTotalKobo(i.item.buyingPriceKobo, i.item.quantity);
       revenueKobo += sign * lineRevenue;
       cogsKobo += sign * lineCogs;
@@ -238,10 +235,13 @@ class _ProfitReportScreenState extends ConsumerState<ProfitReportScreen> {
         subject: 'Profit Report — $friendlyPeriod',
       );
     } catch (e) {
+      debugPrint('[ProfitReport] export failed: $e');
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Could not export: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Couldn't export the report. Please try again."),
+          ),
+        );
       }
     }
   }

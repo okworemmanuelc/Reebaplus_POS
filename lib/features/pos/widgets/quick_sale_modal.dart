@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/core/errors/user_error_message.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/utils/responsive.dart';
@@ -200,7 +201,10 @@ class _QuickSaleModalState extends ConsumerState<QuickSaleModal>
       CrashReporter.record(e, st, context: 'pos.quick_sale.request');
       if (!mounted) return;
       setState(() => _submitting = false);
-      AppNotification.showError(context, 'Could not send for approval: $e');
+      AppNotification.showError(
+        context,
+        userErrorMessage(e, action: 'sending this for approval'),
+      );
     }
   }
 

@@ -1206,7 +1206,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       // existing recoverable message — the sale flow must never blank-crash.
       CrashReporter.record(e, st, context: 'pos.checkout.verify_prices');
       if (mounted) {
-        AppNotification.showError(context, 'Could not verify cart prices: $e');
+        AppNotification.showError(
+          context,
+          userErrorMessage(e, action: 'checking the cart prices'),
+        );
       }
       return;
     }
@@ -1650,7 +1653,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       );
     } catch (e) {
       if (!mounted) return;
-      AppNotification.showError(context, 'Error sharing receipt: $e');
+      debugPrint('[Checkout] sharing receipt failed: $e');
+      AppNotification.showError(
+        context,
+        "Couldn't share the receipt. Please try again.",
+      );
     }
   }
 
@@ -1761,7 +1768,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         if (auto) {
           _showPrintFailed();
         } else {
-          AppNotification.showError(context, 'Print error: $e');
+          debugPrint('[Checkout] printing failed: $e');
+          AppNotification.showError(
+            context,
+            "Couldn't print. Check the printer is on and connected, then try again.",
+          );
         }
       }
     } finally {
@@ -1835,7 +1846,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             }
           } catch (e) {
             if (mounted) {
-              AppNotification.showError(context, 'Print error: $e');
+              debugPrint('[Checkout] printing failed: $e');
+              AppNotification.showError(
+                context,
+                "Couldn't print. Check the printer is on and connected, then try again.",
+              );
             }
           } finally {
             _printInFlight = false;

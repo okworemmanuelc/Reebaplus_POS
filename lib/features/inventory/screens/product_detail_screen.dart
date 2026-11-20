@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/core/errors/user_error_message.dart';
 import 'package:reebaplus_pos/core/utils/perf_log.dart';
 import 'package:reebaplus_pos/shared/widgets/local_photo_image.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
@@ -578,9 +579,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         .map((c) => c.marketplaceCategory)
         .firstOrNull;
     final stores = ref.watch(allStoresProvider).valueOrNull ?? const [];
-    final stock = ref
-            .watch(productStockByStoreProvider(widget.item.id))
-            .valueOrNull ??
+    final stock =
+        ref.watch(productStockByStoreProvider(widget.item.id)).valueOrNull ??
         const <String, double>{};
     final inStockOnline = stores.any(
       (s) =>
@@ -597,7 +597,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       inStockOnline: inStockOnline,
     );
     // Only a factory barcode can be looked up (ADR 0029 §8, 2026-10-26).
-    final canShare = !hasPhoto && FactoryBarcode.tryParse(p.barcode ?? '') != null;
+    final canShare =
+        !hasPhoto && FactoryBarcode.tryParse(p.barcode ?? '') != null;
     return ProductListingCard(
       content: ListingContent.of(p),
       onEdit: _editListing,
@@ -635,13 +636,17 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     final code = _productData?.barcode;
     if (_sharingPhoto || _photoBusy || code == null) return;
     setState(() => _sharingPhoto = true);
-    final outcome = await ref.read(barcodeCatalogueServiceProvider).lookupOutcome(code);
+    final outcome = await ref
+        .read(barcodeCatalogueServiceProvider)
+        .lookupOutcome(code);
     if (!mounted) return;
     Uint8List? bytes;
     if (outcome case CatalogueFound(:final suggestion)) {
       final raw = suggestion.photoBytes;
       if (raw != null) {
-        bytes = switch (ref.read(productImageServiceProvider).processBytes(raw)) {
+        bytes = switch (ref
+            .read(productImageServiceProvider)
+            .processBytes(raw)) {
           Ok(:final value) => value,
           Err() => null,
         };
@@ -649,15 +654,12 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     }
     if (bytes == null) {
       setState(() => _sharingPhoto = false);
-      AppNotification.showInfo(
-        context,
-        switch (outcome) {
-          CatalogueUnreachable() =>
-            'Could not reach the product list. Check your connection and try again.',
-          CatalogueLookupFailed() => 'Something went wrong. Try again later.',
-          _ => 'No shared photo for this barcode yet.',
-        },
-      );
+      AppNotification.showInfo(context, switch (outcome) {
+        CatalogueUnreachable() =>
+          'Could not reach the product list. Check your connection and try again.',
+        CatalogueLookupFailed() => 'Something went wrong. Try again later.',
+        _ => 'No shared photo for this barcode yet.',
+      });
       return;
     }
     await _saveProductPhoto(bytes);
@@ -679,10 +681,11 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         p.imageUrl,
     ];
     final coverPath = _imagePath;
-    final hasCover = (coverPath != null && coverPath.isNotEmpty) ||
+    final hasCover =
+        (coverPath != null && coverPath.isNotEmpty) ||
         (_productData?.imageUrl?.isNotEmpty ?? false);
-    final f = Theme.of(context).extension<AppFixedColors>() ??
-        AppFixedColors.light;
+    final f =
+        Theme.of(context).extension<AppFixedColors>() ?? AppFixedColors.light;
     Widget placeholder() => ColoredBox(
       color: f.neutralTile,
       child: Center(child: AppIcon(AppIcons.image, size: context.getRSize(22))),
@@ -691,8 +694,11 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       hasCover: hasCover,
       cover: coverPath == null || coverPath.isEmpty
           ? null
-          : LocalPhotoImage(coverPath, fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => placeholder()),
+          : LocalPhotoImage(
+              coverPath,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => placeholder(),
+            ),
       photos: urls,
       maxPhotos: kMaxProductPhotos,
       busy: _savingPhotos,
@@ -701,13 +707,22 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
           final path = ref.watch(galleryPhotoPathProvider(url)).valueOrNull;
           return path == null
               ? placeholder()
-              : LocalPhotoImage(path, fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => placeholder());
+              : LocalPhotoImage(
+                  path,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => placeholder(),
+                );
         },
       ),
       onAdd: _addGalleryPhoto,
-      onMove: (from, to) => _runGallery((service, gate) => service.movePhoto(
-            productId: widget.item.id, from: from, to: to, gateContext: gate)),
+      onMove: (from, to) => _runGallery(
+        (service, gate) => service.movePhoto(
+          productId: widget.item.id,
+          from: from,
+          to: to,
+          gateContext: gate,
+        ),
+      ),
       onRemove: _confirmRemoveGalleryPhoto,
     );
   }
@@ -721,7 +736,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     Future<Result<void, AppError>> Function(
       ProductGalleryService service,
       GateContext gate,
-    ) action,
+    )
+    action,
   ) async {
     if (!Gates.manageListing.allowsNow(ref)) {
       showGateDenied(context, Gates.manageListing);
@@ -729,7 +745,10 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     }
     if (_savingPhotos) return;
     setState(() => _savingPhotos = true);
-    final result = await action(_galleryService(), ref.read(gateContextProvider));
+    final result = await action(
+      _galleryService(),
+      ref.read(gateContextProvider),
+    );
     if (!mounted) return;
     setState(() => _savingPhotos = false);
     if (result case Err(:final error)) {
@@ -795,8 +814,10 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       builder: (ctx) => AlertDialog(
         scrollable: true,
         backgroundColor: _surface,
-        title: Text('Remove photo?',
-            style: ctx.screenTitleStyle.copyWith(color: _text)),
+        title: Text(
+          'Remove photo?',
+          style: ctx.screenTitleStyle.copyWith(color: _text),
+        ),
         content: Text(
           'Shoppers will no longer see this photo.',
           style: ctx.regularStyle(14).copyWith(color: _text),
@@ -808,15 +829,19 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text('Remove',
-                style: TextStyle(color: t.colorScheme.error)),
+            child: Text('Remove', style: TextStyle(color: t.colorScheme.error)),
           ),
         ],
       ),
     );
     if (ok != true || !mounted) return;
-    await _runGallery((service, gate) => service.removePhoto(
-          productId: widget.item.id, imageUrl: url, gateContext: gate));
+    await _runGallery(
+      (service, gate) => service.removePhoto(
+        productId: widget.item.id,
+        imageUrl: url,
+        gateContext: gate,
+      ),
+    );
   }
 
   Future<void> _editListing() async {
@@ -899,15 +924,22 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       return;
     }
     if (_savingListing) return;
-    final service = ProductListingService(ref.read(databaseProvider).catalogDao);
+    final service = ProductListingService(
+      ref.read(databaseProvider).catalogDao,
+    );
     final gateContext = ref.read(gateContextProvider);
     setState(() => _savingListing = true);
     final result = await service.setShowOnline(
-      productId: widget.item.id, showOnline: showOnline, gateContext: gateContext);
+      productId: widget.item.id,
+      showOnline: showOnline,
+      gateContext: gateContext,
+    );
     if (!mounted) return;
     setState(() {
       _savingListing = false;
-      if (result.isOk) _productData = _productData?.copyWith(showOnline: showOnline);
+      if (result.isOk) {
+        _productData = _productData?.copyWith(showOnline: showOnline);
+      }
     });
     if (result case Err(:final error)) {
       AppNotification.showError(context, error.message);
@@ -1019,7 +1051,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     } catch (e, st) {
       CrashReporter.record(e, st, context: 'inventory.product_detail.save');
       debugPrint('ProductDetail._saveProductField error: $e');
-      return 'Could not save: $e';
+      return userErrorMessage(e, action: 'saving the product');
     }
   }
 
@@ -1293,8 +1325,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                 );
                 debugPrint('UpdateStock modal save error: $e');
                 return isStockKeeper
-                    ? 'Could not send for approval: $e'
-                    : 'Could not update stock: $e';
+                    ? userErrorMessage(e, action: 'sending this for approval')
+                    : userErrorMessage(e, action: 'updating the stock');
               }
             },
       ),
@@ -1388,7 +1420,10 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         context: 'inventory.product_detail.update_image',
       );
       if (mounted) {
-        AppNotification.showError(context, 'Failed to update image: $e');
+        AppNotification.showError(
+          context,
+          userErrorMessage(e, action: 'updating the picture'),
+        );
       }
     }
   }

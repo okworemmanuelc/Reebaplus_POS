@@ -433,8 +433,8 @@ class _ApprovalCardState extends ConsumerState<_ApprovalCard> {
       AppNotification.showError(
         context,
         approve
-            ? 'Could not approve: ${userErrorMessage(e, action: 'approving this')}'
-            : 'Could not reject: ${userErrorMessage(e, action: 'rejecting this')}',
+            ? userErrorMessage(e, action: 'approving this')
+            : userErrorMessage(e, action: 'rejecting this'),
       );
     }
   }
@@ -581,7 +581,9 @@ class _QuickSaleApprovalCardState
       setState(() => _busy = false);
       AppNotification.showError(
         context,
-        approve ? 'Could not approve: $e' : 'Could not reject: $e',
+        approve
+            ? userErrorMessage(e, action: 'approving this')
+            : userErrorMessage(e, action: 'rejecting this'),
       );
     }
   }
@@ -750,7 +752,9 @@ class _CrateDepositApprovalCardState
       setState(() => _busy = false);
       AppNotification.showError(
         context,
-        confirm ? 'Could not confirm: $e' : 'Could not reject: $e',
+        confirm
+            ? userErrorMessage(e, action: 'confirming this')
+            : userErrorMessage(e, action: 'rejecting this'),
       );
     }
   }

@@ -71,10 +71,13 @@ class _DailyReconciliationListScreenState
         subject: 'Daily Reconciliation ($subjectScope)',
       );
     } catch (e) {
+      debugPrint('[ReconciliationList] export failed: $e');
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Could not export: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Couldn't export the report. Please try again."),
+          ),
+        );
       }
     }
   }
