@@ -297,7 +297,13 @@ class VanReceiptViewState extends ConsumerState<VanReceiptView> {
       }
       _showPrinterPicker(printer, buildBytes);
     } catch (e) {
-      if (mounted) AppNotification.showError(context, 'Print error: $e');
+      debugPrint('[VanReceipt] print failed: $e');
+      if (mounted) {
+        AppNotification.showError(
+          context,
+          "Couldn't print. Check the printer is on and connected, then try again.",
+        );
+      }
     } finally {
       if (mounted) setState(() => _printing = false);
     }
@@ -342,7 +348,13 @@ class VanReceiptViewState extends ConsumerState<VanReceiptView> {
               AppNotification.showError(context, 'Could not connect');
             }
           } catch (e) {
-            if (mounted) AppNotification.showError(context, 'Print error: $e');
+            debugPrint('[VanReceipt] print failed: $e');
+            if (mounted) {
+              AppNotification.showError(
+                context,
+                "Couldn't print. Check the printer is on and connected, then try again.",
+              );
+            }
           } finally {
             if (mounted) setState(() => _printing = false);
           }
@@ -374,7 +386,10 @@ class VanReceiptViewState extends ConsumerState<VanReceiptView> {
         text: 'Reebaplus POS Receipt',
       );
     } catch (e) {
-      if (mounted) AppNotification.showError(context, 'Share failed: $e');
+      debugPrint('[VanReceipt] share failed: $e');
+      if (mounted) {
+        AppNotification.showError(context, "Couldn't share. Please try again.");
+      }
     }
   }
 }

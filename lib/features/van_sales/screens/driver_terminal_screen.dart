@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import 'package:reebaplus_pos/core/errors/user_error_message.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/permissions/gate_registry.dart';
 import 'package:reebaplus_pos/core/permissions/guarded.dart';
@@ -980,7 +981,12 @@ class _DriverTerminalScreenState extends ConsumerState<DriverTerminalScreen> {
     } catch (e, st) {
       CrashReporter.record(e, st, context: 'van.terminal.ring');
       if (mounted) {
-        AppNotification.showError(context, 'Sale failed: $e');
+        AppNotification.showError(
+          context,
+          (e is VanTripNotOpenException || e is VanOverReturnException)
+              ? e.toString()
+              : userErrorMessage(e, action: 'recording the sale'),
+        );
       }
     } finally {
       if (mounted) setState(() => _ringing = false);

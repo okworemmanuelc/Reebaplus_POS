@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:reebaplus_pos/core/errors/user_error_message.dart';
 import 'package:reebaplus_pos/core/providers/app_providers.dart';
 import 'package:reebaplus_pos/core/utils/network_failure.dart';
 
@@ -164,7 +165,10 @@ class ShopperSessionNotifier extends Notifier<ShopperSessionState> {
     if (isNetworkFailure(e)) {
       return 'No internet connection. Connect and try again.';
     }
-    if (e is AuthException && e.message.trim().isNotEmpty) return e.message;
+    if (e is AuthException) {
+      debugPrint('[ShopperSession] auth error: ${e.message}');
+      return authErrorMessage(e, fallback: fallback);
+    }
     return fallback;
   }
 }

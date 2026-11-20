@@ -4,6 +4,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/core/errors/user_error_message.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -225,7 +226,11 @@ class _InviteStaffScreenState extends ConsumerState<InviteStaffScreen> {
         showPlanLimitNotice(context, limit, plan: plan);
         return;
       }
-      AppNotification.showError(context, 'Could not generate code: $e');
+      debugPrint('[InviteStaff] generate code failed: $e');
+      AppNotification.showError(
+        context,
+        userErrorMessage(e, action: 'creating the invite code'),
+      );
     }
   }
 
