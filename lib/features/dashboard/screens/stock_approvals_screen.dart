@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reebaplus_pos/shared/utils/quantity.dart';
+import 'package:reebaplus_pos/core/errors/user_error_message.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
 import 'package:reebaplus_pos/core/crates/crate_deposit_ledger_types.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
@@ -431,7 +432,9 @@ class _ApprovalCardState extends ConsumerState<_ApprovalCard> {
       setState(() => _busy = false);
       AppNotification.showError(
         context,
-        approve ? 'Could not approve: ${_friendly(e)}' : 'Could not reject: $e',
+        approve
+            ? 'Could not approve: ${userErrorMessage(e, action: 'approving this')}'
+            : 'Could not reject: ${userErrorMessage(e, action: 'rejecting this')}',
       );
     }
   }
@@ -460,16 +463,9 @@ class _ApprovalCardState extends ConsumerState<_ApprovalCard> {
   String? get _totalCostLabel {
     final kobo = widget.request.unitCostKobo;
     if (kobo == null) return null;
-    return formatCurrency(lineTotalKobo(kobo, widget.request.quantityDiff) / 100.0);
-  }
-
-  // Surface the common "not enough stock to remove" case in plain English.
-  String _friendly(Object e) {
-    final s = e.toString();
-    if (s.contains('InsufficientStock') || s.contains('insufficient_stock')) {
-      return 'not enough stock in this store to remove that amount.';
-    }
-    return s;
+    return formatCurrency(
+      lineTotalKobo(kobo, widget.request.quantityDiff) / 100.0,
+    );
   }
 
   @override

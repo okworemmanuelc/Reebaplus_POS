@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:reebaplus_pos/core/errors/user_error_message.dart';
 import 'package:reebaplus_pos/core/utils/perf_log.dart';
 import 'package:reebaplus_pos/core/utils/share_file.dart';
 import 'package:reebaplus_pos/core/theme/app_icons.dart';
@@ -1361,7 +1362,19 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       // _compensateRejectedSale — nothing to undo locally here.)
       CrashReporter.record(e, st, context: 'pos.checkout.confirm');
       if (mounted) {
-        AppNotification.showError(context, 'Checkout failed: ${e.toString()}');
+        AppNotification.showError(
+          context,
+          userErrorMessage(
+            e,
+            action: 'completing the sale',
+            productName: (id) {
+              for (final item in widget.cart) {
+                if (item['id'] == id) return item['name'] as String?;
+              }
+              return null;
+            },
+          ),
+        );
       }
     } finally {
       if (mounted) {
