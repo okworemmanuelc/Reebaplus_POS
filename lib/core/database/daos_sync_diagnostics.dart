@@ -292,6 +292,50 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
     );
   }
 
+  /// #835 — atomically CLAIM one queue row for pushing: flips it `pending` →
+  /// `syncing` only if it is still `pending`, and reports whether this caller
+  /// won. Two pushers (checkout's foreground `flushSale` and the background
+  /// drain) can each read the same row as pending; only the claim winner may
+  /// call the RPC. [markInProgressBatch] is an unconditional write, so it let
+  /// both through and the same sale reached the server twice at once.
+  Future<bool> claimForPush(String id) async {
+    final changed =
+        await (update(syncQueue)
+              ..where((t) => t.id.equals(id) & t.status.equals('pending')))
+            .write(const SyncQueueCompanion(status: Value('syncing')));
+    return changed > 0;
+  }
+
+  /// #835 — the live (`pending` or `syncing`) domain envelope whose payload id
+  /// at [payloadIdPath] equals [idValue], or null when it has already been
+  /// delivered, orphaned, or was never queued. `syncing` means a push (this
+  /// caller's or another pusher's) is in flight.
+  Future<SyncQueueData?> findLiveDomainItem(
+    String actionType, {
+    required String payloadIdPath,
+    required String idValue,
+  }) async {
+    final bid = db.businessIdResolver.call();
+    if (bid == null) return null;
+    final result = await customSelect(
+      "SELECT id FROM sync_queue "
+      "WHERE action_type = ?1 AND status IN ('pending', 'syncing') "
+      "  AND business_id = ?2 "
+      "  AND json_extract(payload, ?3) = ?4 "
+      "ORDER BY created_at DESC "
+      "LIMIT 1",
+      variables: [
+        Variable.withString(actionType),
+        Variable.withString(bid),
+        Variable.withString(payloadIdPath),
+        Variable.withString(idValue),
+      ],
+      readsFrom: {syncQueue},
+    ).getSingleOrNull();
+    if (result == null) return null;
+    return getQueueItem(result.read<String>('id'));
+  }
+
   Future<void> markDone(String id) async {
     await (update(syncQueue)..where((t) => t.id.equals(id))).write(
       const SyncQueueCompanion(
@@ -648,36 +692,6 @@ class SyncDao extends DatabaseAccessor<AppDatabase>
       readsFrom: {syncQueue},
     ).getSingleOrNull();
     return result?.read<String>('id');
-  }
-
-  /// Finds a pending domain envelope by extracting an arbitrary JSON path
-  /// from the payload. Used by the checkout flow to locate the freshly
-  /// enqueued `domain:pos_record_sale` row matching a specific orderId
-  /// (the order id lives at `$.p_order.id`, not at the top-level `id`,
-  /// so the dedup lookup above doesn't match).
-  Future<SyncQueueData?> findPendingDomainItem(
-    String actionType, {
-    required String payloadIdPath,
-    required String idValue,
-  }) async {
-    final bid = db.businessIdResolver.call();
-    if (bid == null) return null;
-    final result = await customSelect(
-      "SELECT id FROM sync_queue "
-      "WHERE action_type = ?1 AND status = 'pending' "
-      "  AND business_id = ?2 "
-      "  AND json_extract(payload, ?3) = ?4 "
-      "LIMIT 1",
-      variables: [
-        Variable.withString(actionType),
-        Variable.withString(bid),
-        Variable.withString(payloadIdPath),
-        Variable.withString(idValue),
-      ],
-      readsFrom: {syncQueue},
-    ).getSingleOrNull();
-    if (result == null) return null;
-    return getQueueItem(result.read<String>('id'));
   }
 
   Future<SyncQueueData?> getQueueItem(String id) {
