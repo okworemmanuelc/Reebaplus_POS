@@ -53,6 +53,8 @@ void main() {
     'tenant_mismatch': 'does not belong',
     'JWT expired': 'session has expired',
     'cannot_cancel_status_completed': 'already been dealt with',
+    'Return is already approved': 'already been dealt with',
+    'Pending return not found': 'no longer there',
   };
   cases.forEach((input, expected) {
     test('maps $input', () {

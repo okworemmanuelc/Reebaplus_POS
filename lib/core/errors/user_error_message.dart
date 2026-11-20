@@ -59,11 +59,16 @@ String userErrorMessage(
   if (has('order_not_found')) {
     return 'This sale could not be found. Pull down to refresh, then try again.';
   }
-  if (has('cannot_cancel_status_') || has('cannot_approve_status_')) {
+  if (has('cannot_cancel_status_') ||
+      has('cannot_approve_status_') ||
+      // crate_return_approval_service throws plain text, not a code.
+      has('return is already')) {
     return 'This has already been dealt with, so it cannot be changed again. '
         'Pull down to refresh to see its latest state.';
   }
-  if (has('request_not_found') || has('pending_return_not_found')) {
+  if (has('request_not_found') ||
+      has('pending_return_not_found') ||
+      has('pending return not found')) {
     return 'This request is no longer there. Pull down to refresh.';
   }
   if (has('permission_denied') ||
