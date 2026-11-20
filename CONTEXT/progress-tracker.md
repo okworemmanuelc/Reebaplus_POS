@@ -7,6 +7,12 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #836: plain-language error messages everywhere (2026-11-20, branch `fix/836-plain-error-messages`)
+- Owner: checkout showed `SaleSyncException(orderId=…); pg_P0001: insufficient_stock`. New `lib/core/errors/user_error_message.dart`: `userErrorMessage(e, action:, productName:)` (server codes, network, permission, session, fallback "Something went wrong while <action>…") and `authErrorMessage(e)` (OTP / rate limit / email errors). Never shows class names, ids or `pg_` codes.
+- Stock rejections name the product: the sync engine now keeps the server HINT (` hint=<json>`) in the stored queue error, and checkout resolves the product name from the cart.
+- About 60 user-facing sites swept (checkout, cart, orders, crate returns, inventory, photo uploads via `AppError.unknown(e, action:)`, stock approvals, report exports, van terminal/receipts, payroll print, invite, auth OTP, shopper sign-in, Play billing, logout dialog). Authored domain messages (Van*, ReturnRefused, StaffResign, LogoutWipe, GateDenied) are still shown as written. Raw text still goes to logs / error_logs.
+- Left technical on purpose: Sync Issues and diagnostics screens (support tools).
+- Tests: `test/core/errors/user_error_message_test.dart` + 11 existing files covering the changed screens (259 pass). Not checked on a device.
 ### Issue #831: daily report redesign for phone, tablet and desktop (2026-11-15, branch `feat/daily-report-redesign-831`)
 - Layout and wording only: no figure, sum, gate, provider or write path changed. `DailyReconciliationDetailScreen` now decides by measured width: under 600 a hero card (`ReportHeroCard`), 600-899 three tiles over one 720 column, 900+ three tiles over two card columns (left Sales / Best sellers / How we got your profit, right Cash / Van sales / Stock), capped at 1080 (`kReconDetailMaxWidth`), "What your business is worth right now" spanning both. Download is a labelled button from 600, an icon below.
 - Every row still shows when non-zero, renamed in plain words (Profit & Loss -> How we got your profit, Net profit -> Profit, Cash flow -> Cash, Net cash movement -> Cash you should have, Expected closing -> Stock now, etc.). Sales summary split into Sales and Best sellers. New look-only widgets in `lib/features/dashboard/widgets/report_summary_parts.dart`. Header figures: Total sold, Profit, Cash received (CEO); a Manager sees Total sold only.
