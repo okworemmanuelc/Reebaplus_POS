@@ -170,7 +170,10 @@ class _PayrollPayslipScreenState extends ConsumerState<PayrollPayslipScreen> {
         text: 'Payslip',
       );
     } catch (e) {
-      if (mounted) AppNotification.showError(context, 'Share failed: $e');
+      debugPrint('[PayslipScreen] share failed: $e');
+      if (mounted) {
+        AppNotification.showError(context, "Couldn't share. Please try again.");
+      }
     }
   }
 }

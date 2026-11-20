@@ -136,3 +136,63 @@ Map<String, dynamic>? _parseHint(String raw) {
     return null;
   }
 }
+
+/// #836 — plain sentence for a failed sign-in code step (send or verify OTP).
+/// Accepts a Supabase `AuthException`, any other error, or its message text.
+/// [fallback] is used when nothing known matches.
+String authErrorMessage(
+  Object error, {
+  String fallback = "Sign-in didn't work. Please try again.",
+}) {
+  final text = error.toString().toLowerCase();
+  bool has(String s) => text.contains(s);
+
+  if (has('rate limit') ||
+      has('rate_limit') ||
+      has('for security purposes') ||
+      has('too many') ||
+      has('over_request_rate_limit')) {
+    final secs = RegExp(r'after (\d+) second').firstMatch(text)?.group(1);
+    return secs == null
+        ? 'Too many attempts. Please wait a minute, then try again.'
+        : 'Too many attempts. Please wait $secs seconds, then try again.';
+  }
+  if (has('token has expired') ||
+      has('otp_expired') ||
+      has('expired or is invalid') ||
+      has('otp expired') ||
+      (has('invalid') && (has('token') || has('otp') || has('code')))) {
+    return 'That code is wrong or has expired. Check it, or ask for a new '
+        'code, then try again.';
+  }
+  if (has('email not confirmed') || has('email_not_confirmed')) {
+    return 'This email has not been confirmed yet. '
+        'Check your inbox for the confirmation email, then try again.';
+  }
+  if (has('signups not allowed') ||
+      has('signup is disabled') ||
+      has('signups are disabled') ||
+      has('signup_disabled') ||
+      has('otp_disabled')) {
+    return 'New sign-ups are not open for this email right now. '
+        'Contact support if you need help.';
+  }
+  if (has('invalid format') ||
+      has('email address') && has('invalid') ||
+      has('validate email') ||
+      has('email_address_invalid')) {
+    return 'That email address does not look right. '
+        'Check it and try again.';
+  }
+  if (has('socketexception') ||
+      has('failed host lookup') ||
+      has('clientexception') ||
+      has('timeoutexception') ||
+      has('connection closed') ||
+      has('connection refused') ||
+      has('network is unreachable')) {
+    return 'There is no internet connection right now. '
+        'Check your connection and try again.';
+  }
+  return fallback;
+}

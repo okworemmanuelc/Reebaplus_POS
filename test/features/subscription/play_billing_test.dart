@@ -102,7 +102,7 @@ void main() {
       expect(c.state.phase, BillingPhase.ready);
       await c.handleEvent(const PurchaseEvent(PurchaseEventStatus.error, message: 'boom'));
       expect(c.state.phase, BillingPhase.error);
-      expect(c.state.message, 'boom');
+      expect(c.state.message, contains('You were not charged'));
       await c.handleEvent(const PurchaseEvent(PurchaseEventStatus.pending));
       expect(c.state.phase, BillingPhase.purchasing);
     });

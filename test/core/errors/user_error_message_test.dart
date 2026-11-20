@@ -101,4 +101,34 @@ void main() {
       );
     }
   });
+
+  group('authErrorMessage', () {
+    final cases = <String, String>{
+      'Token has expired or is invalid': 'wrong or has expired',
+      'AuthException(message: Invalid OTP code, statusCode: 403)':
+          'wrong or has expired',
+      'For security purposes, you can only request this after 42 seconds.':
+          'wait 42 seconds',
+      'email rate limit exceeded': 'Too many attempts',
+      'Email not confirmed': 'not been confirmed',
+      'Signups not allowed for otp': 'sign-ups are not open',
+      'Unable to validate email address: invalid format': 'email address',
+      'SocketException: Failed host lookup': 'no internet',
+    };
+    cases.forEach((input, expected) {
+      test('maps $input', () {
+        final m = authErrorMessage(Exception(input));
+        expect(m, contains(expected));
+        expect(m, isNot(contains('Exception')));
+      });
+    });
+
+    test('unknown falls back to the plain default', () {
+      expect(authErrorMessage('weird boom'), contains('Please try again'));
+      expect(
+        authErrorMessage('weird boom', fallback: 'Custom.'),
+        'Custom.',
+      );
+    });
+  });
 }

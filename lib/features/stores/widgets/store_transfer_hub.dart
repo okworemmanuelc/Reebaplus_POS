@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:reebaplus_pos/core/errors/user_error_message.dart';
 import 'package:reebaplus_pos/shared/utils/quantity_input.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -327,7 +328,7 @@ class StoreTransferHub extends ConsumerWidget {
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Text(
-                'Error loading history: $err',
+                userErrorMessage(err, action: 'loading the transfer history'),
                 style: TextStyle(color: f.danger),
               ),
             ),

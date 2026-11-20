@@ -6,6 +6,7 @@ import 'package:drift/drift.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:reebaplus_pos/core/errors/user_error_message.dart';
 import 'package:reebaplus_pos/core/database/app_database.dart';
 import 'package:reebaplus_pos/core/database/uuid_v7.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
@@ -591,7 +592,10 @@ class AuthService extends ValueNotifier<UserData?> {
       return 'The OTP server is slow right now. Please try again in a moment.';
     } on AuthException catch (e) {
       debugPrint('[AuthService] Supabase AuthException: ${e.message}');
-      return e.message;
+      return authErrorMessage(
+        e,
+        fallback: "Couldn't send the code. Please try again.",
+      );
     } catch (e) {
       debugPrint('[AuthService] OTP send generic error: $e');
       if (e.toString().toLowerCase().contains('socketexception') ||
@@ -614,7 +618,11 @@ class AuthService extends ValueNotifier<UserData?> {
       );
       return null;
     } on AuthException catch (e) {
-      return e.message;
+      debugPrint('[AuthService] verifyOtp AuthException: ${e.message}');
+      return authErrorMessage(
+        e,
+        fallback: "Couldn't verify the code. Please try again.",
+      );
     } catch (e) {
       if (e.toString().toLowerCase().contains('socketexception') ||
           e.toString().toLowerCase().contains('failed host lookup') ||
