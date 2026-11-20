@@ -1472,7 +1472,17 @@ class SupabaseSyncService {
     for (final item in items) {
       // #732 — withdrawn earlier in this drain with the edit it depended on.
       if (_withdrawnClaims.remove(item.id)) continue;
-      await _db.syncDao.markInProgressBatch([item.id]);
+      // #835 — claim, don't just mark. Another pusher (checkout's flushSale vs
+      // the background drain) may have read this same row as pending; only the
+      // claim winner calls the RPC, so an envelope never reaches the server
+      // twice at once.
+      if (!await _db.syncDao.claimForPush(item.id)) {
+        debugPrint(
+          '[SyncService] ${item.actionType} ${item.id} already claimed by '
+          'another push — skipped',
+        );
+        continue;
+      }
 
       Map<String, dynamic> payload;
       try {
@@ -2453,26 +2463,44 @@ class SupabaseSyncService {
     // `$.p_order.id`. Both shapes coexist during the per-business
     // rollout — try v2 first, fall back to v1 so flushSale stays
     // correct on either path.
-    SyncQueueData? item = await _db.syncDao.findPendingDomainItem(
+    //
+    // #835 — `syncing` rows count too: the background drain (woken by this
+    // sale's own enqueue) may already hold the envelope. It used to be found
+    // only while `pending`, and both pushers sent it at once.
+    SyncQueueData? item = await _db.syncDao.findLiveDomainItem(
       'domain:pos_record_sale_v2',
       payloadIdPath: r'$.p_order_id',
       idValue: orderId,
     );
-    item ??= await _db.syncDao.findPendingDomainItem(
+    item ??= await _db.syncDao.findLiveDomainItem(
       'domain:pos_record_sale',
       payloadIdPath: r'$.p_order.id',
       idValue: orderId,
     );
     if (item == null) return;
 
-    await _pushDomainItems([item], sessionBusinessId, currentAuthUid);
+    // Claims the row first; a no-op when the background drain claimed it.
+    if (item.status == 'pending') {
+      await _pushDomainItems([item], sessionBusinessId, currentAuthUid);
+    }
+
+    // #835 — when the background drain holds the sale, wait for that push to
+    // finish so its verdict (a real rejection included) still reaches the
+    // cashier before the receipt prints. A `syncing` row with no drain running
+    // is a stale claim from a killed push; resetStuckInProgress recovers it.
+    var updated = await _db.syncDao.getQueueItem(item.id);
+    while (updated?.status == 'syncing') {
+      final run = _pushRunDone;
+      if (!_pushing || run == null || run.isCompleted) break;
+      await run.future;
+      updated = await _db.syncDao.getQueueItem(item.id);
+    }
 
     // §6.8 auto-archive moves permanent failures (P0001 / 23xxx) into
     // `sync_queue_orphans` and deletes them from `sync_queue`. Check
     // both surfaces so a terminal failure on the foreground sale path
     // surfaces to the user instead of silently printing a receipt for
     // a sale the cloud rejected.
-    final updated = await _db.syncDao.getQueueItem(item.id);
     if (updated?.status == 'failed') {
       throw SaleSyncException(
         orderId: orderId,
@@ -4294,14 +4322,25 @@ class SupabaseSyncService {
   Future<void> _runPushOnce() async {
     if (_pushing) return;
     _pushing = true;
+    final done = _pushRunDone = Completer<void>();
     try {
       await pushPending();
     } catch (e) {
       debugPrint('[SyncService] auto-push failed: $e');
     } finally {
       _pushing = false;
+      done.complete();
     }
   }
+
+  /// #835 — completes when the current [_runPushOnce] finishes, so [flushSale]
+  /// can wait out a background drain that claimed the sale first.
+  Completer<void>? _pushRunDone;
+
+  /// Test seam (#835): one background drain exactly as the auto-push runs it
+  /// (the `_pushing`-guarded path that [flushSale] waits on).
+  @visibleForTesting
+  Future<void> runPushOnceForTesting() => _runPushOnce();
 
   /// Automatic orphan-recovery sweep (§6.8.1). Re-enqueues self-healing
   /// orphans (FK-deferred parents that may have landed, ledger `created_at`
