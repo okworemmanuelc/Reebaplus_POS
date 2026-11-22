@@ -24,11 +24,52 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 Future<void> testExecutable(FutureOr<void> Function() testMain) async {
   await _loadAppFonts();
+  _useCiGoldenTolerance();
   await testMain();
+}
+
+/// On GitHub Actions (`CI=true`) screenshot goldens may differ by up to this
+/// share of pixels. GitHub's Mac runners anti-alias edges slightly differently
+/// from the owner's Mac (first CI run: 993 goldens off by 0.00–0.78%, median
+/// 0.10%). Real layout changes, overflow errors and missing widgets still fail.
+/// Locally the comparison stays pixel-exact, so run the goldens of any screen
+/// you touch on your own machine.
+const double _ciGoldenTolerance = 0.01;
+
+void _useCiGoldenTolerance() {
+  if (Platform.environment['CI'] != 'true') return;
+  final current = goldenFileComparator;
+  if (current is! LocalFileComparator) return;
+  // flutter test sets a comparator rooted at this test file's folder; rebuild
+  // it with the same root (any file name in that folder gives the same basedir).
+  goldenFileComparator = _TolerantComparator(
+    current.basedir.resolve('flutter_test_config_ci.dart'),
+  );
+}
+
+class _TolerantComparator extends LocalFileComparator {
+  _TolerantComparator(super.testFile);
+
+  @override
+  Future<bool> compare(Uint8List imageBytes, Uri golden) async {
+    final result = await GoldenFileComparator.compareLists(
+      imageBytes,
+      await getGoldenBytes(golden),
+    );
+    if (result.passed || result.diffPercent <= _ciGoldenTolerance) {
+      result.dispose();
+      return true;
+    }
+    final error = await generateFailureOutput(result, golden, basedir);
+    result.dispose();
+    throw FlutterError(error);
+  }
 }
 
 Future<void> _loadAppFonts() async {

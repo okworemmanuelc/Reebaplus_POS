@@ -1,0 +1,50 @@
+# Full test suite on GitHub (owner decision 2026-11-22).
+#
+# The whole `flutter test` suite runs here on every PR and every push to main,
+# so nobody has to run it on a laptop. Locally, agents run only the tests for
+# the files they changed (see CONTEXT/ai-workflow-rules.md, Token-Saving Rules).
+#
+# Runs on macOS because the screenshot goldens were recorded on macOS; Linux
+# draws text slightly differently and would fail them. Even GitHub's Macs
+# anti-alias a hair differently, so with CI=true goldens allow a 1% pixel diff
+# (test/flutter_test_config.dart). Free for public repos.
+#
+# Tier-2 tests (real dev Supabase) skip themselves without TEST_SUPABASE_* env,
+# and benchmarks are skipped by dart_test.yaml.
+
+name: full-suite
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same PR cancels the older run.
+concurrency:
+  group: full-suite-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Full flutter test suite
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.2
+          cache: true
+      - run: flutter pub get
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+      - name: Test
+        run: flutter test --reporter expanded
+      - name: Upload golden failure images
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-failures
+          path: test/**/failures/
+          if-no-files-found: ignore
