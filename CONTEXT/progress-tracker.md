@@ -7,6 +7,9 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Release 2.0.8+18 (2026-11-22, branch `chore/release-2.0.8-18`)
+- Ships #835 (sale no longer sent twice at once), #836 (plain error messages) and #839 S2/S3 (download pages after the last row; no pull without network; no needless `users`/payroll reads every 30 s). #839 S1 (migration 0260) is server-side and already live.
+- Raise `app_config.min_android_build` to 18 only AFTER 2.0.8+18 is live on Google Play, or every older phone is told to update to a build it cannot get.
 ### Issue #839 S3: no pull without network, fewer wasted reads (2026-11-22, branch `fix/839-pull-offline-and-extra-reads`)
 - Prod logs (largest shop): pulls started with no network ran the one-by-one path over all 64 tables (~22 s) and logged "Download from the cloud failed" (408 streaks since 2026-11-05).
 - `pullChanges` now checks connectivity first: with none (empty or all `none`) it fetches nothing and throws `PullSkippedOfflineException` before the pull starts, so no failure streak, no error_logs row, cursor / backfill set / `pullStatus` untouched. Background callers already swallow it (reconnect listener and 30 s tick pull later); sign-up callers still get an error. A failed connectivity check counts as online. `syncMinimumLogin` unchanged (it already throws when offline).
