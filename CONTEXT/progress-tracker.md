@@ -7,6 +7,12 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #839 S3: no pull without network, fewer wasted reads (2026-11-22, branch `fix/839-pull-offline-and-extra-reads`)
+- Prod logs (largest shop): pulls started with no network ran the one-by-one path over all 64 tables (~22 s) and logged "Download from the cloud failed" (408 streaks since 2026-11-05).
+- `pullChanges` now checks connectivity first: with none (empty or all `none`) it fetches nothing and throws `PullSkippedOfflineException` before the pull starts, so no failure streak, no error_logs row, cursor / backfill set / `pullStatus` untouched. Background callers already swallow it (reconnect listener and 30 s tick pull later); sign-up callers still get an error. A failed connectivity check counts as online. `syncMinimumLogin` unchanged (it already throws when offline).
+- One-by-one (cellular/poor) path stops at the first network failure (`isNetworkFailure`) and marks every table not yet tried as failed; same `PartialPullException` outcome as before, only sooner. A server error still moves on.
+- Incremental pulls: the extra `users` read runs only when the snapshot has no `users` key (a full pull with zero users is still re-fetched and warned); payroll (permission-gated) tables are not fetched on the snapshot path when the user does not hold the key (unknown user = fetch). A key gained in the pull is still caught up in full by `_enforcePermissionGatedAccess`.
+- Tests: `test/sync/pull_offline_and_extra_reads_test.dart` (12). Not checked on a device.
 ### Issue #836: plain-language error messages everywhere (2026-11-20, branch `fix/836-plain-error-messages`)
 - Owner: checkout showed `SaleSyncException(orderId=…); pg_P0001: insufficient_stock`. New `lib/core/errors/user_error_message.dart`: `userErrorMessage(e, action:, productName:)` (server codes, network, permission, session, fallback "Something went wrong while <action>…") and `authErrorMessage(e)` (OTP / rate limit / email errors). Never shows class names, ids or `pg_` codes.
 - Stock rejections name the product: the sync engine now keeps the server HINT (` hint=<json>`) in the stored queue error, and checkout resolves the product name from the cart.

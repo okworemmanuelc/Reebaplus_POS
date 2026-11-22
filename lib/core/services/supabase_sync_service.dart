@@ -13,6 +13,7 @@ import 'package:reebaplus_pos/core/online_orders/online_order_answer.dart';
 import 'package:reebaplus_pos/core/services/cloud_transport.dart';
 import 'package:reebaplus_pos/core/services/crash_reporter.dart';
 import 'package:reebaplus_pos/core/services/first_load_marker_service.dart';
+import 'package:reebaplus_pos/core/utils/network_failure.dart';
 import 'package:reebaplus_pos/core/utils/order_number.dart';
 import 'package:reebaplus_pos/shared/services/secure_storage_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -50,6 +51,21 @@ class PartialPullException implements Exception {
   String toString() =>
       'PartialPullException: ${failedTables.length} table(s) failed: '
       '${failedTables.join(", ")}';
+}
+
+/// Thrown by [SupabaseSyncService.pullChanges] when the phone has no network
+/// at all when the pull would start (#839). Nothing was fetched and nothing
+/// changed: no failure streak, no `error_logs` row, cursor untouched. Background
+/// callers swallow it (the reconnect listener and the 30 s tick pull later);
+/// a sign-in caller sees an error instead of a silent "success" with no data.
+/// The message reads as a network failure for [userErrorMessage] and
+/// `isNetworkFailure`.
+class PullSkippedOfflineException implements Exception {
+  const PullSkippedOfflineException();
+  @override
+  String toString() =>
+      'PullSkippedOfflineException: network is unreachable, download not '
+      'started';
 }
 
 class _FetchOutcome {
@@ -2765,12 +2781,36 @@ class SupabaseSyncService {
       );
       return;
     }
+    // #839: with no network at all every table fetch fails without reaching
+    // the server (~22 s on the one-by-one path) and the pull would count as a
+    // failed download. Don't start it: no failure streak, no error_logs row,
+    // cursor and backfill set untouched, pullStatus unchanged. The reconnect
+    // listener and the 30 s tick pull once a connection returns.
+    if (await _hasNoNetwork()) {
+      debugPrint('[SyncService] Skipping pull: no network connection.');
+      throw const PullSkippedOfflineException();
+    }
     _fullPullRunning = true;
     _pullRunCount++;
     try {
       await _pullChangesGuarded(businessId);
     } finally {
       _fullPullRunning = false;
+    }
+  }
+
+  /// True only when connectivity_plus reports no connection at all (empty, or
+  /// every result `none`) — the same test the push path and the connectivity
+  /// listener use. A failed check counts as "has network" so a plugin hiccup
+  /// never blocks a pull.
+  Future<bool> _hasNoNetwork() async {
+    try {
+      final results = await Connectivity().checkConnectivity();
+      return results.isEmpty ||
+          results.every((r) => r == ConnectivityResult.none);
+    } catch (e) {
+      debugPrint('[SyncService] connectivity check failed: $e');
+      return false;
     }
   }
 
@@ -3057,6 +3097,28 @@ class SupabaseSyncService {
     }
   }
 
+  /// #839: whether an incremental snapshot pull should fetch the tables gated
+  /// by [permissionKey]. False only when the signed-in user is known and the
+  /// local check (the same one [_enforcePermissionGatedAccess] uses) says the
+  /// key is not held. An unknown user or a failed check keeps fetching.
+  Future<bool> _mayFetchGatedKey(
+    String businessId,
+    String permissionKey,
+  ) async {
+    final userId = _db.currentUserId;
+    if (userId == null) return true;
+    try {
+      return await _db.permissionsDao.userHolds(
+        userId: userId,
+        businessId: businessId,
+        permissionKey: permissionKey,
+      );
+    } catch (e) {
+      debugPrint('[SyncService] gated key check failed ($permissionKey): $e');
+      return true;
+    }
+  }
+
   /// Per gated key, how a phone drops its rows when the key is lost.
   late final Map<String, Future<int> Function(String businessId)>
   _purgeForLostAccess = {
@@ -3252,8 +3314,27 @@ class SupabaseSyncService {
       // PostgREST, where RLS returns them only to a caller holding the key —
       // an empty slice for everyone else. A failed fetch holds just these
       // tables for a backfill, never the whole pull.
+      //
+      // #839: skip the fetch when this phone's user does not hold the key —
+      // RLS would only return nothing, three wasted reads every 30 s. The slice
+      // is left absent (not `[]`), so nothing is restored or reconciled from
+      // it; `_enforcePermissionGatedAccess` drops local rows for a key not
+      // held, and does a full fetch for a key GAINED in this pull (the check
+      // here runs on the permissions as they were before the restore).
+      final heldKeys = <String, bool>{};
       for (final table in kSyncPermissionGatedTables.keys) {
         if (snapshot.containsKey(table)) continue;
+        final key = kSyncPermissionGatedTables[table]!;
+        final mayFetch = heldKeys[key] ??= await _mayFetchGatedKey(
+          businessId,
+          key,
+        );
+        if (!mayFetch) {
+          debugPrint(
+            '[SyncService] Gated fetch skipped for $table — "$key" not held.',
+          );
+          continue;
+        }
         try {
           snapshot[table] = await _fetchOneTable(
             table,
@@ -3269,13 +3350,16 @@ class SupabaseSyncService {
       }
     }
 
-    // `pos_pull_snapshot` predates the `users` restore path (see 0005_sync_rpcs
-    // v_tenant_tables) and omits the `users` table. Without a backfill,
-    // `orders.staff_id` and other FK-to-users tables would explode at restore
-    // time on a fresh device. Supplementary fetch is no-op when the postgrest
-    // fallback already populated `users`, or when an updated RPC eventually
-    // returns it inline.
-    if (snapshot['users'] == null || snapshot['users']!.isEmpty) {
+    // The first `pos_pull_snapshot` (0005_sync_rpcs) omitted the `users` table.
+    // Without a backfill, `orders.staff_id` and other FK-to-users tables would
+    // explode at restore time on a fresh device. The current RPC returns a
+    // `users` key on every call and the PostgREST path always fills it, so the
+    // supplementary fetch runs only when the key is missing — #839: an empty
+    // slice on an incremental pull just means no user changed, and re-fetching
+    // it was a wasted read every 30 s. A full pull that came back with zero
+    // users is still re-fetched once (and warned about below).
+    final usersSlice = snapshot['users'];
+    if (usersSlice == null || (since == null && usersSlice.isEmpty)) {
       try {
         final List<dynamic> users = await _transport.fetchTable(
           TableQuery('users', businessId, since, pageSize: pageSize),
@@ -3689,7 +3773,8 @@ class SupabaseSyncService {
       );
       final results = <String, List<dynamic>>{};
       final failed = <String>{};
-      for (final table in _pullOrder) {
+      for (var i = 0; i < _pullOrder.length; i++) {
+        final table = _pullOrder[i];
         try {
           final data = await _fetchOneTable(
             table,
@@ -3702,6 +3787,23 @@ class SupabaseSyncService {
           debugPrint('[SyncService] Sequential fetch failed for $table: $e');
           results[table] = const <dynamic>[];
           failed.add(table);
+          // #839: a network-level failure (no DNS, no route, dropped socket,
+          // timeout) means the link is dead — the remaining tables would fail
+          // the same way, one by one. Stop now and report them all as failed,
+          // so the outcome below is the same as before, only sooner. A server
+          // answer (e.g. a PostgrestException) still moves on to the next table.
+          if (isNetworkFailure(e)) {
+            final notTried = _pullOrder.skip(i + 1).toList();
+            debugPrint(
+              '[SyncService] Network failure on $table — stopping the '
+              'sequential pull; ${notTried.length} table(s) not tried.',
+            );
+            for (final t in notTried) {
+              results[t] = const <dynamic>[];
+              failed.add(t);
+            }
+            break;
+          }
         }
       }
       if (failed.isEmpty) {
