@@ -7,6 +7,11 @@ The human updates it when resolving open questions or making architectural decis
 ---
 
 ## Current Phase
+### Issue #839 S2: download pages "after the last row" instead of OFFSET (2026-11-22, branch `perf/839-keyset-pull-pagination`)
+- Largest shop's late download pages took 2.5–7.8 s (limit 8 s) because `.range(offset, …)` makes the server re-read every earlier row. `SupabaseCloudTransport.fetchTable` now keeps the same order (`last_updated_at, id`) but each next page asks for rows after the previous page's last `(last_updated_at, id)` via `.or(last_updated_at.gt."T",and(last_updated_at.eq."T",id.gt."I"))` + `.limit(size)`, plus a redundant `last_updated_at >= T` so the `(business_id, last_updated_at)` index scan starts at the cursor (prod EXPLAIN: an `or` alone is only a filter). T and I are the raw JSON strings (no DateTime round trip).
+- Prod data note: ~5k of the largest shop's order_items share one `last_updated_at` (2026-11-01 import), so inside that group the `id` tie-break is still a filter. A `(business_id, last_updated_at, id)` index would remove that; not done here (server change).
+- Unchanged: `since` filter, `businesses` by `id` (ignores since), `system_config` single call (the only synced table without `id`, checked against the cloud schema), halve-on-timeout keeps the cursor, `onPage`. No other OFFSET paging in the pull path.
+- Tests: `test/sync/supabase_cloud_transport_pull_test.dart` (new, 7 pass). Not checked on a device.
 ### Issue #836: plain-language error messages everywhere (2026-11-20, branch `fix/836-plain-error-messages`)
 - Owner: checkout showed `SaleSyncException(orderId=…); pg_P0001: insufficient_stock`. New `lib/core/errors/user_error_message.dart`: `userErrorMessage(e, action:, productName:)` (server codes, network, permission, session, fallback "Something went wrong while <action>…") and `authErrorMessage(e)` (OTP / rate limit / email errors). Never shows class names, ids or `pg_` codes.
 - Stock rejections name the product: the sync engine now keeps the server HINT (` hint=<json>`) in the stored queue error, and checkout resolves the product name from the cart.
