@@ -641,6 +641,8 @@ The pull path is triggered by a Supabase Realtime signal (or a periodic fallback
 
 The cursor stored in `sync_meta` advances **only after a page is fully reconciled into Drift**. If reconciliation fails mid-page the sync service retries that page before moving forward. The cursor never skips ahead past an uncommitted page. This makes push and pull symmetrical in their resilience to poor connectivity and large changesets.
 
+**No network, no pull (#839).** Like the push, a pull does not start when connectivity_plus reports no connection at all: `pullChanges` throws `PullSkippedOfflineException` before anything runs, which is not a failed download (no failure streak, no `error_logs` row, cursor untouched); the reconnect listener and the periodic tick pull later. On the one-by-one (mobile / poor) path the first network-level failure (`isNetworkFailure`) stops the loop and every table not yet tried counts as failed, instead of trying each in turn.
+
 ### Live signal — Broadcast (#101) and the two-path signal model
 
 Realtime is a **signal that triggers a pull, never the transport for the data itself** (see the Stack table). What *drives* that pull is deliberately redundant — two independent signal paths run side by side, and a change reaches the engine whichever delivers first:
@@ -741,8 +743,9 @@ hid screens. A registry entry may now carry a **`permissionKey`**
   DELETE). This is the first access rule that depends on a permission.
 - **Pull**: the table is kept OUT of `pos_pull_snapshot` (SECURITY DEFINER,
   bypasses RLS); on the snapshot path the client fetches it through PostgREST,
-  where RLS applies. `test/sync/snapshot_covers_tenant_tables_test.dart` pins
-  that it stays out.
+  where RLS applies, but only when the signed-in user holds the key locally
+  (or is not known yet) — #839. `test/sync/snapshot_covers_tenant_tables_test.dart`
+  pins that it stays out.
 - **Push**: `SyncDao.enqueueUpsert` refuses a gated row unless
   `PermissionsDao.userHolds` (the local twin of `caller_has_permission`: active
   membership, CEO all-on, user override, role grant; no store layer) says the
