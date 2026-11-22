@@ -12,6 +12,10 @@ The human updates it when resolving open questions or making architectural decis
 - Prod data note: ~5k of the largest shop's order_items share one `last_updated_at` (2026-11-01 import), so inside that group the `id` tie-break is still a filter. A `(business_id, last_updated_at, id)` index would remove that; not done here (server change).
 - Unchanged: `since` filter, `businesses` by `id` (ignores since), `system_config` single call (the only synced table without `id`, checked against the cloud schema), halve-on-timeout keeps the cursor, `onPage`. No other OFFSET paging in the pull path.
 - Tests: `test/sync/supabase_cloud_transport_pull_test.dart` (new, 7 pass). Not checked on a device.
+### Issue #839 S1: RLS helpers run once per query, not per row (2026-11-22, branch `perf/839-rls-initplan`)
+- Migration 0260 rewrites every public policy in place (ALTER POLICY over pg_policies): bare `business_id()`, `is_console_admin()`, `auth.uid()` become `(SELECT …)` so Postgres runs them once per statement. `IN (SELECT current_user_business_ids())` already was. Idempotent; public schema only.
+- Checked: dev 179/238 policies rewritten, identical to the originals once the wrapper is stripped, re-run is a no-op. Prod rollback-only trial as the largest shop's phone user: same visible row counts on 10 tables, late order_items page 658 ms → 11 ms.
+- No table/column/money change → no pos-parity issue. SQL only, so the Flutter suite was not run for this PR.
 ### Issue #836: plain-language error messages everywhere (2026-11-20, branch `fix/836-plain-error-messages`)
 - Owner: checkout showed `SaleSyncException(orderId=…); pg_P0001: insufficient_stock`. New `lib/core/errors/user_error_message.dart`: `userErrorMessage(e, action:, productName:)` (server codes, network, permission, session, fallback "Something went wrong while <action>…") and `authErrorMessage(e)` (OTP / rate limit / email errors). Never shows class names, ids or `pg_` codes.
 - Stock rejections name the product: the sync engine now keeps the server HINT (` hint=<json>`) in the stored queue error, and checkout resolves the product name from the cart.
