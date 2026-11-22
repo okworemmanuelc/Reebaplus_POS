@@ -102,6 +102,7 @@ These apply to every AI agent on this repo: Claude, Gemini, Codex and any other.
 4. **The full test suite runs on GitHub, not on the laptop (owner decision 2026-11-22).**
    - `.github/workflows/full-suite.yml` runs analyze + the whole `flutter test` suite on every PR and every push to `main`. A PR merges only when that check is green, on a branch up to date with `main`.
    - Locally, run only the targeted tests: the test files for what changed, plus the test folder of the feature touched (e.g. `test/orders/`).
+   - Screenshot goldens: on GitHub they may differ by up to 1% of pixels (its Macs anti-alias slightly differently; see `test/flutter_test_config.dart`). Locally they stay pixel-exact, so always run the golden tests of any screen you touched on your own machine.
    - Run the full suite locally only when the change touches shared ground: database schema or migrations, sync, money rules, or the shared theme/widgets. Then the old rules apply: up to date with `main` first, never two full suites at once, real exit code, machine awake.
    - Helpers run only the tests for the files they changed.
    - If the GitHub run fails, fix the cause and run the affected test files locally; the next push re-runs the full suite on GitHub.

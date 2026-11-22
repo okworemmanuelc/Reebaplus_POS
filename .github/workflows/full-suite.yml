@@ -5,7 +5,9 @@
 # the files they changed (see CONTEXT/ai-workflow-rules.md, Token-Saving Rules).
 #
 # Runs on macOS because the screenshot goldens were recorded on macOS; Linux
-# draws text slightly differently and would fail them. Free for public repos.
+# draws text slightly differently and would fail them. Even GitHub's Macs
+# anti-alias a hair differently, so with CI=true goldens allow a 1% pixel diff
+# (test/flutter_test_config.dart). Free for public repos.
 #
 # Tier-2 tests (real dev Supabase) skip themselves without TEST_SUPABASE_* env,
 # and benchmarks are skipped by dart_test.yaml.
