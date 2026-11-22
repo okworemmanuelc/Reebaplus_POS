@@ -85,7 +85,7 @@ Do not start the next unit until all of the following are true. Verify each one 
 4. `progress-tracker.md` reflects the completed work and any open questions raised during the unit.
 5. All context files touched by this unit are updated in the same step.
 6. `flutter analyze` passes with zero errors and zero new warnings.
-7. `flutter test` passes.
+7. Targeted tests pass locally, and the GitHub `full-suite` check is green on the PR.
 8. Generated code, if any schema or model changed, was regenerated with `dart run build_runner build` and committed.
 9. A new or redesigned screen follows the **Screen-size rule** in `ui-context.md` (#820): content capped, cards in columns, five sizes tested. Write the rule into every helper's brief for screen work.
 
@@ -99,9 +99,12 @@ These apply to every AI agent on this repo: Claude, Gemini, Codex and any other.
    - Use the smaller/faster model (e.g. Sonnet) for screens, restyles, wording, tests and routine features.
    - Use the top model (e.g. Opus) only for database migrations, sync and money rules that have no existing code to copy.
    - Briefs name the exact existing code to reuse, so a smaller model can follow it.
-4. **Run the full test suite once per PR, and only the supervisor (or the single agent doing the work) runs it.**
+4. **The full test suite runs on GitHub, not on the laptop (owner decision 2026-11-22).**
+   - `.github/workflows/full-suite.yml` runs analyze + the whole `flutter test` suite on every PR and every push to `main`. A PR merges only when that check is green, on a branch up to date with `main`.
+   - Locally, run only the targeted tests: the test files for what changed, plus the test folder of the feature touched (e.g. `test/orders/`).
+   - Run the full suite locally only when the change touches shared ground: database schema or migrations, sync, money rules, or the shared theme/widgets. Then the old rules apply: up to date with `main` first, never two full suites at once, real exit code, machine awake.
    - Helpers run only the tests for the files they changed.
-   - Never run two full suites at the same time: they fail randomly under load and waste a rerun.
+   - If the GitHub run fails, fix the cause and run the affected test files locally; the next push re-runs the full suite on GitHub.
 5. **Merge finished PRs promptly.**
    - Merge each finished, checked PR into `main` (with the owner's approval) before the next one starts, so new work is cut from `main`.
    - Avoid long chains of PRs stacked on each other: every chain costs merge-and-fix rounds.
