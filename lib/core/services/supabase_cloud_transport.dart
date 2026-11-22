@@ -8,8 +8,8 @@ import 'package:reebaplus_pos/core/services/cloud_transport.dart';
 /// Production [CloudTransport] backed by a live [SupabaseClient] (ADR 0001).
 ///
 /// A large adapter with a thin per-method implementation: it forwards the push
-/// verbs, owns the pull pagination loop (moved verbatim from the old
-/// `_fetchOneTable`), and owns the realtime channel lifecycle (a single tenant
+/// verbs, owns the pull pagination loop (keyset paging after the last row,
+/// #839), and owns the realtime channel lifecycle (a single tenant
 /// channel with one `postgres_changes` binding per table, the `businesses`-by-`id`
 /// filter quirk, subscribe-status logging, and teardown). Error modes are passed
 /// through untouched: PostgREST failures throw
@@ -55,19 +55,24 @@ class SupabaseCloudTransport implements CloudTransport {
       _client.rpc(name, params: params);
 
   // ── PULL ──────────────────────────────────────────────────────────────────
-  /// Single-table PostgREST fetch with cursor-based pagination.
+  /// Single-table PostgREST fetch with keyset ("after the last row") pagination.
   ///
   /// Fetches rows in pages of [TableQuery.pageSize] rows, ordered by
-  /// `last_updated_at` ascending (and `id` ascending as a secondary tie-break for
-  /// all tables except `system_config`). This ordering guarantees stable
-  /// pagination — no row is skipped or double-counted across page boundaries.
+  /// `last_updated_at` ascending then `id` ascending. The first page has no
+  /// cursor; every later page asks only for rows strictly after the previous
+  /// page's last `(last_updated_at, id)` — see [_afterCursorFilter]. Unlike an
+  /// OFFSET, the server never re-reads earlier rows, so each page costs the
+  /// same however much history the shop has (#839). The `id` tie-break makes
+  /// the order total, so rows sharing a `last_updated_at` across a page
+  /// boundary are neither skipped nor fetched twice.
   ///
   /// On a page-level [TimeoutException] the page size is halved (floored at
-  /// [_minPullPageSize]) and the same offset is retried once. A second timeout at
-  /// the floor propagates so the caller can classify the failure.
+  /// [_minPullPageSize]) and the same cursor is retried. A timeout at the floor
+  /// propagates so the caller can classify the failure.
   ///
   /// `system_config` is global (no tenant filter, no `id` column, tiny dataset) —
-  /// it is fetched in a single unpaginated call.
+  /// it is fetched in a single unpaginated call. Every other synced table has a
+  /// NOT NULL `id` and `last_updated_at`.
   @override
   Future<List<dynamic>> fetchTable(TableQuery query) async {
     final table = query.table;
@@ -97,49 +102,73 @@ class SupabaseCloudTransport implements CloudTransport {
       return data;
     }
 
-    // Stable ordering required for pagination: rows must not shift across page
-    // boundaries as new rows arrive mid-pull. `last_updated_at` alone is not
-    // unique (multiple rows can share a second boundary); `id` breaks ties
-    // deterministically.
-    final orderedQuery = q
-        .order('last_updated_at', ascending: true)
-        .order('id', ascending: true);
-
     final allRows = <dynamic>[];
-    int offset = 0;
+    // Raw `(last_updated_at, id)` of the last row fetched; null before page 1.
+    ({String lastUpdatedAt, String id})? cursor;
     int currentPageSize = query.pageSize;
 
     while (true) {
       try {
-        final List<dynamic> page = await orderedQuery
-            .range(offset, offset + currentPageSize - 1)
+        // The `gte` repeats what the `or` already implies so Postgres can start
+        // the `(business_id, last_updated_at)` index scan at the cursor instead
+        // of filtering every earlier row (an `or` is never an index condition).
+        final pageQuery = cursor == null
+            ? q
+            : q
+                  .gte('last_updated_at', cursor.lastUpdatedAt)
+                  .or(_afterCursorFilter(cursor));
+        // `last_updated_at` alone is not unique; `id` makes the order total so
+        // the cursor never skips or repeats a row sharing a timestamp.
+        final List<dynamic> page = await pageQuery
+            .order('last_updated_at', ascending: true)
+            .order('id', ascending: true)
+            .limit(currentPageSize)
             .timeout(const Duration(seconds: 15));
 
         if (page.isEmpty) break;
         allRows.addAll(page);
         query.onPage?.call(page.length);
-        offset += page.length;
         if (page.length < currentPageSize) break; // last page
+        final last = page.last as Map<String, dynamic>;
+        cursor = (
+          lastUpdatedAt: last['last_updated_at'] as String,
+          id: last['id'].toString(),
+        );
       } on TimeoutException catch (e) {
         final halved = currentPageSize ~/ 2;
         if (halved < _minPullPageSize) {
           // Already at floor — surface so the caller can classify failure.
           debugPrint(
             '[CloudTransport] Pull page timeout at min size for $table '
-            '(offset=$offset, size=$currentPageSize): $e',
+            '(after=${cursor?.id}, size=$currentPageSize): $e',
           );
           rethrow;
         }
         currentPageSize = halved;
         debugPrint(
           '[CloudTransport] Pull page timeout for $table '
-          '(offset=$offset) — shrinking page to $currentPageSize and retrying.',
+          '(after=${cursor?.id}) — shrinking page to $currentPageSize '
+          'and retrying.',
         );
-        // Retry the same offset with the smaller page size (offset unchanged).
+        // Retry the same cursor with the smaller page size (cursor unchanged).
       }
     }
 
     return allRows;
+  }
+
+  /// PostgREST `or` filter for rows strictly after [cursor] in
+  /// `(last_updated_at, id)` order:
+  /// `last_updated_at > T OR (last_updated_at = T AND id > I)`.
+  ///
+  /// T and I are the raw strings from the previous page's JSON (never
+  /// round-tripped through [DateTime], which would drop microseconds), and are
+  /// double-quoted so the `:` `+` `.` in a timestamp can't be read as filter
+  /// syntax.
+  static String _afterCursorFilter(({String lastUpdatedAt, String id}) cursor) {
+    final t = cursor.lastUpdatedAt;
+    final i = cursor.id;
+    return 'last_updated_at.gt."$t",and(last_updated_at.eq."$t",id.gt."$i")';
   }
 
   @override
@@ -178,11 +207,7 @@ class SupabaseCloudTransport implements CloudTransport {
   Future<void> warmUp(String businessId) async {
     // Tenant-scoped `select … limit 1` on the session's own business row —
     // RLS-safe and tiny. The caller applies the first-drain timeout.
-    await _client
-        .from('businesses')
-        .select('id')
-        .eq('id', businessId)
-        .limit(1);
+    await _client.from('businesses').select('id').eq('id', businessId).limit(1);
   }
 
   @override
